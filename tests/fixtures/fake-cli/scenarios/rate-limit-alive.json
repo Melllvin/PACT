@@ -1,0 +1,4 @@
+{
+  "output": ["Rate limit reached"],
+  "signal": { "type": "failed", "kind": "rate-limit", "message": "Rate limited" }
+}

@@ -1,0 +1,147 @@
+:root {
+  color-scheme: dark;
+  --bg: #0d1117;
+  --surface: #131820;
+  --text: #dfe4eb;
+  --muted: #8b94a4;
+  --border: #27303c;
+  --purple: #a07fdc;
+  --cyan: #6cc5e0;
+  --green: #45c664;
+  --magenta: #d466a8;
+  --yellow: #c9c85a;
+  --slate: #5a6890;
+  --waiting: #d6934f;
+  --error: #c94646;
+  --radius: 6px;
+  font-family: 'Instrument Sans', system-ui, sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 13px;
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--cyan);
+}
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 48px 50px 1fr;
+}
+.tabs,
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.brand {
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--cyan);
+  margin-right: 18px;
+}
+.tab {
+  background: #19202a;
+}
+.toolbar button:first-child {
+  border-color: var(--cyan);
+}
+.spacer {
+  flex: 1;
+}
+.stage {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  min-height: 0;
+}
+.home {
+  display: grid;
+  place-items: center;
+  padding: 40px;
+  background-image: radial-gradient(#27303c 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.hero {
+  width: min(720px, 100%);
+}
+h1 {
+  font-size: 48px;
+  margin: 0 0 12px;
+}
+.lede {
+  font-size: 19px;
+  color: var(--muted);
+  max-width: 600px;
+}
+.drop {
+  margin-top: 34px;
+  border: 1px dashed #526174;
+  border-radius: 12px;
+  background: rgba(19, 24, 32, 0.88);
+  padding: 48px;
+  text-align: center;
+}
+.primary {
+  background: var(--cyan);
+  color: #081015;
+  border: 0;
+  font-weight: 700;
+}
+.detected {
+  display: flex;
+  gap: 24px;
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.dot {
+  color: var(--green);
+}
+.todo {
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  padding: 20px;
+}
+.todo h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.empty {
+  height: 80%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+}
+.legend {
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 800px) {
+  .stage {
+    grid-template-columns: 1fr;
+  }
+  .todo {
+    display: none;
+  }
+  h1 {
+    font-size: 36px;
+  }
+}

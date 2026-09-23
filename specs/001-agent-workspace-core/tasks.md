@@ -1,5 +1,4 @@
 ---
-
 description: "Tâches d'implémentation du socle 001 — workspaces, agents et terminaux"
 ---
 
@@ -30,17 +29,17 @@ story indépendamment.
 
 **Purpose**: initialiser le projet Electron + outillage imposé par la constitution 1.1.0
 
-- [ ] T001 Créer `package.json` (nom `pact`, `"private": true`, `"type": "module"`, `engines.node >=22`, `main: out/main/index.js`) avec les scripts `dev` (electron-vite dev), `build` (electron-vite build), `typecheck` (tsc -b), `lint` (eslint .), `format` / `format:check` (prettier), `test` (vitest run), `coverage` (vitest run --coverage), `check` (typecheck && lint && format:check && coverage), `test:e2e` (build puis playwright test), `dist` (electron-builder), `postinstall` (electron-rebuild -f -w node-pty)
+- [x] T001 Créer `package.json` (nom `pact`, `"private": true`, `"type": "module"`, `engines.node >=22`, `main: out/main/index.js`) avec les scripts `dev` (electron-vite dev), `build` (electron-vite build), `typecheck` (tsc -b), `lint` (eslint .), `format` / `format:check` (prettier), `test` (vitest run), `coverage` (vitest run --coverage), `check` (typecheck && lint && format:check && coverage), `test:e2e` (build puis playwright test), `dist` (electron-builder), `postinstall` (electron-rebuild -f -w node-pty)
 - [ ] T002 Installer les dépendances épinglées de research.md : runtime `electron@44`, `react@19`, `react-dom@19`, `zustand@5`, `zod`, `node-pty@1.1`, `@xterm/xterm@6`, `@xterm/addon-fit`, `@xterm/addon-webgl`, `@xterm/addon-serialize`, `@xterm/addon-unicode11`, `@xterm/addon-web-links` ; dev `typescript@5.9`, `electron-vite@5`, `vite@7`, `@vitejs/plugin-react`, `vitest@5`, `@vitest/coverage-v8@5`, `jsdom`, `@testing-library/react`, `@testing-library/user-event`, `@playwright/test@1.63`, `eslint@10`, `typescript-eslint`, `eslint-plugin-react-hooks`, `prettier@3`, `electron-builder@26`, `@electron/rebuild` ; vérifier que `npm ci` recompile node-pty sur la machine (package.json, package-lock.json)
-- [ ] T003 Configurer TypeScript strict (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) avec références de projet : `tsconfig.json`, `tsconfig.node.json` (main, preload, shared, tests node), `tsconfig.web.json` (renderer, shared, jsx react-jsx)
-- [ ] T004 Configurer electron-vite avec les entrées `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/index.html`, `node-pty` en externe, alias `@shared` → `src/shared` dans `electron.vite.config.ts`
-- [ ] T005 [P] Configurer ESLint flat config (typescript-eslint strict-type-checked, react-hooks, interdiction de `any` explicite) et Prettier (largeur 100) dans `eslint.config.js`, `.prettierrc.json`, `.prettierignore`
-- [ ] T006 [P] Configurer Vitest avec deux projets (`main` : environnement node, fichiers `tests/unit/main/**`, `tests/unit/shared/**`, `tests/integration/**`, `tests/contract/**` ; `renderer` : jsdom, `tests/unit/renderer/**`) et la couverture v8 avec seuils constitutionnels : 80 % lignes/branches sur `src/main/**`, `src/shared/**`, `src/preload/**` ; 70 % sur `src/renderer/**` dans `vitest.config.ts`
-- [ ] T007 [P] Configurer Playwright pour Electron (`_electron.launch` sur `out/main/index.js`, variable `PACT_TEST_MODE=1`, dossier `userData` temporaire par test, 1 worker, traces en échec) dans `playwright.config.ts` et `tests/e2e/helpers/launch-app.ts`
-- [ ] T008 [P] Ajouter `.gitattributes` (`* text=auto eol=lf`, `*.png binary`) et compléter `.gitignore` (`node_modules/`, `out/`, `dist/`, `coverage/`, `test-results/`, `playwright-report/`)
-- [ ] T009 [P] Configurer electron-builder : `.dmg` universel (arm64 + x64) pour macOS, NSIS x64 + arm64 pour Windows, `asarUnpack` pour `node_modules/node-pty/**`, signature désactivée dans `electron-builder.yml`
-- [ ] T010 Créer la CI GitHub Actions : matrice `macos-latest` × `windows-latest`, Node 22, cache npm, job `check` (`npm ci && npm run check`) et job `e2e` (`npm run test:e2e`, `xvfb` inutile sur ces OS), upload des rapports en échec dans `.github/workflows/ci.yml`
-- [ ] T011 Écrire le test de fumée `tests/unit/shared/smoke.test.ts` (échoue), puis créer le squelette minimal qui le fait passer : `src/main/index.ts` (BrowserWindow 1440×900, `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, titre « PACT »), `src/preload/index.ts` (expose `window.pact = {}`), `src/renderer/index.html` (CSP stricte `default-src 'self'`), `src/renderer/main.tsx`, `src/renderer/app/App.tsx` ; `npm run check` vert
+- [x] T003 Configurer TypeScript strict (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) avec références de projet : `tsconfig.json`, `tsconfig.node.json` (main, preload, shared, tests node), `tsconfig.web.json` (renderer, shared, jsx react-jsx)
+- [x] T004 Configurer electron-vite avec les entrées `src/main/index.ts`, `src/preload/index.ts`, `src/renderer/index.html`, `node-pty` en externe, alias `@shared` → `src/shared` dans `electron.vite.config.ts`
+- [x] T005 [P] Configurer ESLint flat config (typescript-eslint strict-type-checked, react-hooks, interdiction de `any` explicite) et Prettier (largeur 100) dans `eslint.config.js`, `.prettierrc.json`, `.prettierignore`
+- [x] T006 [P] Configurer Vitest avec deux projets (`main` : environnement node, fichiers `tests/unit/main/**`, `tests/unit/shared/**`, `tests/integration/**`, `tests/contract/**` ; `renderer` : jsdom, `tests/unit/renderer/**`) et la couverture v8 avec seuils constitutionnels : 80 % lignes/branches sur `src/main/**`, `src/shared/**`, `src/preload/**` ; 70 % sur `src/renderer/**` dans `vitest.config.ts`
+- [x] T007 [P] Configurer Playwright pour Electron (`_electron.launch` sur `out/main/index.js`, variable `PACT_TEST_MODE=1`, dossier `userData` temporaire par test, 1 worker, traces en échec) dans `playwright.config.ts` et `tests/e2e/helpers/launch-app.ts`
+- [x] T008 [P] Ajouter `.gitattributes` (`* text=auto eol=lf`, `*.png binary`) et compléter `.gitignore` (`node_modules/`, `out/`, `dist/`, `coverage/`, `test-results/`, `playwright-report/`)
+- [x] T009 [P] Configurer electron-builder : `.dmg` universel (arm64 + x64) pour macOS, NSIS x64 + arm64 pour Windows, `asarUnpack` pour `node_modules/node-pty/**`, signature désactivée dans `electron-builder.yml`
+- [x] T010 Créer la CI GitHub Actions : matrice `macos-latest` × `windows-latest`, Node 22, cache npm, job `check` (`npm ci && npm run check`) et job `e2e` (`npm run test:e2e`, `xvfb` inutile sur ces OS), upload des rapports en échec dans `.github/workflows/ci.yml`
+- [x] T011 Écrire le test de fumée `tests/unit/shared/smoke.test.ts` (échoue), puis créer le squelette minimal qui le fait passer : `src/main/index.ts` (BrowserWindow 1440×900, `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, titre « PACT »), `src/preload/index.ts` (expose `window.pact = {}`), `src/renderer/index.html` (CSP stricte `default-src 'self'`), `src/renderer/main.tsx`, `src/renderer/app/App.tsx` ; `npm run check` vert
 - [ ] T012 Écrire le test e2e `tests/e2e/smoke.spec.ts` (l'app démarre, une fenêtre titrée « PACT » s'affiche, aucune erreur console) et le faire passer ; `npm run test:e2e` vert en local
 
 **Checkpoint**: projet qui démarre, `check` et `test:e2e` verts, CI prête
@@ -73,13 +72,13 @@ phase.**
 
 ### Implémentation des fondations
 
-- [ ] T025 [P] Implémenter les types et schémas zod de data-model.md (Workspace, RecentProject, CliDefinition, Agent, AgentState, FreeTerminal, TodoItem, PermissionPreference, ScheduledResume) et la palette ordonnée `AGENT_COLORS = ['purple','cyan','green','magenta','yellow','slate']` dans `src/shared/model.ts`
+- [x] T025 [P] Implémenter les types et schémas zod de data-model.md (Workspace, RecentProject, CliDefinition, Agent, AgentState, FreeTerminal, TodoItem, PermissionPreference, ScheduledResume) et la palette ordonnée `AGENT_COLORS = ['purple','cyan','green','magenta','yellow','slate']` dans `src/shared/model.ts`
 - [ ] T026 [P] Implémenter les schémas des canaux de contracts/ipc.md (requêtes et événements) et le type d'erreur `{ code, message }` dans `src/shared/ipc.ts`
-- [ ] T027 [P] Implémenter la persistance JSON atomique validée (`state.json`, `workspaces/<hash>.json`, `schemaVersion`) dans `src/main/persistence/store.ts`
-- [ ] T028 [P] Implémenter la résolution de l'environnement du shell de connexion dans `src/main/env/shell-env.ts`
+- [x] T027 [P] Implémenter la persistance JSON atomique validée (`state.json`, `workspaces/<hash>.json`, `schemaVersion`) dans `src/main/persistence/store.ts`
+- [x] T028 [P] Implémenter la résolution de l'environnement du shell de connexion dans `src/main/env/shell-env.ts`
 - [ ] T029 [P] Implémenter la résolution et l'encapsulation des commandes (wrapper `cmd.exe` pour `.cmd`/`.bat`, échappement) dans `src/main/env/resolve-command.ts`
-- [ ] T030 [P] Implémenter `GitService` via `execFile('git', …)` (aucun shell) dans `src/main/git/git-service.ts`
-- [ ] T031 [P] Implémenter l'allocateur de ports dans `src/main/ports/port-allocator.ts`
+- [x] T030 [P] Implémenter `GitService` via `execFile('git', …)` (aucun shell) dans `src/main/git/git-service.ts`
+- [x] T031 [P] Implémenter l'allocateur de ports dans `src/main/ports/port-allocator.ts`
 - [ ] T032 Implémenter `PtyManager` (node-pty, tampon circulaire, regroupement par trame, `write`, `resize`, `kill`, événements `data`/`exit`) dans `src/main/pty/pty-manager.ts`
 - [ ] T033 [P] Implémenter le serveur HTTP local des hooks (jeton par agent, réponses de décision) dans `src/main/agents/hook-server.ts`, et le script de relais pour les CLI sans hooks HTTP (lit stdin, POST vers `PACT_HOOK_URL`, exécuté avec `ELECTRON_RUN_AS_NODE=1`) dans `src/main/agents/hook-bridge.ts`
 - [ ] T034 [P] Définir l'interface `CliAdapter`, `AgentSignal`, `LaunchInput`, `LaunchSpec` exactement comme `contracts/cli-adapter.md`, et l'adaptateur `fake` (enregistré seulement si `PACT_TEST_MODE=1`) dans `src/main/agents/adapters/types.ts` et `src/main/agents/adapters/fake.ts`
@@ -203,7 +202,7 @@ des deux côtés ; colonne fermée → badge ; onglet inactif → ◆ puis ✕.
 
 ### Implementation for User Story 4
 
-- [ ] T084 [P] [US4] Implémenter `deriveTodos` dans `src/shared/todo.ts` et l'indicateur d'onglet dans `src/shared/tab-indicator.ts`
+- [x] T084 [P] [US4] Implémenter `deriveTodos` dans `src/shared/todo.ts` et l'indicateur d'onglet dans `src/shared/tab-indicator.ts`
 - [ ] T085 [US4] Implémenter la colonne À faire (entrée des éléments en se dépliant) en réutilisant `TileActions` de T077 dans `src/renderer/todo/TodoColumn.tsx` et `src/renderer/todo/TodoItem.tsx`
 - [ ] T086 [US4] Ajouter le badge du bouton À faire dans `src/renderer/app/Toolbar.tsx` et les indicateurs ◆ / ✕ et le compteur ◆ de l'accueil dans `src/renderer/app/TabBar.tsx` et `src/renderer/home/Home.tsx`
 
@@ -297,7 +296,7 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 - [ ] T112 Test e2e de performance SC-002 : 6 agents fake `burst-output` → latence d'écho d'une frappe < 100 ms (p95) et passage d'état visible dans À faire < 2 s (SC-003) dans `tests/e2e/perf.spec.ts`
 - [ ] T113 [P] Test e2e des chemins avec espaces et accents (dépôt dans « Mes Projets/Développement ») sur macOS et Windows dans `tests/e2e/paths.spec.ts`
 - [ ] T114 [P] Revue de sécurité : CSP, `sandbox`, aucune commande shell construite depuis le renderer, jeton de hooks non journalisé, serveur de hooks lié à `127.0.0.1` uniquement ; corriger les écarts et ajouter un test par écart trouvé dans `tests/unit/main/security.test.ts`
-- [ ] T115 [P] Mettre à jour `README.md` (présentation, prérequis, `npm ci`, `npm run dev`, `npm run check`, `npm run test:e2e`, approbation des hooks Codex)
+- [x] T115 [P] Mettre à jour `README.md` (présentation, prérequis, `npm ci`, `npm run dev`, `npm run check`, `npm run test:e2e`, approbation des hooks Codex)
 - [ ] T116 Dérouler `specs/001-agent-workspace-core/quickstart.md` (scénarios automatisés + validation manuelle avec vrais CLI) sur macOS et Windows et consigner les résultats dans la PR
 - [ ] T117 Proposer à l'utilisateur (sans l'appliquer sans son accord) la protection de la branche `main` exigeant les jobs CI `check` et `e2e` (Constitution II)
 

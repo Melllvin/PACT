@@ -8,3 +8,19 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Node / Electron
+node_modules/
+out/
+dist/
+build/
+coverage/
+.tsbuild/
+test-results/
+playwright-report/
+*.log
+.env*
+.vscode/
+.idea/
+*.tmp
+*.swp

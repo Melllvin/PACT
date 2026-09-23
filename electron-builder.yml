@@ -1,0 +1,13 @@
+appId: dev.pact.app
+productName: PACT
+asarUnpack:
+  - node_modules/node-pty/**
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+  identity: null
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
