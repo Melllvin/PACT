@@ -69,12 +69,22 @@ comportement cohérent dans toute l'application.
 
 ## Contraintes techniques
 
-- Les langages et frameworks ne sont pas encore choisis. Toute stack retenue DOIT disposer
-  d'un test runner automatisable, d'un linter et d'un formatter exécutables en ligne de
-  commande et en CI.
-- Le choix de stack, d'outillage de test et le seuil de couverture minimal chiffré DOIVENT
-  être décidés et justifiés lors du premier `/speckit-plan`, puis consignés dans cette
-  constitution par amendement.
+- Stack de référence (décidée au plan 001, voir `specs/001-agent-workspace-core/research.md`) :
+  application de bureau Electron + TypeScript (strict) + React, pour macOS et Windows.
+  Tout changement de stack DOIT passer par un amendement de cette constitution.
+- Outillage obligatoire :
+  - Tests unitaires et d'intégration : Vitest ; tests de bout en bout : Playwright (Electron).
+  - Lint : ESLint avec typescript-eslint ; format : Prettier ; typage : `tsc` en mode strict.
+  - Une commande unique `npm run check` DOIT exécuter typecheck, lint, vérification du format,
+    tests et couverture ; `npm run test:e2e` DOIT exécuter les tests de bout en bout.
+- Seuils de couverture minimaux (lignes et branches), appliqués en CI :
+  - 80 % pour le code hors interface (`src/main`, `src/shared`, `src/preload`) ;
+  - 70 % pour l'interface (`src/renderer`).
+  Un seuil ne PEUT être abaissé que par amendement de cette constitution.
+- CI : GitHub Actions DOIT exécuter `check` et `e2e` sur macOS et sur Windows ; `main` DOIT être
+  protégée et exiger ces jobs verts avant tout merge.
+- Les comportements dépendant d'outils externes non déterministes (CLI d'agents, réseau) DOIVENT
+  être testés contre des doublures déterministes (faux CLI, dépôts Git temporaires).
 - Chaque nouvelle dépendance externe DOIT être justifiée (absence d'équivalent déjà présent
   dans le projet, maintenance active, licence compatible).
 
@@ -105,4 +115,4 @@ comportement cohérent dans toute l'application.
   design et après celle-ci ; chaque PR DOIT être revue au regard de ces principes. Toute
   dérogation DOIT être documentée et justifiée dans le plan.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-23 | **Last Amended**: 2026-09-23
+**Version**: 1.1.0 | **Ratified**: 2026-09-23 | **Last Amended**: 2026-09-23

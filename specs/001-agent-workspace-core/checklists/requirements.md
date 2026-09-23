@@ -34,7 +34,11 @@
 - Les termes worktree, branche, port et terminal viennent du domaine métier (outil pour
   développeurs) et des maquettes ; ce ne sont pas des choix d'implémentation.
 - Aucun marqueur [NEEDS CLARIFICATION] : les points ouverts ont reçu une valeur par défaut, notée
-  dans Assumptions (ports 3001–3006, limite de 6 agents, restauration au redémarrage, choix
-  d'autorisation global, worktrees hors du dépôt).
+  dans Assumptions (ports 3001–3006, limite de 6 agents, restauration au redémarrage).
+- Révision 2026-09-23 d'après les maquettes hi-fi (`docs/maquettes/`) : worktrees dans
+  `.worktrees/`, portée projet/global des autorisations, palette sans orange (réservé à ◆),
+  compteurs mémorisés par workspace, US7 reprise après limite de débit, « Copier la consigne »
+  hors socle. Les chemins `.worktrees/` et `agent/<cli>-<n>` sont visibles dans les maquettes :
+  ce sont des éléments d'interface, pas des choix d'implémentation. Checklist revalidée : OK.
 - Hors périmètre explicite : Aperçus/Comparaison, Revue/Intégration, Workflows, Notifications,
   Réglages complets → specs ultérieures.
