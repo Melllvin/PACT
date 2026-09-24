@@ -23,7 +23,7 @@ let workspace: Workspace;
 let pty: PtyManager;
 let terminals: FreeTerminals[];
 
-const env: Record<string, string> = { ...process.env, SHELL: '/bin/sh' } as Record<string, string>;
+const env: Record<string, string> = { ...process.env, SHELL: '/bin/sh' };
 
 const create = (manager = pty) => {
   const created = new FreeTerminals({
