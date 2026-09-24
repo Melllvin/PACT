@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { DetectedClis } from '../home/DetectedClis';
 import { Home } from '../home/Home';
@@ -29,6 +29,17 @@ export function App({ store, getPathForFile, terminals }: Props) {
     void store.getState().load();
     return disconnect;
   }, [store]);
+
+  // Frees the terminals whose agent or free terminal is gone (closed workspace, exited shell).
+  const termIds = workspaces
+    .flatMap((w) => [...w.agents.map((a) => a.id), ...w.freeTerminals.map((t) => t.id)])
+    .join(' ');
+  const shown = useRef(new Set<string>());
+  useEffect(() => {
+    const current = new Set(termIds.split(' ').filter(Boolean));
+    for (const id of shown.current) if (!current.has(id)) terminals?.dispose(id);
+    shown.current = current;
+  }, [termIds, terminals]);
 
   const workspace =
     activeTab.kind === 'workspace' ? workspaces.find((w) => w.id === activeTab.id) : undefined;

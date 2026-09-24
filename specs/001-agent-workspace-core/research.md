@@ -21,6 +21,11 @@ Date : 2026-09-23. Versions relevées via `npm view` et `--help` le même jour.
   (≈ 1 Mo). Au passage Tuiles ↔ Focus, le renderer ne recrée pas le terminal : une seule instance
   xterm par agent, déplacée dans le DOM (reparenting). Au redémarrage de l'app, pas de restitution
   de sortie : la session CLI est reprise (R6).
+- **Rendu (révisé en phase 4)** : xterm utilise son rendu DOM par défaut. Le texte reste dans la
+  page, où les technologies d'assistance et la suite e2e le lisent. xterm 6 n'a plus d'addon canvas,
+  donc le « repli canvas » est en fait le rendu DOM. WebGL reste disponible via
+  `createXterm({ webgl: true })` (`src/renderer/tiles/xterm-factory.ts`), avec retour au DOM si le
+  contexte manque, au cas où une mesure SC-002 l'exigerait.
 - **Débit** : la sortie PTY est regroupée par trame (~16 ms) avant envoi IPC, pour tenir SC-002
   avec 6 agents.
 - **Alternatives** : `@homebridge/node-pty-prebuilt-multiarch` (binaires précompilés, mais fork

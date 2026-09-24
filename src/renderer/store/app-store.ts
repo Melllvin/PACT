@@ -135,7 +135,16 @@ export function createAppStore(api: PactApi) {
           workspaceId,
           agents: drafts(counts, level),
           freeTerminals: counts.freeTerminal,
-          counters: { freeTerminal: counts.freeTerminal, ...counts.agents },
+          // A zero for every installed CLI: the next launcher starts from exactly these (FR-010).
+          counters: {
+            freeTerminal: counts.freeTerminal,
+            ...Object.fromEntries(
+              get()
+                .clis.filter((cli) => cli.status === 'installed')
+                .map((cli) => [cli.id, 0]),
+            ),
+            ...counts.agents,
+          },
         });
         // Only the workspaces: the rest of the snapshot may lag behind what was just chosen.
         const { workspaces } = await api.invoke('app:getState');
@@ -182,6 +191,17 @@ export function createAppStore(api: PactApi) {
           }),
           api.on('agent:branch', ({ agentId, branch }) => {
             set({ workspaces: updateAgent(get().workspaces, agentId, (a) => ({ ...a, branch })) });
+          }),
+          // Main drops a free terminal whose shell has exited; agents keep their tile (error).
+          api.on('term:exit', ({ termId }) => {
+            const { workspaces } = get();
+            if (!workspaces.some((w) => w.freeTerminals.some((t) => t.id === termId))) return;
+            set({
+              workspaces: workspaces.map((w) => ({
+                ...w,
+                freeTerminals: w.freeTerminals.filter((t) => t.id !== termId),
+              })),
+            });
           }),
           api.on('workspace:status', ({ id, status }) => {
             set({ workspaces: get().workspaces.map((w) => (w.id === id ? { ...w, status } : w)) });
