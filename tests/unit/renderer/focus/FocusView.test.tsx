@@ -48,8 +48,8 @@ describe('FocusView', () => {
   });
 
   it('shows the branch and the port in the header (US5 scenario 1)', () => {
-    setup();
-    expect(screen.getByRole('banner').textContent).toContain('agent/pg-sessions · :3001');
+    const { focus } = setup();
+    expect(within(focus()).getByText('agent/pg-sessions · :3001', { exact: false })).toBeDefined();
   });
 
   it('has the Terminal tab active; Aperçu and Changements are shown but disabled', () => {

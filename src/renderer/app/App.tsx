@@ -79,7 +79,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
               state.openLauncher(workspace.id);
             }}
             actions={{
-              onAnswer: (id, answer) => void state.answerAgent(id, answer),
+              onAnswer: (id, answer, always) => void state.answerAgent(id, answer, always),
               onResume: (id) => void state.resumeAgent(id),
               onRestart: (id) => void state.restartAgent(id),
               onLog: (id) => void state.openLog(id),

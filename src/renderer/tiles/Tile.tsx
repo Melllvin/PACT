@@ -22,7 +22,7 @@ type Props = TileActionHandlers & {
   name: string;
   terminals: Pick<TerminalRegistry, 'attach'> | undefined;
   onClose: () => void;
-  /** ⤢, once an enlarged view exists. */
+  /** ⤢: opens the Focus on this agent (US5). */
   onExpand?: (() => void) | undefined;
 };
 

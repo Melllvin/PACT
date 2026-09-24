@@ -64,7 +64,8 @@ export type AppState = {
   /** Saves the level chosen in 1m, then launches what 1c asked for. */
   confirmPermission: (choice: PermissionPreference) => Promise<void>;
   redetectClis: () => Promise<void>;
-  answerAgent: (agentId: string, answer: 'allow' | 'deny') => Promise<void>;
+  /** `always`: « Toujours pour ce worktree » (FR-034). */
+  answerAgent: (agentId: string, answer: 'allow' | 'deny', always?: boolean) => Promise<void>;
   resumeAgent: (agentId: string) => Promise<void>;
   restartAgent: (agentId: string) => Promise<void>;
   openLog: (agentId: string) => Promise<void>;
@@ -384,7 +385,14 @@ export function createAppStore(api: PactApi) {
         set({ clis: await api.invoke('cli:redetect') });
       },
 
-      answerAgent: (agentId, answer) => act(() => api.invoke('agent:answer', { agentId, answer })),
+      answerAgent: (agentId, answer, always) =>
+        act(() =>
+          api.invoke('agent:answer', {
+            agentId,
+            answer,
+            ...(always === undefined ? {} : { always }),
+          }),
+        ),
       resumeAgent: (agentId) => act(() => api.invoke('agent:resume', { agentId })),
       restartAgent: (agentId) => act(() => api.invoke('agent:restart', { agentId })),
 
