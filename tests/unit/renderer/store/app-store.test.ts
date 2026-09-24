@@ -146,7 +146,7 @@ describe('app store', () => {
     expect(store.getState().workspaces).toBe(before);
   });
 
-  it('stops listening once disconnected', async () => {
+  it('stops listening once disconnected', () => {
     const { api, listenerCount } = fakeApi();
     const store = createAppStore(api);
     const disconnect = store.getState().connect();
