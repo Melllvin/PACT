@@ -175,7 +175,7 @@ describe('availability', () => {
     expect(events).toEqual([]);
   });
 
-  it('checks periodically once watching starts, and stops on dispose', async () => {
+  it('checks periodically once watching starts, and stops on dispose', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     try {
       const service = createService();
