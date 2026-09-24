@@ -13,12 +13,18 @@ let child: ChildProcessWithoutNullStreams | undefined;
 let tmp: string | undefined;
 
 afterEach(async () => {
-  child?.kill();
+  // Wait for the process to be gone: Windows keeps its working directory locked until then.
+  const running = child;
+  if (running && running.exitCode === null && running.signalCode === null) {
+    const exited = new Promise((resolve) => running.once('exit', resolve));
+    running.kill();
+    await exited;
+  }
   await new Promise((resolve) => {
     if (server) server.close(resolve);
     else resolve(undefined);
   });
-  if (tmp) await rm(tmp, { recursive: true, force: true });
+  if (tmp) await rm(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   server = child = tmp = undefined;
 });
 
