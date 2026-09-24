@@ -42,7 +42,7 @@ export class CloneJobs {
   private async run(jobId: string, url: string, destination: string) {
     const state = await isEmptyOrMissing(destination);
     if (state === false) {
-      this.fail(jobId, `Le dossier « ${destination} » existe déjà et n'est pas vide.`);
+      this.fail(jobId, `Le dossier « ${destination} » existe déjà et n’est pas vide.`);
       return;
     }
     try {

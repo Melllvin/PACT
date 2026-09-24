@@ -224,9 +224,9 @@ describe('Clone dialog', () => {
       'git@github.com:me/app.git',
     );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Choisir…' }));
-    expect(
-      (within(dialog).getByRole('textbox', { name: 'Destination' }) as HTMLInputElement).value,
-    ).toBe('/Users/me/code/new');
+    expect(within(dialog).getByRole('textbox', { name: 'Destination' }).getAttribute('value')).toBe(
+      '/Users/me/code/new',
+    );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cloner' }));
     expect(props.onClone).toHaveBeenCalledWith('git@github.com:me/app.git', '/Users/me/code/new');
   });

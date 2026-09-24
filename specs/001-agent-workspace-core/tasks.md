@@ -105,7 +105,7 @@ dépôt ouvert ; redémarrer → dépôt dans les récents.
 ### Tests for User Story 1 ⚠️
 
 - [x] T039 [P] [US1] Tests d'intégration de `WorkspaceService` : ouverture d'un dépôt (id = hash du `realpath`), `NOT_A_REPO`, `ALREADY_OPEN(id)` (FR-004), `initRepo`, récents triés par date décroissante et limités à 20, `keptWorktrees` compté depuis `.worktrees/`, statut `unavailable` quand le dossier est supprimé, persistance des workspaces ouverts dans `tests/integration/workspace/workspace-service.test.ts`
-- [ ] T040 [P] [US1] Tests de l'accueil : sections « Déjà ouverts » (chemin, branche, n worktrees, pastilles, compteur ◆), « Récents » (worktrees conservés, « ouvert il y a N j »), recherche, zone de dépôt, « Choisir un dépôt Git… », « Cloner depuis une URL… » avec progression et erreur, message + proposition d'initialisation pour un dossier non Git dans `tests/unit/renderer/home/Home.test.tsx`
+- [x] T040 [P] [US1] Tests de l'accueil : sections « Déjà ouverts » (chemin, branche, n worktrees, pastilles, compteur ◆), « Récents » (worktrees conservés, « ouvert il y a N j »), recherche, zone de dépôt, « Choisir un dépôt Git… », « Cloner depuis une URL… » avec progression et erreur, message + proposition d'initialisation pour un dossier non Git dans `tests/unit/renderer/home/Home.test.tsx`
 - [ ] T041 [P] [US1] Tests du workspace vide : une seule action « + Ajouter des agents », pas de colonne À faire, Comparer et Revue visibles mais inactifs (FR-006) dans `tests/unit/renderer/workspace/EmptyWorkspace.test.tsx`
 - [ ] T042 [P] [US1] Test e2e : glisser-déposer simulé d'un dépôt temporaire → onglet actif ; réouverture → bascule sur l'onglet existant ; « + » ouvre l'accueil ; clonage d'un dépôt bare local ; redémarrage → récents présents dans `tests/e2e/us1-workspaces.spec.ts`
 
@@ -114,7 +114,7 @@ dépôt ouvert ; redémarrer → dépôt dans les récents.
 - [x] T043 [US1] Implémenter `WorkspaceService` (open, initRepo, close, récents, surveillance du dossier par `fs.watch` + vérification périodique) dans `src/main/workspace/workspace-service.ts`
 - [x] T044 [US1] Implémenter les jobs de clonage (progression `git clone --progress` → événement `clone:progress`, nettoyage du dossier en cas d'échec, aucun onglet créé) dans `src/main/workspace/clone-job.ts`
 - [x] T045 [US1] Brancher les handlers `app:getState`, `workspace:open`, `workspace:initRepo`, `workspace:clone`, `workspace:close` et l'événement `workspace:status`, plus le sélecteur de dossier natif (`dialog.showOpenDialog`) dans `src/main/ipc/workspace-handlers.ts`
-- [ ] T046 [P] [US1] Implémenter l'accueil (1a) avec recherche, zone de dépôt (`webUtils.getPathForFile` via preload), boîte de clonage dans `src/renderer/home/Home.tsx`, `src/renderer/home/CloneDialog.tsx`, `src/renderer/home/DropZone.tsx`
+- [x] T046 [P] [US1] Implémenter l'accueil (1a) avec recherche, zone de dépôt (`webUtils.getPathForFile` via preload), boîte de clonage dans `src/renderer/home/Home.tsx`, `src/renderer/home/CloneDialog.tsx`, `src/renderer/home/DropZone.tsx`
 - [ ] T047 [P] [US1] Implémenter le workspace vide (1b) et l'affichage « indisponible » dans `src/renderer/workspace/EmptyWorkspace.tsx` et `src/renderer/workspace/WorkspaceView.tsx`
 - [ ] T048 [US1] Relier onglets, accueil et workspaces dans le store et `App.tsx` (onglet d'accueil ouvert par « + », fermeture d'onglet) dans `src/renderer/app/App.tsx`
 

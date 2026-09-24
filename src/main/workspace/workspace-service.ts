@@ -61,7 +61,7 @@ export class WorkspaceService {
 
   async open(path: string): Promise<Workspace> {
     if (!(await this.git.isRepo(path))) {
-      throw new IpcFailure('NOT_A_REPO', `« ${basename(path)} » n'est pas un dépôt Git.`);
+      throw new IpcFailure('NOT_A_REPO', `« ${basename(path)} » n’est pas un dépôt Git.`);
     }
     const root = await this.git.repoRoot(path);
     const id = workspaceId(root);
