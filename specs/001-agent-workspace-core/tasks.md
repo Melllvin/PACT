@@ -450,3 +450,4 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 ## Phase 16: Convergence
 
 - [X] T139 Tests puis implémentation : ne compter dans le badge du bouton À faire que les éléments en attente (répondre, limite de débit, consigne), pas l'élément informatif du terminal libre, dans `tests/unit/renderer/workspace/WorkspaceView.test.tsx` et `src/renderer/workspace/WorkspaceView.tsx` per FR-029 / US4/AC3 (partial)
+- [X] T140 Garder la barre d'une tuile dans la tuile quand la colonne À faire la rétrécit (3×2 à 1024 px) : message d'erreur tronqué avant les boutons, boutons renvoyés à la ligne, vérifié par `tests/e2e/us3-tiles.spec.ts` en CI, dans `src/renderer/tiles/tiles.module.css` per FR-024 / US3/AC6 (contradicts)
