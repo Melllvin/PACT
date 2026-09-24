@@ -170,7 +170,8 @@ describe('WorkspaceView', () => {
         actions={actions}
       />,
     );
-    await user.click(screen.getByRole('button', { name: '✓ Autoriser' }));
+    const tiles = within(screen.getByRole('region', { name: 'Tuiles' }));
+    await user.click(tiles.getByRole('button', { name: '✓ Autoriser' }));
     await user.click(screen.getByRole('button', { name: 'Journal' }));
     await user.click(screen.getByRole('button', { name: 'Relancer' }));
     await user.click(screen.getByRole('button', { name: 'Reprendre' }));
@@ -206,5 +207,80 @@ describe('WorkspaceView', () => {
     );
     await user.click(screen.getByRole('button', { name: '+ Agents' }));
     expect(onAddAgents).toHaveBeenCalled();
+  });
+});
+
+describe('À faire column (T082, T086)', () => {
+  const waiting = [agent(1, { state: 'awaiting-prompt' }), agent(2, { state: 'awaiting-answer' })];
+
+  it('lists what the agents need, answers first, with the count on the button', () => {
+    render(<WorkspaceView workspace={workspace({ agents: waiting })} clis={clis} />);
+    const column = screen.getByRole('complementary', { name: 'À faire' });
+    expect(
+      within(column)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual([
+      expect.stringContaining('◆ Répondre'),
+      'Donner une consigne · Claude Code · tapez dans le terminal',
+    ]);
+    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toContain('2');
+  });
+
+  it('answers from the column for the agent of the item', async () => {
+    const onAnswer = vi.fn();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: waiting })}
+        clis={clis}
+        actions={{
+          onAnswer,
+          onResume: vi.fn(),
+          onRestart: vi.fn(),
+          onLog: vi.fn(),
+          onClose: vi.fn(),
+        }}
+      />,
+    );
+    const column = screen.getByRole('complementary', { name: 'À faire' });
+    await userEvent.click(within(column).getByRole('button', { name: '✓ Autoriser' }));
+    expect(onAnswer).toHaveBeenCalledWith(agent(2).id, 'allow');
+  });
+
+  it('closes into the button, which keeps the count', async () => {
+    render(<WorkspaceView workspace={workspace({ agents: waiting })} clis={clis} />);
+    await userEvent.click(screen.getByRole('button', { name: /À faire/ }));
+    expect(screen.queryByRole('complementary', { name: 'À faire' })).toBeNull();
+    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toContain('2');
+    await userEvent.click(screen.getByRole('button', { name: /À faire/ }));
+    expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
+  });
+
+  it('counts only what waits on the button, not a running free terminal (FR-029)', () => {
+    render(
+      <WorkspaceView
+        workspace={workspace({
+          agents: waiting,
+          freeTerminals: [{ id: 't1', workspaceId: 'w1', cwd: '/w', shell: '/bin/zsh' }],
+        })}
+        clis={clis}
+      />,
+    );
+    const column = screen.getByRole('complementary', { name: 'À faire' });
+    expect(within(column).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toBe('À faire 2');
+  });
+
+  it('is absent without agents, even with a free terminal', () => {
+    render(
+      <WorkspaceView
+        workspace={workspace({
+          freeTerminals: [{ id: 't1', workspaceId: 'w1', cwd: '/w', shell: '/bin/zsh' }],
+        })}
+        clis={clis}
+      />,
+    );
+    expect(screen.queryByRole('complementary', { name: 'À faire' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /À faire/ })).toBeNull();
   });
 });

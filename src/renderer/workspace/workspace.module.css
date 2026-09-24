@@ -39,3 +39,14 @@
   border: 1px solid var(--danger);
   border-radius: var(--radius);
 }
+
+.body {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.body > .stage {
+  flex: 1;
+  min-width: 0;
+}

@@ -354,7 +354,8 @@ describe('App tile actions (US3)', () => {
 
   it('answers an agent from its tile', async () => {
     const invoke = setup([{ ...failed, state: 'awaiting-answer' }]);
-    await userEvent.click(await screen.findByRole('button', { name: '✓ Autoriser' }));
+    const tiles = await screen.findByRole('region', { name: 'Tuiles' });
+    await userEvent.click(within(tiles).getByRole('button', { name: '✓ Autoriser' }));
     expect(invoke).toHaveBeenCalledWith('agent:answer', { agentId: failed.id, answer: 'allow' });
   });
 
