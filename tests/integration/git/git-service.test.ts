@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -30,7 +31,7 @@ const makeRepo = async (path: string, ...initArgs: string[]) => {
 };
 
 beforeEach(async () => {
-  root = await realpath(await mkdtemp(join(tmpdir(), 'pact-git-')));
+  root = realpathSync.native(await mkdtemp(join(tmpdir(), 'pact-git-')));
   repo = join(root, 'Mes Projets', 'Développement');
   await makeRepo(repo);
 });
@@ -171,6 +172,6 @@ describe('clone', () => {
         join(root, 'out'),
         () => undefined,
       ),
-    ).rejects.toThrow(/does not appear to be a git repository|not found|repository/i);
+    ).rejects.toThrow(/nothing-here/); // git's own (possibly localized) message names the source
   });
 });
