@@ -17,6 +17,8 @@ let manager: PtyManager;
 let dir: string;
 let output: Map<string, string>;
 let exits: Map<string, number>;
+let dataEvents: Map<string, number>;
+let startedAt: Map<string, number>;
 
 const baseEnv: Record<string, string> = {};
 for (const [key, value] of Object.entries(process.env))
@@ -26,13 +28,19 @@ const env = (scenario = 'prompt-then-done') => ({
   FAKE_CLI_SCENARIO: scenarioPath(scenario),
 });
 
+const diagnostics = (id: string) =>
+  [
+    `elapsed since start: ${String(Date.now() - (startedAt.get(id) ?? Date.now()))} ms`,
+    `data events: ${String(dataEvents.get(id) ?? 0)}`,
+    `exit code: ${exits.has(id) ? String(exits.get(id)) : 'still running'}`,
+    `output:\n${stripAnsi(output.get(id) ?? '')}`,
+  ].join('\n');
+
 const waitFor = async (id: string, text: string, timeoutMs = 10_000) => {
   const start = Date.now();
   while (!stripAnsi(output.get(id) ?? '').includes(text)) {
     if (Date.now() - start > timeoutMs) {
-      throw new Error(
-        `timed out waiting for ${JSON.stringify(text)} in:\n${stripAnsi(output.get(id) ?? '')}`,
-      );
+      throw new Error(`timed out waiting for ${JSON.stringify(text)}\n${diagnostics(id)}`);
     }
     await new Promise((r) => setTimeout(r, 20));
   }
@@ -51,7 +59,18 @@ beforeEach(async () => {
   manager = new PtyManager();
   output = new Map();
   exits = new Map();
-  manager.onData((id, data) => output.set(id, (output.get(id) ?? '') + data));
+  dataEvents = new Map();
+  startedAt = new Map();
+  // Record start times without touching each test: wrap start().
+  const start = manager.start.bind(manager);
+  manager.start = (id, spec) => {
+    startedAt.set(id, Date.now());
+    start(id, spec);
+  };
+  manager.onData((id, data) => {
+    output.set(id, (output.get(id) ?? '') + data);
+    dataEvents.set(id, (dataEvents.get(id) ?? 0) + 1);
+  });
   manager.onExit((id, code) => exits.set(id, code));
 });
 
