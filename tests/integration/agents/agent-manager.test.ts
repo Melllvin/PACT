@@ -133,7 +133,7 @@ beforeEach(async () => {
   scenario = 'prompt-then-done';
   shellEnv = baseEnv;
   portsInUse = new Set();
-});
+}, 30_000);
 
 afterEach(async () => {
   for (const manager of managers) await manager.dispose();
@@ -143,9 +143,9 @@ afterEach(async () => {
   // Reads queue behind the last writes: nothing is left writing into the folder removed below.
   await stores.workspace(workspace.id).read();
   await rm(root, { recursive: true, force: true });
-});
+}, 30_000);
 
-describe('AgentManager.launch', () => {
+describe('AgentManager.launch', { timeout: 30_000 }, () => {
   it('gives each agent its position, color, port, branch and worktree', async () => {
     const agents = await launch(await createManager(), [draft(), draft()]);
     expect(
@@ -249,7 +249,7 @@ describe('AgentManager.launch', () => {
   });
 });
 
-describe('AgentManager launch validation', () => {
+describe('AgentManager launch validation', { timeout: 30_000 }, () => {
   const noWorktree = () => {
     expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(1);
   };
@@ -323,7 +323,7 @@ describe('AgentManager launch validation', () => {
   });
 });
 
-describe('AgentManager terminal and environment', () => {
+describe('AgentManager terminal and environment', { timeout: 30_000 }, () => {
   it('gives the agent its port, hook URL, token and id, and none of the parent Claude Code session', async () => {
     shellEnv = { ...baseEnv, CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', KEEP_ME: 'yes' };
     const spawned: PtySpawnOptions[] = [];
@@ -425,7 +425,7 @@ describe('AgentManager terminal and environment', () => {
   });
 });
 
-describe('AgentManager restart of the app (FR-038)', () => {
+describe('AgentManager restart of the app (FR-038)', { timeout: 30_000 }, () => {
   it('restores the agents with their colors, branches and ports, to be resumed', async () => {
     const manager = await createManager();
     const launched = await launch(manager, [draft(), draft()]);

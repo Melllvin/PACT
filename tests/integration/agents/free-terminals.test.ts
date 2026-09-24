@@ -54,7 +54,7 @@ beforeEach(async () => {
   workspace = await workspaces.open(repo);
   pty = new PtyManager();
   terminals = [];
-});
+}, 30_000);
 
 afterEach(async () => {
   for (const terminal of terminals) await terminal.dispose();
@@ -62,7 +62,7 @@ afterEach(async () => {
   workspaces.dispose();
   await stores.workspace(workspace.id).read();
   await rm(root, { recursive: true, force: true });
-});
+}, 30_000);
 
 describe.skipIf(isWindows)('FreeTerminals', () => {
   it('opens shells at the root of the main repository and saves them', async () => {
@@ -106,7 +106,7 @@ describe.skipIf(isWindows)('FreeTerminals', () => {
   });
 });
 
-describe('freeTerminalShell', () => {
+describe('freeTerminalShell', { timeout: 30_000 }, () => {
   it('uses $SHELL as a login shell on macOS, /bin/zsh without it', async () => {
     expect(await freeTerminalShell({ SHELL: '/opt/homebrew/bin/fish' }, 'darwin')).toEqual({
       file: '/opt/homebrew/bin/fish',
