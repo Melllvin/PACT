@@ -105,6 +105,28 @@ describe('app store', () => {
     expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w1' });
   });
 
+  it('closes the home tab back to the workspace shown before it', async () => {
+    const store = createAppStore(fakeApi({ workspaces: [workspace('w1'), workspace('w2')] }).api);
+    await store.getState().load();
+    store.getState().selectWorkspace('w2');
+    store.getState().openHome();
+    store.getState().closeHome();
+    expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w2' });
+  });
+
+  it('closes the home tab to the last workspace when the previous one is gone', () => {
+    const store = createAppStore(fakeApi().api);
+    store.setState({ workspaces: [workspace('w1')], activeTab: { kind: 'home' } });
+    store.getState().closeHome();
+    expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w1' });
+  });
+
+  it('keeps the home tab when no workspace is open', () => {
+    const store = createAppStore(fakeApi().api);
+    store.getState().closeHome();
+    expect(store.getState().activeTab).toEqual({ kind: 'home' });
+  });
+
   it('tracks the active view', () => {
     const store = createAppStore(fakeApi().api);
     expect(store.getState().view).toBe('tiles');
