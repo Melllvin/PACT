@@ -20,7 +20,9 @@ alimente les bordures, la colonne À faire et les indicateurs d'onglet. Tout le 
 
 **Primary Dependencies**: Electron 44, electron-vite 5, React 19, Zustand 5, node-pty 1.1,
 @xterm/xterm 6 (+ addons fit, webgl, serialize, unicode11, web-links), zod, electron-builder 26 ;
-effets 1c : `DotGrid` de React Bits copié (variante TS + CSS) et `gsap` 3.15 (research.md R15)
+interface : shadcn/ui (primitives `radix-ui`, `class-variance-authority`, `clsx`, `tailwind-merge`,
+`lucide-react`) sur Tailwind CSS 4.3 (`@tailwindcss/vite`, `tw-animate-css`) (research.md R16) ;
+effets 1c : `DotGrid` de React Bits (variante TS + Tailwind) et `gsap` 3.15 (research.md R15)
 
 **Storage**: fichiers JSON validés par zod dans `userData` (research.md R9) ; état Git dans le
 dépôt lui-même (`.worktrees/`, `.git/info/exclude`)
@@ -59,19 +61,23 @@ Aucun point « NEEDS CLARIFICATION » restant : tous résolus dans [research.md]
 **Outillage à inscrire dans la constitution** (amendement 1.1.0, via `/speckit-constitution`) :
 Vitest + Playwright, ESLint + Prettier, seuils de couverture ci-dessus, CI macOS + Windows.
 
-**Re-check amendement R15 (2026-09-24, React Bits)** :
+**Re-check amendements R15 et R16 (2026-09-24, React Bits, shadcn/ui + Tailwind)** : la stack de
+référence de la constitution (Electron + TypeScript strict + React) est inchangée ; Tailwind et
+shadcn sont des dépendances d'interface, justifiées ci-dessous, pas un changement de stack.
 
 | Principe | Effet de l'amendement | Statut |
 |----------|-----------------------|--------|
 | I. Tests d'abord | Enrobages d'effets testés avant écriture (mouvement réduit, tokens, absence dans les tuiles), `gsap` simulé ; rendu vérifié par captures Playwright | ✅ |
+| I. Tests d'abord (R16) | Chaque composant shadcn entre par un test du comportement attendu (rôle, clavier, focus) ; risques CSP et preflight couverts par un test en échec avant installation | ✅ |
 | II. Merge sur tests verts | Inchangé ; les captures entrent dans `npm run test:e2e` | ✅ |
 | III. Zéro régression | Couverture : le code React Bits copié tel quel ne se teste pas sous jsdom (canvas). Exclusion proposée, **soumise à l'accord de l'utilisateur** (Complexity Tracking) | ⚠️ |
-| IV. Réutiliser | Reprend un effet existant (`DotGrid`) au lieu de l'écrire ; garde CSS Modules et tokens (R10) ; les effets déjà en CSS (pulse, dépliage) restent tels quels | ✅ |
+| IV. Réutiliser | Reprend un effet existant (`DotGrid`) et des composants accessibles existants (shadcn/Radix) au lieu de les réécrire ; tokens R10 conservés comme thème ; `use-dialog-keys` et les dialogues faits main disparaissent à la migration (pas de double implémentation durable) | ✅ |
+| V. Qualité (R16) | Huit dépendances d'interface, toutes MIT / Apache-2.0 / ISC, maintenues, sans équivalent dans le projet (R16) ; le code shadcn copié suit notre lint et nos tests | ✅ |
 | V. Qualité | Une dépendance (`gsap`), justifiée : aucun équivalent dans le projet, maintenue (3.15, 2026), licence gratuite y compris commerciale (non OSI, R15). React Bits : MIT + Commons Clause, usage dans l'app permis | ✅ |
 
 **Re-check post-design (Phase 1)** : data-model, contrats et quickstart n'introduisent ni nouvelle
 dépendance ni nouvelle couche. ✅ Aucun écart. Depuis l'amendement R15, Complexity Tracking
-contient deux lignes, dont une soumise à l'accord de l'utilisateur ; data-model et contrats sont
+contient trois lignes, dont une soumise à l'accord de l'utilisateur ; data-model et contrats sont
 inchangés.
 
 ## Project Structure
@@ -121,10 +127,12 @@ src/
     ├── tiles/                    # Tuile, bordure, actions, terminal xterm
     ├── todo/                     # Colonne À faire
     ├── focus/                    # Focus (1p), pastilles
+    ├── components/ui/            # Composants shadcn/ui copiés (R16), testés et lintés comme le reste
+    ├── lib/utils.ts              # cn() : clsx + tailwind-merge (R16)
     ├── effects/                  # Grille de points, particules, pulse (R15)
     │   └── vendor/react-bits/    # Composants React Bits copiés (DotGrid), en-tête origine + licence
     ├── store/                    # Zustand
-    └── theme/tokens.css          # Tokens direction 1c (R10)
+    └── theme/globals.css         # Tailwind v4 + @theme : tokens 1c (R10, R16), remplace tokens.css
 
 tests/
 ├── unit/                         # Vitest (main, shared, renderer)
@@ -134,6 +142,7 @@ tests/
 └── fixtures/fake-cli/            # Faux CLI + scénarios JSON
 
 docs/maquettes/                   # Maquettes de référence
+components.json                   # Configuration du CLI shadcn (R16)
 .github/workflows/ci.yml          # Matrice macOS + Windows
 ```
 
@@ -146,4 +155,5 @@ qu'une seule application existe (Constitution V).
 | Écart | Pourquoi | Alternative plus simple écartée parce que |
 |-------|----------|-------------------------------------------|
 | Exclure `src/renderer/effects/vendor/**` de la couverture et du lint (**proposé, à valider par l'utilisateur avant toute modification de configuration**) | Code tiers copié tel quel : canvas + `gsap` non exécutables sous jsdom, style non conforme à nos règles strictes (`exactOptionalPropertyTypes`, lint) ; le réécrire à nos règles en ferait du code maison | Le tester sous jsdom exigerait de simuler tout le canvas pour une couverture sans valeur ; le réécrire annule l'intérêt de la bibliothèque. Les enrobages dans `effects/` restent couverts et soumis au seuil de 70 % |
+| CSS Modules et Tailwind coexistent pendant la migration (R16) | Migration écran par écran, sous tests, plutôt qu'une réécriture d'un bloc | Tout migrer d'un coup casserait tous les écrans en même temps ; la coexistence prend fin avec les tâches de migration (T141), aucun nouvel écran n'utilise de CSS Module |
 | Dépendance `gsap` pour un seul effet | Exigée par `DotGrid` (inertie au survol) | La grille en canvas maison (R10) reste le repli si l'utilisateur refuse l'exclusion ci-dessus ou la licence `gsap` |

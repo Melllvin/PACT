@@ -292,7 +292,8 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
 
 - **Decision** : React 19 + TypeScript strict, Zustand 5 pour l'état du renderer, CSS Modules avec
   variables CSS pour les tokens de la direction 1c. Polices Instrument Sans et JetBrains Mono
-  embarquées (pas de chargement réseau).
+  embarquées (pas de chargement réseau). **Amendé par R16** : styles en Tailwind v4 et composants
+  shadcn/ui ; les CSS Modules existants migrent écran par écran.
 - **Tokens** : fond `#0d1117`, surface `#131820`, texte `#dfe4eb`, texte secondaire `#8b94a4`,
   bordure `#27303c` ; agents : Purple `#a07fdc`, Cyan `#6cc5e0`, Green `#45c664`,
   Magenta `#d466a8`, Yellow `#c9c85a`, Slate `#5a6890` ; états : attend (orange) `#d6934f`,
@@ -351,8 +352,8 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
   après les user stories, avant T111 (voir T141).
 - **Portée** : React Bits est une collection d'**effets** (fonds animés, animations de texte,
   micro-interactions), pas un kit de composants : pas de boutons, dialogues ni formulaires. R10
-  reste la base : CSS Modules + tokens 1c pour la mise en page et les contrôles. R15 complète
-  R10 pour les seules animations de FR-042.
+  reste la base des tokens 1c ; la mise en page et les contrôles relèvent de R16 (shadcn/ui +
+  Tailwind). R15 couvre les seules animations de FR-042.
 - **Correspondance maquette → composant** (`docs/maquettes/Grille reactive.dc.html`) :
 
   | Effet de la maquette | Choix | Remarque |
@@ -364,10 +365,10 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
 
   Seule `DotGrid` est donc reprise de React Bits à ce stade ; tout autre composant ajouté plus
   tard passe par la même grille d'évaluation (licence, dépendances, CSP, mouvement réduit).
-- **Distribution** : copie du source (mode « copy-paste » officiel, variante **TS + CSS**, pas
-  Tailwind) dans `src/renderer/effects/vendor/react-bits/`, avec en-tête : origine, commit du dépôt
-  source, licence. Pas de CLI shadcn (exige un `components.json` et Tailwind) ni de jsrepo : un
-  seul composant ne justifie pas un outil de plus (Constitution IV, V).
+- **Distribution** (révisée avec R16) : variante **TS + Tailwind**, ajoutée par le CLI shadcn déjà
+  retenu en R16 depuis le registre de React Bits (`https://reactbits.dev/r/DotGrid-TS-TW`), dans
+  `src/renderer/effects/vendor/react-bits/`, avec en-tête : origine, commit du dépôt source,
+  licence. Pas de jsrepo : le CLI shadcn suffit (Constitution IV).
 - **Licences** (Constitution, « licence compatible ») :
   - React Bits : MIT + Commons Clause. L'usage dans une application, même commerciale, est
     permis ; vendre, sous-licencier ou redistribuer **les composants eux-mêmes** est interdit.
@@ -382,8 +383,6 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
     zones hors tuiles.
   - Couleurs passées depuis les tokens R10 (`--border` au repos, `--action` actif), jamais codées
     en dur dans l'appel.
-  - `DotGrid.css` est une feuille globale : ses classes sont préfixées ou converties en CSS Module
-    à la copie pour éviter les collisions.
   - CSP stricte (R11) : aucun chargement réseau, ni `eval` ; canvas autorisé. Vérifié par le test
     e2e CSP existant.
 - **Tests** : jsdom n'a ni canvas ni WebGL. Les enrobages sont testés (mouvement réduit, couleurs
@@ -394,7 +393,58 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
 - **Alternatives considérées** :
   - Garder R10 seul (canvas maison pour la grille) : zéro dépendance, mais écarte le choix de
     l'utilisateur et réécrit un effet qui existe déjà.
-  - Variante Tailwind de React Bits : ajoute Tailwind à tout le renderer pour un seul effet.
+  - Variante CSS de React Bits : retenue d'abord, abandonnée quand Tailwind est arrivé avec R16
+    (feuille globale, collisions de classes possibles, hors du CLI).
   - `Particles` (React Bits) pour la transition : effet différent de la maquette, plus `ogl` et
     WebGL pour un rendu qui ne correspond pas.
   - Un kit de composants (shadcn/ui, Radix…) : hors de la demande ; décision distincte si besoin.
+
+## R16. Composants : shadcn/ui + Tailwind v4 (amendement du 2026-09-24)
+
+- **Decision** : choix de l'utilisateur, un rendu « ultra moderne / sobre » dans l'esprit de React
+  Bits. Composants **shadcn/ui** (CLI `shadcn` 4.x), styles **Tailwind CSS v4** (4.3, plugin
+  `@tailwindcss/vite`), primitives **Radix** (paquet unifié `radix-ui`). Comme React Bits, le code
+  des composants est copié dans le dépôt (`src/renderer/components/ui/`) : il nous appartient, se
+  modifie, se teste et se lint comme le reste.
+- **Rationale** :
+  - Dialogues, onglets, listes, interrupteurs, infobulles accessibles (focus piégé, clavier,
+    ARIA) sans les réécrire : aujourd'hui 5 dialogues faits main (`use-dialog-keys`), une
+    infobulle, des onglets ; la suite ajoute les onglets du Focus (1p) et le panneau détaillé
+    (1d : liste maître-détail, choix de modèle, interrupteur de reprise).
+  - Complément naturel de R15 : React Bits se distribue par le même CLI, en variante Tailwind.
+- **Tokens 1c conservés** : Tailwind v4 déclare son thème en variables CSS (`@theme`) ; les tokens
+  de R10 (`--bg`, `--surface`, `--border`, `--agent-*`, `--waiting`, `--danger`, `--accept`,
+  `--action`, rayon 6 px, Instrument Sans / JetBrains Mono) deviennent les variables du thème
+  shadcn (`--background`, `--card`, `--border`, `--primary`, `--destructive`, `--radius`…).
+  Thème sombre uniquement, comme la direction 1c. Les libellés d'état restent des glyphes
+  (◆ ✓ ✕ ⎇ ⤢, `CONSIGNES-UI.md`) ; `lucide-react` ne sert qu'aux icônes des composants shadcn.
+- **Intégration electron-vite** :
+  - `@tailwindcss/vite` dans la section `renderer` de `electron.vite.config.ts` (Vite 7
+    compatible) ; feuille d'entrée `src/renderer/theme/globals.css` (`@import "tailwindcss"`,
+    `tw-animate-css`, `@theme`), qui absorbe `tokens.css`.
+  - Alias `@/*` → `src/renderer/*` dans `tsconfig.web.json`, `electron.vite.config.ts` et
+    `vitest.config.ts` ; `components.json` à la racine (style `new-york`, `rsc: false`,
+    `tsx: true`, alias `@/components`, `@/lib/utils`).
+  - `cn()` (`clsx` + `tailwind-merge`) dans `src/renderer/lib/utils.ts`.
+- **Migration** : progressive. Les CSS Modules existants (12 feuilles) cohabitent avec Tailwind et
+  migrent écran par écran avec T141 ; les nouveaux écrans des phases 7 à 9 (Focus, lancement
+  détaillé, reprise) utilisent directement shadcn. Les tests visent des rôles et noms accessibles
+  (`getByRole`) : ils restent valides et servent de filet de non-régression.
+- **Risques à vérifier dès l'installation (tests d'abord)** :
+  - **CSP** (`default-src 'self'`, R11) : certaines primitives Radix injectent une balise
+    `<style>` (verrou de défilement des dialogues) ; le test smoke exige zéro erreur console.
+    Si c'est bloqué : nonce de style servi par le main, sinon décision de l'utilisateur sur
+    `style-src 'unsafe-inline'`. Jamais d'assouplissement silencieux.
+  - **Terminaux bruts (FR-020)** : le reset « preflight » de Tailwind ne doit rien changer au rendu
+    xterm ; vérifié par les e2e existants et une capture de tuile.
+  - Performance SC-002 inchangée : Tailwind produit une feuille statique au build.
+- **Dépendances ajoutées** (Constitution, « justifiée, maintenue, licence compatible ») :
+  `tailwindcss`, `@tailwindcss/vite`, `tw-animate-css`, `clsx`, `tailwind-merge` (MIT),
+  `class-variance-authority` (Apache-2.0), `radix-ui` (MIT), `lucide-react` (ISC) ; `shadcn` en
+  outil (`npx`, non installé). Aucune n'a d'équivalent dans le projet.
+- **Alternatives considérées** :
+  - Base UI + CSS Modules : primitives modernes, aucune dépendance de style, mais tout le rendu
+    reste à écrire ; écarté au profit d'un rendu sobre prêt à l'emploi.
+  - Radix seul, sans shadcn : mêmes primitives, sans le style.
+  - React Aria : accessibilité de référence, API plus lourde pour une dizaine de composants.
+  - Kits stylés (MUI, Mantine, Chakra) : design propre qui lutte contre 1c.
