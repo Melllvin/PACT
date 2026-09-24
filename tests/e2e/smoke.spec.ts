@@ -28,6 +28,16 @@ test('opens a PACT window without console errors', async () => {
   expect(errors).toEqual([]);
 });
 
+test('serves a strict Content-Security-Policy in the built app', async () => {
+  const page = await launched.app.firstWindow();
+  const csp = await page
+    .locator('meta[http-equiv="Content-Security-Policy"]')
+    .getAttribute('content');
+  expect(csp).toContain("default-src 'self'");
+  expect(csp).not.toContain('unsafe-inline');
+  expect(csp).not.toContain('unsafe-eval');
+});
+
 test('keeps app data in an isolated directory in test mode', async () => {
   const userData = await launched.app.evaluate(({ app }) => app.getPath('userData'));
   expect(userData).toContain('pact-e2e-');
