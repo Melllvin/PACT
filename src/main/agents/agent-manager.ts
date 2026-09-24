@@ -36,8 +36,6 @@ type Options = {
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
   onBranch?: (event: AgentBranchEvent) => void;
-  /** How often a running agent's branch is read (T075). */
-  branchIntervalMs?: number;
 };
 
 export type LaunchRequest = {
@@ -89,7 +87,6 @@ export class AgentManager {
     this.branches = new BranchWatcher({
       currentBranch: (path) => this.git.currentBranch(path),
       onBranch: (id, branch) => void this.renamed(id, branch),
-      ...(options.branchIntervalMs === undefined ? {} : { intervalMs: options.branchIntervalMs }),
     });
     this.unsubscribe = [
       this.pty.onData((id, data) => {
@@ -143,9 +140,7 @@ export class AgentManager {
       throw new IpcFailure('INVALID_INPUT', 'Cet agent n’attend pas de réponse.');
     }
     this.pty.write(id, running.adapter.answerKeys(answer));
-    await this.change(workspace.id, id, (a) =>
-      a.state === 'awaiting-answer' ? { ...a, state: 'working' } : a,
-    );
+    await this.change(workspace.id, id, (a) => ({ ...a, state: 'working' }));
   }
 
   /**
@@ -238,22 +233,17 @@ export class AgentManager {
   private async startAgain(workspace: Workspace, agent: Agent, sessionId: string | null) {
     const cli = this.installedCli(agent.cliId);
     const env = await this.resolveEnv();
-    let started: Agent | undefined;
+    const fields = {
+      state: 'starting',
+      sessionId,
+      lastError: null,
+      scheduledResume: null,
+    } as const;
     await this.workspaces.update(workspace.id, (ws) => ({
       ...ws,
-      agents: ws.agents.map((a) =>
-        a.id === agent.id
-          ? (started = {
-              ...a,
-              state: 'starting',
-              sessionId,
-              lastError: null,
-              scheduledResume: null,
-            })
-          : a,
-      ),
+      agents: ws.agents.map((a) => (a.id === agent.id ? { ...a, ...fields } : a)),
     }));
-    if (!started) throw new IpcFailure('NOT_FOUND', 'Agent inconnu.');
+    const started: Agent = { ...agent, ...fields };
     this.emit(started);
     this.start(started, workspace.path, cli, env);
   }

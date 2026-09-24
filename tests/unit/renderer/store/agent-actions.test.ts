@@ -21,11 +21,19 @@ const workspace: Workspace = {
   status: 'available',
 };
 
+// Another open workspace, untouched by what happens to the agents of the first one.
+const other: Workspace = { ...workspace, id: 'w2', path: '/w2', name: 'w2', agents: [agent(3)] };
+
 const setup = async (fail?: string) => {
   const listeners = new Map<string, (payload: unknown) => void>();
   const invoke = vi.fn<Invoke>((channel) => {
     if (channel === 'app:getState') {
-      return Promise.resolve({ workspaces: [workspace], recents: [], clis: [], permission: null });
+      return Promise.resolve({
+        workspaces: [workspace, other],
+        recents: [],
+        clis: [],
+        permission: null,
+      });
     }
     // IPC failures reach the renderer as plain { code, message } objects.
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
@@ -120,5 +128,6 @@ describe('closing an agent (FR-037)', () => {
     const { store, emit } = await setup();
     emit('agent:state', { agentId: agent(2).id, state: 'closed' });
     expect(store.getState().workspaces[0]?.agents.map((a) => a.id)).toEqual([id]);
+    expect(store.getState().workspaces[1]).toEqual(other);
   });
 });

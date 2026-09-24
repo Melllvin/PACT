@@ -323,12 +323,12 @@ describe('App launch flow (US2)', () => {
 describe('App tile actions (US3)', () => {
   type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
   const failed = agent(1, { cliId: 'aider', state: 'error' });
-  const setup = () => {
+  const setup = (agents = [failed]) => {
     const invoke = vi.fn<Invoke>((channel) => {
       switch (channel) {
         case 'app:getState':
           return Promise.resolve({
-            workspaces: [{ ...workspace('w1', 'w1'), agents: [failed] }],
+            workspaces: [{ ...workspace('w1', 'w1'), agents }],
             recents: [],
             clis: [],
             permission: null,
@@ -350,6 +350,12 @@ describe('App tile actions (US3)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Relancer' }));
     expect(invoke).toHaveBeenCalledWith('agent:resume', { agentId: failed.id });
     expect(invoke).toHaveBeenCalledWith('agent:restart', { agentId: failed.id });
+  });
+
+  it('answers an agent from its tile', async () => {
+    const invoke = setup([{ ...failed, state: 'awaiting-answer' }]);
+    await userEvent.click(await screen.findByRole('button', { name: '✓ Autoriser' }));
+    expect(invoke).toHaveBeenCalledWith('agent:answer', { agentId: failed.id, answer: 'allow' });
   });
 
   it('opens « Journal » for the agent and closes it', async () => {

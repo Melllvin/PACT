@@ -201,6 +201,34 @@ describe('AgentManager after a crash', { timeout: 30_000 }, () => {
     expect(pty.history(agent.id)).toContain('Terminé');
   });
 
+  it('« Reprendre » types « continue » when the CLI is still alive after a rate limit', async () => {
+    scenario = 'rate-limit-alive';
+    const other = await launchOne();
+    const agent = await launchOne();
+    pty.write(agent.id, 'Travaille\r');
+    await waitForState(agent.id, 'error');
+    expect(current(agent.id)?.lastError?.kind).toBe('rate-limit');
+    await manager.resume(agent.id);
+    await waitForOutput(agent.id, 'Reprise');
+    await waitForState(agent.id, 'done');
+    expect(current(agent.id)?.lastError).toBeNull();
+    expect(current(other.id)?.state).toBe('awaiting-prompt');
+  });
+
+  it('« Relancer » without a known prompt starts a new session and types nothing', async () => {
+    const agent = await launchOne();
+    const write = vi.spyOn(pty, 'write');
+    await workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => ({ ...a, state: 'error' as const })),
+    }));
+    await manager.restart(agent.id);
+    await waitForState(agent.id, 'awaiting-prompt');
+    await new Promise((r) => setTimeout(r, 200));
+    expect(write).not.toHaveBeenCalled();
+    expect(current(agent.id)?.state).toBe('awaiting-prompt');
+  });
+
   it('refuses to resume or restart an agent that is not in error', async () => {
     const agent = await launchOne();
     await expect(manager.resume(agent.id)).rejects.toMatchObject({ code: 'INVALID_INPUT' });
@@ -218,11 +246,13 @@ describe('AgentManager after a crash', { timeout: 30_000 }, () => {
 describe('AgentManager branch watching', { timeout: 30_000 }, () => {
   it('announces a branch renamed by the agent and saves it', async () => {
     scenario = 'rename-branch';
+    const other = await launchOne();
     const agent = await launchOne();
     pty.write(agent.id, 'Renomme\r');
     await waitFor(() => branches.length > 0, 'no agent:branch event', agent.id);
     expect(branches).toEqual([{ agentId: agent.id, branch: 'feature/login' }]);
     expect(current(agent.id)?.branch).toBe('feature/login');
+    expect(current(other.id)?.branch).toBe('agent/fake-1');
   });
 });
 
