@@ -9,8 +9,8 @@ import { FAKE_CLI, scenarioPath } from '../../fixtures/fake-cli/paths';
 
 // Real pseudo-terminals (forkpty on macOS, ConPTY on Windows) driving the fake CLI.
 const isWindows = process.platform === 'win32';
-// eslint-disable-next-line no-control-regex
 const stripAnsi = (text: string) =>
+  // eslint-disable-next-line no-control-regex -- terminal escape sequences are the point here
   text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07/g, '');
 
 let manager: PtyManager;
@@ -18,12 +18,13 @@ let dir: string;
 let output: Map<string, string>;
 let exits: Map<string, number>;
 
-const env = (scenario = 'prompt-then-done') =>
-  Object.fromEntries(
-    Object.entries({ ...process.env, FAKE_CLI_SCENARIO: scenarioPath(scenario) }).filter(
-      (e): e is [string, string] => e[1] !== undefined,
-    ),
-  );
+const baseEnv: Record<string, string> = {};
+for (const [key, value] of Object.entries(process.env))
+  if (value !== undefined) baseEnv[key] = value;
+const env = (scenario = 'prompt-then-done') => ({
+  ...baseEnv,
+  FAKE_CLI_SCENARIO: scenarioPath(scenario),
+});
 
 const waitFor = async (id: string, text: string, timeoutMs = 10_000) => {
   const start = Date.now();

@@ -81,7 +81,9 @@ describe('PtyManager', () => {
 
   it('refuses a second terminal with the same id', () => {
     manager.start('a1', spec);
-    expect(() => manager.start('a1', spec)).toThrow();
+    expect(() => {
+      manager.start('a1', spec);
+    }).toThrow();
   });
 
   it('passes pre-escaped arguments verbatim on Windows (cmd.exe wrapper)', () => {
