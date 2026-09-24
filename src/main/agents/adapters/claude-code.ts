@@ -107,6 +107,11 @@ export class ClaudeCodeAdapter implements CliAdapter {
     return null;
   }
 
+  /** The PermissionRequest hook reply: Claude Code then shows no dialog (R4, FR-034). */
+  permissionDecision(behavior: 'allow') {
+    return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior } } };
+  }
+
   /** `1` picks « Yes »; Escape refuses whatever the options (T049). */
   answerKeys(answer: 'allow' | 'deny'): string {
     return answer === 'allow' ? '1' : '\u001b';

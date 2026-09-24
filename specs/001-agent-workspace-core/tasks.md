@@ -230,12 +230,12 @@ worktree ».
 ### Tests for User Story 5 ⚠️
 
 - [ ] T087 [P] [US5] Tests du Focus : ouverture par ⤢, en-tête branche + port, onglets Terminal (actif), Aperçu et Changements (inactifs), pastilles aux couleurs des agents, « ‹ Tuiles » et Échap hors du terminal ramènent à la grille, Échap dans le terminal est transmis au CLI dans `tests/unit/renderer/focus/FocusView.test.tsx`
-- [ ] T088 [US5] Tests d'intégration « Toujours pour ce worktree » : `agent:answer` avec `always: true` ajoute la règle à `alwaysAllowRules` ; pour Claude Code, la demande suivante de même `ruleKey` reçoit `allow` via la réponse du hook `PermissionRequest` ; pour les autres adaptateurs, `answerKeys('allow')` est envoyé automatiquement ; règles effacées à la fermeture de l'agent dans `tests/integration/agents/always-allow.test.ts`
+- [X] T088 [US5] Tests d'intégration « Toujours pour ce worktree » : `agent:answer` avec `always: true` ajoute la règle à `alwaysAllowRules` ; pour Claude Code, la demande suivante de même `ruleKey` reçoit `allow` via la réponse du hook `PermissionRequest` ; pour les autres adaptateurs, `answerKeys('allow')` est envoyé automatiquement ; règles effacées à la fermeture de l'agent dans `tests/integration/agents/always-allow.test.ts`
 - [ ] T089 [P] [US5] Test e2e : ⤢ → Focus, saisie, pastille d'un autre agent → historique complet, Échap → grille, sorties intactes dans `tests/e2e/us5-focus.spec.ts`
 
 ### Implementation for User Story 5
 
-- [ ] T090 [US5] Implémenter `alwaysAllowRules` et la décision automatique (réponse `PermissionRequest` ou `answerKeys`) dans `src/main/agents/agent-manager.ts` et `src/main/agents/hook-server.ts`
+- [X] T090 [US5] Implémenter `alwaysAllowRules` et la décision automatique (réponse `PermissionRequest` ou `answerKeys`) dans `src/main/agents/agent-manager.ts` et `src/main/agents/hook-server.ts`
 - [ ] T091 [US5] Implémenter le Focus et le sélecteur de pastilles en réutilisant `Tile` et `TerminalView` dans `src/renderer/focus/FocusView.tsx` et `src/renderer/focus/AgentPills.tsx`
 - [ ] T092 [US5] Ajouter l'action « Toujours pour ce worktree » à côté de Refuser / Autoriser en Focus dans `src/renderer/tiles/TileActions.tsx`
 
