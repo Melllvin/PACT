@@ -235,6 +235,10 @@ describe('Codex terminal and dialogs', () => {
     expect(codex.parseRateLimitReset('Try again at 9 AM')).toEqual(new Date(2026, 8, 25, 9, 0));
     expect(codex.parseRateLimitReset('Try again later')).toBeNull();
   });
+
+  it('ignores an agent merely talking about rate limits', () => {
+    expect(adapter.mapOutput('• Added retry with backoff on rate limit errors', {})).toBeNull();
+  });
 });
 
 describe('Codex detection', () => {

@@ -109,6 +109,34 @@ describe('worktrees', () => {
     expect(git(repo, 'branch', '--list', 'agent/codex-1')).toContain('agent/codex-1');
   });
 
+  it('creates the worktree on the branch chosen in the launch form', async () => {
+    const created = await service.addWorktree(repo, {
+      cli: 'codex',
+      position: 3,
+      base: 'main',
+      branch: 'feature/login',
+    });
+    expect(created).toEqual({ path: join(repo, '.worktrees', 'codex-3'), branch: 'feature/login' });
+    expect(await service.currentBranch(created.path)).toBe('feature/login');
+  });
+
+  it('refuses a chosen branch that already exists instead of reusing it', async () => {
+    git(repo, 'branch', 'feature/login');
+    await expect(
+      service.addWorktree(repo, {
+        cli: 'codex',
+        position: 1,
+        base: 'main',
+        branch: 'feature/login',
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('tells whether a local branch exists', async () => {
+    expect(await service.branchExists(repo, 'main')).toBe(true);
+    expect(await service.branchExists(repo, 'agent/none')).toBe(false);
+  });
+
   it('writes the exclusion to the common git dir when .git is a file', async () => {
     const separate = join(root, 'separate');
     const gitDir = join(root, 'gitdir');
