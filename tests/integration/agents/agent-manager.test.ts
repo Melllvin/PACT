@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeAdapter } from '../../../src/main/agents/adapters/fake';
-import type { AgentSignal } from '../../../src/main/agents/adapters/types';
+import type { AgentSignal, OutputContext } from '../../../src/main/agents/adapters/types';
 import { AgentManager, type AgentStateEvent } from '../../../src/main/agents/agent-manager';
 import { CliRegistry } from '../../../src/main/agents/cli-registry';
 import { HookServer } from '../../../src/main/agents/hook-server';
@@ -39,6 +39,24 @@ class TerminalDialogFake extends FakeAdapter {
   }
 }
 
+/** A CLI without dialog hooks, whose questions only show as idle output (generic adapter, T099). */
+class IdleQuestionFake extends FakeAdapter {
+  readonly contexts: OutputContext[] = [];
+
+  override mapHookEvent(payload: unknown): AgentSignal | null {
+    const signal = super.mapHookEvent(payload);
+    return signal?.type === 'awaiting-answer' ? null : signal;
+  }
+
+  override mapOutput(chunk: string, ctx: OutputContext): AgentSignal | null {
+    this.contexts.push(ctx);
+    const match = /\? Exécuter : (.+) \(allow\/deny\)\s*$/.exec(chunk);
+    return match?.[1] && ctx.idleMs !== undefined
+      ? { type: 'awaiting-answer', summary: match[1] }
+      : null;
+  }
+}
+
 let root: string;
 let repo: string;
 let stores: Stores;
@@ -68,6 +86,7 @@ const createManager = async ({
   adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: process.platform }),
   ptyManager = pty,
   service = workspaces,
+  idleMs = undefined as number | undefined,
 } = {}) => {
   const registry = new CliRegistry({
     adapters: [adapter],
@@ -85,6 +104,7 @@ const createManager = async ({
     resolveEnv: () => Promise.resolve({ ...shellEnv, FAKE_CLI_SCENARIO: scenarioPath(scenario) }),
     isPortInUse: (port) => Promise.resolve(portsInUse.has(port)),
     onState: (event) => events.push(event),
+    ...(idleMs === undefined ? {} : { idleMs }),
   });
   managers.push(manager);
   return manager;
@@ -394,6 +414,18 @@ describe('AgentManager terminal and environment', { timeout: 30_000 }, () => {
     await waitForState(id, 'awaiting-prompt');
     pty.write(id, 'Supprime le fichier\r');
     await waitForState(id, 'awaiting-answer');
+  });
+
+  it('asks the adapter again once the output has been idle, for CLIs without hooks', async () => {
+    scenario = 'ask-permission';
+    const adapter = new IdleQuestionFake({ cliPath: FAKE_CLI, platform: process.platform });
+    const [agent] = await launch(await createManager({ adapter, idleMs: 150 }), [draft()]);
+    const id = agent?.id ?? '';
+    await waitForState(id, 'awaiting-prompt');
+    pty.write(id, 'Supprime le fichier\r');
+    await waitForState(id, 'awaiting-answer');
+    expect(current(id)?.state).toBe('awaiting-answer');
+    expect(adapter.contexts).toContainEqual({ idleMs: 150 });
   });
 
   it('shows a crash with the exit code', async () => {

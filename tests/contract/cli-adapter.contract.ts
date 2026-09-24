@@ -14,6 +14,11 @@ type ContractOptions = {
   executablePath?: string;
   /** Obligation 5 needs an adapter able to drive the fake CLI's permission scenario. */
   drivesFakeCli?: { env: Record<string, string> };
+  /**
+   * « Autre CLI »: the command the user typed, run as is. PACT knows neither its permission flags
+   * nor its sessions, so obligations 2 and 3 become « same arguments » and « relaunch ».
+   */
+  opaqueCommand?: boolean;
 };
 
 const LEVELS = ['always-allow', 'ask-sensitive', 'always-ask'] as const;
@@ -21,7 +26,7 @@ const LEVELS = ['always-allow', 'ask-sensitive', 'always-ask'] as const;
 export function runCliAdapterContract(
   name: string,
   factory: AdapterFactory,
-  { executablePath = '/opt/bin/agent', drivesFakeCli }: ContractOptions = {},
+  { executablePath = '/opt/bin/agent', drivesFakeCli, opaqueCommand = false }: ContractOptions = {},
 ) {
   const adapter = factory({ platform: process.platform });
   const input: LaunchInput = {
@@ -50,32 +55,49 @@ export function runCliAdapterContract(
       });
     });
 
-    it('2. maps each permission level to distinct arguments', () => {
-      const argsFor = LEVELS.map((level) =>
-        JSON.stringify(adapter.buildLaunch({ ...input, permissionLevel: level }).args),
-      );
-      expect(new Set(argsFor).size).toBe(LEVELS.length);
+    describe.skipIf(opaqueCommand)('with known permission flags and sessions', () => {
+      it('2. maps each permission level to distinct arguments', () => {
+        const argsFor = LEVELS.map((level) =>
+          JSON.stringify(adapter.buildLaunch({ ...input, permissionLevel: level }).args),
+        );
+        expect(new Set(argsFor).size).toBe(LEVELS.length);
+      });
+
+      it('2. falls back to the most cautious level for an unsupported one', () => {
+        const unknown = {
+          ...input,
+          permissionLevel: 'bypass' as unknown as LaunchInput['permissionLevel'],
+        };
+        const cautious = adapter.buildLaunch({ ...input, permissionLevel: 'always-ask' });
+        expect(adapter.buildLaunch(unknown).args).toEqual(cautious.args);
+      });
+
+      it('3. resumes the same session with the same permission level', () => {
+        const launch = adapter.buildLaunch({ ...input, sessionId: 'session-42' });
+        const resume = adapter.buildResume({ ...input, sessionId: 'session-42' });
+        expect(resume.args.join(' ')).toContain('session-42');
+        expect(resume.cwd).toBe(launch.cwd);
+        const permissionArgs = (args: string[]) =>
+          args.filter((arg) => !arg.includes('session') && arg !== 'session-42');
+        expect(permissionArgs(resume.args)).toEqual(
+          expect.arrayContaining(permissionArgs(launch.args)),
+        );
+      });
     });
 
-    it('2. falls back to the most cautious level for an unsupported one', () => {
-      const unknown = {
-        ...input,
-        permissionLevel: 'bypass' as unknown as LaunchInput['permissionLevel'],
-      };
-      const cautious = adapter.buildLaunch({ ...input, permissionLevel: 'always-ask' });
-      expect(adapter.buildLaunch(unknown).args).toEqual(cautious.args);
-    });
+    describe.runIf(opaqueCommand)('with a command typed by the user', () => {
+      it('2. never adds arguments to it, whatever the permission level', () => {
+        const argsFor = LEVELS.map((level) =>
+          JSON.stringify(adapter.buildLaunch({ ...input, permissionLevel: level }).args),
+        );
+        expect(new Set(argsFor).size).toBe(1);
+      });
 
-    it('3. resumes the same session with the same permission level', () => {
-      const launch = adapter.buildLaunch({ ...input, sessionId: 'session-42' });
-      const resume = adapter.buildResume({ ...input, sessionId: 'session-42' });
-      expect(resume.args.join(' ')).toContain('session-42');
-      expect(resume.cwd).toBe(launch.cwd);
-      const permissionArgs = (args: string[]) =>
-        args.filter((arg) => !arg.includes('session') && arg !== 'session-42');
-      expect(permissionArgs(resume.args)).toEqual(
-        expect.arrayContaining(permissionArgs(launch.args)),
-      );
+      it('3. resumes by running it again', () => {
+        expect(adapter.buildResume({ ...input, sessionId: 'session-42' })).toEqual(
+          adapter.buildLaunch(input),
+        );
+      });
     });
 
     it('4. ignores invalid hook payloads without throwing', () => {
