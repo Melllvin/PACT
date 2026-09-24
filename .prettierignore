@@ -1,0 +1,13 @@
+node_modules
+out
+dist
+coverage
+.tsbuild
+test-results
+playwright-report
+package-lock.json
+docs
+.agents
+.claude
+.specify
+specs
