@@ -61,7 +61,7 @@ export function WorkspaceView({
     <>
       {/* The À faire column and its button appear with the first agent (FR-006). */}
       <Toolbar
-        todoCount={todos.length}
+        todoCount={todos.filter((todo) => todo.kind !== 'info').length}
         showTodo={hasAgents}
         todoOpen={todoOpen}
         onToggleTodo={() => {

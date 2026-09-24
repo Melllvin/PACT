@@ -449,4 +449,4 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 ## Phase 16: Convergence
 
-- [ ] T139 Tests puis implémentation : ne compter dans le badge du bouton À faire que les éléments en attente (répondre, limite de débit, consigne), pas l'élément informatif du terminal libre, dans `tests/unit/renderer/workspace/WorkspaceView.test.tsx` et `src/renderer/workspace/WorkspaceView.tsx` per FR-029 / US4/AC3 (partial)
+- [X] T139 Tests puis implémentation : ne compter dans le badge du bouton À faire que les éléments en attente (répondre, limite de débit, consigne), pas l'élément informatif du terminal libre, dans `tests/unit/renderer/workspace/WorkspaceView.test.tsx` et `src/renderer/workspace/WorkspaceView.tsx` per FR-029 / US4/AC3 (partial)
