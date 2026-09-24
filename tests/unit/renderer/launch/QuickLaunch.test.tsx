@@ -88,9 +88,9 @@ describe('QuickLaunch', () => {
     expect((minus as HTMLButtonElement).disabled).toBe(true);
     await user.click(within(row('Claude Code')).getByRole('button', { name: '−' }));
     expect(count('Claude Code')).toBe('0');
-    expect(
-      (screen.getByRole('button', { name: 'Lancer 0 agent' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Lancer 0 agent' }).hasAttribute('disabled')).toBe(
+      true,
+    );
   });
 
   it('opens a free terminal alone', async () => {
@@ -104,9 +104,9 @@ describe('QuickLaunch', () => {
     const user = userEvent.setup();
     renderLauncher({ existingAgents: 4 });
     await user.click(within(row('Codex')).getByRole('button', { name: '+' }));
-    expect(
-      (within(row('Codex')).getByRole('button', { name: '+' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect(within(row('Codex')).getByRole('button', { name: '+' }).hasAttribute('disabled')).toBe(
+      true,
+    );
     expect(screen.getByText(/6 agents au plus/)).toBeDefined();
   });
 
@@ -135,16 +135,16 @@ describe('QuickLaunch', () => {
   it('disables « Autre CLI… » until a CLI is added', () => {
     renderLauncher();
     expect(
-      (within(row('Autre CLI…')).getByRole('button', { name: '+' }) as HTMLButtonElement).disabled,
+      within(row('Autre CLI…')).getByRole('button', { name: '+' }).hasAttribute('disabled'),
     ).toBe(true);
   });
 
   it('says so when no agent CLI is installed', () => {
     renderLauncher({ clis: [] });
     expect(screen.getByText(/Aucun CLI d’agent détecté/)).toBeDefined();
-    expect(
-      (screen.getByRole('button', { name: 'Lancer 0 agent' }) as HTMLButtonElement).disabled,
-    ).toBe(true);
+    expect(screen.getByRole('button', { name: 'Lancer 0 agent' }).hasAttribute('disabled')).toBe(
+      true,
+    );
   });
 
   it('shows why a launch was refused', () => {

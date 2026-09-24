@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
+import { DetectedClis } from '../home/DetectedClis';
 import { Home } from '../home/Home';
+import { PermissionsDialog } from '../launch/PermissionsDialog';
+import { QuickLaunch } from '../launch/QuickLaunch';
 import type { AppStore } from '../store/app-store';
+import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { Legend } from './Legend';
 import { TabBar } from './TabBar';
@@ -11,11 +15,13 @@ type Props = {
   store: AppStore;
   /** Resolves a dropped file to its path (window.pact.pathForFile in the app). */
   getPathForFile: (file: File) => string;
+  /** Terminals of the agents and free terminals, created once outside React (main.tsx). */
+  terminals?: TerminalRegistry;
 };
 
-export function App({ store, getPathForFile }: Props) {
+export function App({ store, getPathForFile, terminals }: Props) {
   const state = useStore(store);
-  const { status, error, workspaces, activeTab } = state;
+  const { status, error, workspaces, activeTab, launcher } = state;
   const [now] = useState(() => new Date());
 
   useEffect(() => {
@@ -26,6 +32,7 @@ export function App({ store, getPathForFile }: Props) {
 
   const workspace =
     activeTab.kind === 'workspace' ? workspaces.find((w) => w.id === activeTab.id) : undefined;
+  const launching = launcher && workspaces.find((w) => w.id === launcher.workspaceId);
 
   return (
     <div className={styles.app}>
@@ -43,7 +50,33 @@ export function App({ store, getPathForFile }: Props) {
             {error}
           </p>
         )}
-        {status === 'ready' && workspace && <WorkspaceView workspace={workspace} />}
+        {status === 'ready' && workspace && (
+          <WorkspaceView
+            workspace={workspace}
+            clis={state.clis}
+            terminals={terminals}
+            onAddAgents={() => {
+              state.openLauncher(workspace.id);
+            }}
+          />
+        )}
+        {launcher?.step === 'counts' && launching && (
+          <QuickLaunch
+            clis={state.clis}
+            counters={launching.quickLaunchCounters}
+            existingAgents={launching.agents.length}
+            error={launcher.error ?? null}
+            onLaunch={(counts) => void state.requestLaunch(counts)}
+            onClose={state.closeLauncher}
+          />
+        )}
+        {launcher?.step === 'permission' && (
+          <PermissionsDialog
+            agentCount={Object.values(launcher.counts.agents).reduce((sum, n) => sum + n, 0)}
+            onConfirm={(choice) => void state.confirmPermission(choice)}
+            onCancel={state.closeLauncher}
+          />
+        )}
         {status === 'ready' && !workspace && (
           <>
             <Home
@@ -60,6 +93,7 @@ export function App({ store, getPathForFile }: Props) {
               onClone={(url, destination) => void state.startClone(url, destination)}
               getPathForFile={getPathForFile}
             />
+            <DetectedClis clis={state.clis} onRedetect={() => void state.redetectClis()} />
             <Legend />
           </>
         )}

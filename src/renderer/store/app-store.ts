@@ -4,14 +4,21 @@ import {
   type IpcError,
   type IpcEvent,
   type IpcOutput,
+  type AgentDraft,
   type PactApi,
 } from '../../shared/ipc';
-import type { Agent, Workspace } from '../../shared/model';
+import type { Agent, PermissionLevel, PermissionPreference, Workspace } from '../../shared/model';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
 
 export type ActiveTab = { kind: 'home' } | { kind: 'workspace'; id: string };
 export type View = 'tiles' | 'focus';
+/** What the quick launcher (1c) asks for: agents per CLI id, plus free terminals. */
+export type LaunchCounts = { agents: Record<string, number>; freeTerminal: number };
+/** 1c, then 1m when no permission level is known yet (FR-012). */
+export type Launcher =
+  | { workspaceId: string; step: 'counts'; error?: string }
+  | { workspaceId: string; step: 'permission'; counts: LaunchCounts };
 type AppSnapshot = IpcOutput<'app:getState'>;
 
 export type AppState = {
@@ -29,6 +36,7 @@ export type AppState = {
   cloneJobId: string | null;
   /** Workspace shown when the home tab was opened, to return to it on close. */
   previousWorkspaceId: string | null;
+  launcher: Launcher | null;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
@@ -43,6 +51,13 @@ export type AppState = {
   pickCloneDestination: () => Promise<string | null>;
   startClone: (url: string, destination: string) => Promise<void>;
   closeWorkspace: (id: string) => Promise<void>;
+  openLauncher: (workspaceId: string) => void;
+  closeLauncher: () => void;
+  /** Launches straight away when a level is known, otherwise asks for it first (1m). */
+  requestLaunch: (counts: LaunchCounts) => Promise<void>;
+  /** Saves the level chosen in 1m, then launches what 1c asked for. */
+  confirmPermission: (choice: PermissionPreference) => Promise<void>;
+  redetectClis: () => Promise<void>;
 };
 
 export type CloneStatus =
@@ -100,6 +115,36 @@ export function createAppStore(api: PactApi) {
       });
     };
 
+    /** Agents keep the level they were launched with; drafts leave the rest to the main process. */
+    const drafts = (counts: LaunchCounts, level: PermissionLevel): AgentDraft[] =>
+      Object.entries(counts.agents).flatMap(([cliId, count]) =>
+        Array.from({ length: count }, () => ({
+          cliId,
+          model: null,
+          permissionLevel: level,
+          baseBranch: null,
+          branch: null,
+          port: null,
+          startCommand: null,
+        })),
+      );
+
+    const launch = async (workspaceId: string, counts: LaunchCounts, level: PermissionLevel) => {
+      try {
+        await api.invoke('agents:launch', {
+          workspaceId,
+          agents: drafts(counts, level),
+          freeTerminals: counts.freeTerminal,
+          counters: { freeTerminal: counts.freeTerminal, ...counts.agents },
+        });
+        // Only the workspaces: the rest of the snapshot may lag behind what was just chosen.
+        const { workspaces } = await api.invoke('app:getState');
+        set({ workspaces, launcher: null });
+      } catch (error) {
+        set({ launcher: { workspaceId, step: 'counts', error: asIpcError(error).message } });
+      }
+    };
+
     return {
       status: 'loading',
       error: null,
@@ -113,6 +158,7 @@ export function createAppStore(api: PactApi) {
       clone: null,
       cloneJobId: null,
       previousWorkspaceId: null,
+      launcher: null,
 
       async load() {
         set({ status: 'loading', error: null });
@@ -234,6 +280,46 @@ export function createAppStore(api: PactApi) {
             ? { activeTab: fallback ? { kind: 'workspace', id: fallback.id } : { kind: 'home' } }
             : {}),
         });
+      },
+
+      openLauncher(workspaceId) {
+        set({ launcher: { workspaceId, step: 'counts' } });
+      },
+
+      closeLauncher() {
+        set({ launcher: null });
+      },
+
+      async requestLaunch(counts) {
+        const { launcher, workspaces, permission } = get();
+        if (!launcher) return;
+        const { workspaceId } = launcher;
+        const workspace = workspaces.find((w) => w.id === workspaceId);
+        const level = workspace?.permissionOverride?.level ?? permission?.level;
+        const hasAgents = Object.values(counts.agents).some((count) => count > 0);
+        if (level) await launch(workspaceId, counts, level);
+        // Free terminals alone run no agent: no permission to ask for.
+        else if (!hasAgents) await launch(workspaceId, counts, 'always-ask');
+        else set({ launcher: { workspaceId, step: 'permission', counts } });
+      },
+
+      async confirmPermission(choice) {
+        const { launcher } = get();
+        if (launcher?.step !== 'permission') return;
+        const { workspaceId, counts } = launcher;
+        const project = choice.scope === 'project';
+        try {
+          await api.invoke('permission:set', { ...choice, ...(project ? { workspaceId } : {}) });
+        } catch (error) {
+          set({ launcher: { workspaceId, step: 'counts', error: asIpcError(error).message } });
+          return;
+        }
+        if (!project) set({ permission: choice });
+        await launch(workspaceId, counts, choice.level);
+      },
+
+      async redetectClis() {
+        set({ clis: await api.invoke('cli:redetect') });
       },
     };
   });

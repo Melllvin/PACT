@@ -162,6 +162,8 @@ describe('launch flow', () => {
   it('shows a refused launch in the launcher (LIMIT)', async () => {
     const { store } = setup({
       permission: { level: 'always-allow', autoResume: true, scope: 'global' },
+      // IPC failures cross the bridge as plain objects, not Errors.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       launch: () => Promise.reject({ code: 'LIMIT', message: 'Six agents au plus par projet.' }),
     });
     await store.getState().load();

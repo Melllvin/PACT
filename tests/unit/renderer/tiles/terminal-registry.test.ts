@@ -54,7 +54,10 @@ const setup = () => {
     terminals.push(terminal);
     return terminal satisfies TerminalLike;
   });
-  return { registry, invoke, terminals, emit: (e: IpcEvent<'term:data'>) => onData(e) };
+  const emit = (e: IpcEvent<'term:data'>) => {
+    onData(e);
+  };
+  return { registry, invoke, terminals, emit };
 };
 
 describe('terminal registry', () => {
