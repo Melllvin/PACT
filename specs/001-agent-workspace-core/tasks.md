@@ -423,3 +423,10 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 - [x] T129 Consigner dans `specs/001-agent-workspace-core/research.md` R3 que la résolution des commandes cherche directement dans le PATH (avec PATHEXT sous Windows) au lieu de lancer `which` / `where.exe` : même résultat, aucun processus lancé, testable sur les deux OS, vérifié sur la CI Windows per research R3 / T019 (contradicts)
 - [ ] T130 Justifier dans la revue de sécurité (T114) le contrôle d'origine IPC (`trustedSenderCheck`), l'ignorance d'`ELECTRON_RENDERER_URL` dans une app packagée et le service `app:getState` câblé dès la phase 2 (`src/main/app-services.ts`) per T114 (unrequested)
+
+---
+
+## Phase 13: Convergence
+
+- [ ] T131 Surveiller le dossier de chaque workspace ouvert avec `fs.watch` (dossier parent) pour signaler une disparition aussitôt, en gardant la vérification toutes les 3 s en filet de sécurité, dans `src/main/workspace/workspace-service.ts` (test dans `tests/integration/workspace/workspace-service.test.ts`) per T043 (partial)
+- [ ] T132 Aligner l’onglet d’accueil sur la maquette 1a : libellé « Nouvel onglet » et bouton ✕ pour le fermer quand un workspace est ouvert (retour à ce workspace), dans `src/renderer/app/TabBar.tsx` et `src/renderer/store/app-store.ts` (tests dans `tests/unit/renderer/app/shell.test.tsx`) per FR-002 / maquette 1a (partial)
