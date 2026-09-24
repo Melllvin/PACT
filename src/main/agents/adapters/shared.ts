@@ -52,3 +52,19 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
  */
 export const bridgeCommand = ({ executable, script }: HookBridge, ...args: string[]) =>
   ['ELECTRON_RUN_AS_NODE=1', ...[executable, script, ...args].map(shellQuote)].join(' ');
+
+/**
+ * Next occurrence of a clock time written like `3pm`, `9:30am` or `3:45 PM` after `pattern`
+ * (e.g. « resets », « try again at »), or null when the text has none.
+ */
+export function nextClockTime(text: string, pattern: RegExp, now: Date): Date | null {
+  const time = new RegExp(`${pattern.source}\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)`, 'i');
+  const match = time.exec(text);
+  if (!match) return null;
+  const hour12 = Number(match[1]) % 12;
+  const hour = match[3]?.toLowerCase() === 'pm' ? hour12 + 12 : hour12;
+  const reset = new Date(now);
+  reset.setHours(hour, Number(match[2] ?? 0), 0, 0);
+  if (reset <= now) reset.setDate(reset.getDate() + 1);
+  return reset;
+}

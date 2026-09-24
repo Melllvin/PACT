@@ -43,7 +43,8 @@ export const agentSignalSchema = z.discriminatedUnion('type', [
     summary: z.string(),
     ruleKey: z.string().optional(),
   }),
-  z.object({ type: z.literal('turn-finished') }),
+  // `sessionId` lets the manager drop signals from another session (Codex title thread, T049).
+  z.object({ type: z.literal('turn-finished'), sessionId: z.string().optional() }),
   z.object({
     type: z.literal('failed'),
     kind: z.enum(['crash', 'rate-limit']),

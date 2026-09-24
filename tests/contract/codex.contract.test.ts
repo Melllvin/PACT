@@ -98,6 +98,11 @@ describe('Codex launch arguments', () => {
     );
   });
 
+  it('leaves notify out on Windows, where it was not characterized', () => {
+    const args = create('win32').buildLaunch({ ...input, executablePath: 'C:\\codex.exe' }).args;
+    expect(configs(args).some((c) => c.startsWith('notify='))).toBe(false);
+  });
+
   it('never puts the hook token in the process arguments', () => {
     expect(create().buildLaunch(input).args.join(' ')).not.toContain(input.hook.token);
   });

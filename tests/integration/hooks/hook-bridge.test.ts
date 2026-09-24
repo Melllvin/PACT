@@ -43,6 +43,24 @@ describe('relayHook', () => {
     expect(JSON.parse(out.text())).toEqual({ decision: 'approve' });
   });
 
+  it('relays a Codex notify payload given as the last argument, without reading stdin', async () => {
+    const handler = vi.fn(() => ({}));
+    const token = server.register('agent-1', handler);
+    const notify = { type: 'agent-turn-complete', 'thread-id': 't1' };
+    const stdin = {
+      [Symbol.asyncIterator]: () => ({ next: () => new Promise<never>(() => undefined) }),
+    };
+
+    await relayHook({
+      stdin,
+      stdout: collect().stream,
+      env: { PACT_HOOK_URL: url, PACT_AGENT_TOKEN: token },
+      argv: ['--notify', JSON.stringify(notify)],
+    });
+
+    expect(handler).toHaveBeenCalledWith(notify);
+  });
+
   it('does nothing outside of PACT (no hook URL)', async () => {
     const out = collect();
     await relayHook({ stdin: Readable.from(['{}']), stdout: out.stream, env: {} });

@@ -22,10 +22,11 @@ export interface CliAdapter {
   buildLaunch(input: LaunchInput): LaunchSpec;
   /** Construit la reprise d'une session existante (« Reprendre »). */
   buildResume(input: LaunchInput & { sessionId: string }): LaunchSpec;
-  // LaunchInput = { agentId: string; executablePath: string; cwd: string;
+  // LaunchInput = { agentId: string; executablePath: string; repoPath: string; cwd: string;
   //                 model: string | null; permissionLevel; sessionId?: string; port: number;
   //                 hook: { url: string; token: string } }
   //  - executablePath : chemin complet résolu à la détection (CliDefinition.resolvedPath)
+  //  - repoPath : dépôt principal (Codex : `<repoPath>/.git` reste inscriptible, R5)
   // LaunchSpec  = { file: string; args: string[]; env: Record<string, string>; cwd: string;
   //                 windowsVerbatimArguments: boolean }
   //  - windowsVerbatimArguments : args déjà échappés pour cmd.exe (shims .cmd/.bat, obligation 6)
@@ -50,7 +51,7 @@ export type AgentSignal =
   | { type: 'session-started'; sessionId?: string }
   | { type: 'prompt-submitted'; prompt?: string }
   | { type: 'awaiting-answer'; summary: string; ruleKey?: string }
-  | { type: 'turn-finished' }
+  | { type: 'turn-finished'; sessionId?: string } // signal d'une autre session → ignoré
   | { type: 'failed'; kind: 'crash' | 'rate-limit'; message: string; resetAt?: Date };
 ```
 
@@ -70,7 +71,7 @@ export type AgentSignal =
 
 | Adaptateur | Signaux principaux | Repli |
 |------------|--------------------|-------|
-| claude-code | hooks HTTP injectés via `--settings` : SessionStart, UserPromptSubmit, Notification (`permission_prompt`, `idle_prompt`, `agent_needs_input`), Stop, StopFailure, PermissionRequest (« Toujours pour ce worktree ») | code de sortie, motifs texte |
-| codex | hooks (`-c features.hooks=true` + commandes de hook vers le bridge) et `notify` | code de sortie, motifs texte |
+| claude-code | hooks injectés via `--settings` : HTTP (jeton en en-tête `X-Pact-Token: $PACT_AGENT_TOKEN`) pour UserPromptSubmit, Notification (`permission_prompt`, `agent_needs_input`), Stop, StopFailure, PermissionRequest (« Toujours pour ce worktree ») ; commande `hook-bridge` pour SessionStart (HTTP refusé, T049). Réponses : `1` / Échap | code de sortie, écran de confiance du dossier |
+| codex | hooks `command` vers le `hook-bridge` injectés par `-c hooks.<Événement>=…` (SessionStart, UserPromptSubmit, PermissionRequest, Stop, confiance à accorder une fois dans l'écran « Hooks need review ») et `-c notify=[…, "--notify"]` (hors Windows) ; fil interne de titre ignoré. Réponses : `y` / Échap | code de sortie, écrans de confiance, « usage limit » |
 | generic | aucun | code de sortie, inactivité > 3 s après sortie terminée par `?` ou `(y/n)` = attend une réponse |
 | fake | hooks HTTP du scénario | — |

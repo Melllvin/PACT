@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { PermissionLevel } from '../../../shared/model';
 import { toSpawnCommand } from '../../env/resolve-command';
-import { bridgeCommand, detectCommand, tryRun } from './shared';
+import { bridgeCommand, detectCommand, nextClockTime, tryRun } from './shared';
 import {
   pactEnv,
   supportedLevel,
@@ -113,14 +113,7 @@ export class ClaudeCodeAdapter implements CliAdapter {
   }
 
   parseRateLimitReset(text: string): Date | null {
-    const match = /resets (?:at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i.exec(text);
-    if (!match) return null;
-    const hour12 = Number(match[1]) % 12;
-    const hour = match[3]?.toLowerCase() === 'pm' ? hour12 + 12 : hour12;
-    const reset = new Date(this.now());
-    reset.setHours(hour, Number(match[2] ?? 0), 0, 0);
-    if (reset <= this.now()) reset.setDate(reset.getDate() + 1);
-    return reset;
+    return nextClockTime(text, /resets(?: at)?/, this.now());
   }
 
   private spec(input: LaunchInput, sessionArgs: string[]): LaunchSpec {
