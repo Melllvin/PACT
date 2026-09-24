@@ -37,6 +37,12 @@ export type AppState = {
   /** Workspace shown when the home tab was opened, to return to it on close. */
   previousWorkspaceId: string | null;
   launcher: Launcher | null;
+  /** Why the last tile action was refused; cleared by the next one that succeeds. */
+  actionError: string | null;
+  /** « Journal » of an agent, as read from the main process. */
+  log: { agentId: string; text: string } | null;
+  /** Agent whose close dialog is open (FR-037). */
+  closingAgentId: string | null;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
@@ -58,6 +64,15 @@ export type AppState = {
   /** Saves the level chosen in 1m, then launches what 1c asked for. */
   confirmPermission: (choice: PermissionPreference) => Promise<void>;
   redetectClis: () => Promise<void>;
+  answerAgent: (agentId: string, answer: 'allow' | 'deny') => Promise<void>;
+  resumeAgent: (agentId: string) => Promise<void>;
+  restartAgent: (agentId: string) => Promise<void>;
+  openLog: (agentId: string) => Promise<void>;
+  closeLog: () => void;
+  requestCloseAgent: (agentId: string) => void;
+  cancelCloseAgent: () => void;
+  /** Closes the agent asked for, keeping or removing its worktree and branch. */
+  closeAgent: (removeWorktree: boolean) => Promise<void>;
 };
 
 export type CloneStatus =
@@ -103,9 +118,27 @@ const applyState =
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
   });
 
+/** Drops an agent from whichever workspace holds it. */
+const withoutAgent = (workspaces: Workspace[], agentId: string): Workspace[] =>
+  workspaces.map((workspace) =>
+    workspace.agents.some((agent) => agent.id === agentId)
+      ? { ...workspace, agents: workspace.agents.filter((agent) => agent.id !== agentId) }
+      : workspace,
+  );
+
 export function createAppStore(api: PactApi) {
   return createStore<AppState>()((set, get) => {
     /** Adds (or refreshes) a workspace and makes its tab active. */
+    /** Runs a tile action; a refusal is shown until an action succeeds. */
+    const act = async (action: () => Promise<unknown>) => {
+      try {
+        await action();
+        set({ actionError: null });
+      } catch (error) {
+        set({ actionError: asIpcError(error).message });
+      }
+    };
+
     const addWorkspace = (workspace: Workspace) => {
       const others = get().workspaces.filter((w) => w.id !== workspace.id);
       set({
@@ -168,6 +201,9 @@ export function createAppStore(api: PactApi) {
       cloneJobId: null,
       previousWorkspaceId: null,
       launcher: null,
+      actionError: null,
+      log: null,
+      closingAgentId: null,
 
       async load() {
         set({ status: 'loading', error: null });
@@ -187,7 +223,13 @@ export function createAppStore(api: PactApi) {
       connect() {
         const unsubscribers = [
           api.on('agent:state', (event) => {
-            set({ workspaces: updateAgent(get().workspaces, event.agentId, applyState(event)) });
+            const { workspaces } = get();
+            set({
+              workspaces:
+                event.state === 'closed'
+                  ? withoutAgent(workspaces, event.agentId)
+                  : updateAgent(workspaces, event.agentId, applyState(event)),
+            });
           }),
           api.on('agent:branch', ({ agentId, branch }) => {
             set({ workspaces: updateAgent(get().workspaces, agentId, (a) => ({ ...a, branch })) });
@@ -340,6 +382,37 @@ export function createAppStore(api: PactApi) {
 
       async redetectClis() {
         set({ clis: await api.invoke('cli:redetect') });
+      },
+
+      answerAgent: (agentId, answer) => act(() => api.invoke('agent:answer', { agentId, answer })),
+      resumeAgent: (agentId) => act(() => api.invoke('agent:resume', { agentId })),
+      restartAgent: (agentId) => act(() => api.invoke('agent:restart', { agentId })),
+
+      openLog: (agentId) =>
+        act(async () => {
+          set({ log: { agentId, text: await api.invoke('agent:log', { agentId }) } });
+        }),
+
+      closeLog() {
+        set({ log: null });
+      },
+
+      requestCloseAgent(agentId) {
+        set({ closingAgentId: agentId });
+      },
+
+      cancelCloseAgent() {
+        set({ closingAgentId: null });
+      },
+
+      async closeAgent(removeWorktree) {
+        const agentId = get().closingAgentId;
+        if (agentId === null) return;
+        set({ closingAgentId: null });
+        await act(async () => {
+          await api.invoke('agent:close', { agentId, removeWorktree });
+          set({ workspaces: withoutAgent(get().workspaces, agentId) });
+        });
       },
     };
   });

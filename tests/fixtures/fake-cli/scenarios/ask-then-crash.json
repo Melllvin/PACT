@@ -1,0 +1,10 @@
+{
+  "output": ["Analyse du dépôt"],
+  "permission": "rm fichier.txt",
+  "signal": {
+    "type": "failed",
+    "kind": "crash",
+    "message": "Erreur simulée"
+  },
+  "exitCode": 1
+}

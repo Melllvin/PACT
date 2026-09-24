@@ -80,7 +80,8 @@ export class PtyManager {
     });
     const session: Session = { pty, pending: '', timer: undefined, exited };
     this.sessions.set(id, session);
-    this.histories.set(id, '');
+    // A resumed or restarted agent keeps its earlier output for « Journal ».
+    if (!this.histories.has(id)) this.histories.set(id, '');
 
     pty.onData((data) => {
       this.remember(id, data);

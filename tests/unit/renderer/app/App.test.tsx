@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../../../src/renderer/app/App';
 import { createAppStore } from '../../../../src/renderer/store/app-store';
 import type { PactApi } from '../../../../src/shared/ipc';
 import type { CliDefinition, Workspace } from '../../../../src/shared/model';
+import { agent } from '../tiles/fixtures';
 
 const workspace = (id: string, name: string): Workspace => ({
   id,
@@ -316,5 +317,74 @@ describe('App launch flow (US2)', () => {
     const invoke = setup([]);
     await userEvent.click(await screen.findByRole('button', { name: 'Détecter à nouveau' }));
     expect(invoke).toHaveBeenCalledWith('cli:redetect');
+  });
+});
+
+describe('App tile actions (US3)', () => {
+  type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
+  const failed = agent(1, { cliId: 'aider', state: 'error' });
+  const setup = (agents = [failed]) => {
+    const invoke = vi.fn<Invoke>((channel) => {
+      switch (channel) {
+        case 'app:getState':
+          return Promise.resolve({
+            workspaces: [{ ...workspace('w1', 'w1'), agents }],
+            recents: [],
+            clis: [],
+            permission: null,
+          });
+        case 'agent:log':
+          return Promise.resolve('Erreur simulée');
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} />);
+    return invoke;
+  };
+
+  it('resumes and restarts an agent from its tile', async () => {
+    const invoke = setup();
+    await userEvent.click(await screen.findByRole('button', { name: 'Reprendre' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Relancer' }));
+    expect(invoke).toHaveBeenCalledWith('agent:resume', { agentId: failed.id });
+    expect(invoke).toHaveBeenCalledWith('agent:restart', { agentId: failed.id });
+  });
+
+  it('answers an agent from its tile', async () => {
+    const invoke = setup([{ ...failed, state: 'awaiting-answer' }]);
+    await userEvent.click(await screen.findByRole('button', { name: '✓ Autoriser' }));
+    expect(invoke).toHaveBeenCalledWith('agent:answer', { agentId: failed.id, answer: 'allow' });
+  });
+
+  it('opens « Journal » for the agent and closes it', async () => {
+    setup();
+    await userEvent.click(await screen.findByRole('button', { name: 'Journal' }));
+    const panel = await screen.findByRole('dialog', { name: 'Journal de aider 1' });
+    expect(panel.textContent).toContain('Erreur simulée');
+    await userEvent.click(screen.getByRole('button', { name: 'Fermer' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('asks before closing an agent, then closes it with the choice made (FR-037)', async () => {
+    const invoke = setup();
+    await userEvent.click(await screen.findByRole('button', { name: 'Fermer l’agent' }));
+    const dialog = screen.getByRole('dialog', { name: 'Fermer aider 1' });
+    await userEvent.click(screen.getByRole('radio', { name: /Supprimer/ }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Fermer l’agent' }));
+    expect(invoke).toHaveBeenCalledWith('agent:close', {
+      agentId: failed.id,
+      removeWorktree: true,
+    });
+    expect(await screen.findByRole('button', { name: /Ajouter des agents/ })).toBeDefined();
+  });
+
+  it('cancels closing an agent', async () => {
+    const invoke = setup();
+    await userEvent.click(await screen.findByRole('button', { name: 'Fermer l’agent' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(invoke).not.toHaveBeenCalledWith('agent:close', expect.anything());
   });
 });

@@ -6,14 +6,17 @@ import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-a
 import type { PtyManager } from '../pty/pty-manager';
 import type { AgentSignal, CliAdapter, ResolvedEnv } from './adapters/types';
 import { applyExit, applySignal } from './agent-state';
+import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
 import { TerminalText } from './terminal-text';
 
 // US2 — agents launched in their own worktree and pseudo-terminal, followed through their hooks
-// (FR-009…FR-018, FR-038, FR-039).
+// (FR-009…FR-018, FR-038, FR-039). US3 — the tile actions: answer, resume, restart, log, close
+// (FR-024, FR-037), and the branch followed for the ⎇ tooltip (FR-021).
 
 export type AgentStateEvent = IpcEvent<'agent:state'>;
+export type AgentBranchEvent = IpcEvent<'agent:branch'>;
 
 type WorkspaceAccess = {
   get(id: string): Workspace | undefined;
@@ -24,7 +27,7 @@ type WorkspaceAccess = {
 type Options = {
   workspaces: WorkspaceAccess;
   registry: { get(id: string): RegisteredCli | undefined };
-  git: Pick<GitService, 'addWorktree' | 'branchExists'>;
+  git: Pick<GitService, 'addWorktree' | 'branchExists' | 'currentBranch' | 'removeWorktree'>;
   pty: PtyManager;
   hooks: Pick<HookServer, 'register' | 'unregister'>;
   /** Base URL of the hook server, known once it listens. */
@@ -32,6 +35,7 @@ type Options = {
   resolveEnv: () => Promise<ResolvedEnv>;
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
+  onBranch?: (event: AgentBranchEvent) => void;
 };
 
 export type LaunchRequest = {
@@ -41,6 +45,7 @@ export type LaunchRequest = {
 };
 
 type Running = { workspaceId: string; adapter: CliAdapter; output: TerminalText };
+type InstalledCli = { adapter: CliAdapter; executablePath: string };
 
 /** Set by the Claude Code session PACT may be started from; an agent must not inherit them. */
 const isParentClaudeVariable = (name: string) =>
@@ -58,7 +63,11 @@ export class AgentManager {
   private readonly resolveEnv: () => Promise<ResolvedEnv>;
   private readonly isPortInUse: (port: number) => Promise<boolean>;
   private readonly onState: NonNullable<Options['onState']>;
+  private readonly onBranch: NonNullable<Options['onBranch']>;
+  private readonly branches: BranchWatcher;
   private readonly running = new Map<string, Running>();
+  /** Initial prompts « Relancer » types again once the new session shows its prompt. */
+  private readonly retype = new Map<string, string>();
   private readonly unsubscribe: (() => void)[];
   /** Launches run one at a time: each one reads the positions and ports the previous one took. */
   private queue: Promise<unknown> = Promise.resolve();
@@ -74,6 +83,11 @@ export class AgentManager {
     this.resolveEnv = options.resolveEnv;
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
+    this.onBranch = options.onBranch ?? (() => undefined);
+    this.branches = new BranchWatcher({
+      currentBranch: (path) => this.git.currentBranch(path),
+      onBranch: (id, branch) => void this.renamed(id, branch),
+    });
     this.unsubscribe = [
       this.pty.onData((id, data) => {
         this.readOutput(id, data);
@@ -118,15 +132,130 @@ export class AgentManager {
     }
   }
 
+  /** « ✓ Autoriser » / « ✕ Refuser »: the keys the CLI expects, typed in its terminal. */
+  async answer(id: string, answer: 'allow' | 'deny'): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    const running = this.running.get(id);
+    if (agent.state !== 'awaiting-answer' || !running) {
+      throw new IpcFailure('INVALID_INPUT', 'Cet agent n’attend pas de réponse.');
+    }
+    this.pty.write(id, running.adapter.answerKeys(answer));
+    await this.change(workspace.id, id, (a) => ({ ...a, state: 'working' }));
+  }
+
+  /**
+   * « Reprendre »: the same session (R6). A process still alive after a rate limit gets
+   * « continue » typed in its prompt instead (data-model « AgentState »).
+   */
+  async resume(id: string): Promise<void> {
+    const { workspace, agent } = this.inError(id);
+    if (this.running.has(id)) {
+      this.pty.write(id, 'continue\r');
+      await this.change(workspace.id, id, (a) => ({
+        ...a,
+        state: 'working',
+        lastError: null,
+        scheduledResume: null,
+      }));
+      return;
+    }
+    await this.startAgain(workspace, agent, agent.sessionId);
+  }
+
+  /** « Relancer »: a new session, then the initial prompt typed again (FR-024, R6). */
+  async restart(id: string): Promise<void> {
+    const { workspace, agent } = this.inError(id);
+    await this.stop(id);
+    if (agent.initialPrompt !== null) this.retype.set(id, agent.initialPrompt);
+    await this.startAgain(workspace, agent, null);
+  }
+
+  /** « Journal »: the output kept for the agent, across its restarts. */
+  log(id: string): string {
+    this.find(id);
+    return this.pty.history(id);
+  }
+
+  /** Stops the agent and forgets it; its worktree and branch go only when asked (FR-037). */
+  async close(id: string, { removeWorktree }: { removeWorktree: boolean }): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    await this.stop(id);
+    if (removeWorktree) {
+      // The agent may have renamed its branch since the last check.
+      const current = await this.git.currentBranch(agent.worktreePath).catch(() => '');
+      await this.git.removeWorktree(workspace.path, {
+        path: agent.worktreePath,
+        branch: current || agent.branch,
+        force: true,
+      });
+    }
+    await this.workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.filter((a) => a.id !== id),
+    }));
+    this.emit({ ...agent, state: 'closed' });
+  }
+
   /** Stops every agent process on quit; their last known state stays saved. */
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
     for (const stop of this.unsubscribe) stop();
-    const ids = [...this.running.keys()];
-    for (const id of ids) this.hooks.unregister(id);
-    this.running.clear();
-    await Promise.all(ids.map((id) => this.pty.kill(id)));
+    this.branches.dispose();
+    await Promise.all([...this.running.keys()].map((id) => this.stop(id)));
+  }
+
+  private find(id: string) {
+    for (const workspace of this.workspaces.list()) {
+      const agent = workspace.agents.find((a) => a.id === id);
+      if (agent) return { workspace, agent };
+    }
+    throw new IpcFailure('NOT_FOUND', 'Agent inconnu.');
+  }
+
+  private inError(id: string) {
+    const found = this.find(id);
+    if (found.agent.state !== 'error') {
+      throw new IpcFailure('INVALID_INPUT', 'Seul un agent en erreur se reprend ou se relance.');
+    }
+    return found;
+  }
+
+  /** Ends the process without it counting as a crash: PACT asked for it. */
+  private async stop(id: string) {
+    this.retype.delete(id);
+    this.branches.unwatch(id);
+    if (!this.running.delete(id)) return;
+    this.hooks.unregister(id);
+    await this.pty.kill(id);
+  }
+
+  private async startAgain(workspace: Workspace, agent: Agent, sessionId: string | null) {
+    const cli = this.installedCli(agent.cliId);
+    const env = await this.resolveEnv();
+    const fields = {
+      state: 'starting',
+      sessionId,
+      lastError: null,
+      scheduledResume: null,
+    } as const;
+    await this.workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === agent.id ? { ...a, ...fields } : a)),
+    }));
+    const started: Agent = { ...agent, ...fields };
+    this.emit(started);
+    this.start(started, workspace.path, cli, env);
+  }
+
+  private async renamed(id: string, branch: string) {
+    const running = this.running.get(id);
+    if (!running) return;
+    await this.workspaces.update(running.workspaceId, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === id ? { ...a, branch } : a)),
+    }));
+    this.onBranch({ agentId: id, branch });
   }
 
   private async launchNow({ workspaceId, agents: drafts, counters }: LaunchRequest) {
@@ -188,7 +317,7 @@ export class AgentManager {
     return launched;
   }
 
-  private installedCli(cliId: string) {
+  private installedCli(cliId: string): InstalledCli {
     const cli = this.registry.get(cliId);
     if (cli?.definition.status !== 'installed' || !cli.definition.resolvedPath) {
       throw new IpcFailure('INVALID_INPUT', `Le CLI « ${cliId} » n’est pas disponible.`);
@@ -219,19 +348,15 @@ export class AgentManager {
     }
   }
 
-  private start(
-    agent: Agent,
-    repoPath: string,
-    cli: { adapter: CliAdapter; executablePath: string },
-    env: ResolvedEnv,
-  ) {
+  /** Starts the agent's CLI; a known `sessionId` resumes that session (R6). */
+  private start(agent: Agent, repoPath: string, cli: InstalledCli, env: ResolvedEnv) {
     const { adapter } = cli;
     const token = this.hooks.register(agent.id, (payload) => {
       const signal = adapter.mapHookEvent(payload);
       if (signal) void this.apply(agent.id, signal);
       return {};
     });
-    const spec = adapter.buildLaunch({
+    const input = {
       agentId: agent.id,
       executablePath: cli.executablePath,
       repoPath,
@@ -240,7 +365,11 @@ export class AgentManager {
       permissionLevel: agent.permissionLevel,
       port: agent.port,
       hook: { url: this.hookUrl(), token },
-    });
+    };
+    const spec =
+      agent.sessionId === null
+        ? adapter.buildLaunch(input)
+        : adapter.buildResume({ ...input, sessionId: agent.sessionId });
     this.running.set(agent.id, {
       workspaceId: agent.workspaceId,
       adapter,
@@ -253,6 +382,7 @@ export class AgentManager {
       env: agentEnv(env, spec.env),
       windowsVerbatimArguments: spec.windowsVerbatimArguments,
     });
+    this.branches.watch(agent.id, agent.worktreePath, agent.branch);
   }
 
   private readOutput(id: string, data: string) {
@@ -269,6 +399,8 @@ export class AgentManager {
     if (!running) return;
     this.running.delete(id);
     this.hooks.unregister(id);
+    this.branches.unwatch(id);
+    this.retype.delete(id);
     await this.change(running.workspaceId, id, (agent) => applyExit(agent, code));
   }
 
@@ -276,6 +408,7 @@ export class AgentManager {
     const running = this.running.get(id);
     if (!running) return;
     await this.change(running.workspaceId, id, (agent) => applySignal(agent, signal));
+    if (signal.type === 'turn-finished') await this.branches.check(id);
   }
 
   /** Saves and announces a transition; `next` runs on the latest agent, inside the update. */
@@ -287,7 +420,13 @@ export class AgentManager {
       ...ws,
       agents: ws.agents.map((a) => (a.id === id ? (changed = next(a)) : a)),
     }));
-    if (changed) this.emit(changed);
+    if (!changed) return;
+    this.emit(changed);
+    const prompt = this.retype.get(id);
+    if (changed.state === 'awaiting-prompt' && prompt !== undefined && this.running.has(id)) {
+      this.retype.delete(id);
+      this.pty.write(id, `${prompt}\r`);
+    }
   }
 
   private emit({ id, state, lastError, scheduledResume }: Agent) {

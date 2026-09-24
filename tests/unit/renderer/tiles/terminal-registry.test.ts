@@ -97,6 +97,18 @@ describe('terminal registry', () => {
     expect(second.contains(terminals[0]?.element ?? null)).toBe(true);
   });
 
+  it('keeps writing output while no tile shows the terminal (T071)', () => {
+    const { registry, emit, terminals } = setup();
+    const detach = registry.attach('t1', document.createElement('div'));
+    detach();
+    emit({ termId: 't1', data: 'pendant le démontage' });
+    const again = document.createElement('div');
+    registry.attach('t1', again);
+    expect(terminals).toHaveLength(1);
+    expect(terminals[0]?.written).toEqual(['pendant le démontage']);
+    expect(again.contains(terminals[0]?.element ?? null)).toBe(true);
+  });
+
   it('frees a terminal that is gone', () => {
     const { registry, terminals } = setup();
     registry.attach('t1', document.createElement('div'));

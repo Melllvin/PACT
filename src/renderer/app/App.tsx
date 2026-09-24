@@ -4,7 +4,10 @@ import { DetectedClis } from '../home/DetectedClis';
 import { Home } from '../home/Home';
 import { PermissionsDialog } from '../launch/PermissionsDialog';
 import { QuickLaunch } from '../launch/QuickLaunch';
+import type { Agent } from '../../shared/model';
 import type { AppStore } from '../store/app-store';
+import { CloseAgentDialog } from '../tiles/CloseAgentDialog';
+import { LogPanel } from '../tiles/LogPanel';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { Legend } from './Legend';
@@ -45,6 +48,11 @@ export function App({ store, getPathForFile, terminals }: Props) {
   const workspace =
     activeTab.kind === 'workspace' ? workspaces.find((w) => w.id === activeTab.id) : undefined;
   const launching = launcher && workspaces.find((w) => w.id === launcher.workspaceId);
+  const agentsById = new Map(workspaces.flatMap((w) => w.agents).map((a) => [a.id, a]));
+  const agentName = (agent: Agent) =>
+    `${state.clis.find((c) => c.id === agent.cliId)?.name ?? agent.cliId} ${String(agent.position)}`;
+  const closing = state.closingAgentId === null ? undefined : agentsById.get(state.closingAgentId);
+  const logged = state.log === null ? undefined : agentsById.get(state.log.agentId);
 
   return (
     <div className={styles.app}>
@@ -70,7 +78,26 @@ export function App({ store, getPathForFile, terminals }: Props) {
             onAddAgents={() => {
               state.openLauncher(workspace.id);
             }}
+            actions={{
+              onAnswer: (id, answer) => void state.answerAgent(id, answer),
+              onResume: (id) => void state.resumeAgent(id),
+              onRestart: (id) => void state.restartAgent(id),
+              onLog: (id) => void state.openLog(id),
+              onClose: state.requestCloseAgent,
+            }}
+            actionError={state.actionError}
           />
+        )}
+        {closing && (
+          <CloseAgentDialog
+            name={agentName(closing)}
+            branch={closing.branch}
+            onConfirm={(removeWorktree) => void state.closeAgent(removeWorktree)}
+            onCancel={state.cancelCloseAgent}
+          />
+        )}
+        {state.log && logged && (
+          <LogPanel name={agentName(logged)} text={state.log.text} onClose={state.closeLog} />
         )}
         {launcher?.step === 'counts' && launching && (
           <QuickLaunch
