@@ -78,4 +78,9 @@ test('shows the ANSI colors of a CLI without any CSP violation', async () => {
   const red = tile.locator('.xterm-rows span', { hasText: 'Rouge' });
   await expect(red).toHaveCSS('color', 'rgb(204, 0, 0)'); // xterm 6 default ANSI red, not the foreground
   expect(errors).toEqual([]);
+
+  // The CLI stays raw (FR-020): page resets such as Tailwind's preflight leave xterm alone.
+  await expect(tile.locator('.xterm-helper-textarea')).toHaveCSS('opacity', '0');
+  await expect(red).toHaveCSS('font-family', /JetBrains Mono/);
+  await expect(red).toHaveCSS('font-size', '12px');
 });
