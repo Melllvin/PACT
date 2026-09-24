@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
+import { watch, type FSWatcher } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { IpcFailure } from '../../shared/ipc';
 import { MAX_RECENT_PROJECTS, type RecentProject, type Workspace } from '../../shared/model';
 import type { GitService } from '../git/git-service';
@@ -43,6 +44,8 @@ export class WorkspaceService {
   private readonly now: () => Date;
   private readonly onStatus: NonNullable<Options['onStatus']>;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private readonly watchers = new Map<string, FSWatcher>();
+  private watching = false;
 
   constructor({ git, stores, now = () => new Date(), onStatus = () => undefined }: Options) {
     this.git = git;
@@ -84,6 +87,7 @@ export class WorkspaceService {
       status: 'available',
     };
     this.open_.set(id, workspace);
+    this.watchFolder(workspace);
     await this.stores.workspace(id).write(workspace);
     await this.updateAppState((state) => ({
       ...state,
@@ -102,6 +106,7 @@ export class WorkspaceService {
     const workspace = this.open_.get(id);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
     this.open_.delete(id);
+    this.unwatchFolder(id);
     await this.updateAppState((state) => ({
       ...state,
       openWorkspaces: state.openWorkspaces.filter((p) => p !== workspace.path),
@@ -151,16 +156,45 @@ export class WorkspaceService {
     }
   }
 
+  /**
+   * Watches each workspace folder's parent to react at once when it is removed or renamed; the
+   * periodic check stays as a safety net (watchers can miss events or fail to start).
+   */
   startWatching(intervalMs: number): void {
     this.dispose();
+    this.watching = true;
+    for (const workspace of this.list()) this.watchFolder(workspace);
     this.timer = setInterval(() => {
       void this.checkAvailability();
     }, intervalMs);
   }
 
   dispose(): void {
+    this.watching = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    for (const id of [...this.watchers.keys()]) this.unwatchFolder(id);
+  }
+
+  private watchFolder(workspace: Workspace) {
+    if (!this.watching || this.watchers.has(workspace.id)) return;
+    const name = basename(workspace.path);
+    try {
+      const watcher = watch(dirname(workspace.path), (_event, filename) => {
+        if (filename === null || filename === name) void this.checkAvailability();
+      });
+      watcher.on('error', () => {
+        this.unwatchFolder(workspace.id);
+      });
+      this.watchers.set(workspace.id, watcher);
+    } catch {
+      // The parent folder may be gone or unreadable: the periodic check still covers it.
+    }
+  }
+
+  private unwatchFolder(id: string) {
+    this.watchers.get(id)?.close();
+    this.watchers.delete(id);
   }
 
   private async remember(workspace: Workspace) {
