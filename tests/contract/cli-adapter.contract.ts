@@ -30,6 +30,8 @@ export function runCliAdapterContract(
     cwd: '/repo/.worktrees/agent-1',
     model: null,
     permissionLevel: 'ask-sensitive',
+    // Fixed so argument comparisons only reflect what the test varies.
+    sessionId: 'session-1',
     port: 3001,
     hook: { url: 'http://127.0.0.1:4567', token: 'a'.repeat(64) },
   };

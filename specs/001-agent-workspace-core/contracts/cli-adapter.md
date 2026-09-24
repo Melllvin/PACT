@@ -26,7 +26,9 @@ export interface CliAdapter {
   //                 model: string | null; permissionLevel; sessionId?: string; port: number;
   //                 hook: { url: string; token: string } }
   //  - executablePath : chemin complet résolu à la détection (CliDefinition.resolvedPath)
-  // LaunchSpec  = { file: string; args: string[]; env: Record<string, string>; cwd: string }
+  // LaunchSpec  = { file: string; args: string[]; env: Record<string, string>; cwd: string;
+  //                 windowsVerbatimArguments: boolean }
+  //  - windowsVerbatimArguments : args déjà échappés pour cmd.exe (shims .cmd/.bat, obligation 6)
   //  - env contient toujours PORT, PACT_PORT, PACT_HOOK_URL, PACT_AGENT_TOKEN, PACT_AGENT_ID
   //    (PACT_AGENT_ID = input.agentId)
   //  - cwd = input.cwd (worktree de l'agent, obligation 1)
