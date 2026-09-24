@@ -60,7 +60,7 @@ phase.**
 
 ### Tests des fondations (écrire d'abord, doivent échouer)
 
-- [ ] T015 [P] Tests des schémas du modèle : `Agent.position` 1..6 ; `color` ∈ `purple | cyan | green | magenta | yellow | slate` ; `permissionLevel` ∈ `always-allow | ask-sensitive | always-ask` ; `PermissionPreference.autoResume` booléen défaut `true`, `scope` ∈ `project | global` ; `CliDefinition.status` ∈ `installed | missing | unsupported-version` ; `RecentProject` « 20 entrées max » ; `Workspace.agents` « 0 à 6 » dans `tests/unit/shared/model.test.ts`
+- [x] T015 [P] Tests des schémas du modèle : `Agent.position` 1..6 ; `color` ∈ `purple | cyan | green | magenta | yellow | slate` ; `permissionLevel` ∈ `always-allow | ask-sensitive | always-ask` ; `PermissionPreference.autoResume` booléen défaut `true`, `scope` ∈ `project | global` ; `CliDefinition.status` ∈ `installed | missing | unsupported-version` ; `RecentProject` « 20 entrées max » ; `Workspace.agents` « 0 à 6 » dans `tests/unit/shared/model.test.ts`
 - [ ] T016 [P] Tests des schémas IPC (chaque canal de contracts/ipc.md accepte les entrées valides, rejette les invalides, erreurs au format `{ code, message }`) dans `tests/unit/shared/ipc.test.ts`
 - [ ] T017 [P] Tests de persistance : écriture atomique (fichier temporaire + renommage), relecture validée par zod, fichier corrompu ou `schemaVersion` inconnu → valeurs par défaut sans crash, séparation `state.json` / `workspaces/<hash>.json` dans `tests/unit/main/persistence/store.test.ts`
 - [ ] T018 [P] Tests de l'environnement shell : parse la sortie de `$SHELL -ilc env`, délai max 3 s puis repli sur `process.env`, résultat mis en cache, sous Windows retourne `process.env` sans lancer de shell dans `tests/unit/main/env/shell-env.test.ts`
@@ -73,7 +73,7 @@ phase.**
 
 ### Implémentation des fondations
 
-- [ ] T025 [P] Implémenter les types et schémas zod de data-model.md (Workspace, RecentProject, CliDefinition, Agent, AgentState, FreeTerminal, TodoItem, PermissionPreference, ScheduledResume) et la palette ordonnée `AGENT_COLORS = ['purple','cyan','green','magenta','yellow','slate']` dans `src/shared/model.ts`
+- [x] T025 [P] Implémenter les types et schémas zod de data-model.md (Workspace, RecentProject, CliDefinition, Agent, AgentState, FreeTerminal, TodoItem, PermissionPreference, ScheduledResume) et la palette ordonnée `AGENT_COLORS = ['purple','cyan','green','magenta','yellow','slate']` dans `src/shared/model.ts`
 - [ ] T026 [P] Implémenter les schémas des canaux de contracts/ipc.md (requêtes et événements) et le type d'erreur `{ code, message }` dans `src/shared/ipc.ts`
 - [ ] T027 [P] Implémenter la persistance JSON atomique validée (`state.json`, `workspaces/<hash>.json`, `schemaVersion`) dans `src/main/persistence/store.ts`
 - [ ] T028 [P] Implémenter la résolution de l'environnement du shell de connexion dans `src/main/env/shell-env.ts`
