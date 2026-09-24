@@ -35,6 +35,7 @@ export function App({ store, getPathForFile }: Props) {
         onSelect={state.selectWorkspace}
         onHome={state.openHome}
         onClose={(id) => void state.closeWorkspace(id)}
+        onCloseHome={state.closeHome}
       />
       <main className={styles.stage}>
         {status === 'error' && (

@@ -7,10 +7,12 @@ type Props = {
   onSelect: (id: string) => void;
   onHome: () => void;
   onClose?: (id: string) => void;
+  /** Closes the home tab back to a workspace; only offered when one is open. */
+  onCloseHome?: () => void;
 };
 
 /** One tab per open workspace, a home tab opened by « + » (FR-002), settings inactive in the core. */
-export function TabBar({ workspaces, activeTab, onSelect, onHome, onClose }: Props) {
+export function TabBar({ workspaces, activeTab, onSelect, onHome, onClose, onCloseHome }: Props) {
   const homeOpen = activeTab.kind === 'home';
   return (
     <header className={styles.tabBar}>
@@ -45,9 +47,20 @@ export function TabBar({ workspaces, activeTab, onSelect, onHome, onClose }: Pro
           );
         })}
         {homeOpen && (
-          <button role="tab" aria-selected className={styles.tab}>
-            Accueil
-          </button>
+          <span className={styles.tabGroup}>
+            <button role="tab" aria-selected className={styles.tab}>
+              Nouvel onglet
+            </button>
+            {onCloseHome && workspaces.length > 0 && (
+              <button
+                className={styles.close}
+                aria-label="Fermer Nouvel onglet"
+                onClick={onCloseHome}
+              >
+                ✕
+              </button>
+            )}
+          </span>
         )}
       </div>
       <button className={styles.iconButton} aria-label="Nouvel onglet" onClick={onHome}>

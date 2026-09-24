@@ -27,11 +27,15 @@ export type AppState = {
   openError: (IpcError & { path: string }) | null;
   clone: CloneStatus | null;
   cloneJobId: string | null;
+  /** Workspace shown when the home tab was opened, to return to it on close. */
+  previousWorkspaceId: string | null;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
   selectWorkspace: (id: string) => void;
   openHome: () => void;
+  /** Leaves the home tab for the workspace shown before it (or the last one). */
+  closeHome: () => void;
   setView: (view: View) => void;
   openRepository: (path: string) => Promise<void>;
   initRepository: (path: string) => Promise<void>;
@@ -108,6 +112,7 @@ export function createAppStore(api: PactApi) {
       openError: null,
       clone: null,
       cloneJobId: null,
+      previousWorkspaceId: null,
 
       async load() {
         set({ status: 'loading', error: null });
@@ -159,7 +164,17 @@ export function createAppStore(api: PactApi) {
       },
 
       openHome() {
-        set({ activeTab: { kind: 'home' } });
+        const { activeTab } = get();
+        set({
+          activeTab: { kind: 'home' },
+          previousWorkspaceId: activeTab.kind === 'workspace' ? activeTab.id : null,
+        });
+      },
+
+      closeHome() {
+        const { workspaces, previousWorkspaceId } = get();
+        const target = workspaces.find((w) => w.id === previousWorkspaceId) ?? workspaces.at(-1);
+        if (target) set({ activeTab: { kind: 'workspace', id: target.id } });
       },
 
       setView(view) {
