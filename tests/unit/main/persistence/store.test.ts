@@ -89,7 +89,7 @@ describe('JsonFile', () => {
 });
 
 describe('openStores', () => {
-  it('keeps global state in state.json and each workspace in workspaces/<id>.json', async () => {
+  it('keeps global state in state.json and each workspace in workspaces/<id>.json', () => {
     const stores = openStores(dir);
     expect(stores.state.path).toBe(join(dir, 'state.json'));
     expect(stores.workspace('a1b2c3').path).toBe(join(dir, 'workspaces', 'a1b2c3.json'));
