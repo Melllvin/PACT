@@ -27,6 +27,7 @@ export function runCliAdapterContract(
   const input: LaunchInput = {
     agentId: '00000000-0000-4000-8000-000000000001',
     executablePath,
+    repoPath: '/repo',
     cwd: '/repo/.worktrees/agent-1',
     model: null,
     permissionLevel: 'ask-sensitive',

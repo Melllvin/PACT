@@ -66,6 +66,7 @@ describe('fake adapter specifics', () => {
     const spec = adapter.buildLaunch({
       agentId: '00000000-0000-4000-8000-000000000001',
       executablePath: '/Applications/PACT.app/Contents/MacOS/PACT',
+      repoPath: '/r',
       cwd: '/w',
       model: null,
       permissionLevel: 'always-allow',
