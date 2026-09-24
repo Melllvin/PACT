@@ -17,7 +17,9 @@
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run coverage",
+    "setup:e2e:linux": "playwright install-deps",
     "test:e2e": "npm run build && playwright test",
+    "test:e2e:linux": "npm run build && xvfb-run -a playwright test",
     "dist": "electron-builder",
     "postinstall": "electron-rebuild -f -w node-pty"
   },
