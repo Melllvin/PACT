@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAdapters } from '../../src/main/agents/adapters';
+import { createAdapters, runCommand } from '../../src/main/agents/adapters';
 import { FakeAdapter } from '../../src/main/agents/adapters/fake';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { runCliAdapterContract } from './cli-adapter.contract';
@@ -80,10 +80,28 @@ describe('fake adapter specifics', () => {
 });
 
 describe('adapter registry', () => {
-  it('only offers the fake adapter in test mode (PACT_TEST_MODE=1)', () => {
-    const ids = (env: Record<string, string>) =>
-      createAdapters({ env, platform: 'darwin' }).map((a) => a.id);
-    expect(ids({})).not.toContain('fake');
-    expect(ids({ PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI })).toContain('fake');
+  const bridge = { executable: '/Applications/PACT.app/Contents/MacOS/PACT', script: '/b.js' };
+  const ids = (env: Record<string, string>) =>
+    createAdapters({ env, platform: 'darwin', bridge }).map((a) => a.id);
+
+  it('offers Claude Code and Codex', () => {
+    expect(ids({})).toEqual(['claude-code', 'codex']);
+  });
+
+  it('only offers the fake adapter in test mode, so e2e runs never depend on installed CLIs', () => {
+    expect(ids({ PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI })).toEqual(['fake']);
+  });
+});
+
+describe('default command runner', () => {
+  it('returns the standard output of a short command', async () => {
+    const out = await runCommand(process.execPath, ['--version'], process.env, process.platform);
+    expect(out.trim()).toBe(process.version);
+  });
+
+  it('rejects when the command fails', async () => {
+    await expect(
+      runCommand(process.execPath, ['-e', 'process.exit(3)'], process.env, process.platform),
+    ).rejects.toThrow();
   });
 });
