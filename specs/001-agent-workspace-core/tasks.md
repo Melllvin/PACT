@@ -446,3 +446,7 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 - [X] T137 Tests puis implémentation : décrire dans l'écran 1m ce que chaque niveau permet réellement **pour chaque CLI lancé** (Claude Code : règles `ask` rm / curl / wget / git push / WebFetch ; Codex : sandbox `workspace-write`, approbation `on-request` décidée par le modèle, réseau coupé par le sandbox), sans promettre à Codex ce que seules les règles de Claude Code garantissent, dans `tests/unit/renderer/launch/PermissionsDialog.test.tsx` et `src/renderer/launch/PermissionsDialog.tsx` per FR-012 / research R5 (contradicts)
 - [X] T138 Tests puis implémentation : en niveau « Demander pour les actions sensibles », faire demander Claude Code avant toute écriture hors du worktree (vérifier le comportement réel d'`acceptEdits` hors du `cwd`, sinon ajouter des règles `permissions.ask` `Edit` / `Write` hors worktree), dans `tests/contract/claude-code.contract.test.ts` et `src/main/agents/adapters/claude-code.ts` per FR-012 / research R5 (partial)
+
+## Phase 16: Convergence
+
+- [ ] T139 Tests puis implémentation : ne compter dans le badge du bouton À faire que les éléments en attente (répondre, limite de débit, consigne), pas l'élément informatif du terminal libre, dans `tests/unit/renderer/workspace/WorkspaceView.test.tsx` et `src/renderer/workspace/WorkspaceView.tsx` per FR-029 / US4/AC3 (partial)

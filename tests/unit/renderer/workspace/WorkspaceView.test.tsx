@@ -256,6 +256,21 @@ describe('À faire column (T082, T086)', () => {
     expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
   });
 
+  it('counts only what waits on the button, not a running free terminal (FR-029)', () => {
+    render(
+      <WorkspaceView
+        workspace={workspace({
+          agents: waiting,
+          freeTerminals: [{ id: 't1', workspaceId: 'w1', cwd: '/w', shell: '/bin/zsh' }],
+        })}
+        clis={clis}
+      />,
+    );
+    const column = screen.getByRole('complementary', { name: 'À faire' });
+    expect(within(column).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toBe('À faire 2');
+  });
+
   it('is absent without agents, even with a free terminal', () => {
     render(
       <WorkspaceView
