@@ -1,0 +1,9 @@
+{
+  "output": ["Erreur simulée"],
+  "signal": {
+    "type": "failed",
+    "kind": "crash",
+    "message": "Erreur simulée"
+  },
+  "exitCode": 1
+}

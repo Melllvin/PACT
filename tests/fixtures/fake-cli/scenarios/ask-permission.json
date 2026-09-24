@@ -1,0 +1,4 @@
+{
+  "output": ["Analyse du dépôt"],
+  "permission": "rm fichier.txt"
+}

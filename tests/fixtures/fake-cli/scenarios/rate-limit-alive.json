@@ -1,0 +1,7 @@
+{
+  "output": ["Travail en cours"],
+  "rateLimit": {
+    "resetAt": "2030-01-01T09:30:00.000Z",
+    "exit": false
+  }
+}
