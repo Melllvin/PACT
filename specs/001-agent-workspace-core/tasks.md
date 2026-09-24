@@ -419,5 +419,5 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 ## Phase 12: Convergence
 
-- [ ] T129 Consigner dans `specs/001-agent-workspace-core/research.md` R3 que la résolution des commandes cherche directement dans le PATH (avec PATHEXT sous Windows) au lieu de lancer `which` / `where.exe` : même résultat, aucun processus lancé, testable sur les deux OS, vérifié sur la CI Windows per research R3 / T019 (contradicts)
+- [x] T129 Consigner dans `specs/001-agent-workspace-core/research.md` R3 que la résolution des commandes cherche directement dans le PATH (avec PATHEXT sous Windows) au lieu de lancer `which` / `where.exe` : même résultat, aucun processus lancé, testable sur les deux OS, vérifié sur la CI Windows per research R3 / T019 (contradicts)
 - [ ] T130 Justifier dans la revue de sécurité (T114) le contrôle d'origine IPC (`trustedSenderCheck`), l'ignorance d'`ELECTRON_RENDERER_URL` dans une app packagée et le service `app:getState` câblé dès la phase 2 (`src/main/app-services.ts`) per T114 (unrequested)

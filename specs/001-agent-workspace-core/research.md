@@ -40,6 +40,11 @@ Date : 2026-09-23. Versions relevées via `npm view` et `--help` le même jour.
 - **Decision** : la détection résout le chemin complet via `where.exe` ; si l'extension est `.cmd`
   ou `.bat`, le lancement passe par `cmd.exe /d /s /c "<chemin>" <args>` ; les `.exe` sont lancés
   directement. Les arguments sont échappés par une fonction dédiée, testée unitairement.
+- **Implémentation (phase 2)** : plutôt que de lancer `which` / `where.exe`, la résolution parcourt
+  directement le PATH (avec PATHEXT et des noms de variables insensibles à la casse sous Windows) :
+  même résultat, aucun processus lancé, et un comportement testable à l'identique sur les deux OS.
+  L'aller-retour d'arguments (espaces, guillemets, `&`, `%`, accents) à travers un vrai shim npm
+  `.cmd` est vérifié sur la CI Windows.
 - **Alternatives** : `cross-spawn` (ne couvre pas node-pty) ; lancer tout via un shell interactif
   (casse la détection de fin de processus et les codes de sortie).
 
