@@ -22,7 +22,7 @@ const touch = async (path: string, mode = 0o755) => {
 };
 
 describe('findExecutable', () => {
-  it('returns the first match in PATH order', async () => {
+  it.skipIf(isWindows)('returns the first match in PATH order', async () => {
     const [first, second] = [join(root, 'a'), join(root, 'b')];
     await mkdir(first);
     await mkdir(second);
