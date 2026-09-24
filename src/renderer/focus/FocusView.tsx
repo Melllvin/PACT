@@ -20,7 +20,7 @@ type Props = Omit<AgentActions, 'onClose'> & {
 const TAB =
   'flex-none rounded-none border-0 border-b-2 border-transparent px-0.5 pt-2.5 pb-2 text-[12.5px] ' +
   'data-[state=active]:border-(--agent-color) data-[state=active]:bg-transparent ' +
-  'data-[state=active]:font-semibold data-[state=active]:shadow-none';
+  'data-[state=active]:font-semibold data-[state=active]:shadow-none after:bg-(--agent-color)';
 
 /**
  * Focus (screen 1p): one agent large, opened by ⤢. Only the Terminal tab exists in this version;
