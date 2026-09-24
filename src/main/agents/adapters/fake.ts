@@ -9,6 +9,7 @@ import {
   type DetectionResult,
   type LaunchInput,
   type LaunchSpec,
+  type OutputContext,
   type ResolvedEnv,
 } from './types';
 
@@ -51,7 +52,7 @@ export class FakeAdapter implements CliAdapter {
     return parsed.success ? parsed.data : null;
   }
 
-  mapOutput(): AgentSignal | null {
+  mapOutput(_chunk: string, _ctx: OutputContext): AgentSignal | null {
     return null;
   }
 

@@ -136,7 +136,8 @@ export class CodexAdapter implements CliAdapter {
     if (/Hooks need review/.test(chunk)) {
       return { type: 'awaiting-answer', summary: 'Approuver les hooks PACT ?' };
     }
-    if (/usage limit|rate limit/i.test(chunk)) {
+    // The banner only: an agent may well write « rate limit » while working on retries.
+    if (/You've hit your usage limit/i.test(chunk)) {
       const resetAt = this.parseRateLimitReset(chunk);
       return {
         type: 'failed',

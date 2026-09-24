@@ -60,12 +60,27 @@ export class GitService {
     return (await this.git(path, ['status', '--porcelain'])).length > 0;
   }
 
+  /**
+   * Worktree `<repo>/.worktrees/<cli>-<position>`. Without a chosen `branch`, it gets the
+   * provisional `agent/<cli>-<position>`, suffixed rather than reusing an existing branch; a
+   * chosen branch that already exists makes git fail (the caller validates it first).
+   */
   async addWorktree(
     repo: string,
-    { cli, position, base }: { cli: string; position: number; base: string },
+    {
+      cli,
+      position,
+      base,
+      branch,
+    }: { cli: string; position: number; base: string; branch?: string },
   ): Promise<Worktree> {
     await this.excludeWorktrees(repo);
     const name = `${cli}-${String(position)}`;
+    if (branch !== undefined) {
+      const path = await this.freePath(join(repo, '.worktrees', name));
+      await this.git(repo, ['worktree', 'add', '-b', branch, path, base]);
+      return { path, branch };
+    }
     for (let attempt = 1; ; attempt++) {
       const suffix = attempt === 1 ? '' : `-${String(attempt)}`;
       const branch = `agent/${name}${suffix}`;
@@ -110,12 +125,20 @@ export class GitService {
     });
   }
 
-  private async branchExists(repo: string, branch: string) {
+  async branchExists(repo: string, branch: string): Promise<boolean> {
     try {
       await this.git(repo, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** `path`, or `path-2`, `path-3`… when a leftover folder is in the way. */
+  private async freePath(path: string) {
+    for (let attempt = 1; ; attempt++) {
+      const candidate = attempt === 1 ? path : `${path}-${String(attempt)}`;
+      if (!(await exists(candidate))) return candidate;
     }
   }
 

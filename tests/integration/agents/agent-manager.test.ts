@@ -29,8 +29,7 @@ const gitEnv = {
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8' }).trim();
 
-const baseEnv: Record<string, string> = {};
-for (const [key, value] of Object.entries(gitEnv)) if (value !== undefined) baseEnv[key] = value;
+const baseEnv: Record<string, string> = { ...gitEnv };
 
 /** Prints `? Exécuter : …`: shows the terminal fallback when a CLI has no hook for a dialog. */
 class TerminalDialogFake extends FakeAdapter {
@@ -91,8 +90,11 @@ const createManager = async ({
   return manager;
 };
 
-const launch = (manager: AgentManager, drafts: AgentDraft[], counters = { freeTerminal: 0 }) =>
-  manager.launch({ workspaceId: workspace.id, agents: drafts, counters });
+const launch = (
+  manager: AgentManager,
+  drafts: AgentDraft[],
+  counters: Workspace['quickLaunchCounters'] = { freeTerminal: 0 },
+) => manager.launch({ workspaceId: workspace.id, agents: drafts, counters });
 
 const agentsOnDisk = async () => (await stores.workspace(workspace.id).read())?.agents ?? [];
 const current = (id: string) => workspaces.get(workspace.id)?.agents.find((a) => a.id === id);
@@ -136,6 +138,8 @@ afterEach(async () => {
   await pty.dispose();
   await hooks.stop();
   workspaces.dispose();
+  // Reads queue behind the last writes: nothing is left writing into the folder removed below.
+  await stores.workspace(workspace.id).read();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -244,7 +248,9 @@ describe('AgentManager.launch', () => {
 });
 
 describe('AgentManager launch validation', () => {
-  const noWorktree = () => expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(1);
+  const noWorktree = () => {
+    expect(git(repo, 'worktree', 'list').split('\n')).toHaveLength(1);
+  };
 
   it('refuses more than 6 agents in a workspace (LIMIT)', async () => {
     const manager = await createManager();
@@ -322,12 +328,18 @@ describe('AgentManager terminal and environment', () => {
     const recording = new PtyManager({
       spawn: (_file, _args, options) => {
         spawned.push(options);
+        let exit: (event: { exitCode: number }) => void = () => undefined;
         return {
           onData: () => ({ dispose: () => undefined }),
-          onExit: () => ({ dispose: () => undefined }),
+          onExit: (listener) => {
+            exit = listener;
+            return { dispose: () => undefined };
+          },
           write: () => undefined,
           resize: () => undefined,
-          kill: () => undefined,
+          kill: () => {
+            exit({ exitCode: 0 });
+          },
         };
       },
     });
