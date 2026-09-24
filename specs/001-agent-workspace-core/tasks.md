@@ -107,7 +107,7 @@ dépôt ouvert ; redémarrer → dépôt dans les récents.
 - [x] T039 [P] [US1] Tests d'intégration de `WorkspaceService` : ouverture d'un dépôt (id = hash du `realpath`), `NOT_A_REPO`, `ALREADY_OPEN(id)` (FR-004), `initRepo`, récents triés par date décroissante et limités à 20, `keptWorktrees` compté depuis `.worktrees/`, statut `unavailable` quand le dossier est supprimé, persistance des workspaces ouverts dans `tests/integration/workspace/workspace-service.test.ts`
 - [x] T040 [P] [US1] Tests de l'accueil : sections « Déjà ouverts » (chemin, branche, n worktrees, pastilles, compteur ◆), « Récents » (worktrees conservés, « ouvert il y a N j »), recherche, zone de dépôt, « Choisir un dépôt Git… », « Cloner depuis une URL… » avec progression et erreur, message + proposition d'initialisation pour un dossier non Git dans `tests/unit/renderer/home/Home.test.tsx`
 - [x] T041 [P] [US1] Tests du workspace vide : une seule action « + Ajouter des agents », pas de colonne À faire, Comparer et Revue visibles mais inactifs (FR-006) dans `tests/unit/renderer/workspace/EmptyWorkspace.test.tsx`
-- [ ] T042 [P] [US1] Test e2e : glisser-déposer simulé d'un dépôt temporaire → onglet actif ; réouverture → bascule sur l'onglet existant ; « + » ouvre l'accueil ; clonage d'un dépôt bare local ; redémarrage → récents présents dans `tests/e2e/us1-workspaces.spec.ts`
+- [x] T042 [P] [US1] Test e2e : glisser-déposer simulé d'un dépôt temporaire → onglet actif ; réouverture → bascule sur l'onglet existant ; « + » ouvre l'accueil ; clonage d'un dépôt bare local ; redémarrage → récents présents dans `tests/e2e/us1-workspaces.spec.ts`
 
 ### Implementation for User Story 1
 
@@ -117,6 +117,8 @@ dépôt ouvert ; redémarrer → dépôt dans les récents.
 - [x] T046 [P] [US1] Implémenter l'accueil (1a) avec recherche, zone de dépôt (`webUtils.getPathForFile` via preload), boîte de clonage dans `src/renderer/home/Home.tsx`, `src/renderer/home/CloneDialog.tsx`, `src/renderer/home/DropZone.tsx`
 - [x] T047 [P] [US1] Implémenter le workspace vide (1b) et l'affichage « indisponible » dans `src/renderer/workspace/EmptyWorkspace.tsx` et `src/renderer/workspace/WorkspaceView.tsx`
 - [x] T048 [US1] Relier onglets, accueil et workspaces dans le store et `App.tsx` (onglet d'accueil ouvert par « + », fermeture d'onglet) dans `src/renderer/app/App.tsx`
+
+> Notes d'implémentation : le test e2e T042 a été écrit après l'implémentation (chaque comportement avait son test Red aux niveaux unitaire et intégration). Le glisser-déposer est couvert au niveau composant (un `File` synthétique n'a pas de chemin réel en e2e) ; l'e2e passe par le sélecteur natif simulé dans le processus main. Deux ajouts au contrat IPC : `dialog:pickFolder` et la variante `{ jobId, workspace }` de `clone:progress`.
 
 **Checkpoint**: US1 fonctionnelle et testée seule
 

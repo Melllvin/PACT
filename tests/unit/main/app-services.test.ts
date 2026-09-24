@@ -28,6 +28,7 @@ let stores: Stores;
 let workspaces: WorkspaceService;
 let pickFolder: ReturnType<typeof vi.fn<(purpose: string) => Promise<string | null>>>;
 let services: ReturnType<typeof createAppServices>;
+let cloneEvents: unknown[];
 
 const makeRepo = async (name: string) => {
   const path = join(dir, name);
@@ -45,10 +46,11 @@ beforeEach(async () => {
   const git = new GitService({ env: gitEnv });
   workspaces = new WorkspaceService({ git, stores });
   pickFolder = vi.fn<(purpose: string) => Promise<string | null>>();
+  cloneEvents = [];
   services = createAppServices({
     stores,
     workspaces,
-    clones: new CloneJobs({ git, workspaces, emit: () => undefined }),
+    clones: new CloneJobs({ git, workspaces, emit: (event) => cloneEvents.push(event) }),
     pickFolder,
   });
 });
@@ -101,9 +103,10 @@ describe('workspace channels', () => {
       destination: join(dir, 'copy'),
     });
     expect(jobId).toMatch(/[0-9a-f-]{36}/);
-    for (let i = 0; i < 500 && workspaces.list().length === 0; i++) {
-      await new Promise((r) => setTimeout(r, 20));
-    }
+    // Wait for the completion event: it is emitted once the workspace is fully persisted.
+    const done = () =>
+      cloneEvents.some((e) => typeof e === 'object' && e !== null && 'workspace' in e);
+    for (let i = 0; i < 500 && !done(); i++) await new Promise((r) => setTimeout(r, 20));
     expect(workspaces.list().map((w) => w.name)).toEqual(['copy']);
   });
 

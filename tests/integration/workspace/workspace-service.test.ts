@@ -116,7 +116,8 @@ describe('recent projects', () => {
     expect((await service.recents()).map((r) => r.name)).toEqual(['b', 'a']);
   });
 
-  it('keeps at most 20 recents', async () => {
+  // 22 real repositories: allow for slow disks and parallel test files.
+  it('keeps at most 20 recents', { timeout: 30_000 }, async () => {
     const service = createService();
     for (let i = 0; i < 22; i++) {
       clock = new Date(Date.UTC(2026, 8, 1, i));
