@@ -196,3 +196,18 @@ describe('IPC errors', () => {
     expect(toIpcError(error)).toEqual(error);
   });
 });
+
+describe('IpcFailure', () => {
+  it('carries a code and an optional workspace id through toIpcError', async () => {
+    const { IpcFailure } = await import('../../../src/shared/ipc');
+    expect(toIpcError(new IpcFailure('ALREADY_OPEN', 'Déjà ouvert', 'w1'))).toEqual({
+      code: 'ALREADY_OPEN',
+      message: 'Déjà ouvert',
+      workspaceId: 'w1',
+    });
+    expect(toIpcError(new IpcFailure('LIMIT', '6 agents au plus'))).toEqual({
+      code: 'LIMIT',
+      message: '6 agents au plus',
+    });
+  });
+});

@@ -34,7 +34,26 @@ export const ipcErrorSchema = z.object({
 });
 export type IpcError = z.infer<typeof ipcErrorSchema>;
 
+/** Thrown by main-process services to return a specific, displayable error to the renderer. */
+export class IpcFailure extends Error {
+  constructor(
+    readonly code: IpcError['code'],
+    message: string,
+    readonly workspaceId?: string,
+  ) {
+    super(message);
+    this.name = 'IpcFailure';
+  }
+}
+
 export function toIpcError(error: unknown): IpcError {
+  if (error instanceof IpcFailure) {
+    return {
+      code: error.code,
+      message: error.message,
+      ...(error.workspaceId === undefined ? {} : { workspaceId: error.workspaceId }),
+    };
+  }
   const parsed = ipcErrorSchema.safeParse(error);
   if (parsed.success) return parsed.data;
   if (error instanceof Error) return { code: 'INTERNAL', message: error.message };
@@ -141,3 +160,15 @@ export type IpcEventChannel = keyof typeof ipcEvents;
 export type IpcInput<C extends IpcRequestChannel> = z.input<(typeof ipcRequests)[C]['input']>;
 export type IpcOutput<C extends IpcRequestChannel> = z.output<(typeof ipcRequests)[C]['output']>;
 export type IpcEvent<C extends IpcEventChannel> = z.output<(typeof ipcEvents)[C]>;
+
+/** What travels back over `invoke`: Electron mangles thrown errors, so results are wrapped. */
+export type IpcEnvelope<T> = { ok: true; data: T } | { ok: false; error: IpcError };
+
+type InputArgs<C extends IpcRequestChannel> = undefined extends IpcInput<C> ? [] : [IpcInput<C>];
+
+/** The API exposed as `window.pact` by the preload (contracts/ipc.md). */
+export interface PactApi {
+  /** Rejects with a plain `IpcError` object (it must survive the context bridge). */
+  invoke<C extends IpcRequestChannel>(channel: C, ...input: InputArgs<C>): Promise<IpcOutput<C>>;
+  on<C extends IpcEventChannel>(channel: C, listener: (payload: IpcEvent<C>) => void): () => void;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createPactApi, PactError } from '../../../src/preload/api';
+import { createPactApi } from '../../../src/preload/api';
 
 const agentId = '00000000-0000-4000-8000-000000000001';
 
@@ -30,7 +30,10 @@ describe('window.pact', () => {
     await import('../../../src/preload/index');
     expect(exposeInMainWorld).toHaveBeenCalledWith(
       'pact',
-      expect.objectContaining({ invoke: expect.any(Function), on: expect.any(Function) }),
+      expect.objectContaining({
+        invoke: expect.any(Function) as unknown,
+        on: expect.any(Function) as unknown,
+      }),
     );
     vi.doUnmock('electron');
   });
@@ -52,7 +55,8 @@ describe('window.pact', () => {
     expect(ipc.invoke).not.toHaveBeenCalled();
   });
 
-  it('turns an error envelope into a PactError with a code', async () => {
+  // contextBridge drops custom properties of Error objects, so errors cross it as plain objects.
+  it('rejects with a plain { code, message } object that survives the context bridge', async () => {
     const ipc = fakeIpcRenderer();
     ipc.invoke.mockResolvedValue({
       ok: false,
@@ -61,8 +65,8 @@ describe('window.pact', () => {
     const error = await createPactApi(ipc)
       .invoke('workspace:open', { path: '/repo' })
       .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(PactError);
-    expect(error).toMatchObject({
+    expect(error).not.toBeInstanceOf(Error);
+    expect(error).toEqual({
       code: 'ALREADY_OPEN',
       message: 'Déjà ouvert',
       workspaceId: 'w1',

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createEventEmitter, registerHandlers } from '../../../../src/main/ipc/handlers';
+import { IpcFailure } from '../../../../src/shared/ipc';
 
 type Listener = (event: { senderFrame: { url: string } | null }, input: unknown) => unknown;
 
@@ -53,7 +54,7 @@ describe('registerHandlers', () => {
       ipc,
       {
         'workspace:close': () => {
-          throw { code: 'NOT_FOUND', message: 'Workspace inconnu' };
+          throw new IpcFailure('NOT_FOUND', 'Workspace inconnu');
         },
         'agent:resume': () => {
           throw new Error('pty crashed');
