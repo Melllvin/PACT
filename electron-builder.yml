@@ -1,0 +1,19 @@
+appId: dev.pact.app
+productName: PACT
+directories:
+  output: dist
+files:
+  - out/**
+  - package.json
+asarUnpack:
+  - node_modules/node-pty/**
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+  # Signing and notarization are out of scope for the core (research.md R14).
+  identity: null
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
