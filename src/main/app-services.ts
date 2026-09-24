@@ -46,3 +46,12 @@ export function trustedSenderCheck({
     return devOrigin !== undefined && parsed.origin === devOrigin;
   };
 }
+
+/**
+ * The electron-vite dev server URL, honored only when running unpackaged: in a packaged app an
+ * environment variable must never be able to swap PACT's UI for another page.
+ */
+export const devServerUrl = (
+  app: { isPackaged: boolean },
+  env: Record<string, string | undefined>,
+): string | undefined => (app.isPackaged ? undefined : env.ELECTRON_RENDERER_URL);
