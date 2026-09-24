@@ -73,7 +73,9 @@ describe('createMainWindow', () => {
 
   it('blocks navigation away from the app', () => {
     createMainWindow({});
-    const call = lastWindow().webContents.on.mock.calls.find(([event]) => event === 'will-navigate');
+    const call = lastWindow().webContents.on.mock.calls.find(
+      ([event]) => event === 'will-navigate',
+    );
     const preventDefault = vi.fn();
     (call?.[1] as (event: { preventDefault(): void }) => void)({ preventDefault });
     expect(preventDefault).toHaveBeenCalled();
