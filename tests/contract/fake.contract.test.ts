@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAdapters, runCommand } from '../../src/main/agents/adapters';
+import { commandRunner, createAdapters, runCommand } from '../../src/main/agents/adapters';
 import { FakeAdapter } from '../../src/main/agents/adapters/fake';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { runCliAdapterContract } from './cli-adapter.contract';
@@ -88,6 +88,10 @@ describe('adapter registry', () => {
     expect(ids({})).toEqual(['claude-code', 'codex']);
   });
 
+  it('offers nothing in test mode without a fake CLI', () => {
+    expect(ids({ PACT_TEST_MODE: '1' })).toEqual([]);
+  });
+
   it('only offers the fake adapter in test mode, so e2e runs never depend on installed CLIs', () => {
     expect(ids({ PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI })).toEqual(['fake']);
   });
@@ -105,6 +109,11 @@ describe('adapter registry', () => {
 describe('default command runner', () => {
   it('returns the standard output of a short command', async () => {
     const out = await runCommand(process.execPath, ['--version'], process.env, process.platform);
+    expect(out.trim()).toBe(process.version);
+  });
+
+  it('is bound to the platform for the adapters', async () => {
+    const out = await commandRunner(process.platform)(process.execPath, ['--version'], process.env);
     expect(out.trim()).toBe(process.version);
   });
 

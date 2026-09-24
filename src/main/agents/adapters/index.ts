@@ -26,6 +26,12 @@ export async function runCommand(
   return stdout;
 }
 
+/** The runner the adapters use for detection on `platform`. */
+export const commandRunner =
+  (platform: NodeJS.Platform): CommandRunner =>
+  (file, args, env) =>
+    runCommand(file, args, env, platform);
+
 /**
  * Adapters available on this machine. In test mode only the fake one, pointed at the fake CLI by
  * the e2e harness: e2e runs never depend on the CLIs installed where they run.
@@ -34,7 +40,7 @@ export function createAdapters({
   env,
   platform,
   bridge,
-  run = (file, args, commandEnv) => runCommand(file, args, commandEnv, platform),
+  run = commandRunner(platform),
 }: {
   env: Record<string, string | undefined>;
   platform: NodeJS.Platform;
@@ -42,7 +48,8 @@ export function createAdapters({
   run?: CommandRunner;
 }): CliAdapter[] {
   if (env.PACT_TEST_MODE === '1') {
-    return env.PACT_FAKE_CLI ? [new FakeAdapter({ cliPath: env.PACT_FAKE_CLI, platform })] : [];
+    const { PACT_FAKE_CLI: cliPath, PACT_FAKE_NODE: runtime } = env;
+    return cliPath ? [new FakeAdapter({ cliPath, platform, runtime })] : [];
   }
   return [
     new ClaudeCodeAdapter({ platform, bridge, run }),
