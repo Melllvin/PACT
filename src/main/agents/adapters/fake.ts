@@ -9,26 +9,38 @@ import {
   type DetectionResult,
   type LaunchInput,
   type LaunchSpec,
+  type OutputContext,
   type ResolvedEnv,
 } from './types';
 
 /**
  * Drives tests/fixtures/fake-cli (research.md R13). Only registered in test mode; it runs the
- * fake CLI script with the app's own executable (Electron in Node mode, or Node in tests).
+ * fake CLI script with `runtime`, by default the app's own executable (Electron in Node mode, or
+ * Node in tests). Electron gets no console in a Windows pseudo-terminal, so e2e runs pass a Node.
  */
 export class FakeAdapter implements CliAdapter {
   readonly id = 'fake';
   private readonly cliPath: string;
   private readonly platform: NodeJS.Platform;
+  private readonly runtime: string;
 
-  constructor({ cliPath, platform }: { cliPath: string; platform: NodeJS.Platform }) {
+  constructor({
+    cliPath,
+    platform,
+    runtime = process.execPath,
+  }: {
+    cliPath: string;
+    platform: NodeJS.Platform;
+    runtime?: string | undefined;
+  }) {
     this.cliPath = cliPath;
     this.platform = platform;
+    this.runtime = runtime;
   }
 
   detect(_env: ResolvedEnv): Promise<DetectionResult> {
     return Promise.resolve({
-      resolvedPath: process.execPath,
+      resolvedPath: this.runtime,
       version: process.version,
       status: 'installed',
     });
@@ -51,7 +63,7 @@ export class FakeAdapter implements CliAdapter {
     return parsed.success ? parsed.data : null;
   }
 
-  mapOutput(): AgentSignal | null {
+  mapOutput(_chunk: string, _ctx: OutputContext): AgentSignal | null {
     return null;
   }
 

@@ -1,6 +1,7 @@
 // research.md R4 — hook command for CLIs that only run command hooks (e.g. Codex). Launched as
 // `"<Electron>" hook-bridge.js` with ELECTRON_RUN_AS_NODE=1, so users need neither Node nor curl.
-// It forwards the JSON payload read from stdin to PACT and prints PACT's answer on stdout.
+// It forwards the JSON payload read from stdin to PACT and prints PACT's answer on stdout. With
+// `--notify <json>` (Codex `notify`), the payload is the last argument and stdin is not read.
 // Keep this file free of dependencies: it is bundled on its own.
 import { pathToFileURL } from 'node:url';
 
@@ -8,13 +9,14 @@ type RelayOptions = {
   stdin: AsyncIterable<Buffer | string>;
   stdout: NodeJS.WritableStream;
   env: Record<string, string | undefined>;
+  argv?: string[];
 };
 
-export async function relayHook({ stdin, stdout, env }: RelayOptions): Promise<void> {
+export async function relayHook({ stdin, stdout, env, argv = [] }: RelayOptions): Promise<void> {
   const url = env.PACT_HOOK_URL;
   if (!url) return;
-  let body = '';
-  for await (const chunk of stdin) body += chunk.toString();
+  let body = argv[0] === '--notify' ? (argv.at(-1) ?? '') : '';
+  if (argv[0] !== '--notify') for await (const chunk of stdin) body += chunk.toString();
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -28,5 +30,10 @@ export async function relayHook({ stdin, stdout, env }: RelayOptions): Promise<v
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void relayHook({ stdin: process.stdin, stdout: process.stdout, env: process.env });
+  void relayHook({
+    stdin: process.stdin,
+    stdout: process.stdout,
+    env: process.env,
+    argv: process.argv.slice(2),
+  });
 }

@@ -13,11 +13,12 @@ export type LaunchedApp = {
 /** Launches the built app in test mode with an isolated userData directory. */
 export async function launchApp({
   userDataDir,
-}: { userDataDir?: string } = {}): Promise<LaunchedApp> {
+  env = {},
+}: { userDataDir?: string; env?: Record<string, string> } = {}): Promise<LaunchedApp> {
   const dir = userDataDir ?? (await mkdtemp(join(tmpdir(), 'pact-e2e-')));
   const app = await electron.launch({
     args: ['.'],
-    env: { ...process.env, PACT_TEST_MODE: '1', PACT_USER_DATA_DIR: dir },
+    env: { ...process.env, ...env, PACT_TEST_MODE: '1', PACT_USER_DATA_DIR: dir },
   });
   return {
     app,

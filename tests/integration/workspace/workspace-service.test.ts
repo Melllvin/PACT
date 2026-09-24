@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitService } from '../../../src/main/git/git-service';
 import { openStores } from '../../../src/main/persistence/store';
@@ -33,6 +33,9 @@ const makeRepo = async (name: string, branch = 'main') => {
   git(path, 'commit', '-m', 'initial');
   return path;
 };
+
+/** macOS FSEvents streams start asynchronously and miss changes made in their first moments. */
+const watcherStartup = () => new Promise((r) => setTimeout(r, 300));
 
 const createService = () =>
   new WorkspaceService({
@@ -174,8 +177,9 @@ describe('availability', () => {
     const { id } = await service.open(repo);
     service.startWatching(3_600_000); // the periodic check cannot be what reacts here
     try {
+      await watcherStartup();
       await rename(repo, `${repo}-moved`);
-      for (let i = 0; i < 100 && events.length === 0; i++) {
+      for (let i = 0; i < 250 && events.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
       expect(events).toEqual([{ id, status: 'unavailable' }]);
@@ -197,14 +201,42 @@ describe('availability', () => {
 
       const other = await makeRepo('other');
       const opened = await service.open(other);
+      await watcherStartup();
       await rename(other, `${other}-moved`);
-      for (let i = 0; i < 100 && events.length === 0; i++) {
+      for (let i = 0; i < 250 && events.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
       expect(events).toEqual([{ id: opened.id, status: 'unavailable' }]);
     } finally {
       service.dispose();
     }
+  });
+
+  it('checks after a burst of changes next to the folder, and not after dispose', async () => {
+    const repo = await makeRepo('app');
+    const service = createService();
+    await service.open(repo);
+    const check = vi.spyOn(service, 'checkAvailability').mockResolvedValue();
+    service.startWatching(3_600_000);
+    try {
+      await watcherStartup();
+      for (const n of [1, 2, 3]) await writeFile(join(dirname(repo), `burst-${String(n)}`), '');
+      for (let i = 0; i < 250 && check.mock.calls.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(check).toHaveBeenCalled();
+
+      await new Promise((r) => setTimeout(r, 200)); // late events of the burst settle first
+      check.mockClear();
+      await writeFile(join(dirname(repo), 'burst-4'), '');
+      for (let i = 0; i < 100 && !service['pendingCheck']; i++) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    } finally {
+      service.dispose();
+    }
+    await new Promise((r) => setTimeout(r, 200));
+    expect(check).not.toHaveBeenCalled();
   });
 
   it('only reports status changes', async () => {
@@ -268,5 +300,24 @@ describe('persistence across restarts (FR-005)', () => {
 
   it('closing an unknown workspace is a NOT_FOUND error', async () => {
     await expect(createService().close('abc123')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('WorkspaceService.update', () => {
+  it('saves a change to an open workspace so it survives a restart', async () => {
+    const repo = await makeRepo('app');
+    const service = createService();
+    const { id } = await service.open(repo);
+    const permissionOverride = { level: 'always-ask', autoResume: true, scope: 'project' } as const;
+    await service.update(id, (workspace) => ({ ...workspace, permissionOverride }));
+    expect(service.get(id)?.permissionOverride).toEqual(permissionOverride);
+    const [restored] = await createService().restore();
+    expect(restored?.permissionOverride).toEqual(permissionOverride);
+  });
+
+  it('refuses an unknown workspace (NOT_FOUND)', async () => {
+    await expect(createService().update('abc', (w) => w)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
   });
 });

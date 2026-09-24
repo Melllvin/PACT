@@ -44,6 +44,8 @@ export default defineConfig({
         // Process entry points only wire Electron/React together; the e2e suite covers them.
         'src/main/index.ts',
         'src/renderer/main.tsx',
+        // Thin wrapper over xterm.js, which needs a real browser; the e2e suite covers it.
+        'src/renderer/tiles/xterm-factory.ts',
       ],
       // Constitution 1.1.0 — minimum line and branch coverage, enforced in CI.
       thresholds: {

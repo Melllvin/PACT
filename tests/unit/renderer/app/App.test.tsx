@@ -81,6 +81,75 @@ describe('App', () => {
   });
 });
 
+describe('App terminals', () => {
+  const exitedShell = async (terminals?: { attach: () => () => void; dispose: () => void }) => {
+    const shell = {
+      id: '00000000-0000-4000-8000-000000000007',
+      workspaceId: 'w1',
+      cwd: '/w1',
+      shell: '/bin/zsh',
+    };
+    let exit: (event: { termId: string; code: number | null }) => void = () => undefined;
+    const store = createAppStore({
+      invoke: vi.fn(() =>
+        Promise.resolve({
+          workspaces: [{ ...workspace('w1', 'w1'), freeTerminals: [shell] }],
+          recents: [],
+          clis: [],
+          permission: null,
+        }),
+      ),
+      on: (channel: string, listener: typeof exit) => {
+        if (channel === 'term:exit') exit = listener;
+        return () => undefined;
+      },
+    } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} terminals={terminals} />);
+    await screen.findByRole('article', { name: 'Terminal libre' });
+    act(() => {
+      exit({ termId: shell.id, code: 0 });
+    });
+    return shell.id;
+  };
+
+  it('removes the tile of an exited shell even without terminals to free', async () => {
+    await exitedShell();
+    expect(screen.queryByRole('article', { name: 'Terminal libre' })).toBeNull();
+  });
+
+  it('frees the terminal of a free terminal that is gone', async () => {
+    const shell = {
+      id: '00000000-0000-4000-8000-000000000007',
+      workspaceId: 'w1',
+      cwd: '/w1',
+      shell: '/bin/zsh',
+    };
+    let exit: (event: { termId: string; code: number | null }) => void = () => undefined;
+    const store = createAppStore({
+      invoke: vi.fn(() =>
+        Promise.resolve({
+          workspaces: [{ ...workspace('w1', 'w1'), freeTerminals: [shell] }],
+          recents: [],
+          clis: [],
+          permission: null,
+        }),
+      ),
+      on: (channel: string, listener: typeof exit) => {
+        if (channel === 'term:exit') exit = listener;
+        return () => undefined;
+      },
+    } as unknown as PactApi);
+    const terminals = { attach: vi.fn(() => () => undefined), dispose: vi.fn() };
+    render(<App store={store} getPathForFile={() => ''} terminals={terminals} />);
+    expect(await screen.findByRole('article', { name: 'Terminal libre' })).toBeDefined();
+    act(() => {
+      exit({ termId: shell.id, code: 0 });
+    });
+    expect(screen.queryByRole('article', { name: 'Terminal libre' })).toBeNull();
+    expect(terminals.dispose).toHaveBeenCalledWith(shell.id);
+  });
+});
+
 describe('App wiring of the home actions', () => {
   type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
   const setup = (workspaces: Workspace[] = []) => {
@@ -167,5 +236,69 @@ describe('App wiring of the home actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Fermer atelier-web' }));
     expect(invoke).toHaveBeenCalledWith('workspace:close', { id: 'w1' });
     expect(await screen.findByRole('heading', { name: 'Ouvrir un workspace' })).toBeDefined();
+  });
+});
+
+describe('App launch flow (US2)', () => {
+  type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
+  const fake = {
+    id: 'fake',
+    name: 'Faux CLI',
+    adapter: 'fake',
+    command: 'node',
+    resolvedPath: '/bin/node',
+    version: 'v24.0.0',
+    origin: 'detected',
+    status: 'installed',
+    models: [],
+  } as const;
+  const setup = (workspaces: Workspace[]) => {
+    const invoke = vi.fn<Invoke>((channel) => {
+      switch (channel) {
+        case 'app:getState':
+          return Promise.resolve({ workspaces, recents: [], clis: [fake], permission: null });
+        case 'cli:redetect':
+          return Promise.resolve([fake]);
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} />);
+    return invoke;
+  };
+
+  it('launches from « Ajouter des agents » through the permissions dialog', async () => {
+    const invoke = setup([workspace('w1', 'w1')]);
+    await userEvent.click(await screen.findByRole('button', { name: /Ajouter des agents/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Lancer 1 agent' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Lancer 1 agent' }));
+    expect(invoke).toHaveBeenCalledWith('permission:set', {
+      level: 'always-allow',
+      autoResume: true,
+      scope: 'global',
+    });
+    expect(invoke).toHaveBeenCalledWith(
+      'agents:launch',
+      expect.objectContaining({ workspaceId: 'w1', freeTerminals: 0 }),
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('closes the launcher and the permissions dialog', async () => {
+    setup([workspace('w1', 'w1')]);
+    await userEvent.click(await screen.findByRole('button', { name: /Ajouter des agents/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /Ajouter des agents/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Lancer 1 agent' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('detects the CLIs again from the home tab', async () => {
+    const invoke = setup([]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Détecter à nouveau' }));
+    expect(invoke).toHaveBeenCalledWith('cli:redetect');
   });
 });

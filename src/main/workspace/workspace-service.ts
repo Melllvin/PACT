@@ -16,6 +16,8 @@ type Options = {
   onStatus?: (event: { id: string; status: Workspace['status'] }) => void;
 };
 
+const WATCH_DEBOUNCE_MS = 50;
+
 /** Stable id: hash of the repository's real path (data-model Workspace.id). */
 export const workspaceId = (repoRoot: string) =>
   createHash('sha256').update(repoRoot).digest('hex').slice(0, 16);
@@ -46,6 +48,7 @@ export class WorkspaceService {
   private timer: ReturnType<typeof setInterval> | undefined;
   private readonly watchers = new Map<string, FSWatcher>();
   private watching = false;
+  private pendingCheck: ReturnType<typeof setTimeout> | undefined;
 
   constructor({ git, stores, now = () => new Date(), onStatus = () => undefined }: Options) {
     this.git = git;
@@ -60,6 +63,16 @@ export class WorkspaceService {
 
   get(id: string): Workspace | undefined {
     return this.open_.get(id);
+  }
+
+  /** Changes an open workspace and saves it, keeping memory and disk in step. */
+  async update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace> {
+    const workspace = this.open_.get(id);
+    if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
+    const updated = change(workspace);
+    this.open_.set(id, updated);
+    await this.stores.workspace(id).write(updated);
+    return updated;
   }
 
   async open(path: string): Promise<Workspace> {
@@ -173,15 +186,17 @@ export class WorkspaceService {
     this.watching = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    if (this.pendingCheck) clearTimeout(this.pendingCheck);
+    this.pendingCheck = undefined;
     for (const id of [...this.watchers.keys()]) this.unwatchFolder(id);
   }
 
   private watchFolder(workspace: Workspace) {
     if (!this.watching || this.watchers.has(workspace.id)) return;
-    const name = basename(workspace.path);
     try {
-      const watcher = watch(dirname(workspace.path), (_event, filename) => {
-        if (filename === null || filename === name) void this.checkAvailability();
+      // Any change in the parent: a rename may only report the new name (macOS FSEvents).
+      const watcher = watch(dirname(workspace.path), () => {
+        this.scheduleCheck();
       });
       watcher.on('error', () => {
         this.unwatchFolder(workspace.id);
@@ -190,6 +205,15 @@ export class WorkspaceService {
     } catch {
       // The parent folder may be gone or unreadable: the periodic check still covers it.
     }
+  }
+
+  /** Coalesces a burst of watcher events into one check. */
+  private scheduleCheck() {
+    if (this.pendingCheck) return;
+    this.pendingCheck = setTimeout(() => {
+      this.pendingCheck = undefined;
+      void this.checkAvailability();
+    }, WATCH_DEBOUNCE_MS);
   }
 
   private unwatchFolder(id: string) {

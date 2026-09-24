@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAdapters } from '../../src/main/agents/adapters';
+import { commandRunner, createAdapters, runCommand } from '../../src/main/agents/adapters';
 import { FakeAdapter } from '../../src/main/agents/adapters/fake';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { runCliAdapterContract } from './cli-adapter.contract';
@@ -66,6 +66,7 @@ describe('fake adapter specifics', () => {
     const spec = adapter.buildLaunch({
       agentId: '00000000-0000-4000-8000-000000000001',
       executablePath: '/Applications/PACT.app/Contents/MacOS/PACT',
+      repoPath: '/r',
       cwd: '/w',
       model: null,
       permissionLevel: 'always-allow',
@@ -79,10 +80,46 @@ describe('fake adapter specifics', () => {
 });
 
 describe('adapter registry', () => {
-  it('only offers the fake adapter in test mode (PACT_TEST_MODE=1)', () => {
-    const ids = (env: Record<string, string>) =>
-      createAdapters({ env, platform: 'darwin' }).map((a) => a.id);
-    expect(ids({})).not.toContain('fake');
-    expect(ids({ PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI })).toContain('fake');
+  const bridge = { executable: '/Applications/PACT.app/Contents/MacOS/PACT', script: '/b.js' };
+  const ids = (env: Record<string, string>) =>
+    createAdapters({ env, platform: 'darwin', bridge }).map((a) => a.id);
+
+  it('offers Claude Code and Codex', () => {
+    expect(ids({})).toEqual(['claude-code', 'codex']);
+  });
+
+  it('offers nothing in test mode without a fake CLI', () => {
+    expect(ids({ PACT_TEST_MODE: '1' })).toEqual([]);
+  });
+
+  it('only offers the fake adapter in test mode, so e2e runs never depend on installed CLIs', () => {
+    expect(ids({ PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI })).toEqual(['fake']);
+  });
+
+  it('runs the fake CLI with the Node given by the e2e harness (Electron has no console on Windows)', async () => {
+    const [fake] = createAdapters({
+      env: { PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI, PACT_FAKE_NODE: '/usr/bin/node' },
+      platform: 'darwin',
+      bridge,
+    });
+    expect((await fake?.detect({}))?.resolvedPath).toBe('/usr/bin/node');
+  });
+});
+
+describe('default command runner', () => {
+  it('returns the standard output of a short command', async () => {
+    const out = await runCommand(process.execPath, ['--version'], process.env, process.platform);
+    expect(out.trim()).toBe(process.version);
+  });
+
+  it('is bound to the platform for the adapters', async () => {
+    const out = await commandRunner(process.platform)(process.execPath, ['--version'], process.env);
+    expect(out.trim()).toBe(process.version);
+  });
+
+  it('rejects when the command fails', async () => {
+    await expect(
+      runCommand(process.execPath, ['-e', 'process.exit(3)'], process.env, process.platform),
+    ).rejects.toThrow();
   });
 });

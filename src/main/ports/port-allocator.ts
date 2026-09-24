@@ -49,17 +49,21 @@ export async function isPortInUse(port: number): Promise<boolean> {
   return false;
 }
 
-type AllocateOptions = { base?: number; maxPort?: number };
+type AllocateOptions = {
+  base?: number;
+  maxPort?: number;
+  inUse?: (port: number) => Promise<boolean>;
+};
 
 export async function allocatePort(
   position: number,
   used: ReadonlySet<number>,
-  { base = 3000, maxPort = 65535 }: AllocateOptions = {},
+  { base = 3000, maxPort = 65535, inUse = isPortInUse }: AllocateOptions = {},
 ): Promise<number> {
   const preferred = base + position;
-  if (!used.has(preferred) && !(await isPortInUse(preferred))) return preferred;
+  if (!used.has(preferred) && !(await inUse(preferred))) return preferred;
   for (let port = base + PORTS_PER_WORKSPACE + 1; port <= maxPort; port++) {
-    if (!used.has(port) && !(await isPortInUse(port))) return port;
+    if (!used.has(port) && !(await inUse(port))) return port;
   }
   throw new Error(`Aucun port libre entre ${String(base + 1)} et ${String(maxPort)}`);
 }

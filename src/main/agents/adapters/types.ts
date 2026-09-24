@@ -15,6 +15,8 @@ export type LaunchInput = {
   agentId: string;
   /** Full path resolved at detection (CliDefinition.resolvedPath). */
   executablePath: string;
+  /** Main repository; its `.git` must stay writable from a sandboxed worktree (research.md R5). */
+  repoPath: string;
   cwd: string;
   model: string | null;
   permissionLevel: PermissionLevel;
@@ -41,7 +43,8 @@ export const agentSignalSchema = z.discriminatedUnion('type', [
     summary: z.string(),
     ruleKey: z.string().optional(),
   }),
-  z.object({ type: z.literal('turn-finished') }),
+  // `sessionId` lets the manager drop signals from another session (Codex title thread, T049).
+  z.object({ type: z.literal('turn-finished'), sessionId: z.string().optional() }),
   z.object({
     type: z.literal('failed'),
     kind: z.enum(['crash', 'rate-limit']),
@@ -53,6 +56,12 @@ export const agentSignalSchema = z.discriminatedUnion('type', [
   }),
 ]);
 export type AgentSignal = z.output<typeof agentSignalSchema>;
+
+/** Runs a short command (`--version`, `--help`…) and resolves with its standard output. */
+export type CommandRunner = (file: string, args: string[], env: ResolvedEnv) => Promise<string>;
+
+/** How CLIs without HTTP hooks reach PACT: the built hook bridge run by Electron in Node mode. */
+export type HookBridge = { executable: string; script: string };
 
 export type OutputContext = { exitCode?: number; idleMs?: number };
 

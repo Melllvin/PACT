@@ -158,6 +158,22 @@ describe('app store', () => {
     expect(ws?.agents[0]?.state).toBe('starting');
   });
 
+  it('removes a free terminal whose shell has exited, and nothing for an agent', async () => {
+    const shell = { id: uuid(7), workspaceId: 'w1', cwd: '/w1', shell: '/bin/zsh' };
+    const { api, emit } = fakeApi({
+      workspaces: [{ ...workspace('w1', [agent(1)]), freeTerminals: [shell] }],
+    });
+    const store = createAppStore(api);
+    await store.getState().load();
+    store.getState().connect();
+    const before = store.getState().workspaces;
+    emit('term:exit', { termId: uuid(1), code: 0 });
+    expect(store.getState().workspaces).toBe(before);
+    emit('term:exit', { termId: uuid(7), code: 0 });
+    expect(store.getState().workspaces[0]?.freeTerminals).toEqual([]);
+    expect(store.getState().workspaces[0]?.agents).toHaveLength(1);
+  });
+
   it('ignores events about unknown agents', async () => {
     const { api, emit } = fakeApi({ workspaces: [workspace('w1', [agent(1)])] });
     const store = createAppStore(api);

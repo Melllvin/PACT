@@ -85,6 +85,10 @@ error ──(Relancer)──▶ starting (nouvelle session, consigne retapée)
 * ──(fermeture)──▶ closed
 ```
 
+Un processus terminé sans que PACT l'ait demandé passe en `error` (kind `crash`, « à reprendre »)
+même avec le code 0 : une sortie d'un CLI interactif (`/exit`, Ctrl+D) laisse un agent sans
+terminal qu'il faut reprendre ou relancer. Seule une fermeture demandée par PACT mène à `closed`.
+
 Chaque transition émet `agent:state` et déclenche un pulse (FR-023) ; `error` active le halo.
 
 ## FreeTerminal
