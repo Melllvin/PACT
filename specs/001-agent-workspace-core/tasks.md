@@ -456,3 +456,7 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 - [X] T139 Tests puis implémentation : ne compter dans le badge du bouton À faire que les éléments en attente (répondre, limite de débit, consigne), pas l'élément informatif du terminal libre, dans `tests/unit/renderer/workspace/WorkspaceView.test.tsx` et `src/renderer/workspace/WorkspaceView.tsx` per FR-029 / US4/AC3 (partial)
 - [X] T140 Garder la barre d'une tuile dans la tuile quand la colonne À faire la rétrécit (3×2 à 1024 px) : message d'erreur tronqué avant les boutons, boutons renvoyés à la ligne, vérifié par `tests/e2e/us3-tiles.spec.ts` en CI, dans `src/renderer/tiles/tiles.module.css` per FR-024 / US3/AC6 (contradicts)
+
+## Phase 17: Convergence
+
+- [ ] T143 Vérifier avec le vrai Codex (caractérisation, comme T049) que « Toujours pour ce worktree » autorise bien une demande suivante de même `ruleKey` : les touches `answerKeys('allow')` sont tapées pendant l'appel du hook `PermissionRequest`, peut-être avant que Codex affiche sa boîte ; si elles se perdent, répondre par la sortie du hook quand Codex l'accepte (`permissionDecision`) ou taper après l'affichage de la boîte, test de contrat à l'appui dans `tests/contract/codex.contract.test.ts` et `src/main/agents/adapters/codex.ts` per FR-034 / US5/AC4 (partial)
