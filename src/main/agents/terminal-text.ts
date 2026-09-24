@@ -29,6 +29,11 @@ export class TerminalText {
     return text;
   }
 
+  /** The recent output, as the last `push` returned it. */
+  text(): string {
+    return this.tail;
+  }
+
   /** Forgets the output an adapter just recognized, so the same dialog is not reported again. */
   consume(): void {
     this.tail = '';

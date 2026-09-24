@@ -67,6 +67,12 @@ export type AgentSignal =
 6. Sous Windows, un exécutable `.cmd` est lancé via `cmd.exe /d /s /c` avec arguments échappés
    (research.md R3).
 
+Exception `generic` : la commande saisie par l'utilisateur est lancée telle quelle, PACT n'en
+connaît ni les options de permissions ni les sessions. Les obligations 2 et 3 y deviennent « mêmes
+arguments quel que soit le niveau » et « reprendre = relancer la commande »
+(`runCliAdapterContract(…, { opaqueCommand: true })`) ; l'obligation 5 ne s'applique pas (réponses
+`y` / `n`).
+
 ## Adaptateurs
 
 | Adaptateur | Signaux principaux | Repli |

@@ -5,6 +5,7 @@ import { MAX_AGENTS, type Agent, type Workspace } from '../../shared/model';
 import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
 import type { PtyManager } from '../pty/pty-manager';
+import { IDLE_QUESTION_MS } from './adapters/generic';
 import type { AgentSignal, CliAdapter, ResolvedEnv } from './adapters/types';
 import { applyExit, applySignal } from './agent-state';
 import { BranchWatcher } from './branch-watcher';
@@ -37,6 +38,8 @@ type Options = {
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
   onBranch?: (event: AgentBranchEvent) => void;
+  /** Quiet time after which the output is read again for a question (generic adapter). */
+  idleMs?: number;
 };
 
 export type LaunchRequest = {
@@ -45,7 +48,12 @@ export type LaunchRequest = {
   counters: Workspace['quickLaunchCounters'];
 };
 
-type Running = { workspaceId: string; adapter: CliAdapter; output: TerminalText };
+type Running = {
+  workspaceId: string;
+  adapter: CliAdapter;
+  output: TerminalText;
+  idle?: ReturnType<typeof setTimeout>;
+};
 type InstalledCli = { adapter: CliAdapter; executablePath: string };
 
 /** Set by the Claude Code session PACT may be started from; an agent must not inherit them. */
@@ -66,6 +74,7 @@ export class AgentManager {
   private readonly onState: NonNullable<Options['onState']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
   private readonly branches: BranchWatcher;
+  private readonly idleMs: number;
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
@@ -87,6 +96,7 @@ export class AgentManager {
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
+    this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
     this.branches = new BranchWatcher({
       currentBranch: (path) => this.git.currentBranch(path),
       onBranch: (id, branch) => void this.renamed(id, branch),
@@ -242,7 +252,10 @@ export class AgentManager {
     this.retype.delete(id);
     this.pendingRule.delete(id);
     this.branches.unwatch(id);
-    if (!this.running.delete(id)) return;
+    const running = this.running.get(id);
+    if (!running) return;
+    clearTimeout(running.idle);
+    this.running.delete(id);
     this.hooks.unregister(id);
     await this.pty.kill(id);
   }
@@ -417,15 +430,26 @@ export class AgentManager {
   private readOutput(id: string, data: string) {
     const running = this.running.get(id);
     if (!running) return;
+    clearTimeout(running.idle);
     const signal = running.adapter.mapOutput(running.output.push(data), {});
-    if (!signal) return;
-    running.output.consume();
-    void this.apply(id, signal);
+    if (signal) {
+      running.output.consume();
+      void this.apply(id, signal);
+      return;
+    }
+    // CLIs without hooks: a question is output that stays unanswered (contracts/cli-adapter.md).
+    running.idle = setTimeout(() => {
+      const idle = running.adapter.mapOutput(running.output.text(), { idleMs: this.idleMs });
+      if (!idle) return;
+      running.output.consume();
+      void this.apply(id, idle);
+    }, this.idleMs);
   }
 
   private async exited(id: string, code: number) {
     const running = this.running.get(id);
     if (!running) return;
+    clearTimeout(running.idle);
     this.running.delete(id);
     this.hooks.unregister(id);
     this.branches.unwatch(id);

@@ -254,7 +254,7 @@ réglages appliqués ; CLI ajouté → proposé au lancement.
 ### Tests for User Story 6 ⚠️
 
 - [X] T093 [P] [US6] Tests du brouillon de lancement (logique pure) : « Commun à tous » hérité par défaut, surcharge marquée ≠ et comptée par agent, la surcharge prime au lancement, réordonnancement → positions, ports et couleurs recalculés, dupliquer / retirer, détection des conflits de branche et de port, bascule mode rapide ↔ détaillé sans perte dans `tests/unit/shared/launch-draft.test.ts`
-- [ ] T094 [P] [US6] Tests de l'adaptateur générique : suite de contrat ; heuristique « attend une réponse » après 3 s d'inactivité si la dernière sortie finit par `?` ou `(y/n)` ; fin de processus → `turn-finished` ou `failed` selon le code dans `tests/contract/generic.contract.test.ts`
+- [X] T094 [P] [US6] Tests de l'adaptateur générique : suite de contrat ; heuristique « attend une réponse » après 3 s d'inactivité si la dernière sortie finit par `?` ou `(y/n)` ; fin de processus → `turn-finished` ou `failed` selon le code dans `tests/contract/generic.contract.test.ts`
 - [ ] T095 [P] [US6] Tests de `cli:add` : CLI enregistré avec `origin: custom`, id `custom-<slug>`, avertissement si la commande est introuvable, proposé dans les compteurs du mode rapide dans `tests/unit/main/agents/cli-registry-custom.test.ts`
 - [ ] T096 [P] [US6] Tests du panneau détaillé (1d) : liste à gauche identifiée par couleur, glisser-déposer, inspecteur (CLI, modèle, permissions Demander / Auto · worktree / Tout auto, branche de base, branche « auto — choisie par l'agent », port · commande), pointillés pour l'hérité, ≠ pour le surchargé dans `tests/unit/renderer/launch/DetailedLaunch.test.tsx`
 - [ ] T097 [P] [US6] Test e2e : mode détaillé, 2 agents fake avec branches et port personnalisés → réglages appliqués ; conflit de port → lancement bloqué ; ajout d'un CLI personnalisé depuis l'accueil dans `tests/e2e/us6-detailed-launch.spec.ts`
@@ -262,7 +262,7 @@ réglages appliqués ; CLI ajouté → proposé au lancement.
 ### Implementation for User Story 6
 
 - [X] T098 [P] [US6] Implémenter la logique du brouillon de lancement dans `src/shared/launch-draft.ts` et l'utiliser aussi dans `QuickLaunch` (T065) pour ne pas dupliquer la validation
-- [ ] T099 [P] [US6] Implémenter l'adaptateur générique dans `src/main/agents/adapters/generic.ts`
+- [X] T099 [P] [US6] Implémenter l'adaptateur générique dans `src/main/agents/adapters/generic.ts`
 - [ ] T100 [US6] Implémenter `cli:add` et `agents:reorder` dans `src/main/agents/cli-registry.ts`, `src/main/agents/agent-manager.ts` et `src/main/ipc/agent-handlers.ts`
 - [ ] T101 [US6] Implémenter le panneau maître-détail (1d) dans `src/renderer/launch/DetailedLaunch.tsx`, `src/renderer/launch/AgentInspector.tsx`, `src/renderer/launch/AgentList.tsx`
 - [ ] T102 [US6] Implémenter « Autre CLI — ajouter » sur l'accueil dans `src/renderer/home/AddCliDialog.tsx`
