@@ -135,7 +135,7 @@ Purple, Cyan, Green, états `awaiting-prompt` ; redémarrer → agents restauré
 ### Tests for User Story 2 ⚠️
 
 - [X] T049 [US2] Caractériser à la main Claude Code 2.1.x et Codex 0.156.x sur la machine de dev et consigner les résultats dans `specs/001-agent-workspace-core/research.md` (R4, R5, R6) : séquences de touches des boîtes d'autorisation, charges réelles des hooks (`SessionStart`, `UserPromptSubmit`, `Notification`, `Stop`, `StopFailure`), disponibilité de `--permission-mode auto`, injection des hooks Codex via `-c` et mécanisme d'approbation des hooks (sans `--dangerously-bypass-hook-trust`), `git commit` possible dans un worktree avec `writable_roots`
-- [ ] T050 [P] [US2] Tests de l'adaptateur Claude Code : suite de contrat + arguments exacts par niveau (`always-allow` → `--permission-mode auto`, repli `acceptEdits` ; `ask-sensitive` → `--permission-mode acceptEdits` + règles `permissions.ask` via `--settings` ; `always-ask` → `--permission-mode manual`), `--session-id <uuid>`, `--resume <uuid>`, hooks HTTP injectés via `--settings`, `mapHookEvent` pour chaque événement de R4, `answerKeys` issues de T049, jamais `bypassPermissions` dans `tests/contract/claude-code.contract.test.ts`
+- [X] T050 [P] [US2] Tests de l'adaptateur Claude Code : suite de contrat + arguments exacts par niveau (`always-allow` → `--permission-mode auto`, repli `acceptEdits` ; `ask-sensitive` → `--permission-mode acceptEdits` + règles `permissions.ask` via `--settings` ; `always-ask` → `--permission-mode manual`), `--session-id <uuid>`, `--resume <uuid>`, hooks HTTP injectés via `--settings`, `mapHookEvent` pour chaque événement de R4, `answerKeys` issues de T049, jamais `bypassPermissions` dans `tests/contract/claude-code.contract.test.ts`
 - [ ] T051 [P] [US2] Tests de l'adaptateur Codex : suite de contrat + arguments par niveau (`always-allow` → `-a never -s workspace-write` ; `ask-sensitive` → `-a on-request -s workspace-write` ; `always-ask` → `-a on-request -s read-only` ; tous avec `-c sandbox_workspace_write.writable_roots=["<repo>/.git"]`), `codex resume <SESSION_ID>`, hooks par `-c` sans écrire `~/.codex/config.toml`, jamais `--dangerously-bypass-hook-trust` ni `danger-full-access`, statut `unsupported-version` si `hooks` absent de `codex features list`, mode dégradé `notify` + heuristique si hooks non approuvés dans `tests/contract/codex.contract.test.ts`
 - [ ] T052 [P] [US2] Tests du registre de CLI : détection via l'environnement du shell (T028), version, statuts, CLI « installé » (pas d'état de connexion) dans `tests/unit/main/agents/cli-registry.test.ts`
 - [ ] T053 [P] [US2] Tests de la préférence d'autorisation : résolution projet > global > « demander » (écran 1m), mémorisation, `autoResume` défaut `true` dans `tests/unit/main/agents/permission-service.test.ts`
@@ -146,7 +146,7 @@ Purple, Cyan, Green, états `awaiting-prompt` ; redémarrer → agents restauré
 
 ### Implementation for User Story 2
 
-- [ ] T058 [P] [US2] Implémenter l'adaptateur Claude Code dans `src/main/agents/adapters/claude-code.ts`
+- [X] T058 [P] [US2] Implémenter l'adaptateur Claude Code dans `src/main/agents/adapters/claude-code.ts`
 - [ ] T059 [P] [US2] Implémenter l'adaptateur Codex dans `src/main/agents/adapters/codex.ts`
 - [ ] T060 [US2] Implémenter le registre de CLI (détection, CLI ajoutés persistés, `cli:redetect`) dans `src/main/agents/cli-registry.ts`
 - [ ] T061 [P] [US2] Implémenter la préférence d'autorisation dans `src/main/agents/permission-service.ts`

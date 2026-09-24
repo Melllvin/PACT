@@ -88,7 +88,8 @@ describe('Claude Code launch arguments', () => {
   });
 
   it('generates a session id when none is given', () => {
-    const { sessionId: _, ...withoutSession } = input;
+    const withoutSession: LaunchInput = { ...input };
+    delete withoutSession.sessionId;
     const id = valueAfter(create().buildLaunch(withoutSession).args, '--session-id');
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
   });

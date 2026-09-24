@@ -57,11 +57,7 @@ export const agentSignalSchema = z.discriminatedUnion('type', [
 export type AgentSignal = z.output<typeof agentSignalSchema>;
 
 /** Runs a short command (`--version`, `--help`…) and resolves with its standard output. */
-export type CommandRunner = (
-  file: string,
-  args: string[],
-  env: ResolvedEnv,
-) => Promise<string>;
+export type CommandRunner = (file: string, args: string[], env: ResolvedEnv) => Promise<string>;
 
 /** How CLIs without HTTP hooks reach PACT: the built hook bridge run by Electron in Node mode. */
 export type HookBridge = { executable: string; script: string };
