@@ -20,12 +20,23 @@ const fakeIpcRenderer = () => {
   };
 };
 
+describe('window.pact.pathForFile', () => {
+  it('resolves a dropped file to its path through webUtils', () => {
+    const getPathForFile = vi.fn(() => '/Users/me/depot');
+    const api = createPactApi(fakeIpcRenderer(), { getPathForFile });
+    const file = new File([''], 'depot');
+    expect(api.pathForFile(file)).toBe('/Users/me/depot');
+    expect(getPathForFile).toHaveBeenCalledWith(file);
+  });
+});
+
 describe('window.pact', () => {
   it('is exposed by the preload through the context bridge', async () => {
     const exposeInMainWorld = vi.fn();
     vi.doMock('electron', () => ({
       contextBridge: { exposeInMainWorld },
       ipcRenderer: fakeIpcRenderer(),
+      webUtils: { getPathForFile: vi.fn() },
     }));
     await import('../../../src/preload/index');
     expect(exposeInMainWorld).toHaveBeenCalledWith(
@@ -41,14 +52,14 @@ describe('window.pact', () => {
   it('invokes a channel and unwraps the result', async () => {
     const ipc = fakeIpcRenderer();
     ipc.invoke.mockResolvedValue({ ok: true, data: 'journal' });
-    const api = createPactApi(ipc);
+    const api = createPactApi(ipc, { getPathForFile: () => '' });
     expect(await api.invoke('agent:log', { agentId })).toBe('journal');
     expect(ipc.invoke).toHaveBeenCalledWith('agent:log', { agentId });
   });
 
   it('rejects an invalid input before it reaches the main process', async () => {
     const ipc = fakeIpcRenderer();
-    const api = createPactApi(ipc);
+    const api = createPactApi(ipc, { getPathForFile: () => '' });
     await expect(api.invoke('agent:log', { agentId: 'nope' })).rejects.toMatchObject({
       code: 'INVALID_INPUT',
     });
@@ -62,7 +73,7 @@ describe('window.pact', () => {
       ok: false,
       error: { code: 'ALREADY_OPEN', message: 'Déjà ouvert', workspaceId: 'w1' },
     });
-    const error = await createPactApi(ipc)
+    const error = await createPactApi(ipc, { getPathForFile: () => '' })
       .invoke('workspace:open', { path: '/repo' })
       .catch((e: unknown) => e);
     expect(error).not.toBeInstanceOf(Error);
@@ -75,7 +86,7 @@ describe('window.pact', () => {
 
   it('refuses channels outside the contract', async () => {
     const ipc = fakeIpcRenderer();
-    const api = createPactApi(ipc) as unknown as {
+    const api = createPactApi(ipc, { getPathForFile: () => '' }) as unknown as {
       invoke(c: string, i: unknown): Promise<unknown>;
     };
     await expect(api.invoke('fs:readFile', {})).rejects.toMatchObject({ code: 'INVALID_INPUT' });
@@ -84,7 +95,7 @@ describe('window.pact', () => {
 
   it('delivers valid events, drops invalid ones and unsubscribes', () => {
     const ipc = fakeIpcRenderer();
-    const api = createPactApi(ipc);
+    const api = createPactApi(ipc, { getPathForFile: () => '' });
     const received = vi.fn();
     const off = api.on('agent:branch', received);
 

@@ -1,0 +1,41 @@
+.stage {
+  height: 100%;
+  padding: 16px;
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+
+.add {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 40px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+.add:not(:disabled):hover {
+  border-color: var(--action);
+  color: var(--text);
+}
+
+.plus {
+  color: var(--action);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.unavailable {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+}

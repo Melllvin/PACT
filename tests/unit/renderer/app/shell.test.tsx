@@ -60,7 +60,9 @@ describe('TabBar', () => {
     render(
       <TabBar workspaces={tabs} activeTab={{ kind: 'home' }} onSelect={vi.fn()} onHome={vi.fn()} />,
     );
-    expect(screen.getByRole('tab', { name: 'Accueil' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Nouvel onglet' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
   });
 
   it('keeps the settings button visible but inactive in the core', () => {
@@ -114,5 +116,52 @@ describe('Legend', () => {
     const text = screen.getByRole('note').textContent;
     for (const item of ['◆ attend', '✓ prêt', '✕ erreur', '⎇ branche'])
       expect(text).toContain(item);
+  });
+});
+
+describe('TabBar closing', () => {
+  it('closes a workspace tab with its ✕ button', async () => {
+    const onClose = vi.fn();
+    render(
+      <TabBar
+        workspaces={tabs}
+        activeTab={{ kind: 'workspace', id: 'w1' }}
+        onSelect={vi.fn()}
+        onHome={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Fermer api-facturation' }));
+    expect(onClose).toHaveBeenCalledWith('w2');
+  });
+});
+
+describe('home tab (1a)', () => {
+  it('can be closed back to the workspaces when some are open', async () => {
+    const onCloseHome = vi.fn();
+    render(
+      <TabBar
+        workspaces={tabs}
+        activeTab={{ kind: 'home' }}
+        onSelect={vi.fn()}
+        onHome={vi.fn()}
+        onCloseHome={onCloseHome}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Fermer Nouvel onglet' }));
+    expect(onCloseHome).toHaveBeenCalled();
+  });
+
+  it('cannot be closed when it is the only tab', () => {
+    render(
+      <TabBar
+        workspaces={[]}
+        activeTab={{ kind: 'home' }}
+        onSelect={vi.fn()}
+        onHome={vi.fn()}
+        onCloseHome={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Fermer Nouvel onglet' })).toBeNull();
   });
 });

@@ -102,6 +102,11 @@ export const ipcRequests = {
     z.object({ jobId: z.string() }),
   ),
   'workspace:close': request(z.object({ id: nonEmpty }), none),
+  /** Native folder picker; the main process chooses the dialog, the renderer never passes paths. */
+  'dialog:pickFolder': request(
+    z.object({ purpose: z.enum(['open-repository', 'clone-destination']) }),
+    absolutePath.nullable(),
+  ),
   'cli:add': request(z.object({ name: nonEmpty.max(64), command: nonEmpty }), cliDefinitionSchema),
   'cli:redetect': request(none, z.array(cliDefinitionSchema)),
   'permission:set': request(
@@ -152,6 +157,8 @@ export const ipcEvents = {
   'clone:progress': z.union([
     z.object({ jobId: z.string(), percent: z.number().min(0).max(100), phase: z.string() }),
     z.object({ jobId: z.string(), error: ipcErrorSchema }),
+    // Clone finished and the repository is open (US1 scenario 2).
+    z.object({ jobId: z.string(), workspace: workspaceSchema }),
   ]),
 } as const;
 
@@ -171,4 +178,6 @@ export interface PactApi {
   /** Rejects with a plain `IpcError` object (it must survive the context bridge). */
   invoke<C extends IpcRequestChannel>(channel: C, ...input: InputArgs<C>): Promise<IpcOutput<C>>;
   on<C extends IpcEventChannel>(channel: C, listener: (payload: IpcEvent<C>) => void): () => void;
+  /** Path of a dropped file: the sandboxed renderer cannot read it itself (webUtils). */
+  pathForFile(file: File): string;
 }

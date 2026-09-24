@@ -40,6 +40,10 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
     ],
   },
   'workspace:close': { valid: { id: 'abc' }, invalid: [{ id: '' }] },
+  'dialog:pickFolder': {
+    valid: { purpose: 'open-repository' },
+    invalid: [{ purpose: 'anything' }, {}],
+  },
   'cli:add': {
     valid: { name: 'Aider', command: 'aider --model x' },
     invalid: [
@@ -152,6 +156,22 @@ describe('IPC event schemas', () => {
       schema.safeParse({ jobId: 'j', error: { code: 'CLONE_FAILED', message: 'x' } }).success,
     ).toBe(true);
     expect(schema.safeParse({ jobId: 'j', percent: 142, phase: 'x' }).success).toBe(false);
+  });
+
+  it('announce the opened workspace when a clone completes (US1 scenario 2)', () => {
+    const workspace = {
+      id: 'abc',
+      path: '/repo',
+      name: 'repo',
+      mainBranch: 'main',
+      agents: [],
+      freeTerminals: [],
+      quickLaunchCounters: { freeTerminal: 0 },
+      permissionOverride: null,
+      lastOpenedAt: '2026-09-24T10:00:00.000Z',
+      status: 'available',
+    };
+    expect(ipcEvents['clone:progress'].safeParse({ jobId: 'j', workspace }).success).toBe(true);
   });
 
   it('accept agent state changes', () => {

@@ -13,8 +13,16 @@ import {
 // contracts/ipc.md — every request is validated on entry and on exit; errors become envelopes.
 
 type ServiceInput<C extends IpcRequestChannel> = z.output<(typeof ipcRequests)[C]['input']>;
+/**
+ * Channels without a result may be served by functions returning void; their output is still
+ * validated against the contract (z.undefined) before replying.
+ */
+type ServiceOutput<C extends IpcRequestChannel> =
+  undefined extends IpcOutput<C> ? unknown : IpcOutput<C>;
 export type IpcServices = {
-  [C in IpcRequestChannel]?: (input: ServiceInput<C>) => IpcOutput<C> | Promise<IpcOutput<C>>;
+  [C in IpcRequestChannel]?: (
+    input: ServiceInput<C>,
+  ) => ServiceOutput<C> | Promise<ServiceOutput<C>>;
 };
 
 /** The part of Electron's ipcMain used here (injectable for tests). */

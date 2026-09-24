@@ -104,19 +104,21 @@ dépôt ouvert ; redémarrer → dépôt dans les récents.
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T039 [P] [US1] Tests d'intégration de `WorkspaceService` : ouverture d'un dépôt (id = hash du `realpath`), `NOT_A_REPO`, `ALREADY_OPEN(id)` (FR-004), `initRepo`, récents triés par date décroissante et limités à 20, `keptWorktrees` compté depuis `.worktrees/`, statut `unavailable` quand le dossier est supprimé, persistance des workspaces ouverts dans `tests/integration/workspace/workspace-service.test.ts`
-- [ ] T040 [P] [US1] Tests de l'accueil : sections « Déjà ouverts » (chemin, branche, n worktrees, pastilles, compteur ◆), « Récents » (worktrees conservés, « ouvert il y a N j »), recherche, zone de dépôt, « Choisir un dépôt Git… », « Cloner depuis une URL… » avec progression et erreur, message + proposition d'initialisation pour un dossier non Git dans `tests/unit/renderer/home/Home.test.tsx`
-- [ ] T041 [P] [US1] Tests du workspace vide : une seule action « + Ajouter des agents », pas de colonne À faire, Comparer et Revue visibles mais inactifs (FR-006) dans `tests/unit/renderer/workspace/EmptyWorkspace.test.tsx`
-- [ ] T042 [P] [US1] Test e2e : glisser-déposer simulé d'un dépôt temporaire → onglet actif ; réouverture → bascule sur l'onglet existant ; « + » ouvre l'accueil ; clonage d'un dépôt bare local ; redémarrage → récents présents dans `tests/e2e/us1-workspaces.spec.ts`
+- [x] T039 [P] [US1] Tests d'intégration de `WorkspaceService` : ouverture d'un dépôt (id = hash du `realpath`), `NOT_A_REPO`, `ALREADY_OPEN(id)` (FR-004), `initRepo`, récents triés par date décroissante et limités à 20, `keptWorktrees` compté depuis `.worktrees/`, statut `unavailable` quand le dossier est supprimé, persistance des workspaces ouverts dans `tests/integration/workspace/workspace-service.test.ts`
+- [x] T040 [P] [US1] Tests de l'accueil : sections « Déjà ouverts » (chemin, branche, n worktrees, pastilles, compteur ◆), « Récents » (worktrees conservés, « ouvert il y a N j »), recherche, zone de dépôt, « Choisir un dépôt Git… », « Cloner depuis une URL… » avec progression et erreur, message + proposition d'initialisation pour un dossier non Git dans `tests/unit/renderer/home/Home.test.tsx`
+- [x] T041 [P] [US1] Tests du workspace vide : une seule action « + Ajouter des agents », pas de colonne À faire, Comparer et Revue visibles mais inactifs (FR-006) dans `tests/unit/renderer/workspace/EmptyWorkspace.test.tsx`
+- [x] T042 [P] [US1] Test e2e : glisser-déposer simulé d'un dépôt temporaire → onglet actif ; réouverture → bascule sur l'onglet existant ; « + » ouvre l'accueil ; clonage d'un dépôt bare local ; redémarrage → récents présents dans `tests/e2e/us1-workspaces.spec.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T043 [US1] Implémenter `WorkspaceService` (open, initRepo, close, récents, surveillance du dossier par `fs.watch` + vérification périodique) dans `src/main/workspace/workspace-service.ts`
-- [ ] T044 [US1] Implémenter les jobs de clonage (progression `git clone --progress` → événement `clone:progress`, nettoyage du dossier en cas d'échec, aucun onglet créé) dans `src/main/workspace/clone-job.ts`
-- [ ] T045 [US1] Brancher les handlers `app:getState`, `workspace:open`, `workspace:initRepo`, `workspace:clone`, `workspace:close` et l'événement `workspace:status`, plus le sélecteur de dossier natif (`dialog.showOpenDialog`) dans `src/main/ipc/workspace-handlers.ts`
-- [ ] T046 [P] [US1] Implémenter l'accueil (1a) avec recherche, zone de dépôt (`webUtils.getPathForFile` via preload), boîte de clonage dans `src/renderer/home/Home.tsx`, `src/renderer/home/CloneDialog.tsx`, `src/renderer/home/DropZone.tsx`
-- [ ] T047 [P] [US1] Implémenter le workspace vide (1b) et l'affichage « indisponible » dans `src/renderer/workspace/EmptyWorkspace.tsx` et `src/renderer/workspace/WorkspaceView.tsx`
-- [ ] T048 [US1] Relier onglets, accueil et workspaces dans le store et `App.tsx` (onglet d'accueil ouvert par « + », fermeture d'onglet) dans `src/renderer/app/App.tsx`
+- [x] T043 [US1] Implémenter `WorkspaceService` (open, initRepo, close, récents, surveillance du dossier par `fs.watch` + vérification périodique) dans `src/main/workspace/workspace-service.ts`
+- [x] T044 [US1] Implémenter les jobs de clonage (progression `git clone --progress` → événement `clone:progress`, nettoyage du dossier en cas d'échec, aucun onglet créé) dans `src/main/workspace/clone-job.ts`
+- [x] T045 [US1] Brancher les handlers `app:getState`, `workspace:open`, `workspace:initRepo`, `workspace:clone`, `workspace:close` et l'événement `workspace:status`, plus le sélecteur de dossier natif (`dialog.showOpenDialog`) dans `src/main/ipc/workspace-handlers.ts`
+- [x] T046 [P] [US1] Implémenter l'accueil (1a) avec recherche, zone de dépôt (`webUtils.getPathForFile` via preload), boîte de clonage dans `src/renderer/home/Home.tsx`, `src/renderer/home/CloneDialog.tsx`, `src/renderer/home/DropZone.tsx`
+- [x] T047 [P] [US1] Implémenter le workspace vide (1b) et l'affichage « indisponible » dans `src/renderer/workspace/EmptyWorkspace.tsx` et `src/renderer/workspace/WorkspaceView.tsx`
+- [x] T048 [US1] Relier onglets, accueil et workspaces dans le store et `App.tsx` (onglet d'accueil ouvert par « + », fermeture d'onglet) dans `src/renderer/app/App.tsx`
+
+> Notes d'implémentation : le test e2e T042 a été écrit après l'implémentation (chaque comportement avait son test Red aux niveaux unitaire et intégration). Le glisser-déposer est couvert au niveau composant (un `File` synthétique n'a pas de chemin réel en e2e) ; l'e2e passe par le sélecteur natif simulé dans le processus main. Deux ajouts au contrat IPC : `dialog:pickFolder` et la variante `{ jobId, workspace }` de `clone:progress`.
 
 **Checkpoint**: US1 fonctionnelle et testée seule
 
@@ -419,5 +421,12 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 ## Phase 12: Convergence
 
-- [ ] T129 Consigner dans `specs/001-agent-workspace-core/research.md` R3 que la résolution des commandes cherche directement dans le PATH (avec PATHEXT sous Windows) au lieu de lancer `which` / `where.exe` : même résultat, aucun processus lancé, testable sur les deux OS, vérifié sur la CI Windows per research R3 / T019 (contradicts)
+- [x] T129 Consigner dans `specs/001-agent-workspace-core/research.md` R3 que la résolution des commandes cherche directement dans le PATH (avec PATHEXT sous Windows) au lieu de lancer `which` / `where.exe` : même résultat, aucun processus lancé, testable sur les deux OS, vérifié sur la CI Windows per research R3 / T019 (contradicts)
 - [ ] T130 Justifier dans la revue de sécurité (T114) le contrôle d'origine IPC (`trustedSenderCheck`), l'ignorance d'`ELECTRON_RENDERER_URL` dans une app packagée et le service `app:getState` câblé dès la phase 2 (`src/main/app-services.ts`) per T114 (unrequested)
+
+---
+
+## Phase 13: Convergence
+
+- [x] T131 Surveiller le dossier de chaque workspace ouvert avec `fs.watch` (dossier parent) pour signaler une disparition aussitôt, en gardant la vérification toutes les 3 s en filet de sécurité, dans `src/main/workspace/workspace-service.ts` (test dans `tests/integration/workspace/workspace-service.test.ts`) per T043 (partial)
+- [x] T132 Aligner l’onglet d’accueil sur la maquette 1a : libellé « Nouvel onglet » et bouton ✕ pour le fermer quand un workspace est ouvert (retour à ce workspace), dans `src/renderer/app/TabBar.tsx` et `src/renderer/store/app-store.ts` (tests dans `tests/unit/renderer/app/shell.test.tsx`) per FR-002 / maquette 1a (partial)

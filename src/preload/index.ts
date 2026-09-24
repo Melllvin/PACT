@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { createPactApi } from './api';
 
-contextBridge.exposeInMainWorld('pact', createPactApi(ipcRenderer));
+contextBridge.exposeInMainWorld('pact', createPactApi(ipcRenderer, webUtils));

@@ -22,7 +22,9 @@ const isRequestChannel = (channel: string): channel is IpcRequestChannel =>
 
 const invalid = (message: string): IpcError => ({ code: 'INVALID_INPUT', message });
 
-export function createPactApi(ipc: IpcRendererLike): PactApi {
+type WebUtilsLike = { getPathForFile(file: File): string };
+
+export function createPactApi(ipc: IpcRendererLike, webUtils: WebUtilsLike): PactApi {
   const invoke = async (channel: string, input?: unknown): Promise<unknown> => {
     // Plain objects are rejected on purpose: contextBridge drops the custom properties (code)
     // of Error objects, and the renderer needs the code.
@@ -50,5 +52,7 @@ export function createPactApi(ipc: IpcRendererLike): PactApi {
     };
   };
 
-  return { invoke, on } as PactApi;
+  const pathForFile = (file: File) => webUtils.getPathForFile(file);
+
+  return { invoke, on, pathForFile } as PactApi;
 }

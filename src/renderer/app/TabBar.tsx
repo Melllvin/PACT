@@ -6,10 +6,13 @@ type Props = {
   activeTab: ActiveTab;
   onSelect: (id: string) => void;
   onHome: () => void;
+  onClose?: (id: string) => void;
+  /** Closes the home tab back to a workspace; only offered when one is open. */
+  onCloseHome?: () => void;
 };
 
 /** One tab per open workspace, a home tab opened by « + » (FR-002), settings inactive in the core. */
-export function TabBar({ workspaces, activeTab, onSelect, onHome }: Props) {
+export function TabBar({ workspaces, activeTab, onSelect, onHome, onClose, onCloseHome }: Props) {
   const homeOpen = activeTab.kind === 'home';
   return (
     <header className={styles.tabBar}>
@@ -18,23 +21,46 @@ export function TabBar({ workspaces, activeTab, onSelect, onHome }: Props) {
         {workspaces.map(({ id, name }) => {
           const selected = activeTab.kind === 'workspace' && activeTab.id === id;
           return (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={selected}
-              className={styles.tab}
-              onClick={() => {
-                onSelect(id);
-              }}
-            >
-              {name}
-            </button>
+            <span key={id} className={styles.tabGroup}>
+              <button
+                role="tab"
+                aria-selected={selected}
+                className={styles.tab}
+                onClick={() => {
+                  onSelect(id);
+                }}
+              >
+                {name}
+              </button>
+              {onClose && (
+                <button
+                  className={styles.close}
+                  aria-label={`Fermer ${name}`}
+                  onClick={() => {
+                    onClose(id);
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </span>
           );
         })}
         {homeOpen && (
-          <button role="tab" aria-selected className={styles.tab}>
-            Accueil
-          </button>
+          <span className={styles.tabGroup}>
+            <button role="tab" aria-selected className={styles.tab}>
+              Nouvel onglet
+            </button>
+            {onCloseHome && workspaces.length > 0 && (
+              <button
+                className={styles.close}
+                aria-label="Fermer Nouvel onglet"
+                onClick={onCloseHome}
+              >
+                ✕
+              </button>
+            )}
+          </span>
         )}
       </div>
       <button className={styles.iconButton} aria-label="Nouvel onglet" onClick={onHome}>
