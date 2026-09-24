@@ -28,6 +28,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+      # TEMPORARY: measure how often the real-terminal tests fail on Windows (reverted after).
+      - name: PTY stress (temporary)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $fails = 0
+          for ($i = 1; $i -le 15; $i++) {
+            npx vitest run tests/integration/pty --reporter=dot 2>&1 | Out-File -Append pty-stress.log
+            if ($LASTEXITCODE -ne 0) { $fails++; Write-Output "run $i FAILED" }
+          }
+          Write-Output "PTY stress: $fails failure(s) out of 15"
+          Select-String -Path pty-stress.log -Pattern 'timed out waiting|data events|exit code|elapsed' | Select-Object -First 40
       - uses: actions/upload-artifact@v7
         if: always()
         with:
