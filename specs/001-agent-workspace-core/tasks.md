@@ -152,7 +152,7 @@ Purple, Cyan, Green, états `awaiting-prompt` ; redémarrer → agents restauré
 - [X] T061 [P] [US2] Implémenter la préférence d'autorisation dans `src/main/agents/permission-service.ts`
 - [X] T062 [US2] Implémenter `AgentManager` (validation, création de worktree via `GitService`, ports, couleurs, lancement PTY via adaptateur, machine à états, jetons de hooks, persistance, restauration au démarrage avec état `error` « à reprendre » pour les agents dont le processus n'existe plus) dans `src/main/agents/agent-manager.ts`
 - [X] T063 [US2] Implémenter les terminaux libres (shell `$SHELL` sous macOS, `pwsh` sinon `powershell.exe` sous Windows, `cwd` = racine du dépôt) dans `src/main/agents/free-terminals.ts`
-- [ ] T064 [US2] Brancher `agents:launch`, `permission:set`, `cli:redetect`, `app:getState` (CLI) et l'événement `agent:state` dans `src/main/ipc/agent-handlers.ts`
+- [X] T064 [US2] Brancher `agents:launch`, `permission:set`, `cli:redetect`, `app:getState` (CLI) et l'événement `agent:state` dans `src/main/ipc/agent-handlers.ts`
 - [ ] T065 [P] [US2] Implémenter le menu rapide (1c) dans `src/renderer/launch/QuickLaunch.tsx`
 - [ ] T066 [P] [US2] Implémenter l'écran d'autorisations (1m) dans `src/renderer/launch/PermissionsDialog.tsx`
 - [ ] T067 [P] [US2] Afficher « Agents détectés » (✓ installé, ○ absent, version trop ancienne avec invitation à mettre à jour, invitation à approuver les hooks PACT pour Codex) sur l'accueil dans `src/renderer/home/DetectedClis.tsx`

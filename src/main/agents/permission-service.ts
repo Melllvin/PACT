@@ -14,7 +14,7 @@ export type PermissionChoice = {
   level: PermissionLevel;
   autoResume: boolean;
   scope: PermissionPreference['scope'];
-  workspaceId?: string;
+  workspaceId?: string | undefined;
 };
 
 type Options = { stores: Stores; workspaces: WorkspaceAccess };

@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { IpcOutput } from '../shared/ipc';
+import type { CliDefinition, Workspace } from '../shared/model';
 import type { Stores } from './persistence/store';
 import type { CloneJobs } from './workspace/clone-job';
 import type { WorkspaceService } from './workspace/workspace-service';
@@ -11,25 +12,38 @@ type Dependencies = {
   workspaces: WorkspaceService;
   clones: CloneJobs;
   pickFolder: (purpose: FolderPurpose) => Promise<string | null>;
+  /** Detected and added CLIs; the saved custom ones only until detection is wired. */
+  clis?: () => Promise<CliDefinition[]>;
+  /** Runs after a workspace opens: its saved agents and free terminals come back (FR-038). */
+  onOpened?: (workspaceId: string) => Promise<void>;
 };
 
-/**
- * Main-process implementations of the IPC channels available so far. CLI detection and agents
- * join app:getState with US2 (T060, T062).
- */
-export function createAppServices({ stores, workspaces, clones, pickFolder }: Dependencies) {
+/** Main-process implementations of the app and workspace IPC channels. */
+export function createAppServices({
+  stores,
+  workspaces,
+  clones,
+  pickFolder,
+  clis,
+  onOpened = () => Promise.resolve(),
+}: Dependencies) {
+  const opened = async (workspace: Workspace) => {
+    await onOpened(workspace.id);
+    return workspaces.get(workspace.id) ?? workspace;
+  };
   return {
     async 'app:getState'(): Promise<IpcOutput<'app:getState'>> {
       const state = await stores.state.read();
       return {
         workspaces: workspaces.list(),
         recents: state.recents,
-        clis: state.customClis,
+        clis: clis ? await clis() : state.customClis,
         permission: state.permission,
       };
     },
-    'workspace:open': ({ path }: { path: string }) => workspaces.open(path),
-    'workspace:initRepo': ({ path }: { path: string }) => workspaces.initRepo(path),
+    'workspace:open': async ({ path }: { path: string }) => opened(await workspaces.open(path)),
+    'workspace:initRepo': async ({ path }: { path: string }) =>
+      opened(await workspaces.initRepo(path)),
     'workspace:close': ({ id }: { id: string }) => workspaces.close(id),
     'workspace:clone': ({ url, destination }: { url: string; destination: string }) =>
       clones.start({ url, destination }),

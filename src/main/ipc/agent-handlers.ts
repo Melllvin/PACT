@@ -1,0 +1,64 @@
+import type { IpcEvent, IpcEventChannel, IpcInput } from '../../shared/ipc';
+import type { Agent, CliDefinition } from '../../shared/model';
+import type { LaunchRequest } from '../agents/agent-manager';
+import type { PermissionChoice } from '../agents/permission-service';
+
+// T064 — US2 channels (contracts/ipc.md). `term:write` and `term:resize` come with them: the user
+// types the first prompt in the agent's terminal (FR-018), before the US3 actions.
+
+type Dependencies = {
+  registry: { detect(): Promise<CliDefinition[]> };
+  permissions: { set(choice: PermissionChoice): Promise<void> };
+  agents: { launch(request: LaunchRequest): Promise<Agent[]> };
+  freeTerminals: { open(workspaceId: string, count: number): Promise<unknown> };
+  pty: {
+    write(id: string, data: string): void;
+    resize(id: string, cols: number, rows: number): void;
+  };
+};
+
+export function createAgentServices({
+  registry,
+  permissions,
+  agents,
+  freeTerminals,
+  pty,
+}: Dependencies) {
+  return {
+    'cli:redetect': () => registry.detect(),
+    'permission:set': (choice: PermissionChoice) => permissions.set(choice),
+    /** Agents first: a refused batch (LIMIT, conflicts) opens nothing at all. */
+    async 'agents:launch'({
+      workspaceId,
+      agents: drafts,
+      freeTerminals: count,
+      counters,
+    }: IpcInput<'agents:launch'> & { counters: LaunchRequest['counters'] }) {
+      const launched = await agents.launch({ workspaceId, agents: drafts, counters });
+      await freeTerminals.open(workspaceId, count);
+      return launched;
+    },
+    'term:write': ({ termId, data }: IpcInput<'term:write'>) => {
+      pty.write(termId, data);
+    },
+    'term:resize': ({ termId, cols, rows }: IpcInput<'term:resize'>) => {
+      pty.resize(termId, cols, rows);
+    },
+  };
+}
+
+type TerminalSource = {
+  onData(listener: (id: string, data: string) => void): () => void;
+  onExit(listener: (id: string, code: number) => void): () => void;
+};
+type Emit = <C extends IpcEventChannel>(channel: C, payload: IpcEvent<C>) => void;
+
+/** Terminal output reaches the renderer already grouped by frame (PtyManager, research.md R2). */
+export function forwardTerminalEvents(source: TerminalSource, emit: Emit): void {
+  source.onData((termId, data) => {
+    emit('term:data', { termId, data });
+  });
+  source.onExit((termId, code) => {
+    emit('term:exit', { termId, code });
+  });
+}

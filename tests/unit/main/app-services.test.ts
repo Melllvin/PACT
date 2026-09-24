@@ -14,6 +14,7 @@ import { GitService } from '../../../src/main/git/git-service';
 import { openStores, type Stores } from '../../../src/main/persistence/store';
 import { CloneJobs } from '../../../src/main/workspace/clone-job';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
+import type { CliDefinition } from '../../../src/shared/model';
 
 const gitEnv = {
   ...process.env,
@@ -87,7 +88,7 @@ describe('app:getState', () => {
 
 describe('app:getState with CLI detection', () => {
   it('lists the detected CLIs', async () => {
-    const clis = [
+    const clis: CliDefinition[] = [
       {
         id: 'codex',
         name: 'Codex',
@@ -99,13 +100,13 @@ describe('app:getState with CLI detection', () => {
         status: 'installed',
         models: [],
       },
-    ] as const;
+    ];
     const withClis = createAppServices({
       stores,
       workspaces,
       clones: new CloneJobs({ git: new GitService({ env: gitEnv }), workspaces, emit: vi.fn() }),
       pickFolder,
-      clis: () => Promise.resolve([...clis]),
+      clis: () => Promise.resolve(clis),
     });
     expect((await withClis['app:getState']()).clis).toEqual(clis);
   });
