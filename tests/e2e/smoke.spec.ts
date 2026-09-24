@@ -28,6 +28,13 @@ test('opens a PACT window without console errors', async () => {
   expect(errors).toEqual([]);
 });
 
+test('starts on the home tab with the state loaded from the main process', async () => {
+  const page = await launched.app.firstWindow();
+  await expect(page.getByRole('tab', { name: 'Accueil' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('note', { name: 'Légende' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('serves a strict Content-Security-Policy in the built app', async () => {
   const page = await launched.app.firstWindow();
   const csp = await page
