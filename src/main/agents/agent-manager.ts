@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { IpcFailure, type AgentDraft, type IpcEvent } from '../../shared/ipc';
-import { AGENT_COLORS, MAX_AGENTS, type Agent, type Workspace } from '../../shared/model';
+import { freeColors, freePositions } from '../../shared/launch-draft';
+import { MAX_AGENTS, type Agent, type Workspace } from '../../shared/model';
 import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
 import type { PtyManager } from '../pty/pty-manager';
@@ -467,19 +468,6 @@ export class AgentManager {
   private emit({ id, state, lastError, scheduledResume }: Agent) {
     this.onState({ agentId: id, state, lastError, scheduledResume });
   }
-}
-
-/** Positions 1…6 not taken yet, lowest first. */
-function freePositions(agents: Agent[], count: number) {
-  const taken = new Set(agents.map((agent) => agent.position));
-  const free = Array.from({ length: MAX_AGENTS }, (_, i) => i + 1).filter((p) => !taken.has(p));
-  return free.slice(0, count);
-}
-
-/** Colors go in the order of AGENT_COLORS and an agent keeps its color (FR-016). */
-function freeColors(agents: Agent[], count: number) {
-  const taken = new Set(agents.map((agent) => agent.color));
-  return AGENT_COLORS.filter((color) => !taken.has(color)).slice(0, count);
 }
 
 function agentEnv(shell: ResolvedEnv, own: Record<string, string>): Record<string, string> {

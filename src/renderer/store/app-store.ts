@@ -7,6 +7,7 @@ import {
   type AgentDraft,
   type PactApi,
 } from '../../shared/ipc';
+import { draftFromCounts, toAgentDrafts } from '../../shared/launch-draft';
 import type { Agent, PermissionLevel, PermissionPreference, Workspace } from '../../shared/model';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
@@ -151,16 +152,10 @@ export function createAppStore(api: PactApi) {
 
     /** Agents keep the level they were launched with; drafts leave the rest to the main process. */
     const drafts = (counts: LaunchCounts, level: PermissionLevel): AgentDraft[] =>
-      Object.entries(counts.agents).flatMap(([cliId, count]) =>
-        Array.from({ length: count }, () => ({
-          cliId,
-          model: null,
-          permissionLevel: level,
-          baseBranch: null,
-          branch: null,
-          port: null,
-          startCommand: null,
-        })),
+      toAgentDrafts(
+        draftFromCounts(counts.agents, counts.freeTerminal),
+        level,
+        (cliId) => get().clis.find((cli) => cli.id === cliId)?.models ?? [],
       );
 
     const launch = async (workspaceId: string, counts: LaunchCounts, level: PermissionLevel) => {
