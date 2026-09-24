@@ -60,7 +60,8 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-describe('PtyManager with a real pseudo-terminal', () => {
+// Real processes are slower on CI runners: leave room for waitFor to report what it saw.
+describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
   it('runs the CLI in the given directory, even with spaces and accents', async () => {
     const cwd = join(dir, 'Mes Projets', 'Développement');
     await mkdir(cwd, { recursive: true });
@@ -110,7 +111,8 @@ describe('PtyManager with a real pseudo-terminal', () => {
 
   it('resizes the terminal', async () => {
     const script =
-      'process.stdin.on("data", () => console.log("SIZE=" + process.stdout.columns + "x" + process.stdout.rows))';
+      // getWindowSize() queries the console each time; `columns` may be cached on Windows.
+      'process.stdin.on("data", () => console.log("SIZE=" + process.stdout.getWindowSize().join("x")))';
     manager.start('size', {
       file: process.execPath,
       args: ['-e', script],
