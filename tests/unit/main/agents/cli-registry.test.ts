@@ -11,11 +11,11 @@ import type { AdapterId, CliDefinition } from '../../../../src/shared/model';
 
 const adapter = (
   id: AdapterId,
-  detect: () => Promise<DetectionResult>,
+  detect: CliAdapter['detect'],
   models: string[] = [],
 ): CliAdapter => ({
   id,
-  detect: vi.fn(detect),
+  detect,
   listModels: () => Promise.resolve(models),
   buildLaunch: vi.fn(),
   buildResume: vi.fn(),
@@ -47,13 +47,15 @@ afterEach(async () => {
 describe('CliRegistry', () => {
   it('detects each CLI with the environment of the login shell', async () => {
     const env = { PATH: '/Users/me/.local/bin:/opt/homebrew/bin' };
-    const claude = adapter('claude-code', () =>
-      Promise.resolve(found('/Users/me/.local/bin/claude', '2.1.281')),
-    );
+    const detect = vi.fn(() => Promise.resolve(found('/Users/me/.local/bin/claude', '2.1.281')));
     const resolveEnv = vi.fn(() => Promise.resolve(env));
-    await new CliRegistry({ adapters: [claude], resolveEnv, stores }).detect();
+    await new CliRegistry({
+      adapters: [adapter('claude-code', detect)],
+      resolveEnv,
+      stores,
+    }).detect();
     expect(resolveEnv).toHaveBeenCalledOnce();
-    expect(claude.detect).toHaveBeenCalledWith(env);
+    expect(detect).toHaveBeenCalledWith(env);
   });
 
   it('describes installed, missing and too old CLIs, without any login state', async () => {

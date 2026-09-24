@@ -16,9 +16,9 @@ type Options = {
   onStatus?: (event: { id: string; status: Workspace['status'] }) => void;
 };
 
-/** Stable id: hash of the repository's real path (data-model Workspace.id). */
 const WATCH_DEBOUNCE_MS = 50;
 
+/** Stable id: hash of the repository's real path (data-model Workspace.id). */
 export const workspaceId = (repoRoot: string) =>
   createHash('sha256').update(repoRoot).digest('hex').slice(0, 16);
 
@@ -63,6 +63,16 @@ export class WorkspaceService {
 
   get(id: string): Workspace | undefined {
     return this.open_.get(id);
+  }
+
+  /** Changes an open workspace and saves it, keeping memory and disk in step. */
+  async update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace> {
+    const workspace = this.open_.get(id);
+    if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
+    const updated = change(workspace);
+    this.open_.set(id, updated);
+    await this.stores.workspace(id).write(updated);
+    return updated;
   }
 
   async open(path: string): Promise<Workspace> {

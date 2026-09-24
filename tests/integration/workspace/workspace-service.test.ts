@@ -275,3 +275,22 @@ describe('persistence across restarts (FR-005)', () => {
     await expect(createService().close('abc123')).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });
+
+describe('WorkspaceService.update', () => {
+  it('saves a change to an open workspace so it survives a restart', async () => {
+    const repo = await makeRepo('app');
+    const service = createService();
+    const { id } = await service.open(repo);
+    const permissionOverride = { level: 'always-ask', autoResume: true, scope: 'project' } as const;
+    await service.update(id, (workspace) => ({ ...workspace, permissionOverride }));
+    expect(service.get(id)?.permissionOverride).toEqual(permissionOverride);
+    const [restored] = await createService().restore();
+    expect(restored?.permissionOverride).toEqual(permissionOverride);
+  });
+
+  it('refuses an unknown workspace (NOT_FOUND)', async () => {
+    await expect(createService().update('abc', (w) => w)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+});
