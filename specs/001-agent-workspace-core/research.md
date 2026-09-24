@@ -300,7 +300,8 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
   rayon 6 px.
 - **Animations** : CSS + `requestAnimationFrame` pour la grille de points réactive et les
   particules (canvas 2D), désactivées si `prefers-reduced-motion` (FR-042). Aucun effet à
-  l'intérieur des terminaux (FR-020).
+  l'intérieur des terminaux (FR-020). La grille de points vient de React Bits depuis
+  l'amendement R15.
 
 ## R11. Communication main ↔ renderer
 
@@ -342,3 +343,58 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
 - **Decision** : electron-builder 26 ; `.dmg` (macOS, universel arm64 + x64) et NSIS (Windows
   x64 / arm64). Recompilation de node-pty via `@electron/rebuild` (`postinstall`). Signature et
   notarisation hors du socle (documentées, non bloquantes).
+
+## R15. Effets visuels avec React Bits (amendement du 2026-09-24)
+
+- **Contexte** : l'utilisateur a choisi React Bits (<https://reactbits.dev>, dépôt
+  `DavidHDev/react-bits`) pour coller aux maquettes `docs/maquettes` (direction 1c). Mise en œuvre
+  après les user stories, avant T111 (voir T141).
+- **Portée** : React Bits est une collection d'**effets** (fonds animés, animations de texte,
+  micro-interactions), pas un kit de composants : pas de boutons, dialogues ni formulaires. R10
+  reste la base : CSS Modules + tokens 1c pour la mise en page et les contrôles. R15 complète
+  R10 pour les seules animations de FR-042.
+- **Correspondance maquette → composant** (`docs/maquettes/Grille reactive.dc.html`) :
+
+  | Effet de la maquette | Choix | Remarque |
+  |----------------------|-------|----------|
+  | Grille de points qui s'allume autour du curseur | `DotGrid` (React Bits) | canvas 2D ; couleur par proximité (`baseColor`, `activeColor`, `proximity`) ; dépend de `gsap` + `InertiaPlugin` |
+  | Particules au changement d'onglet, puis tuiles, puis bordures | **implémentation maison** (canvas 2D, R10) | `Particles` de React Bits est un fond 3D WebGL continu (`ogl`), pas une gerbe ponctuelle : il ne rend pas la transition de la maquette |
+  | Tâches À faire qui entrent en se dépliant (`dcFold`, par caractère) | CSS (dépliage de l'élément déjà dans `todo.module.css` ; dépliage par caractère en T111) | aucune dépendance |
+  | Pulse de bordure à chaque changement d'état | CSS (existant, `tiles.module.css`) | aucune dépendance |
+
+  Seule `DotGrid` est donc reprise de React Bits à ce stade ; tout autre composant ajouté plus
+  tard passe par la même grille d'évaluation (licence, dépendances, CSP, mouvement réduit).
+- **Distribution** : copie du source (mode « copy-paste » officiel, variante **TS + CSS**, pas
+  Tailwind) dans `src/renderer/effects/vendor/react-bits/`, avec en-tête : origine, commit du dépôt
+  source, licence. Pas de CLI shadcn (exige un `components.json` et Tailwind) ni de jsrepo : un
+  seul composant ne justifie pas un outil de plus (Constitution IV, V).
+- **Licences** (Constitution, « licence compatible ») :
+  - React Bits : MIT + Commons Clause. L'usage dans une application, même commerciale, est
+    permis ; vendre, sous-licencier ou redistribuer **les composants eux-mêmes** est interdit.
+    Le dépôt PACT est privé ; s'il devenait public, la copie versionnée serait une zone grise à
+    réexaminer.
+  - `gsap` 3.15 : licence « Standard no charge » (gratuite, usage commercial compris, non
+    OSI). Compatible avec l'usage de PACT, à noter dans le README (T115).
+- **Contraintes à tenir par l'enrobage** (`src/renderer/effects/`) :
+  - FR-042 : ni `DotGrid` ni `Particles` ne gèrent `prefers-reduced-motion` ; l'enrobage ne
+    monte pas l'effet quand le mouvement réduit est demandé.
+  - FR-020 : aucun effet sous ou dans les terminaux ; la grille reste en fond de l'accueil et des
+    zones hors tuiles.
+  - Couleurs passées depuis les tokens R10 (`--border` au repos, `--action` actif), jamais codées
+    en dur dans l'appel.
+  - `DotGrid.css` est une feuille globale : ses classes sont préfixées ou converties en CSS Module
+    à la copie pour éviter les collisions.
+  - CSP stricte (R11) : aucun chargement réseau, ni `eval` ; canvas autorisé. Vérifié par le test
+    e2e CSP existant.
+- **Tests** : jsdom n'a ni canvas ni WebGL. Les enrobages sont testés (mouvement réduit, couleurs
+  issues des tokens, absence dans les tuiles) avec `gsap` simulé ; le rendu réel est vérifié par
+  captures Playwright à 1024 px et en grand écran. Le code copié tel quel est exclu de la
+  couverture et du lint **sous réserve d'accord explicite de l'utilisateur** (voir plan.md,
+  Complexity Tracking).
+- **Alternatives considérées** :
+  - Garder R10 seul (canvas maison pour la grille) : zéro dépendance, mais écarte le choix de
+    l'utilisateur et réécrit un effet qui existe déjà.
+  - Variante Tailwind de React Bits : ajoute Tailwind à tout le renderer pour un seul effet.
+  - `Particles` (React Bits) pour la transition : effet différent de la maquette, plus `ogl` et
+    WebGL pour un rendu qui ne correspond pas.
+  - Un kit de composants (shadcn/ui, Radix…) : hors de la demande ; décision distincte si besoin.

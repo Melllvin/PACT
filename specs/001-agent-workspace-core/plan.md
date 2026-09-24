@@ -19,7 +19,8 @@ alimente les bordures, la colonne À faire et les indicateurs d'onglet. Tout le 
 **Language/Version**: TypeScript 5.9 (strict ; TS 7 incompatible avec typescript-eslint, R12) ; Node 22 LTS pour l'outillage ; runtime Electron 44.x
 
 **Primary Dependencies**: Electron 44, electron-vite 5, React 19, Zustand 5, node-pty 1.1,
-@xterm/xterm 6 (+ addons fit, webgl, serialize, unicode11, web-links), zod, electron-builder 26
+@xterm/xterm 6 (+ addons fit, webgl, serialize, unicode11, web-links), zod, electron-builder 26 ;
+effets 1c : `DotGrid` de React Bits copié (variante TS + CSS) et `gsap` 3.15 (research.md R15)
 
 **Storage**: fichiers JSON validés par zod dans `userData` (research.md R9) ; état Git dans le
 dépôt lui-même (`.worktrees/`, `.git/info/exclude`)
@@ -58,8 +59,20 @@ Aucun point « NEEDS CLARIFICATION » restant : tous résolus dans [research.md]
 **Outillage à inscrire dans la constitution** (amendement 1.1.0, via `/speckit-constitution`) :
 Vitest + Playwright, ESLint + Prettier, seuils de couverture ci-dessus, CI macOS + Windows.
 
+**Re-check amendement R15 (2026-09-24, React Bits)** :
+
+| Principe | Effet de l'amendement | Statut |
+|----------|-----------------------|--------|
+| I. Tests d'abord | Enrobages d'effets testés avant écriture (mouvement réduit, tokens, absence dans les tuiles), `gsap` simulé ; rendu vérifié par captures Playwright | ✅ |
+| II. Merge sur tests verts | Inchangé ; les captures entrent dans `npm run test:e2e` | ✅ |
+| III. Zéro régression | Couverture : le code React Bits copié tel quel ne se teste pas sous jsdom (canvas). Exclusion proposée, **soumise à l'accord de l'utilisateur** (Complexity Tracking) | ⚠️ |
+| IV. Réutiliser | Reprend un effet existant (`DotGrid`) au lieu de l'écrire ; garde CSS Modules et tokens (R10) ; les effets déjà en CSS (pulse, dépliage) restent tels quels | ✅ |
+| V. Qualité | Une dépendance (`gsap`), justifiée : aucun équivalent dans le projet, maintenue (3.15, 2026), licence gratuite y compris commerciale (non OSI, R15). React Bits : MIT + Commons Clause, usage dans l'app permis | ✅ |
+
 **Re-check post-design (Phase 1)** : data-model, contrats et quickstart n'introduisent ni nouvelle
-dépendance ni nouvelle couche. ✅ Aucun écart, Complexity Tracking vide.
+dépendance ni nouvelle couche. ✅ Aucun écart. Depuis l'amendement R15, Complexity Tracking
+contient deux lignes, dont une soumise à l'accord de l'utilisateur ; data-model et contrats sont
+inchangés.
 
 ## Project Structure
 
@@ -108,7 +121,8 @@ src/
     ├── tiles/                    # Tuile, bordure, actions, terminal xterm
     ├── todo/                     # Colonne À faire
     ├── focus/                    # Focus (1p), pastilles
-    ├── effects/                  # Grille de points, particules, pulse
+    ├── effects/                  # Grille de points, particules, pulse (R15)
+    │   └── vendor/react-bits/    # Composants React Bits copiés (DotGrid), en-tête origine + licence
     ├── store/                    # Zustand
     └── theme/tokens.css          # Tokens direction 1c (R10)
 
@@ -129,4 +143,7 @@ qu'une seule application existe (Constitution V).
 
 ## Complexity Tracking
 
-Aucune violation de la constitution à justifier.
+| Écart | Pourquoi | Alternative plus simple écartée parce que |
+|-------|----------|-------------------------------------------|
+| Exclure `src/renderer/effects/vendor/**` de la couverture et du lint (**proposé, à valider par l'utilisateur avant toute modification de configuration**) | Code tiers copié tel quel : canvas + `gsap` non exécutables sous jsdom, style non conforme à nos règles strictes (`exactOptionalPropertyTypes`, lint) ; le réécrire à nos règles en ferait du code maison | Le tester sous jsdom exigerait de simuler tout le canvas pour une couverture sans valeur ; le réécrire annule l'intérêt de la bibliothèque. Les enrobages dans `effects/` restent couverts et soumis au seuil de 70 % |
+| Dépendance `gsap` pour un seul effet | Exigée par `DotGrid` (inertie au survol) | La grille en canvas maison (R10) reste le repli si l'utilisateur refuse l'exclusion ci-dessus ou la licence `gsap` |
