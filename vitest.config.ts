@@ -18,6 +18,7 @@ export default defineConfig({
             'tests/unit/shared/**/*.test.ts',
             'tests/unit/fixtures/**/*.test.ts',
             'tests/unit/scripts/**/*.test.ts',
+            'tests/unit/assets/**/*.test.ts',
             'tests/integration/**/*.test.ts',
             'tests/contract/**/*.test.ts',
           ],

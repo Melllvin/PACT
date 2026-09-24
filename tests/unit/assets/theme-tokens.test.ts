@@ -2,9 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { AGENT_COLORS } from '../../../../src/shared/model';
+import { AGENT_COLORS } from '../../../src/shared/model';
 
-const themeDir = join(dirname(fileURLToPath(import.meta.url)), '../../../../src/renderer/theme');
+const themeDir = join(dirname(fileURLToPath(import.meta.url)), '../../../src/renderer/theme');
 const css = readFileSync(join(themeDir, 'tokens.css'), 'utf8');
 const token = (name: string) => new RegExp(`--${name}:\\s*([^;]+);`).exec(css)?.[1]?.trim();
 
