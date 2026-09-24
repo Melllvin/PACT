@@ -4,8 +4,8 @@ import { cn } from '../../../../src/renderer/lib/utils';
 // research.md R16 — class names of the shadcn/ui components.
 describe('cn', () => {
   it('joins the classes that apply and drops the others', () => {
-    expect(cn('flex', false, undefined, null, 'gap-2', { hidden: false, block: true })).toBe(
-      'flex gap-2 block',
+    expect(cn('flex', false, undefined, null, 'gap-2', { hidden: false, 'text-sm': true })).toBe(
+      'flex gap-2 text-sm',
     );
   });
 

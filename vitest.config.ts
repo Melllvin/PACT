@@ -26,7 +26,7 @@ export default defineConfig({
       },
       {
         plugins: [react()],
-        resolve: { alias },
+        resolve: { alias: { ...alias, '@': resolve('src/renderer') } },
         test: {
           name: 'renderer',
           environment: 'jsdom',

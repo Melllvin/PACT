@@ -132,7 +132,7 @@ src/
     ├── effects/                  # Grille de points, particules, pulse (R15)
     │   └── vendor/react-bits/    # Composants React Bits copiés (DotGrid), en-tête origine + licence
     ├── store/                    # Zustand
-    └── theme/globals.css         # Tailwind v4 + @theme : tokens 1c (R10, R16), remplace tokens.css
+    └── theme/globals.css         # Tailwind v4 + @theme sur les tokens 1c (R10, R16), importe tokens.css
 
 tests/
 ├── unit/                         # Vitest (main, shared, renderer)

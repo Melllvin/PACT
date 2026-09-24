@@ -225,7 +225,7 @@ worktree ».
 
 ### Prérequis interface (R16)
 
-- [ ] T142 Tests d'abord puis installation de Tailwind v4 + shadcn/ui (research.md R16) : tests en échec pour la CSP (aucune erreur console avec un Dialog shadcn ouvert, le verrou de défilement Radix compris) et pour les terminaux bruts (rendu xterm inchangé sous le preflight) ; puis `@tailwindcss/vite` dans `electron.vite.config.ts`, alias `@/*` → `src/renderer/*` (`tsconfig.web.json`, `electron.vite.config.ts`, `vitest.config.ts`), `components.json`, `src/renderer/lib/utils.ts` (`cn`), `src/renderer/theme/globals.css` (`@import "tailwindcss"`, `tw-animate-css`, `@theme` reprenant les tokens 1c de `tokens.css`) ; aucun écran existant migré ici (T141)
+- [X] T142 Tests d'abord puis installation de Tailwind v4 + shadcn/ui (research.md R16) : tests en échec pour la CSP (aucune erreur console avec un Dialog shadcn ouvert, le verrou de défilement Radix compris) et pour les terminaux bruts (rendu xterm inchangé sous le preflight) ; puis `@tailwindcss/vite` dans `electron.vite.config.ts`, alias `@/*` → `src/renderer/*` (`tsconfig.web.json`, `electron.vite.config.ts`, `vitest.config.ts`), `components.json`, `src/renderer/lib/utils.ts` (`cn`), `src/renderer/theme/globals.css` (`@import "tailwindcss"`, `tw-animate-css`, `@theme` reprenant les tokens 1c de `tokens.css`) ; aucun écran existant migré ici (T141) — fait : CSP `style-src 'self' 'unsafe-inline'` testée (smoke, couleurs ANSI sans violation) ; le test « Dialog shadcn ouvert sans erreur console » part avec le premier Dialog shadcn (T141), aucun n'existant encore ; régressions du preflight corrigées sur captures avant/après (hauteur de ligne, graisse des titres, boutons sans style)
 
 ### Tests for User Story 5 ⚠️
 
