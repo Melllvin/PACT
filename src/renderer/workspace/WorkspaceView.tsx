@@ -1,11 +1,29 @@
-import type { CliDefinition, Workspace } from '../../shared/model';
+import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
 import { Toolbar } from '../app/Toolbar';
-import { AgentTile } from '../tiles/AgentTile';
-import { TerminalView } from '../tiles/TerminalView';
+import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
+import { Tile } from '../tiles/Tile';
+import { TileGrid } from '../tiles/TileGrid';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
-import tiles from '../tiles/tiles.module.css';
 import { EmptyWorkspace } from './EmptyWorkspace';
 import styles from './workspace.module.css';
+
+/** The tile actions, each about one agent (FR-024, FR-037). */
+export type AgentActions = {
+  onAnswer: (agentId: string, answer: 'allow' | 'deny') => void;
+  onResume: (agentId: string) => void;
+  onRestart: (agentId: string) => void;
+  onLog: (agentId: string) => void;
+  onClose: (agentId: string) => void;
+};
+
+const none = () => undefined;
+const NO_ACTIONS: AgentActions = {
+  onAnswer: none,
+  onResume: none,
+  onRestart: none,
+  onLog: none,
+  onClose: none,
+};
 
 type Props = {
   workspace: Workspace;
@@ -13,15 +31,26 @@ type Props = {
   /** Where the tiles find their terminals; without it, tiles show no terminal. */
   terminals?: Pick<TerminalRegistry, 'attach'> | undefined;
   onAddAgents?: () => void;
+  actions?: AgentActions;
+  /** Why the last tile action was refused. */
+  actionError?: string | null;
 };
 
-export function WorkspaceView({ workspace, clis = [], terminals, onAddAgents }: Props) {
+export function WorkspaceView({
+  workspace,
+  clis = [],
+  terminals,
+  onAddAgents,
+  actions = NO_ACTIONS,
+  actionError = null,
+}: Props) {
   const available = workspace.status === 'available';
   const launch = available ? onAddAgents : undefined;
   const hasAgents = workspace.agents.length > 0;
   const hasTiles = hasAgents || workspace.freeTerminals.length > 0;
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   const cliName = (id: string) => clis.find((cli) => cli.id === id)?.name ?? id;
+  const canAdd = agents.length < MAX_AGENTS;
 
   return (
     <>
@@ -34,33 +63,41 @@ export function WorkspaceView({ workspace, clis = [], terminals, onAddAgents }: 
             de retour.
           </p>
         )}
+        {actionError && (
+          <p role="alert" className={styles.unavailable}>
+            {actionError}
+          </p>
+        )}
         {available && !hasTiles && <EmptyWorkspace onAddAgents={launch} />}
         {available && hasTiles && (
-          <div className={tiles.grid}>
+          <TileGrid onAdd={canAdd ? launch : undefined}>
             {agents.map((agent) => (
-              <AgentTile
+              <Tile
                 key={agent.id}
                 agent={agent}
                 name={cliName(agent.cliId)}
                 terminals={terminals}
+                onAnswer={(answer) => {
+                  actions.onAnswer(agent.id, answer);
+                }}
+                onResume={() => {
+                  actions.onResume(agent.id);
+                }}
+                onRestart={() => {
+                  actions.onRestart(agent.id);
+                }}
+                onLog={() => {
+                  actions.onLog(agent.id);
+                }}
+                onClose={() => {
+                  actions.onClose(agent.id);
+                }}
               />
             ))}
             {workspace.freeTerminals.map((terminal) => (
-              <article key={terminal.id} aria-label="Terminal libre" className={tiles.tile}>
-                <header className={tiles.header}>
-                  <strong>Terminal libre</strong>
-                  <span className={tiles.meta}>{terminal.cwd}</span>
-                </header>
-                {terminals && (
-                  <TerminalView
-                    termId={terminal.id}
-                    registry={terminals}
-                    label={`Shell dans ${terminal.cwd}`}
-                  />
-                )}
-              </article>
+              <FreeTerminalTile key={terminal.id} terminal={terminal} terminals={terminals} />
             ))}
-          </div>
+          </TileGrid>
         )}
       </section>
     </>

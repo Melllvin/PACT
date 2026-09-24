@@ -27,6 +27,8 @@ const setup = async (fail?: string) => {
     if (channel === 'app:getState') {
       return Promise.resolve({ workspaces: [workspace], recents: [], clis: [], permission: null });
     }
+    // IPC failures reach the renderer as plain { code, message } objects.
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     if (channel === fail) return Promise.reject({ code: 'INVALID_INPUT', message: 'Refusé' });
     if (channel === 'agent:log') return Promise.resolve('Erreur simulée');
     return Promise.resolve(undefined);

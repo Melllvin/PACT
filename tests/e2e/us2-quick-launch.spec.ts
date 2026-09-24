@@ -3,7 +3,7 @@ import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { answerFolderPickers, launchApp, type LaunchedApp } from './helpers/launch-app';
 
@@ -29,6 +29,14 @@ const env = {
 let root: string;
 let repo: string;
 let launched: LaunchedApp | undefined;
+
+/** What the ⎇ of a tile shows on hover (FR-021). */
+const branchAndPort = async (tile: Locator) => {
+  await tile.getByRole('button', { name: 'Branche et port' }).hover();
+  const text = await tile.getByRole('tooltip').textContent();
+  await tile.page().mouse.move(0, 0);
+  return text;
+};
 
 test.beforeEach(async () => {
   root = realpathSync.native(await mkdtemp(join(tmpdir(), 'pact-us2-')));
@@ -71,11 +79,10 @@ test('launches 2 fake agents and a free terminal, then restores them after a res
   await expect(page.getByRole('dialog', { name: 'Autorisations des agents' })).toBeVisible();
   await page.keyboard.press('Enter');
 
-  const first = page.getByRole('article', { name: 'Faux CLI 1' });
-  const second = page.getByRole('article', { name: 'Faux CLI 2' });
-  await expect(first).toContainText(':3001');
-  await expect(second).toContainText(':3002');
-  await expect(first).toContainText('agent/fake-1');
+  const first = page.getByRole('article', { name: /^Faux CLI 1,/ });
+  const second = page.getByRole('article', { name: /^Faux CLI 2,/ });
+  await expect(branchAndPort(first)).resolves.toBe('agent/fake-1 · :3001');
+  await expect(branchAndPort(second)).resolves.toBe('agent/fake-2 · :3002');
   await expect(page.getByRole('article', { name: 'Terminal libre' })).toBeVisible();
   // The fake CLI printed its banner in the agent terminal: it waits for a prompt (FR-018).
   await expect(first).toContainText('Session');
@@ -105,8 +112,11 @@ test('launches 2 fake agents and a free terminal, then restores them after a res
   await launched.close({ keepData: true });
   launched = await launchApp({ userDataDir, env });
   page = await launched.app.firstWindow();
-  await expect(page.getByRole('article', { name: 'Faux CLI 1' })).toContainText(':3001');
-  await expect(page.getByRole('article', { name: 'Faux CLI 2' })).toContainText(':3002');
-  await expect(page.getByRole('article', { name: 'Faux CLI 1' })).toContainText('✕');
+  const restored = page.getByRole('article', { name: /^Faux CLI 1,/ });
+  await expect(restored).toHaveAttribute('data-state', 'error');
+  await expect(branchAndPort(restored)).resolves.toBe('agent/fake-1 · :3001');
+  await expect(branchAndPort(page.getByRole('article', { name: /^Faux CLI 2,/ }))).resolves.toBe(
+    'agent/fake-2 · :3002',
+  );
   expect(await saved()).toEqual(before);
 });
