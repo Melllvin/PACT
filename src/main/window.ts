@@ -3,6 +3,9 @@ import { BrowserWindow } from 'electron';
 
 const fromHere = (relative: string) => fileURLToPath(new URL(relative, import.meta.url));
 
+/** The built renderer page, the only file:// page allowed to call IPC. */
+export const RENDERER_HTML = fromHere('../renderer/index.html');
+
 /** Creates the single PACT window. `env` is injected so the dev/prod switch is testable. */
 export function createMainWindow(env: NodeJS.ProcessEnv): BrowserWindow {
   const win = new BrowserWindow({
@@ -25,6 +28,6 @@ export function createMainWindow(env: NodeJS.ProcessEnv): BrowserWindow {
 
   const devServerUrl = env.ELECTRON_RENDERER_URL;
   if (devServerUrl) void win.loadURL(devServerUrl);
-  else void win.loadFile(fromHere('../renderer/index.html'));
+  else void win.loadFile(RENDERER_HTML);
   return win;
 }
