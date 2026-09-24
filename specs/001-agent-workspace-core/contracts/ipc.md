@@ -35,7 +35,7 @@ preload (côté renderer) et dans le handler (côté main). Le renderer n'a acc�
 | `agent:state` | `{ agentId, state, lastError?, scheduledResume? }` | pulse, halo, actions, À faire |
 | `agent:branch` | `{ agentId, branch }` | infobulle ⎇ |
 | `workspace:status` | `{ id, status }` | dossier disparu |
-| `clone:progress` | `{ jobId, percent, phase }` / `{ jobId, error }` | |
+| `clone:progress` | `{ jobId, percent, phase }` / `{ jobId, error }` / `{ jobId, workspace }` (terminé, dépôt ouvert) | US1 sc. 2 |
 
 ## Règles
 

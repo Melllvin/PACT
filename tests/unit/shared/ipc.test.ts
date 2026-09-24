@@ -154,6 +154,22 @@ describe('IPC event schemas', () => {
     expect(schema.safeParse({ jobId: 'j', percent: 142, phase: 'x' }).success).toBe(false);
   });
 
+  it('announce the opened workspace when a clone completes (US1 scenario 2)', () => {
+    const workspace = {
+      id: 'abc',
+      path: '/repo',
+      name: 'repo',
+      mainBranch: 'main',
+      agents: [],
+      freeTerminals: [],
+      quickLaunchCounters: { freeTerminal: 0 },
+      permissionOverride: null,
+      lastOpenedAt: '2026-09-24T10:00:00.000Z',
+      status: 'available',
+    };
+    expect(ipcEvents['clone:progress'].safeParse({ jobId: 'j', workspace }).success).toBe(true);
+  });
+
   it('accept agent state changes', () => {
     expect(ipcEvents['agent:state'].safeParse({ agentId, state: 'awaiting-answer' }).success).toBe(
       true,

@@ -152,6 +152,8 @@ export const ipcEvents = {
   'clone:progress': z.union([
     z.object({ jobId: z.string(), percent: z.number().min(0).max(100), phase: z.string() }),
     z.object({ jobId: z.string(), error: ipcErrorSchema }),
+    // Clone finished and the repository is open (US1 scenario 2).
+    z.object({ jobId: z.string(), workspace: workspaceSchema }),
   ]),
 } as const;
 
