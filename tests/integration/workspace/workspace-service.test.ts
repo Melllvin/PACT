@@ -34,6 +34,9 @@ const makeRepo = async (name: string, branch = 'main') => {
   return path;
 };
 
+/** macOS FSEvents streams start asynchronously and miss changes made in their first moments. */
+const watcherStartup = () => new Promise((r) => setTimeout(r, 300));
+
 const createService = () =>
   new WorkspaceService({
     git: new GitService({ env: gitEnv }),
@@ -174,8 +177,9 @@ describe('availability', () => {
     const { id } = await service.open(repo);
     service.startWatching(3_600_000); // the periodic check cannot be what reacts here
     try {
+      await watcherStartup();
       await rename(repo, `${repo}-moved`);
-      for (let i = 0; i < 100 && events.length === 0; i++) {
+      for (let i = 0; i < 250 && events.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
       expect(events).toEqual([{ id, status: 'unavailable' }]);
@@ -197,8 +201,9 @@ describe('availability', () => {
 
       const other = await makeRepo('other');
       const opened = await service.open(other);
+      await watcherStartup();
       await rename(other, `${other}-moved`);
-      for (let i = 0; i < 100 && events.length === 0; i++) {
+      for (let i = 0; i < 250 && events.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
       expect(events).toEqual([{ id: opened.id, status: 'unavailable' }]);
