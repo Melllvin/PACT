@@ -168,6 +168,45 @@ describe('availability', () => {
     expect(events.at(-1)).toEqual({ id, status: 'available' });
   });
 
+  it('reacts to a folder disappearing right away, without waiting for the periodic check', async () => {
+    const repo = await makeRepo('app');
+    const service = createService();
+    const { id } = await service.open(repo);
+    service.startWatching(3_600_000); // the periodic check cannot be what reacts here
+    try {
+      await rename(repo, `${repo}-moved`);
+      for (let i = 0; i < 100 && events.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(events).toEqual([{ id, status: 'unavailable' }]);
+    } finally {
+      service.dispose();
+    }
+  });
+
+  it('watches workspaces opened after watching started, and stops watching closed ones', async () => {
+    const service = createService();
+    service.startWatching(3_600_000);
+    try {
+      const repo = await makeRepo('late');
+      const { id } = await service.open(repo);
+      await service.close(id);
+      await rename(repo, `${repo}-moved`);
+      await new Promise((r) => setTimeout(r, 300));
+      expect(events).toEqual([]);
+
+      const other = await makeRepo('other');
+      const opened = await service.open(other);
+      await rename(other, `${other}-moved`);
+      for (let i = 0; i < 100 && events.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(events).toEqual([{ id: opened.id, status: 'unavailable' }]);
+    } finally {
+      service.dispose();
+    }
+  });
+
   it('only reports status changes', async () => {
     const service = createService();
     await service.open(await makeRepo('app'));
