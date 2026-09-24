@@ -242,12 +242,15 @@ describe('Codex terminal and dialogs', () => {
 });
 
 describe('Codex detection', () => {
+  // The real host: PATH is split and PATHEXT applied the way this OS does it.
+  const host = process.platform;
+  const bin = host === 'win32' ? 'codex.cmd' : 'codex';
   let dir: string;
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'pact-codex-'));
-    await writeFile(join(dir, 'codex'), '#!/bin/sh\n');
-    await chmod(join(dir, 'codex'), 0o755);
+    await writeFile(join(dir, bin), '#!/bin/sh\n');
+    await chmod(join(dir, bin), 0o755);
   });
 
   afterEach(async () => {
@@ -255,15 +258,15 @@ describe('Codex detection', () => {
   });
 
   it('reports codex as installed when hooks are available', async () => {
-    expect(await create().detect({ PATH: dir })).toEqual({
-      resolvedPath: join(dir, 'codex'),
+    expect(await create(host).detect({ PATH: dir })).toEqual({
+      resolvedPath: join(dir, bin),
       version: '0.156.1',
       status: 'installed',
     });
   });
 
   it('reports codex as missing when it is not in PATH', async () => {
-    expect(await create().detect({ PATH: '' })).toMatchObject({ status: 'missing' });
+    expect(await create(host).detect({ PATH: '' })).toMatchObject({ status: 'missing' });
   });
 
   it('flags a codex without the hooks feature as unsupported-version', async () => {
@@ -272,7 +275,7 @@ describe('Codex detection', () => {
       'apps                                     stable             true',
     ]) {
       const adapter = create(
-        'darwin',
+        host,
         runner({ '--version': 'codex-cli 0.120.0', 'features list': features }),
       );
       expect(await adapter.detect({ PATH: dir })).toMatchObject({
@@ -283,7 +286,7 @@ describe('Codex detection', () => {
   });
 
   it('flags a codex without the features command as unsupported-version', async () => {
-    const adapter = create('darwin', runner({ '--version': 'codex-cli 0.40.0' }));
+    const adapter = create(host, runner({ '--version': 'codex-cli 0.40.0' }));
     expect(await adapter.detect({ PATH: dir })).toMatchObject({ status: 'unsupported-version' });
   });
 });

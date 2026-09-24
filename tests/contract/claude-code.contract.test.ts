@@ -274,12 +274,15 @@ describe('Claude Code terminal and dialogs', () => {
 });
 
 describe('Claude Code detection', () => {
+  // The real host: PATH is split and PATHEXT applied the way this OS does it.
+  const host = process.platform;
+  const bin = host === 'win32' ? 'claude.cmd' : 'claude';
   let dir: string;
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'pact-claude-'));
-    await writeFile(join(dir, 'claude'), '#!/bin/sh\n');
-    await chmod(join(dir, 'claude'), 0o755);
+    await writeFile(join(dir, bin), '#!/bin/sh\n');
+    await chmod(join(dir, bin), 0o755);
   });
 
   afterEach(async () => {
@@ -287,15 +290,15 @@ describe('Claude Code detection', () => {
   });
 
   it('reports claude as installed with its version', async () => {
-    expect(await create().detect({ PATH: dir })).toEqual({
-      resolvedPath: join(dir, 'claude'),
+    expect(await create(host).detect({ PATH: dir })).toEqual({
+      resolvedPath: join(dir, bin),
       version: '2.1.281',
       status: 'installed',
     });
   });
 
   it('reports claude as missing when it is not in PATH', async () => {
-    expect(await create().detect({ PATH: '' })).toEqual({
+    expect(await create(host).detect({ PATH: '' })).toEqual({
       resolvedPath: null,
       version: null,
       status: 'missing',
@@ -304,7 +307,7 @@ describe('Claude Code detection', () => {
 
   it('flags a version older than 2.1 as unsupported', async () => {
     const adapter = create(
-      'darwin',
+      host,
       runner({ '--version': '1.0.44 (Claude Code)', '--help': HELP_WITH_AUTO }),
     );
     expect(await adapter.detect({ PATH: dir })).toMatchObject({
@@ -314,8 +317,8 @@ describe('Claude Code detection', () => {
   });
 
   it('keeps the CLI usable when --version fails', async () => {
-    expect(await create('darwin', runner({})).detect({ PATH: dir })).toEqual({
-      resolvedPath: join(dir, 'claude'),
+    expect(await create(host, runner({})).detect({ PATH: dir })).toEqual({
+      resolvedPath: join(dir, bin),
       version: null,
       status: 'installed',
     });
@@ -323,7 +326,7 @@ describe('Claude Code detection', () => {
 
   it('falls back to acceptEdits when this Claude Code has no auto mode', async () => {
     const adapter = create(
-      'darwin',
+      host,
       runner({ '--version': '2.1.0 (Claude Code)', '--help': '--permission-mode <mode>' }),
     );
     await adapter.detect({ PATH: dir });
@@ -331,6 +334,6 @@ describe('Claude Code detection', () => {
   });
 
   it('offers no model list of its own', async () => {
-    expect(await create().listModels()).toEqual([]);
+    expect(await create(host).listModels()).toEqual([]);
   });
 });
