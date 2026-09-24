@@ -71,10 +71,15 @@ describe('CloneJobs', () => {
     expect(workspaces.list().map((w) => w.path)).toEqual([destination]);
   });
 
-  it('gives each clone its own job id', () => {
+  it('gives each clone its own job id', async () => {
     const first = jobs.start({ url: bareUrl, destination: join(root, 'a') });
     const second = jobs.start({ url: bareUrl, destination: join(root, 'b') });
     expect(first.jobId).not.toBe(second.jobId);
+    // Let both clones finish before the temporary folder is removed.
+    for (let i = 0; i < 500 && events.filter((e) => 'workspace' in e).length < 2; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(events.filter((e) => 'workspace' in e)).toHaveLength(2);
   });
 
   it('reports a clear error, removes the partial folder and opens no tab on failure', async () => {
