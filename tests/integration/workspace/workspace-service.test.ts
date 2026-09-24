@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitService } from '../../../src/main/git/git-service';
 import { openStores } from '../../../src/main/persistence/store';
@@ -210,6 +210,33 @@ describe('availability', () => {
     } finally {
       service.dispose();
     }
+  });
+
+  it('checks after a burst of changes next to the folder, and not after dispose', async () => {
+    const repo = await makeRepo('app');
+    const service = createService();
+    await service.open(repo);
+    const check = vi.spyOn(service, 'checkAvailability').mockResolvedValue();
+    service.startWatching(3_600_000);
+    try {
+      await watcherStartup();
+      for (const n of [1, 2, 3]) await writeFile(join(dirname(repo), `burst-${String(n)}`), '');
+      for (let i = 0; i < 250 && check.mock.calls.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(check).toHaveBeenCalled();
+
+      await new Promise((r) => setTimeout(r, 200)); // late events of the burst settle first
+      check.mockClear();
+      await writeFile(join(dirname(repo), 'burst-4'), '');
+      for (let i = 0; i < 100 && !service['pendingCheck']; i++) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    } finally {
+      service.dispose();
+    }
+    await new Promise((r) => setTimeout(r, 200));
+    expect(check).not.toHaveBeenCalled();
   });
 
   it('only reports status changes', async () => {
