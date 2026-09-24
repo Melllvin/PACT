@@ -2,13 +2,20 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { PermissionsDialog } from '../../../../src/renderer/launch/PermissionsDialog';
+import type { CliDefinition } from '../../../../src/shared/model';
 
 // Screen 1m — asked once, on the first launch (FR-012, FR-035, US2 scenario 1).
 
-const renderDialog = () => {
+type Cli = Pick<CliDefinition, 'id' | 'name' | 'adapter'>;
+const claude: Cli = { id: 'claude-code', name: 'Claude Code', adapter: 'claude-code' };
+const codex: Cli = { id: 'codex', name: 'Codex', adapter: 'codex' };
+
+const renderDialog = (clis: Cli[] = [claude, codex]) => {
   const onConfirm = vi.fn();
   const onCancel = vi.fn();
-  render(<PermissionsDialog agentCount={3} onConfirm={onConfirm} onCancel={onCancel} />);
+  render(
+    <PermissionsDialog agentCount={3} clis={clis} onConfirm={onConfirm} onCancel={onCancel} />,
+  );
   return { onConfirm, onCancel };
 };
 
@@ -29,6 +36,30 @@ describe('PermissionsDialog', () => {
     expect(text).toMatch(/sans vous demander/);
     expect(text).toMatch(/git push/);
     expect(text).toMatch(/attend votre accord/);
+  });
+
+  it('describes each level for each CLI launched (FR-012, research R5)', () => {
+    renderDialog();
+    const allowAll = radio('Toujours autoriser').closest('label')?.textContent ?? '';
+    expect(allowAll).toMatch(/Claude Code.*hors de son worktree/);
+    expect(allowAll).toMatch(/Codex.*sandbox/);
+    const sensitive = radio('Demander pour les actions sensibles').closest('label')?.textContent;
+    expect(sensitive).toMatch(/Claude Code.*git push/);
+    expect(sensitive).toMatch(/Codex.*juge/);
+  });
+
+  it('promises Codex nothing that only Claude Code rules guarantee', () => {
+    renderDialog([codex]);
+    const text = document.body.textContent;
+    expect(text).not.toMatch(/git push|Claude Code/);
+    expect(text).toMatch(/sandbox/);
+  });
+
+  it('describes other CLIs without promising anything they do not enforce', () => {
+    renderDialog([{ id: 'custom-aider', name: 'Aider', adapter: 'generic' }]);
+    const text = document.body.textContent;
+    expect(text).not.toMatch(/git push|sandbox/);
+    expect(text).toMatch(/Aider.*ses propres réglages/);
   });
 
   it('offers the « Ce projet » and « Tous les projets » scopes', () => {
