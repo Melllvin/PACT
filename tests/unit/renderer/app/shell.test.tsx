@@ -67,9 +67,7 @@ describe('TabBar', () => {
     render(
       <TabBar workspaces={[]} activeTab={{ kind: 'home' }} onSelect={vi.fn()} onHome={vi.fn()} />,
     );
-    expect((screen.getByRole('button', { name: 'Réglages' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole('button', { name: 'Réglages' }).hasAttribute('disabled')).toBe(true);
   });
 });
 
@@ -83,12 +81,8 @@ describe('Toolbar', () => {
 
   it('keeps Comparer and Revue visible but inactive (FR-006)', () => {
     render(<Toolbar todoCount={0} onAddAgents={vi.fn()} />);
-    expect((screen.getByRole('button', { name: /Comparer/ }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
-    expect((screen.getByRole('button', { name: /Revue/ }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(screen.getByRole('button', { name: /Comparer/ }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: /Revue/ }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: /Tuiles/ }).getAttribute('aria-pressed')).toBe(
       'true',
     );

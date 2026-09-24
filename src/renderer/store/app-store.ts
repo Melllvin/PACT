@@ -17,12 +17,12 @@ export type AppState = {
   permission: AppSnapshot['permission'];
   activeTab: ActiveTab;
   view: View;
-  load(): Promise<void>;
+  load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
-  connect(): () => void;
-  selectWorkspace(id: string): void;
-  openHome(): void;
-  setView(view: View): void;
+  connect: () => () => void;
+  selectWorkspace: (id: string) => void;
+  openHome: () => void;
+  setView: (view: View) => void;
 };
 
 const errorMessage = (error: unknown) =>
