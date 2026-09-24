@@ -1,22 +1,39 @@
 import { fileURLToPath } from 'node:url';
 import type { IpcOutput } from '../shared/ipc';
 import type { Stores } from './persistence/store';
+import type { CloneJobs } from './workspace/clone-job';
+import type { WorkspaceService } from './workspace/workspace-service';
+
+export type FolderPurpose = 'open-repository' | 'clone-destination';
+
+type Dependencies = {
+  stores: Stores;
+  workspaces: WorkspaceService;
+  clones: CloneJobs;
+  pickFolder: (purpose: FolderPurpose) => Promise<string | null>;
+};
 
 /**
- * Main-process implementations of the IPC channels available so far. Workspace restoration,
- * CLI detection and agents join app:getState with US1 and US2 (T043, T045, T060).
+ * Main-process implementations of the IPC channels available so far. CLI detection and agents
+ * join app:getState with US2 (T060, T062).
  */
-export function createAppServices({ stores }: { stores: Stores }) {
+export function createAppServices({ stores, workspaces, clones, pickFolder }: Dependencies) {
   return {
     async 'app:getState'(): Promise<IpcOutput<'app:getState'>> {
       const state = await stores.state.read();
       return {
-        workspaces: [],
+        workspaces: workspaces.list(),
         recents: state.recents,
         clis: state.customClis,
         permission: state.permission,
       };
     },
+    'workspace:open': ({ path }: { path: string }) => workspaces.open(path),
+    'workspace:initRepo': ({ path }: { path: string }) => workspaces.initRepo(path),
+    'workspace:close': ({ id }: { id: string }) => workspaces.close(id),
+    'workspace:clone': ({ url, destination }: { url: string; destination: string }) =>
+      clones.start({ url, destination }),
+    'dialog:pickFolder': ({ purpose }: { purpose: FolderPurpose }) => pickFolder(purpose),
   };
 }
 

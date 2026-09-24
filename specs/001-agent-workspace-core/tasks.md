@@ -113,7 +113,7 @@ dépôt ouvert ; redémarrer → dépôt dans les récents.
 
 - [x] T043 [US1] Implémenter `WorkspaceService` (open, initRepo, close, récents, surveillance du dossier par `fs.watch` + vérification périodique) dans `src/main/workspace/workspace-service.ts`
 - [x] T044 [US1] Implémenter les jobs de clonage (progression `git clone --progress` → événement `clone:progress`, nettoyage du dossier en cas d'échec, aucun onglet créé) dans `src/main/workspace/clone-job.ts`
-- [ ] T045 [US1] Brancher les handlers `app:getState`, `workspace:open`, `workspace:initRepo`, `workspace:clone`, `workspace:close` et l'événement `workspace:status`, plus le sélecteur de dossier natif (`dialog.showOpenDialog`) dans `src/main/ipc/workspace-handlers.ts`
+- [x] T045 [US1] Brancher les handlers `app:getState`, `workspace:open`, `workspace:initRepo`, `workspace:clone`, `workspace:close` et l'événement `workspace:status`, plus le sélecteur de dossier natif (`dialog.showOpenDialog`) dans `src/main/ipc/workspace-handlers.ts`
 - [ ] T046 [P] [US1] Implémenter l'accueil (1a) avec recherche, zone de dépôt (`webUtils.getPathForFile` via preload), boîte de clonage dans `src/renderer/home/Home.tsx`, `src/renderer/home/CloneDialog.tsx`, `src/renderer/home/DropZone.tsx`
 - [ ] T047 [P] [US1] Implémenter le workspace vide (1b) et l'affichage « indisponible » dans `src/renderer/workspace/EmptyWorkspace.tsx` et `src/renderer/workspace/WorkspaceView.tsx`
 - [ ] T048 [US1] Relier onglets, accueil et workspaces dans le store et `App.tsx` (onglet d'accueil ouvert par « + », fermeture d'onglet) dans `src/renderer/app/App.tsx`
