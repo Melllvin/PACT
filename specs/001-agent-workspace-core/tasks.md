@@ -439,3 +439,10 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 - [X] T134 Tests puis implémentation : à `term:exit` d'un terminal libre, retirer sa tuile du workspace et libérer son xterm (`registry.dispose`), dans `tests/unit/renderer/store/app-store.test.ts`, `tests/unit/renderer/app/App.test.tsx`, `src/renderer/store/app-store.ts` et `src/renderer/app/App.tsx` per T063, US2/AC5 (partial)
 - [X] T135 Consigner dans `specs/001-agent-workspace-core/research.md` R2 que xterm utilise le rendu DOM par défaut (texte lisible par les technologies d'assistance et l'e2e, plus d'addon canvas dans xterm 6), WebGL restant disponible via `createXterm({ webgl: true })` per plan R2 / T068 (contradicts)
 - [X] T136 Consigner dans `specs/001-agent-workspace-core/data-model.md` (transitions) qu'un processus terminé sans demande de PACT passe en `error` « à reprendre » même avec le code 0 per data-model AgentState (partial)
+
+---
+
+## Phase 15: Convergence
+
+- [ ] T137 Tests puis implémentation : décrire dans l'écran 1m ce que chaque niveau permet réellement **pour chaque CLI lancé** (Claude Code : règles `ask` rm / curl / wget / git push / WebFetch ; Codex : sandbox `workspace-write`, approbation `on-request` décidée par le modèle, réseau coupé par le sandbox), sans promettre à Codex ce que seules les règles de Claude Code garantissent, dans `tests/unit/renderer/launch/PermissionsDialog.test.tsx` et `src/renderer/launch/PermissionsDialog.tsx` per FR-012 / research R5 (contradicts)
+- [X] T138 Tests puis implémentation : en niveau « Demander pour les actions sensibles », faire demander Claude Code avant toute écriture hors du worktree (vérifier le comportement réel d'`acceptEdits` hors du `cwd`, sinon ajouter des règles `permissions.ask` `Edit` / `Write` hors worktree), dans `tests/contract/claude-code.contract.test.ts` et `src/main/agents/adapters/claude-code.ts` per FR-012 / research R5 (partial)
