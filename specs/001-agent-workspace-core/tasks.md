@@ -303,6 +303,7 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 - [ ] T114 [P] Revue de sécurité : CSP, `sandbox`, aucune commande shell construite depuis le renderer, jeton de hooks non journalisé, serveur de hooks lié à `127.0.0.1` uniquement ; corriger les écarts et ajouter un test par écart trouvé dans `tests/unit/main/security.test.ts`
 - [ ] T115 [P] Mettre à jour `README.md` (présentation, prérequis, `npm ci`, `npm run dev`, `npm run check`, `npm run test:e2e`, approbation des hooks Codex)
 - [ ] T116 Dérouler `specs/001-agent-workspace-core/quickstart.md` (scénarios automatisés + validation manuelle avec vrais CLI) sur macOS et Windows et consigner les résultats dans la PR
+- [ ] T141 Rappel (décision utilisateur du 2026-09-24) : adopter la bibliothèque React Bits pour coller aux maquettes `docs/maquettes` (direction 1c, `CONSIGNES-UI.md`). D'abord `/speckit-plan` pour amender research.md R10 (CSS Modules + tokens → React Bits, variantes CSS compatibles CSS Modules, dépendances éventuelles, compatibilité CSP), puis `/speckit-tasks` pour les tâches de migration écran par écran avec captures Playwright à 1024 px et grand écran ; à faire avant T111 (grille de points et particules pourront venir de React Bits)
 - [ ] T117 Proposer à l'utilisateur (sans l'appliquer sans son accord) la protection de la branche `main` exigeant les jobs CI `check` et `e2e` (Constitution II)
 
 ---
