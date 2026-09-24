@@ -414,3 +414,10 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 - [x] T126 Aligner `contracts/cli-adapter.md` et les types de T034 : ajouter `agentId` à `LaunchInput` (requis pour `PACT_AGENT_ID`) et `cwd` à `LaunchSpec` (obligation 1), et harmoniser le chemin de la suite de contrat (`tests/contract/cli-adapter.contract.ts`) avant d'implémenter T024 / T034 per contracts/cli-adapter.md (contradicts)
 - [x] T127 Vérifier si `style-src 'unsafe-inline'` est nécessaire hors mode dev ; le cas échéant, le limiter au serveur de développement (CSP de production `default-src 'self'` stricte), avec assertion e2e sur la CSP servie, dans `src/renderer/index.html` et `electron.vite.config.ts` per T011 (partial)
 - [ ] T128 Justifier dans la revue de sécurité (T114) le blocage de `window.open` et de la navigation (`src/main/window.ts`), ajouté sans tâche dédiée, ou le retirer per T114 (unrequested)
+
+---
+
+## Phase 12: Convergence
+
+- [ ] T129 Consigner dans `specs/001-agent-workspace-core/research.md` R3 que la résolution des commandes cherche directement dans le PATH (avec PATHEXT sous Windows) au lieu de lancer `which` / `where.exe` : même résultat, aucun processus lancé, testable sur les deux OS, vérifié sur la CI Windows per research R3 / T019 (contradicts)
+- [ ] T130 Justifier dans la revue de sécurité (T114) le contrôle d'origine IPC (`trustedSenderCheck`), l'ignorance d'`ELECTRON_RENDERER_URL` dans une app packagée et le service `app:getState` câblé dès la phase 2 (`src/main/app-services.ts`) per T114 (unrequested)
