@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceView } from '../../../../src/renderer/workspace/WorkspaceView';
 import type { Agent, CliDefinition, Workspace } from '../../../../src/shared/model';
 
-// T068 — until US3, each agent and free terminal gets a minimal tile around its terminal.
+// T068, T069, T079 — the tiles of the agents and free terminals, in the grid.
 
 const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   id: `00000000-0000-4000-8000-00000000000${String(n)}`,
@@ -58,8 +58,17 @@ const clis: CliDefinition[] = [
 
 const registry = () => ({ attach: vi.fn(() => () => undefined) });
 
+const colors = ['purple', 'cyan', 'green', 'magenta', 'yellow', 'slate'] as const;
+const agents = (count: number) =>
+  Array.from({ length: count }, (_, i) => agent(i + 1, { color: colors[i] ?? 'slate' }));
+const borders = () =>
+  screen
+    .getAllByRole('article')
+    .map((tile) => tile.style.getPropertyValue('--agent-color'))
+    .filter(Boolean);
+
 describe('WorkspaceView', () => {
-  it('shows one tile per agent with its branch, port and state, in position order', () => {
+  it('shows one tile per agent in position order, with its terminal', () => {
     const terminals = registry();
     render(
       <WorkspaceView
@@ -72,20 +81,52 @@ describe('WorkspaceView', () => {
     );
     const tiles = screen.getAllByRole('article');
     expect(tiles.map((t) => t.getAttribute('aria-label'))).toEqual([
-      'Claude Code 1',
-      'Claude Code 2',
+      'Claude Code 1, erreur',
+      'Claude Code 2, en cours',
     ]);
-    expect(tiles[0]?.textContent).toMatch(/agent\/claude-code-1.*:3001.*✕/);
-    expect(tiles[1]?.textContent).toMatch(/▶/);
     expect(terminals.attach).toHaveBeenCalledTimes(2);
   });
 
   it('names a tile after its CLI id when the CLI is no longer known', () => {
     render(<WorkspaceView workspace={workspace({ agents: [agent(1, { cliId: 'aider' })] })} />);
-    expect(screen.getByRole('article', { name: 'aider 1' })).toBeDefined();
+    expect(screen.getByRole('article', { name: 'aider 1, attend une consigne' })).toBeDefined();
   });
 
-  it('adds a tile per free terminal', () => {
+  it('goes from 2×2 to 3×2 with the fifth agent, without changing any color (T069)', () => {
+    const { rerender } = render(
+      <WorkspaceView workspace={workspace({ agents: agents(4) })} clis={clis} />,
+    );
+    expect(screen.getByRole('region', { name: 'Tuiles' }).dataset.layout).toBe('2x2');
+    const before = borders();
+    rerender(<WorkspaceView workspace={workspace({ agents: agents(5) })} clis={clis} />);
+    expect(screen.getByRole('region', { name: 'Tuiles' }).dataset.layout).toBe('3x2');
+    expect(borders().slice(0, 4)).toEqual(before);
+  });
+
+  it('offers « + » in the free slots while agents can be added', async () => {
+    const user = userEvent.setup();
+    const onAddAgents = vi.fn();
+    const { rerender } = render(
+      <WorkspaceView
+        workspace={workspace({ agents: agents(3) })}
+        clis={clis}
+        onAddAgents={onAddAgents}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Ajouter un agent' }));
+    expect(onAddAgents).toHaveBeenCalledOnce();
+    rerender(
+      <WorkspaceView
+        workspace={workspace({ agents: agents(6), freeTerminals: [] })}
+        clis={clis}
+        onAddAgents={onAddAgents}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Ajouter un agent' })).toBeNull();
+  });
+
+  it('adds a tile per free terminal, open at the root of the repository (T079)', () => {
+    const terminals = registry();
     render(
       <WorkspaceView
         workspace={workspace({
@@ -99,12 +140,57 @@ describe('WorkspaceView', () => {
           ],
         })}
         clis={clis}
-        terminals={registry()}
+        terminals={terminals}
       />,
     );
-    expect(
-      within(screen.getByRole('article', { name: 'Terminal libre' })).getByText('/w'),
-    ).toBeDefined();
+    const tile = screen.getByRole('article', { name: 'Terminal libre' });
+    expect(within(tile).getByText('/w')).toBeDefined();
+    expect(within(tile).getByLabelText('Shell dans /w')).toBeDefined();
+    expect(terminals.attach).toHaveBeenCalledWith(
+      '00000000-0000-4000-8000-000000000009',
+      expect.any(HTMLElement),
+    );
+  });
+
+  it('passes the tile actions on with the agent they are about', async () => {
+    const user = userEvent.setup();
+    const actions = {
+      onAnswer: vi.fn(),
+      onResume: vi.fn(),
+      onRestart: vi.fn(),
+      onLog: vi.fn(),
+      onClose: vi.fn(),
+    };
+    const waiting = agent(1, { state: 'awaiting-answer' });
+    const failed = agent(2, { state: 'error' });
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: [waiting, failed] })}
+        clis={clis}
+        actions={actions}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: '✓ Autoriser' }));
+    await user.click(screen.getByRole('button', { name: 'Journal' }));
+    await user.click(screen.getByRole('button', { name: 'Relancer' }));
+    await user.click(screen.getByRole('button', { name: 'Reprendre' }));
+    await user.click(screen.getAllByRole('button', { name: 'Fermer l’agent' })[0] ?? document.body);
+    expect(actions.onAnswer).toHaveBeenCalledWith(waiting.id, 'allow');
+    expect(actions.onLog).toHaveBeenCalledWith(failed.id);
+    expect(actions.onRestart).toHaveBeenCalledWith(failed.id);
+    expect(actions.onResume).toHaveBeenCalledWith(failed.id);
+    expect(actions.onClose).toHaveBeenCalledWith(waiting.id);
+  });
+
+  it('shows a refused action', () => {
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: [agent(1)] })}
+        clis={clis}
+        actionError="Cet agent n’attend pas de réponse."
+      />,
+    );
+    expect(screen.getByRole('alert').textContent).toBe('Cet agent n’attend pas de réponse.');
   });
 
   it('opens the launcher from « + Agents » once agents exist', async () => {
