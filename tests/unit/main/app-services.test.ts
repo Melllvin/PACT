@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAppServices, trustedSenderCheck } from '../../../src/main/app-services';
+import {
+  createAppServices,
+  devServerUrl,
+  trustedSenderCheck,
+} from '../../../src/main/app-services';
 import { openStores } from '../../../src/main/persistence/store';
 
 let dir: string;
@@ -46,6 +50,16 @@ describe('app:getState', () => {
       recents: [recent],
       permission: { level: 'ask-sensitive', autoResume: false, scope: 'global' },
     });
+  });
+});
+
+describe('devServerUrl', () => {
+  it('uses the electron-vite dev server only in an unpackaged app', () => {
+    const env = { ELECTRON_RENDERER_URL: 'http://localhost:5173/' };
+    expect(devServerUrl({ isPackaged: false }, env)).toBe('http://localhost:5173/');
+    // A packaged app must never let an environment variable swap its UI for a remote page.
+    expect(devServerUrl({ isPackaged: true }, env)).toBeUndefined();
+    expect(devServerUrl({ isPackaged: false }, {})).toBeUndefined();
   });
 });
 
