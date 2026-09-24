@@ -102,6 +102,11 @@ export const ipcRequests = {
     z.object({ jobId: z.string() }),
   ),
   'workspace:close': request(z.object({ id: nonEmpty }), none),
+  /** Native folder picker; the main process chooses the dialog, the renderer never passes paths. */
+  'dialog:pickFolder': request(
+    z.object({ purpose: z.enum(['open-repository', 'clone-destination']) }),
+    absolutePath.nullable(),
+  ),
   'cli:add': request(z.object({ name: nonEmpty.max(64), command: nonEmpty }), cliDefinitionSchema),
   'cli:redetect': request(none, z.array(cliDefinitionSchema)),
   'permission:set': request(

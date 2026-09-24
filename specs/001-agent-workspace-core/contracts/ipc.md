@@ -12,6 +12,7 @@ preload (côté renderer) et dans le handler (côté main). Le renderer n'a acc�
 | `workspace:initRepo` | `{ path }` | `Workspace` | US1 sc. 5 |
 | `workspace:clone` | `{ url, destination }` | `{ jobId }` (progression via événement) | FR-003 |
 | `workspace:close` | `{ id }` | — | |
+| `dialog:pickFolder` | `{ purpose: 'open-repository' \| 'clone-destination' }` | chemin absolu \| `null` (annulé) | US1 sc. 1, 2 |
 | `cli:add` | `{ name, command }` | `CliDefinition` (avec `status`) | FR-008 |
 | `cli:redetect` | — | `CliDefinition[]` | FR-007 |
 | `permission:set` | `PermissionPreference & { workspaceId? }` (inclut `autoResume`) | — | FR-012, FR-035 |
