@@ -401,7 +401,7 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 ## Phase 11: Convergence
 
-- [ ] T118 CRITICAL — Protéger la branche `main` dès maintenant (la CI existe depuis T010) en exigeant les jobs `check` et `e2e` sur macOS et Windows, après accord explicite de l'utilisateur ; T117 reste la trace de validation finale per Constitution II (contradicts)
+- [x] T118 CRITICAL — Protéger la branche `main` dès maintenant (la CI existe depuis T010) en exigeant les jobs `check` et `e2e` sur macOS et Windows, après accord explicite de l'utilisateur ; T117 reste la trace de validation finale per Constitution II (contradicts)
 - [ ] T119 CRITICAL — Ajouter en CI un contrôle de non-régression de couverture : comparer `coverage/coverage-summary.json` de la PR à celui de `main` et échouer si la couverture lignes/branches baisse sur les fichiers modifiés, en plus des seuils fixes de `vitest.config.ts`, dans `.github/workflows/ci.yml` et `scripts/coverage-guard.mjs` (test dans `tests/unit/scripts/coverage-guard.test.ts`) per Constitution III (missing)
 - [x] T120 CRITICAL — Justifier la dépendance `globals` (utilisée par `eslint.config.js`) dans `specs/001-agent-workspace-core/research.md` R12, ou la retirer si typescript-eslint suffit per Constitution, contraintes techniques (contradicts)
 - [ ] T121 Tests puis implémentation : quand le dossier d'un workspace est supprimé ou déplacé, le workspace passe `unavailable` **et ses agents sont arrêtés proprement** (PTY tués, état persisté) dans `tests/integration/workspace/workspace-service.test.ts` et `src/main/workspace/workspace-service.ts` per spec Edge Cases (dossier supprimé) (missing)
