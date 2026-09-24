@@ -71,6 +71,16 @@ describe('agent actions', () => {
     expect(store.getState().actionError).toBeNull();
   });
 
+  it('sends « Toujours pour ce worktree » with the answer (FR-034)', async () => {
+    const { store, invoke } = await setup();
+    await store.getState().answerAgent(id, 'allow', true);
+    expect(invoke).toHaveBeenCalledWith('agent:answer', {
+      agentId: id,
+      answer: 'allow',
+      always: true,
+    });
+  });
+
   it('shows a refused action until the next one succeeds', async () => {
     const { store } = await setup('agent:resume');
     await store.getState().resumeAgent(id);

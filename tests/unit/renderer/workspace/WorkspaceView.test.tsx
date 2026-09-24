@@ -284,3 +284,37 @@ describe('À faire column (T082, T086)', () => {
     expect(screen.queryByRole('button', { name: /À faire/ })).toBeNull();
   });
 });
+
+describe('Focus (T087, US5)', () => {
+  it('opens the Focus with ⤢ and comes back to the grid, terminals kept (US5)', async () => {
+    const user = userEvent.setup();
+    const terminals = registry();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: agents(2) })}
+        clis={clis}
+        terminals={terminals}
+      />,
+    );
+    const second = screen.getAllByRole('button', { name: 'Agrandir' })[1] ?? document.body;
+    await user.click(second);
+    expect(screen.queryByRole('region', { name: 'Tuiles' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Focus : Claude Code 2' })).toBeDefined();
+    await user.click(screen.getByRole('button', { name: 'Claude Code 1' }));
+    expect(screen.getByRole('region', { name: 'Focus : Claude Code 1' })).toBeDefined();
+    await user.click(screen.getByRole('button', { name: '‹ Tuiles' }));
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+    expect(terminals.attach).toHaveBeenLastCalledWith(agent(2).id, expect.any(HTMLElement));
+  });
+
+  it('goes back to the grid when the agent in Focus is closed', async () => {
+    const user = userEvent.setup();
+    const view = (count: number) => (
+      <WorkspaceView workspace={workspace({ agents: agents(count) })} clis={clis} />
+    );
+    const { rerender } = render(view(2));
+    await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[1] ?? document.body);
+    rerender(view(1));
+    expect(screen.getByRole('region', { name: 'Tuiles' })).toBeDefined();
+  });
+});
