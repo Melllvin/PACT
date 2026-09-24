@@ -76,6 +76,6 @@ test('shows the ANSI colors of a CLI without any CSP violation', async () => {
   await page.keyboard.type('Colore');
   await page.keyboard.press('Enter');
   const red = tile.locator('.xterm-rows span', { hasText: 'Rouge' });
-  await expect(red).toHaveCSS('color', 'rgb(205, 49, 49)'); // xterm's default ANSI red
+  await expect(red).toHaveCSS('color', 'rgb(204, 0, 0)'); // xterm 6 default ANSI red, not the foreground
   expect(errors).toEqual([]);
 });

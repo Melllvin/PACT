@@ -309,6 +309,13 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
 - **Decision** : `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`. Le preload
   expose une API typée unique (`window.pact`) ; chaque canal IPC a un schéma zod partagé
   (`src/shared/ipc.ts`) validé des deux côtés. Voir `contracts/ipc.md`.
+- **CSP** (décision utilisateur du 2026-09-24) : `default-src 'self'; script-src 'self';
+  style-src 'self' 'unsafe-inline'; img-src 'self' data:`. Les scripts restent stricts (ni inline,
+  ni `eval`). Les styles injectés sont permis : xterm en crée un par terminal pour son rendu DOM
+  (couleurs ANSI, curseur, sélection), bloqué jusque-là sans que rien ne le signale, et Radix en
+  crée pour ses dialogues (R16). Un nonce est impossible : xterm n'en pose pas, et un nonce figé
+  dans le HTML construit ne protège de rien. Risque faible : application locale sans contenu
+  distant, un style injecté n'exécute pas de code. Vérifié par `tests/e2e/terminal-styles.spec.ts`.
 
 ## R12. Tests, qualité et CI (Constitution I, II, III, V)
 
@@ -383,8 +390,8 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
     zones hors tuiles.
   - Couleurs passées depuis les tokens R10 (`--border` au repos, `--action` actif), jamais codées
     en dur dans l'appel.
-  - CSP stricte (R11) : aucun chargement réseau, ni `eval` ; canvas autorisé. Vérifié par le test
-    e2e CSP existant.
+  - CSP (R11) : aucun chargement réseau, ni `eval`, ni script inline ; canvas autorisé. Vérifié
+    par le test e2e CSP existant.
 - **Tests** : jsdom n'a ni canvas ni WebGL. Les enrobages sont testés (mouvement réduit, couleurs
   issues des tokens, absence dans les tuiles) avec `gsap` simulé ; le rendu réel est vérifié par
   captures Playwright à 1024 px et en grand écran. Le code copié tel quel est exclu de la
@@ -431,10 +438,9 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
   détaillé, reprise) utilisent directement shadcn. Les tests visent des rôles et noms accessibles
   (`getByRole`) : ils restent valides et servent de filet de non-régression.
 - **Risques à vérifier dès l'installation (tests d'abord)** :
-  - **CSP** (`default-src 'self'`, R11) : certaines primitives Radix injectent une balise
-    `<style>` (verrou de défilement des dialogues) ; le test smoke exige zéro erreur console.
-    Si c'est bloqué : nonce de style servi par le main, sinon décision de l'utilisateur sur
-    `style-src 'unsafe-inline'`. Jamais d'assouplissement silencieux.
+  - **CSP** : réglée en R11 (styles injectés permis, scripts stricts), après qu'une sonde a montré
+    que la CSP bloquait déjà les styles de xterm. Le premier dialogue shadcn migré (T141) vérifie
+    l'absence d'erreur console.
   - **Terminaux bruts (FR-020)** : le reset « preflight » de Tailwind ne doit rien changer au rendu
     xterm ; vérifié par les e2e existants et une capture de tuile.
   - Performance SC-002 inchangée : Tailwind produit une feuille statique au build.
