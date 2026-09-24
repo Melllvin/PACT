@@ -2,8 +2,9 @@
 
 Fichier : `src/main/agents/adapters/types.ts`. Un adaptateur par famille de CLI : `claude-code`,
 `codex`, `generic` (« Autre CLI »), `fake` (tests uniquement). Ajouter un CLI = écrire un
-adaptateur qui passe la suite de tests de contrat commune
-(`tests/contract/cli-adapter.contract.test.ts`).
+adaptateur qui passe la suite de tests de contrat commune : la fonction
+`runCliAdapterContract(adapterFactory)` de `tests/contract/cli-adapter.contract.ts`, appliquée par un
+fichier `tests/contract/<adaptateur>.contract.test.ts` par adaptateur.
 
 ```ts
 export interface CliAdapter {
@@ -21,10 +22,16 @@ export interface CliAdapter {
   buildLaunch(input: LaunchInput): LaunchSpec;
   /** Construit la reprise d'une session existante (« Reprendre »). */
   buildResume(input: LaunchInput & { sessionId: string }): LaunchSpec;
-  // LaunchInput = { cwd; model; permissionLevel; sessionId?: string; port;
+  // LaunchInput = { agentId: string; executablePath: string; cwd: string;
+  //                 model: string | null; permissionLevel; sessionId?: string; port: number;
   //                 hook: { url: string; token: string } }
-  // LaunchSpec  = { file: string; args: string[]; env: Record<string, string> }
+  //  - executablePath : chemin complet résolu à la détection (CliDefinition.resolvedPath)
+  // LaunchSpec  = { file: string; args: string[]; env: Record<string, string>; cwd: string;
+  //                 windowsVerbatimArguments: boolean }
+  //  - windowsVerbatimArguments : args déjà échappés pour cmd.exe (shims .cmd/.bat, obligation 6)
   //  - env contient toujours PORT, PACT_PORT, PACT_HOOK_URL, PACT_AGENT_TOKEN, PACT_AGENT_ID
+  //    (PACT_AGENT_ID = input.agentId)
+  //  - cwd = input.cwd (worktree de l'agent, obligation 1)
 
   /** Traduit un événement de hook reçu (corps JSON) en signal d'état normalisé. */
   mapHookEvent(payload: unknown): AgentSignal | null;

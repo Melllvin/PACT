@@ -16,5 +16,10 @@
     "scripts/**/*.ts",
     "*.config.ts"
   ],
-  "exclude": ["tests/unit/renderer/**"]
+  "exclude": [
+    "tests/unit/renderer/**",
+    "tests/setup/renderer.ts",
+    "tests/e2e/**",
+    "playwright.config.ts"
+  ]
 }

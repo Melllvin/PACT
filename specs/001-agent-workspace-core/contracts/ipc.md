@@ -43,3 +43,13 @@ preload (côté renderer) et dans le handler (côté main). Le renderer n'a acc�
   résolution côté main (pas de commande shell arbitraire, sauf `cli:add` qui enregistre une
   commande choisie explicitement par l'utilisateur).
 - Toute erreur est renvoyée sous la forme `{ code, message }` avec un message affichable.
+  Codes : `INVALID_INPUT`, `NOT_A_REPO`, `ALREADY_OPEN` (avec `workspaceId` de l'onglet existant,
+  FR-004), `LIMIT`, `BRANCH_CONFLICT`, `PORT_CONFLICT`, `NOT_FOUND`, `CLONE_FAILED`, `INTERNAL`.
+- Les chemins reçus du renderer (`workspace:open`, `workspace:initRepo`, `workspace:clone`)
+  doivent être absolus.
+
+## AgentDraft
+
+Un agent à lancer (mode rapide ou détaillé, FR-011) : `{ cliId, model, permissionLevel,
+baseBranch, branch, port, startCommand }`. `null` signifie « hérité de Commun à tous » ou « choisi
+automatiquement » (branche `agent/<cli>-<n>`, port 3000 + position).

@@ -1,0 +1,4 @@
+{
+  "output": ["Renommage de la branche"],
+  "renameBranch": "feature/login"
+}

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "outDir": ".tsbuild/e2e"
+  },
+  "include": ["tests/e2e/**/*.ts", "playwright.config.ts"]
+}

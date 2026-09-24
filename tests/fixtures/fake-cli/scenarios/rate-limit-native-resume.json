@@ -1,0 +1,8 @@
+{
+  "output": ["quota_auto_resume_fired"],
+  "hooks": [
+    {
+      "type": "native-resume"
+    }
+  ]
+}

@@ -55,9 +55,10 @@ function main([baseSummary, baseRoot, headSummary, headRoot]: string[]) {
   const read = (path: string) => JSON.parse(readFileSync(path, 'utf8')) as CoverageSummary;
   const regressions = findRegressions(read(baseSummary), baseRoot, read(headSummary), headRoot);
   for (const r of regressions) {
-    console.error(
-      `::error file=${r.file}::${r.metric} coverage dropped from ${String(r.base)}% to ${String(r.head)}%`,
-    );
+    const message = `${r.metric} coverage dropped from ${String(r.base)}% to ${String(r.head)}%`;
+    // Plain line first: GitHub turns the annotation into a message without the file name.
+    console.error(`${r.file}: ${message}`);
+    console.error(`::error file=${r.file}::${message}`);
   }
   if (regressions.length === 0) console.log('Coverage did not decrease on any existing file.');
   return regressions.length === 0 ? 0 : 1;

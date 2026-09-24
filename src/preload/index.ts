@@ -1,8 +1,4 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
+import { createPactApi } from './api';
 
-// Typed IPC channels are added with contracts/ipc.md (T035).
-const api = {};
-
-export type PactApi = typeof api;
-
-contextBridge.exposeInMainWorld('pact', api);
+contextBridge.exposeInMainWorld('pact', createPactApi(ipcRenderer));
