@@ -10,10 +10,10 @@ import styles from './shell.module.css';
 type Props = {
   store: AppStore;
   /** Resolves a dropped file to its path (window.pact.pathForFile in the app). */
-  getPathForFile?: (file: File) => string;
+  getPathForFile: (file: File) => string;
 };
 
-export function App({ store, getPathForFile = () => '' }: Props) {
+export function App({ store, getPathForFile }: Props) {
   const state = useStore(store);
   const { status, error, workspaces, activeTab } = state;
   const [now] = useState(() => new Date());

@@ -259,6 +259,30 @@ describe('US1 actions', () => {
     expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w9' });
   });
 
+  it('keeps the path when initializing a repository fails', async () => {
+    const { store } = setup({
+      'workspace:initRepo': () => {
+        throw new Error('Permission refusée');
+      },
+    });
+    await store.getState().initRepository('/locked');
+    expect(store.getState().openError).toEqual({
+      code: 'INTERNAL',
+      message: 'Permission refusée',
+      path: '/locked',
+    });
+  });
+
+  it('reports a clone that cannot start', async () => {
+    const { store } = setup({
+      'workspace:clone': () => {
+        throw new Error('Destination invalide');
+      },
+    });
+    await store.getState().startClone('x', '/dest');
+    expect(store.getState().clone).toEqual({ status: 'failed', message: 'Destination invalide' });
+  });
+
   it('reports a failed clone', async () => {
     const { store, emit } = setup({ 'workspace:clone': () => ({ jobId: 'j1' }) });
     await store.getState().startClone('bad', '/dest');
