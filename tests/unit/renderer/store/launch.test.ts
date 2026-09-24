@@ -159,6 +159,19 @@ describe('launch flow', () => {
     expect(invoke).not.toHaveBeenCalledWith('permission:set', expect.anything());
   });
 
+  it('remembers a zero for every installed CLI, so a terminal alone is launched again (FR-010)', async () => {
+    const { store, invoke } = setup({
+      permission: { level: 'always-allow', autoResume: true, scope: 'global' },
+    });
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    await store.getState().requestLaunch({ agents: {}, freeTerminal: 1 });
+    const launch = invoke.mock.calls.find(([channel]) => channel === 'agents:launch')?.[1];
+    expect(launch).toMatchObject({
+      counters: { freeTerminal: 1, 'claude-code': 0, codex: 0 },
+    });
+  });
+
   it('shows a refused launch in the launcher (LIMIT)', async () => {
     const { store } = setup({
       permission: { level: 'always-allow', autoResume: true, scope: 'global' },

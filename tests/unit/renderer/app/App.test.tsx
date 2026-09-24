@@ -81,6 +81,40 @@ describe('App', () => {
   });
 });
 
+describe('App terminals', () => {
+  it('frees the terminal of a free terminal that is gone', async () => {
+    const shell = {
+      id: '00000000-0000-4000-8000-000000000007',
+      workspaceId: 'w1',
+      cwd: '/w1',
+      shell: '/bin/zsh',
+    };
+    let exit: (event: { termId: string; code: number | null }) => void = () => undefined;
+    const store = createAppStore({
+      invoke: vi.fn(() =>
+        Promise.resolve({
+          workspaces: [{ ...workspace('w1', 'w1'), freeTerminals: [shell] }],
+          recents: [],
+          clis: [],
+          permission: null,
+        }),
+      ),
+      on: (channel: string, listener: typeof exit) => {
+        if (channel === 'term:exit') exit = listener;
+        return () => undefined;
+      },
+    } as unknown as PactApi);
+    const terminals = { attach: vi.fn(() => () => undefined), dispose: vi.fn() };
+    render(<App store={store} getPathForFile={() => ''} terminals={terminals} />);
+    expect(await screen.findByRole('article', { name: 'Terminal libre' })).toBeDefined();
+    act(() => {
+      exit({ termId: shell.id, code: 0 });
+    });
+    expect(screen.queryByRole('article', { name: 'Terminal libre' })).toBeNull();
+    expect(terminals.dispose).toHaveBeenCalledWith(shell.id);
+  });
+});
+
 describe('App wiring of the home actions', () => {
   type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
   const setup = (workspaces: Workspace[] = []) => {

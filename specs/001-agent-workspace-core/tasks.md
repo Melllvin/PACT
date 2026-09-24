@@ -430,3 +430,12 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 - [x] T131 Surveiller le dossier de chaque workspace ouvert avec `fs.watch` (dossier parent) pour signaler une disparition aussitôt, en gardant la vérification toutes les 3 s en filet de sécurité, dans `src/main/workspace/workspace-service.ts` (test dans `tests/integration/workspace/workspace-service.test.ts`) per T043 (partial)
 - [x] T132 Aligner l’onglet d’accueil sur la maquette 1a : libellé « Nouvel onglet » et bouton ✕ pour le fermer quand un workspace est ouvert (retour à ce workspace), dans `src/renderer/app/TabBar.tsx` et `src/renderer/store/app-store.ts` (tests dans `tests/unit/renderer/app/shell.test.tsx`) per FR-002 / maquette 1a (partial)
+
+---
+
+## Phase 14: Convergence
+
+- [ ] T133 Tests puis implémentation : mémoriser un compteur (0 compris) pour chaque CLI installé à chaque lancement, pour qu'un lancement « Terminal libre » seul ne repropose pas 1 agent ensuite, dans `tests/unit/renderer/store/launch.test.ts` et `src/renderer/store/app-store.ts` per US2/AC7, FR-010 (partial)
+- [ ] T134 Tests puis implémentation : à `term:exit` d'un terminal libre, retirer sa tuile du workspace et libérer son xterm (`registry.dispose`), dans `tests/unit/renderer/store/app-store.test.ts`, `tests/unit/renderer/app/App.test.tsx`, `src/renderer/store/app-store.ts` et `src/renderer/app/App.tsx` per T063, US2/AC5 (partial)
+- [ ] T135 Consigner dans `specs/001-agent-workspace-core/research.md` R2 que xterm utilise le rendu DOM par défaut (texte lisible par les technologies d'assistance et l'e2e, plus d'addon canvas dans xterm 6), WebGL restant disponible via `createXterm({ webgl: true })` per plan R2 / T068 (contradicts)
+- [ ] T136 Consigner dans `specs/001-agent-workspace-core/data-model.md` (transitions) qu'un processus terminé sans demande de PACT passe en `error` « à reprendre » même avec le code 0 per data-model AgentState (partial)
