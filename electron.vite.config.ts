@@ -18,7 +18,14 @@ export default defineConfig({
   main: {
     resolve: { alias: shared },
     build: {
-      rollupOptions: { input: resolve('src/main/index.ts'), external: ['node-pty'] },
+      rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          // Standalone hook relay run by agent CLIs (ELECTRON_RUN_AS_NODE=1).
+          'hook-bridge': resolve('src/main/agents/hook-bridge.ts'),
+        },
+        external: ['node-pty'],
+      },
     },
   },
   preload: {
