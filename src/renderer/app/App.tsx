@@ -85,6 +85,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
         {launcher?.step === 'permission' && (
           <PermissionsDialog
             agentCount={Object.values(launcher.counts.agents).reduce((sum, n) => sum + n, 0)}
+            clis={state.clis.filter((cli) => (launcher.counts.agents[cli.id] ?? 0) > 0)}
             onConfirm={(choice) => void state.confirmPermission(choice)}
             onCancel={state.closeLauncher}
           />

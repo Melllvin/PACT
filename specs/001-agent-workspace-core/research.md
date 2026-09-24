@@ -222,6 +222,13 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
 - **Pas de `bypassPermissions` ni de `danger-full-access` dans le socle** : aucun des deux ne
   confine l'agent, alors que l'écran 1m promet « les agents agissent seuls dans leur worktree ».
   Le libellé de 1m sera ajusté à ce que garantit réellement chaque CLI (FR-012).
+- **Écritures hors worktree (Claude Code)** : Claude Code n'écrit que dans le dossier où il démarre
+  (documentation Claude Code, « Security » : restriction d'écriture) ; au-delà, il demande, même en
+  `acceptEdits`. PACT le lance avec `cwd` = worktree, sans `--add-dir` ni `additionalDirectories`,
+  ce que fige le test de contrat (T138). Une règle `permissions.ask` « hors worktree » n'est pas
+  exprimable (pas de négation dans la syntaxe des règles) et n'est donc pas ajoutée. Une commande
+  Bash qui écrit ailleurs reste soumise à l'approbation des commandes. Non revérifié à la main
+  sur la machine de dev : à confirmer lors de la validation avec les vrais CLI.
 - **`writable_roots`** : un worktree Git stocke ses métadonnées dans `<repo>/.git/worktrees/<nom>`,
   hors du dossier du worktree ; sans cette racine en écriture, le sandbox `workspace-write` de
   Codex empêcherait `git commit`. Vérifié par un test d'intégration avec le vrai Codex (optionnel

@@ -68,6 +68,17 @@ describe('Claude Code launch arguments', () => {
     expect(settingsOf(allowAll).permissions).toBeUndefined();
   });
 
+  // Claude Code only writes in the folder it starts in; beyond it, it asks, even in acceptEdits.
+  // PACT keeps that folder the worktree and never widens it (T138, research.md R5).
+  it('leaves writes outside the worktree to an explicit approval', () => {
+    for (const permissionLevel of ['always-allow', 'ask-sensitive', 'always-ask'] as const) {
+      const spec = create().buildLaunch({ ...input, permissionLevel });
+      expect(spec.cwd).toBe(input.cwd);
+      expect(spec.args).not.toContain('--add-dir');
+      expect(spec.args.join(' ')).not.toContain('additionalDirectories');
+    }
+  });
+
   it('never bypasses permissions, whatever the level', () => {
     for (const permissionLevel of ['always-allow', 'ask-sensitive', 'always-ask'] as const) {
       const line = create()

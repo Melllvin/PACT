@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../../../src/renderer/app/App';
 import { createAppStore } from '../../../../src/renderer/store/app-store';
 import type { PactApi } from '../../../../src/shared/ipc';
-import type { Workspace } from '../../../../src/shared/model';
+import type { CliDefinition, Workspace } from '../../../../src/shared/model';
 
 const workspace = (id: string, name: string): Workspace => ({
   id,
@@ -241,7 +241,7 @@ describe('App wiring of the home actions', () => {
 
 describe('App launch flow (US2)', () => {
   type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
-  const fake = {
+  const fake: CliDefinition = {
     id: 'fake',
     name: 'Faux CLI',
     adapter: 'fake',
@@ -251,12 +251,12 @@ describe('App launch flow (US2)', () => {
     origin: 'detected',
     status: 'installed',
     models: [],
-  } as const;
-  const setup = (workspaces: Workspace[]) => {
+  };
+  const setup = (workspaces: Workspace[], clis: CliDefinition[] = [fake]) => {
     const invoke = vi.fn<Invoke>((channel) => {
       switch (channel) {
         case 'app:getState':
-          return Promise.resolve({ workspaces, recents: [], clis: [fake], permission: null });
+          return Promise.resolve({ workspaces, recents: [], clis, permission: null });
         case 'cli:redetect':
           return Promise.resolve([fake]);
         default:
@@ -283,6 +283,22 @@ describe('App launch flow (US2)', () => {
       expect.objectContaining({ workspaceId: 'w1', freeTerminals: 0 }),
     );
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('describes the permission levels for the launched CLIs only', async () => {
+    const codex: CliDefinition = { ...fake, id: 'codex', name: 'Codex', adapter: 'codex' };
+    const claude: CliDefinition = {
+      ...fake,
+      id: 'claude-code',
+      name: 'Claude Code',
+      status: 'missing',
+    };
+    setup([workspace('w1', 'w1')], [fake, codex, claude]);
+    await userEvent.click(await screen.findByRole('button', { name: /Ajouter des agents/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Lancer 1 agent' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Autorisations des agents' });
+    expect(dialog.textContent).toContain('Faux CLI');
+    expect(dialog.textContent).not.toMatch(/Codex|Claude Code/);
   });
 
   it('closes the launcher and the permissions dialog', async () => {
