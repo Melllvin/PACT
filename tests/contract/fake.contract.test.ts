@@ -91,6 +91,15 @@ describe('adapter registry', () => {
   it('only offers the fake adapter in test mode, so e2e runs never depend on installed CLIs', () => {
     expect(ids({ PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI })).toEqual(['fake']);
   });
+
+  it('runs the fake CLI with the Node given by the e2e harness (Electron has no console on Windows)', async () => {
+    const [fake] = createAdapters({
+      env: { PACT_TEST_MODE: '1', PACT_FAKE_CLI: FAKE_CLI, PACT_FAKE_NODE: '/usr/bin/node' },
+      platform: 'darwin',
+      bridge,
+    });
+    expect((await fake?.detect({}))?.resolvedPath).toBe('/usr/bin/node');
+  });
 });
 
 describe('default command runner', () => {

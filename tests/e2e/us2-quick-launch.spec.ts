@@ -18,7 +18,13 @@ const gitEnv = {
 const git = (cwd: string, ...args: string[]) =>
   execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8' }).trim();
 
-const env = { PACT_FAKE_CLI: FAKE_CLI, FAKE_CLI_SCENARIO: scenarioPath('prompt-then-done') };
+// The fake CLI runs with Playwright's Node: Electron in Node mode gets no console in a Windows
+// pseudo-terminal, so it would print nothing and see its input closed.
+const env = {
+  PACT_FAKE_CLI: FAKE_CLI,
+  PACT_FAKE_NODE: process.execPath,
+  FAKE_CLI_SCENARIO: scenarioPath('prompt-then-done'),
+};
 
 let root: string;
 let repo: string;
