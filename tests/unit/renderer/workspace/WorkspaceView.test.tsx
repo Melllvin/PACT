@@ -170,7 +170,8 @@ describe('WorkspaceView', () => {
         actions={actions}
       />,
     );
-    await user.click(screen.getByRole('button', { name: '✓ Autoriser' }));
+    const tiles = within(screen.getByRole('region', { name: 'Tuiles' }));
+    await user.click(tiles.getByRole('button', { name: '✓ Autoriser' }));
     await user.click(screen.getByRole('button', { name: 'Journal' }));
     await user.click(screen.getByRole('button', { name: 'Relancer' }));
     await user.click(screen.getByRole('button', { name: 'Reprendre' }));

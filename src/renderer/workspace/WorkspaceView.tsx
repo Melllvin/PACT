@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
+import { deriveTodos } from '../../shared/todo';
 import { Toolbar } from '../app/Toolbar';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
+import { TodoColumn } from '../todo/TodoColumn';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { EmptyWorkspace } from './EmptyWorkspace';
 import styles from './workspace.module.css';
@@ -51,55 +54,68 @@ export function WorkspaceView({
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   const cliName = (id: string) => clis.find((cli) => cli.id === id)?.name ?? id;
   const canAdd = agents.length < MAX_AGENTS;
+  const [todoOpen, setTodoOpen] = useState(true);
+  const todos = deriveTodos(workspace, cliName);
 
   return (
     <>
       {/* The À faire column and its button appear with the first agent (FR-006). */}
-      <Toolbar todoCount={0} showTodo={hasAgents} onAddAgents={launch} />
-      <section aria-label={workspace.name} className={styles.stage}>
-        {!available && (
-          <p role="alert" className={styles.unavailable}>
-            Dossier introuvable : {workspace.path}. Le workspace reviendra dès que le dossier sera
-            de retour.
-          </p>
-        )}
-        {actionError && (
-          <p role="alert" className={styles.unavailable}>
-            {actionError}
-          </p>
-        )}
-        {available && !hasTiles && <EmptyWorkspace onAddAgents={launch} />}
-        {available && hasTiles && (
-          <TileGrid onAdd={canAdd ? launch : undefined}>
-            {agents.map((agent) => (
-              <Tile
-                key={agent.id}
-                agent={agent}
-                name={cliName(agent.cliId)}
-                terminals={terminals}
-                onAnswer={(answer) => {
-                  actions.onAnswer(agent.id, answer);
-                }}
-                onResume={() => {
-                  actions.onResume(agent.id);
-                }}
-                onRestart={() => {
-                  actions.onRestart(agent.id);
-                }}
-                onLog={() => {
-                  actions.onLog(agent.id);
-                }}
-                onClose={() => {
-                  actions.onClose(agent.id);
-                }}
-              />
-            ))}
-            {workspace.freeTerminals.map((terminal) => (
-              <FreeTerminalTile key={terminal.id} terminal={terminal} terminals={terminals} />
-            ))}
-          </TileGrid>
-        )}
-      </section>
+      <Toolbar
+        todoCount={todos.length}
+        showTodo={hasAgents}
+        todoOpen={todoOpen}
+        onToggleTodo={() => {
+          setTodoOpen((open) => !open);
+        }}
+        onAddAgents={launch}
+      />
+      <div className={styles.body}>
+        <section aria-label={workspace.name} className={styles.stage}>
+          {!available && (
+            <p role="alert" className={styles.unavailable}>
+              Dossier introuvable : {workspace.path}. Le workspace reviendra dès que le dossier sera
+              de retour.
+            </p>
+          )}
+          {actionError && (
+            <p role="alert" className={styles.unavailable}>
+              {actionError}
+            </p>
+          )}
+          {available && !hasTiles && <EmptyWorkspace onAddAgents={launch} />}
+          {available && hasTiles && (
+            <TileGrid onAdd={canAdd ? launch : undefined}>
+              {agents.map((agent) => (
+                <Tile
+                  key={agent.id}
+                  agent={agent}
+                  name={cliName(agent.cliId)}
+                  terminals={terminals}
+                  onAnswer={(answer) => {
+                    actions.onAnswer(agent.id, answer);
+                  }}
+                  onResume={() => {
+                    actions.onResume(agent.id);
+                  }}
+                  onRestart={() => {
+                    actions.onRestart(agent.id);
+                  }}
+                  onLog={() => {
+                    actions.onLog(agent.id);
+                  }}
+                  onClose={() => {
+                    actions.onClose(agent.id);
+                  }}
+                />
+              ))}
+              {workspace.freeTerminals.map((terminal) => (
+                <FreeTerminalTile key={terminal.id} terminal={terminal} terminals={terminals} />
+              ))}
+            </TileGrid>
+          )}
+        </section>
+        {hasAgents && todoOpen && <TodoColumn todos={todos} agents={agents} {...actions} />}
+      </div>
     </>
   );
 }

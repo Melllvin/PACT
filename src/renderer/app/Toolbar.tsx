@@ -7,11 +7,20 @@ import styles from './shell.module.css';
 type Props = {
   todoCount: number;
   showTodo?: boolean;
+  /** Whether the À faire column is shown; closed, the button keeps the count (US4). */
+  todoOpen?: boolean;
+  onToggleTodo?: () => void;
   onAddAgents?: (() => void) | undefined;
 };
 
 /** Workspace views; Comparer and Revue stay visible but inactive in the core (FR-006). */
-export function Toolbar({ todoCount, showTodo = true, onAddAgents }: Props) {
+export function Toolbar({
+  todoCount,
+  showTodo = true,
+  todoOpen = false,
+  onToggleTodo,
+  onAddAgents,
+}: Props) {
   return (
     <nav role="toolbar" aria-label="Vues" className={styles.toolbar}>
       <button className={styles.viewButton} aria-pressed>
@@ -25,7 +34,7 @@ export function Toolbar({ todoCount, showTodo = true, onAddAgents }: Props) {
       </button>
       <span className={styles.spacer} />
       {showTodo && (
-        <button className={styles.viewButton}>
+        <button className={styles.viewButton} aria-pressed={todoOpen} onClick={onToggleTodo}>
           À faire <span className={styles.count}>{todoCount}</span>
         </button>
       )}

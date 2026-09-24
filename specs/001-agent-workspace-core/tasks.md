@@ -200,16 +200,16 @@ des deux côtés ; colonne fermée → badge ; onglet inactif → ◆ puis ✕.
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T080 [P] [US4] Tests de la dérivation pure `deriveTodos` : tri « answer, rate-limit, prompt, info » (data-model TodoItem), id `<agentId>:<kind>`, actions identiques à la tuile, élément « Donner une consigne · <CLI> · tapez dans le terminal » pour chaque agent en `awaiting-prompt`, « En cours ▸ <shell> — <branche> » pour le terminal libre dans `tests/unit/shared/todo.test.ts`
-- [ ] T081 [P] [US4] Tests de l'indicateur d'onglet : ◆ si au moins un agent `awaiting-answer`, sinon ✕ si au moins un agent `error`, sinon rien (FR-030) dans `tests/unit/shared/tab-indicator.test.ts`
-- [ ] T082 [P] [US4] Tests de la colonne : couleur d'agent sur chaque élément, boutons fonctionnels, fermeture → bouton en clair avec badge du nombre d'éléments, « Rien à faire · vous serez prévenu » si vide, absente sans agent dans `tests/unit/renderer/todo/TodoColumn.test.tsx`
-- [ ] T083 [P] [US4] Test e2e : deux agents fake `ask-permission` → deux « ◆ Répondre » avant les « Donner une consigne » ; réponse depuis la colonne → disparition sur la tuile en < 1 s ; second workspace actif → ◆ sur l'onglet du premier ; crash → ✕ dans `tests/e2e/us4-todo.spec.ts`
+- [X] T080 [P] [US4] Tests de la dérivation pure `deriveTodos` : tri « answer, rate-limit, prompt, info » (data-model TodoItem), id `<agentId>:<kind>`, actions identiques à la tuile, élément « Donner une consigne · <CLI> · tapez dans le terminal » pour chaque agent en `awaiting-prompt`, « En cours ▸ <shell> — <branche> » pour le terminal libre dans `tests/unit/shared/todo.test.ts`
+- [X] T081 [P] [US4] Tests de l'indicateur d'onglet : ◆ si au moins un agent `awaiting-answer`, sinon ✕ si au moins un agent `error`, sinon rien (FR-030) dans `tests/unit/shared/tab-indicator.test.ts`
+- [X] T082 [P] [US4] Tests de la colonne : couleur d'agent sur chaque élément, boutons fonctionnels, fermeture → bouton en clair avec badge du nombre d'éléments, « Rien à faire · vous serez prévenu » si vide, absente sans agent dans `tests/unit/renderer/todo/TodoColumn.test.tsx`
+- [X] T083 [P] [US4] Test e2e : deux agents fake `ask-permission` → deux « ◆ Répondre » avant les « Donner une consigne » ; réponse depuis la colonne → disparition sur la tuile en < 1 s ; second workspace actif → ◆ sur l'onglet du premier ; crash → ✕ dans `tests/e2e/us4-todo.spec.ts`
 
 ### Implementation for User Story 4
 
-- [ ] T084 [P] [US4] Implémenter `deriveTodos` dans `src/shared/todo.ts` et l'indicateur d'onglet dans `src/shared/tab-indicator.ts`
-- [ ] T085 [US4] Implémenter la colonne À faire (entrée des éléments en se dépliant) en réutilisant `TileActions` de T077 dans `src/renderer/todo/TodoColumn.tsx` et `src/renderer/todo/TodoItem.tsx`
-- [ ] T086 [US4] Ajouter le badge du bouton À faire dans `src/renderer/app/Toolbar.tsx` et les indicateurs ◆ / ✕ et le compteur ◆ de l'accueil dans `src/renderer/app/TabBar.tsx` et `src/renderer/home/Home.tsx`
+- [X] T084 [P] [US4] Implémenter `deriveTodos` dans `src/shared/todo.ts` et l'indicateur d'onglet dans `src/shared/tab-indicator.ts`
+- [X] T085 [US4] Implémenter la colonne À faire (entrée des éléments en se dépliant) en réutilisant `TileActions` de T077 dans `src/renderer/todo/TodoColumn.tsx` et `src/renderer/todo/TodoItem.tsx`
+- [X] T086 [US4] Ajouter le badge du bouton À faire dans `src/renderer/app/Toolbar.tsx` et les indicateurs ◆ / ✕ et le compteur ◆ de l'accueil dans `src/renderer/app/TabBar.tsx` et `src/renderer/home/Home.tsx`
 
 **Checkpoint**: US4 fonctionnelle, US1–US3 toujours vertes
 
