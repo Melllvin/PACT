@@ -70,6 +70,9 @@ void app.whenReady().then(async () => {
     onState: (event) => {
       emit('agent:state', event);
     },
+    onBranch: (event) => {
+      emit('agent:branch', event);
+    },
   });
   const freeTerminals = new FreeTerminals({
     workspaces,
