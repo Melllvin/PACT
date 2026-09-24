@@ -20,6 +20,16 @@ const fakeIpcRenderer = () => {
   };
 };
 
+describe('window.pact.pathForFile', () => {
+  it('resolves a dropped file to its path through webUtils', () => {
+    const getPathForFile = vi.fn(() => '/Users/me/depot');
+    const api = createPactApi(fakeIpcRenderer(), { getPathForFile });
+    const file = new File([''], 'depot');
+    expect(api.pathForFile(file)).toBe('/Users/me/depot');
+    expect(getPathForFile).toHaveBeenCalledWith(file);
+  });
+});
+
 describe('window.pact', () => {
   it('is exposed by the preload through the context bridge', async () => {
     const exposeInMainWorld = vi.fn();

@@ -116,3 +116,20 @@ describe('Legend', () => {
       expect(text).toContain(item);
   });
 });
+
+describe('TabBar closing', () => {
+  it('closes a workspace tab with its ✕ button', async () => {
+    const onClose = vi.fn();
+    render(
+      <TabBar
+        workspaces={tabs}
+        activeTab={{ kind: 'workspace', id: 'w1' }}
+        onSelect={vi.fn()}
+        onHome={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Fermer api-facturation' }));
+    expect(onClose).toHaveBeenCalledWith('w2');
+  });
+});

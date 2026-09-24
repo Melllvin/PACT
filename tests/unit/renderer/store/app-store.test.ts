@@ -155,3 +155,126 @@ describe('app store', () => {
     expect(listenerCount()).toBe(0);
   });
 });
+
+describe('US1 actions', () => {
+  type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
+  const setup = (handlers: Record<string, (input: unknown) => unknown>) => {
+    const { api, emit } = fakeApi();
+    const invoke = vi.fn<Invoke>((channel, input) => {
+      if (channel === 'app:getState') {
+        return Promise.resolve({ workspaces: [], recents: [], clis: [], permission: null });
+      }
+      const handler = handlers[channel];
+      return handler
+        ? Promise.resolve().then(() => handler(input))
+        : Promise.reject(new Error(channel));
+    });
+    (api as unknown as { invoke: Invoke }).invoke = invoke;
+    const store = createAppStore(api);
+    store.getState().connect();
+    return { store, invoke, emit };
+  };
+
+  it('opens a repository and selects its new tab', async () => {
+    const { store } = setup({ 'workspace:open': () => workspace('w1') });
+    await store.getState().load();
+    await store.getState().openRepository('/w1');
+    expect(store.getState().workspaces.map((w) => w.id)).toEqual(['w1']);
+    expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w1' });
+    expect(store.getState().openError).toBeNull();
+  });
+
+  it('switches to the existing tab when the repository is already open (FR-004)', async () => {
+    const { store } = setup({
+      'workspace:open': () => {
+        throw { code: 'ALREADY_OPEN', message: 'Déjà ouvert', workspaceId: 'w1' };
+      },
+    });
+    store.setState({ workspaces: [workspace('w1')], activeTab: { kind: 'home' } });
+    await store.getState().openRepository('/w1');
+    expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w1' });
+    expect(store.getState().openError).toBeNull();
+  });
+
+  it('keeps the refused path so the home screen can offer to initialize it', async () => {
+    const { store } = setup({
+      'workspace:open': () => {
+        throw { code: 'NOT_A_REPO', message: '« notes » n’est pas un dépôt Git.' };
+      },
+    });
+    await store.getState().openRepository('/notes');
+    expect(store.getState().openError).toEqual({
+      code: 'NOT_A_REPO',
+      message: '« notes » n’est pas un dépôt Git.',
+      path: '/notes',
+    });
+    expect(store.getState().activeTab).toEqual({ kind: 'home' });
+  });
+
+  it('initializes a repository and opens it', async () => {
+    const { store, invoke } = setup({ 'workspace:initRepo': () => workspace('w2') });
+    store.setState({ openError: { code: 'NOT_A_REPO', message: 'x', path: '/w2' } });
+    await store.getState().initRepository('/w2');
+    expect(invoke).toHaveBeenCalledWith('workspace:initRepo', { path: '/w2' });
+    expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w2' });
+    expect(store.getState().openError).toBeNull();
+  });
+
+  it('opens the folder chosen in the native picker, and nothing when cancelled', async () => {
+    const picked: (string | null)[] = ['/w1', null];
+    const { store, invoke } = setup({
+      'dialog:pickFolder': () => picked.shift(),
+      'workspace:open': () => workspace('w1'),
+    });
+    await store.getState().pickRepository();
+    expect(invoke).toHaveBeenCalledWith('dialog:pickFolder', { purpose: 'open-repository' });
+    expect(store.getState().workspaces).toHaveLength(1);
+    await store.getState().pickRepository();
+    expect(invoke.mock.calls.filter(([c]) => c === 'workspace:open')).toHaveLength(1);
+  });
+
+  it('asks for a clone destination', async () => {
+    const { store, invoke } = setup({ 'dialog:pickFolder': () => '/dest' });
+    expect(await store.getState().pickCloneDestination()).toBe('/dest');
+    expect(invoke).toHaveBeenCalledWith('dialog:pickFolder', { purpose: 'clone-destination' });
+  });
+
+  it('follows a clone from progress to the opened workspace', async () => {
+    const { store, emit } = setup({ 'workspace:clone': () => ({ jobId: 'j1' }) });
+    await store.getState().startClone('git@x:y.git', '/dest');
+    expect(store.getState().clone).toEqual({ status: 'running', percent: 0, phase: 'Démarrage' });
+
+    emit('clone:progress', { jobId: 'other', percent: 90, phase: 'x' });
+    expect(store.getState().clone).toMatchObject({ percent: 0 });
+    emit('clone:progress', { jobId: 'j1', percent: 42, phase: 'Réception d’objets' });
+    expect(store.getState().clone).toEqual({
+      status: 'running',
+      percent: 42,
+      phase: 'Réception d’objets',
+    });
+    emit('clone:progress', { jobId: 'j1', workspace: workspace('w9') });
+    expect(store.getState().clone).toBeNull();
+    expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w9' });
+  });
+
+  it('reports a failed clone', async () => {
+    const { store, emit } = setup({ 'workspace:clone': () => ({ jobId: 'j1' }) });
+    await store.getState().startClone('bad', '/dest');
+    emit('clone:progress', { jobId: 'j1', error: { code: 'CLONE_FAILED', message: 'Not found' } });
+    expect(store.getState().clone).toEqual({ status: 'failed', message: 'Not found' });
+  });
+
+  it('closes a workspace tab and falls back to another tab or home', async () => {
+    const { store, invoke } = setup({ 'workspace:close': () => undefined });
+    store.setState({
+      workspaces: [workspace('w1'), workspace('w2')],
+      activeTab: { kind: 'workspace', id: 'w2' },
+    });
+    await store.getState().closeWorkspace('w2');
+    expect(invoke).toHaveBeenCalledWith('workspace:close', { id: 'w2' });
+    expect(store.getState().activeTab).toEqual({ kind: 'workspace', id: 'w1' });
+    await store.getState().closeWorkspace('w1');
+    expect(store.getState().activeTab).toEqual({ kind: 'home' });
+    expect(store.getState().workspaces).toEqual([]);
+  });
+});

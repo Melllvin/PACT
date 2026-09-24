@@ -38,6 +38,14 @@ describe('App', () => {
     expect(screen.getByRole('toolbar')).toBeDefined();
   });
 
+  it('shows the home screen on the home tab and the workspace on its tab', async () => {
+    const store = storeWith([workspace('w1', 'atelier-web')]);
+    render(<App store={store} />);
+    expect(await screen.findByRole('region', { name: 'atelier-web' })).toBeDefined();
+    await userEvent.click(screen.getByRole('button', { name: 'Nouvel onglet' }));
+    expect(screen.getByRole('heading', { name: 'Ouvrir un workspace' })).toBeDefined();
+  });
+
   it('hides the workspace toolbar on the home tab', async () => {
     const store = storeWith([workspace('w1', 'atelier-web')]);
     render(<App store={store} />);
