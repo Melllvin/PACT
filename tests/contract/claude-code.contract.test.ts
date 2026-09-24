@@ -199,6 +199,12 @@ describe('Claude Code hook payloads (captured in T049)', () => {
     ).toEqual({ type: 'awaiting-answer', summary: 'WebFetch', ruleKey: 'WebFetch' });
   });
 
+  it('allows a request from the PermissionRequest hook reply (« Toujours pour ce worktree »)', () => {
+    expect(adapter.permissionDecision('allow')).toEqual({
+      hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
+    });
+  });
+
   it('Notification permission_prompt → awaiting-answer; idle_prompt is not a new state', () => {
     expect(
       adapter.mapHookEvent({

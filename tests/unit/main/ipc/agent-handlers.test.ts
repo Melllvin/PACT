@@ -97,9 +97,15 @@ describe('tile actions (US3)', () => {
     await services['agent:answer']({ agentId, answer: 'allow' });
     await services['agent:resume']({ agentId });
     await services['agent:restart']({ agentId });
-    expect(deps.agents.answer).toHaveBeenCalledWith(agentId, 'allow');
+    expect(deps.agents.answer).toHaveBeenCalledWith(agentId, 'allow', false);
     expect(deps.agents.resume).toHaveBeenCalledWith(agentId);
     expect(deps.agents.restart).toHaveBeenCalledWith(agentId);
+  });
+
+  it('passes « Toujours pour ce worktree » on to the answer (FR-034)', async () => {
+    const { deps, services } = setup();
+    await services['agent:answer']({ agentId, answer: 'allow', always: true });
+    expect(deps.agents.answer).toHaveBeenCalledWith(agentId, 'allow', true);
   });
 
   it('closes the agent, keeping or removing its worktree (FR-037)', async () => {
