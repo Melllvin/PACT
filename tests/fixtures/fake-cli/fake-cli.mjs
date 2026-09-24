@@ -5,7 +5,8 @@
 // Scenario fields (all optional):
 //   output: string[]                lines printed for each prompt
 //   burst: number                   extra lines printed as fast as possible
-//   permission: string              asks `? Exécuter : <cmd> (allow/deny)` and waits for the answer
+//   permission: string              asks `? Exécuter : <cmd> (allow/deny)` and waits for the answer,
+//                                   unless the hook reply already allows it (ruleKey `Bash(<cmd>)`)
 //   rateLimit: { resetAt, exit }    prints a rate-limit message; exits (code 1) or waits for "continue"
 //   hooks: object[]                 raw hook payloads posted after the output
 //   renameBranch: string            runs `git branch -m <name>` in the working directory
@@ -24,11 +25,12 @@ const scenario = JSON.parse(readFileSync(process.env.FAKE_CLI_SCENARIO ?? '', 'u
 const resumed = argValue('--resume');
 const sessionId = resumed ?? argValue('--session-id') ?? 'fake-session';
 
+/** Posts a hook payload and resolves with PACT's reply, like a blocking CLI hook. */
 async function hook(payload) {
   const url = process.env.PACT_HOOK_URL;
-  if (!url) return;
+  if (!url) return undefined;
   try {
-    await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -36,8 +38,10 @@ async function hook(payload) {
       },
       body: JSON.stringify(payload),
     });
+    return response.ok ? await response.json() : undefined;
   } catch {
     // PACT may be gone: a CLI never crashes because a hook failed.
+    return undefined;
   }
 }
 
@@ -58,8 +62,13 @@ async function runTurn(line) {
 
   if (scenario.permission) {
     console.log(`? Exécuter : ${scenario.permission} (allow/deny)`);
-    await hook({ type: 'awaiting-answer', summary: scenario.permission });
-    let answer = await nextLine();
+    const reply = await hook({
+      type: 'awaiting-answer',
+      summary: scenario.permission,
+      ruleKey: `Bash(${scenario.permission})`,
+    });
+    // Claude Code's PermissionRequest decision: no dialog left to answer.
+    let answer = reply?.hookSpecificOutput?.decision?.behavior;
     while (answer !== 'allow' && answer !== 'deny') answer = await nextLine();
     console.log(answer === 'allow' ? 'Autorisé' : 'Refusé');
   }

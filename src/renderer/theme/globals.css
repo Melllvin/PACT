@@ -1,0 +1,39 @@
+/* research.md R16 — Tailwind v4 and the shadcn/ui theme, built on the 1c tokens (R10).
+   Tailwind's preflight lives in @layer base: the unlayered CSS Modules still win over it. */
+
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './tokens.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* shadcn/ui colors map straight onto the 1c tokens: a single palette for both. */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--action);
+  --color-primary-foreground: var(--bg);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--surface);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--danger);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--action);
+  --color-waiting: var(--waiting);
+  --color-accept: var(--accept);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
+}

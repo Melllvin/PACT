@@ -92,6 +92,7 @@
 }
 
 .row button,
+.section > button,
 .drop button,
 .dialog button,
 .alert button {

@@ -50,3 +50,41 @@ describe('theme tokens', () => {
     );
   });
 });
+
+// research.md R16 — Tailwind v4 and the shadcn/ui theme, built on the 1c tokens.
+describe('Tailwind theme', () => {
+  const globals = readFileSync(join(themeDir, 'globals.css'), 'utf8');
+  const variable = (name: string) =>
+    new RegExp(`--${name}:\\s*([^;]+);`).exec(globals)?.[1]?.trim();
+
+  it('loads Tailwind, its animations and the 1c tokens, without any network request', () => {
+    expect(globals).toMatch(/@import ['"]tailwindcss['"]/);
+    expect(globals).toMatch(/@import ['"]tw-animate-css['"]/);
+    expect(globals).toMatch(/@import ['"]\.\/tokens\.css['"]/);
+    expect(globals).not.toMatch(/url\(['"]?(https?:)?\/\//);
+  });
+
+  // Straight to the Tailwind colors: shadcn's own --border would loop on the 1c --border.
+  it.each([
+    ['background', 'var(--bg)'],
+    ['foreground', 'var(--text)'],
+    ['card', 'var(--surface)'],
+    ['popover', 'var(--surface)'],
+    ['muted', 'var(--surface)'],
+    ['muted-foreground', 'var(--text-muted)'],
+    ['border', 'var(--border)'],
+    ['input', 'var(--border)'],
+    ['ring', 'var(--action)'],
+    ['primary', 'var(--action)'],
+    ['primary-foreground', 'var(--bg)'],
+    ['destructive', 'var(--danger)'],
+  ])('gives the Tailwind color %s the 1c token %s', (name, value) => {
+    expect(variable(`color-${name}`)).toBe(value);
+  });
+
+  it('keeps the 1c radius and fonts in the Tailwind theme', () => {
+    expect(variable('radius-md')).toBe('var(--radius)');
+    expect(variable('font-sans')).toBe('var(--font-ui)');
+    expect(variable('font-mono')).toBe('var(--font-mono)');
+  });
+});

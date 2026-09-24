@@ -55,3 +55,7 @@ restauration après redémarrage (SC-005) ; ◆ puis ✕ sur l'onglet inactif.
 7. Tuer le processus d'un agent (`kill` / Gestionnaire des tâches) → halo rouge → « Reprendre ».
 8. Quitter et relancer l'app → workspace et agents restaurés, mêmes couleurs, branches, ports.
 9. macOS : lancer l'app packagée depuis le Finder → Claude Code et Codex détectés.
+10. Conformité visuelle (R15) : à 1024 px puis en grand écran, comparer l'accueil, la grille 2×2 et
+    3×2 avec la colonne À faire, et le Focus à `docs/maquettes` ; la grille de points s'allume
+    autour du curseur hors des terminaux, rien ne bouge dans un terminal ; avec « Réduire les
+    animations » activé dans le système, aucun effet ne s'anime.

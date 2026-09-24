@@ -223,17 +223,21 @@ worktree ».
 **Independent Test**: Focus sur un agent, changement via pastilles, Échap → grille intacte ;
 « Toujours pour ce worktree » → demandes suivantes du même type autorisées automatiquement.
 
+### Prérequis interface (R16)
+
+- [X] T142 Tests d'abord puis installation de Tailwind v4 + shadcn/ui (research.md R16) : tests en échec pour la CSP (aucune erreur console avec un Dialog shadcn ouvert, le verrou de défilement Radix compris) et pour les terminaux bruts (rendu xterm inchangé sous le preflight) ; puis `@tailwindcss/vite` dans `electron.vite.config.ts`, alias `@/*` → `src/renderer/*` (`tsconfig.web.json`, `electron.vite.config.ts`, `vitest.config.ts`), `components.json`, `src/renderer/lib/utils.ts` (`cn`), `src/renderer/theme/globals.css` (`@import "tailwindcss"`, `tw-animate-css`, `@theme` reprenant les tokens 1c de `tokens.css`) ; aucun écran existant migré ici (T141) — fait : CSP `style-src 'self' 'unsafe-inline'` testée (smoke, couleurs ANSI sans violation) ; le test « Dialog shadcn ouvert sans erreur console » part avec le premier Dialog shadcn (T141), aucun n'existant encore ; régressions du preflight corrigées sur captures avant/après (hauteur de ligne, graisse des titres, boutons sans style)
+
 ### Tests for User Story 5 ⚠️
 
-- [ ] T087 [P] [US5] Tests du Focus : ouverture par ⤢, en-tête branche + port, onglets Terminal (actif), Aperçu et Changements (inactifs), pastilles aux couleurs des agents, « ‹ Tuiles » et Échap hors du terminal ramènent à la grille, Échap dans le terminal est transmis au CLI dans `tests/unit/renderer/focus/FocusView.test.tsx`
-- [ ] T088 [US5] Tests d'intégration « Toujours pour ce worktree » : `agent:answer` avec `always: true` ajoute la règle à `alwaysAllowRules` ; pour Claude Code, la demande suivante de même `ruleKey` reçoit `allow` via la réponse du hook `PermissionRequest` ; pour les autres adaptateurs, `answerKeys('allow')` est envoyé automatiquement ; règles effacées à la fermeture de l'agent dans `tests/integration/agents/always-allow.test.ts`
-- [ ] T089 [P] [US5] Test e2e : ⤢ → Focus, saisie, pastille d'un autre agent → historique complet, Échap → grille, sorties intactes dans `tests/e2e/us5-focus.spec.ts`
+- [X] T087 [P] [US5] Tests du Focus : ouverture par ⤢, en-tête branche + port, onglets Terminal (actif), Aperçu et Changements (inactifs), pastilles aux couleurs des agents, « ‹ Tuiles » et Échap hors du terminal ramènent à la grille, Échap dans le terminal est transmis au CLI dans `tests/unit/renderer/focus/FocusView.test.tsx`
+- [X] T088 [US5] Tests d'intégration « Toujours pour ce worktree » : `agent:answer` avec `always: true` ajoute la règle à `alwaysAllowRules` ; pour Claude Code, la demande suivante de même `ruleKey` reçoit `allow` via la réponse du hook `PermissionRequest` ; pour les autres adaptateurs, `answerKeys('allow')` est envoyé automatiquement ; règles effacées à la fermeture de l'agent dans `tests/integration/agents/always-allow.test.ts`
+- [X] T089 [P] [US5] Test e2e : ⤢ → Focus, saisie, pastille d'un autre agent → historique complet, Échap → grille, sorties intactes dans `tests/e2e/us5-focus.spec.ts`
 
 ### Implementation for User Story 5
 
-- [ ] T090 [US5] Implémenter `alwaysAllowRules` et la décision automatique (réponse `PermissionRequest` ou `answerKeys`) dans `src/main/agents/agent-manager.ts` et `src/main/agents/hook-server.ts`
-- [ ] T091 [US5] Implémenter le Focus et le sélecteur de pastilles en réutilisant `Tile` et `TerminalView` dans `src/renderer/focus/FocusView.tsx` et `src/renderer/focus/AgentPills.tsx`
-- [ ] T092 [US5] Ajouter l'action « Toujours pour ce worktree » à côté de Refuser / Autoriser en Focus dans `src/renderer/tiles/TileActions.tsx`
+- [X] T090 [US5] Implémenter `alwaysAllowRules` et la décision automatique (réponse `PermissionRequest` ou `answerKeys`) dans `src/main/agents/agent-manager.ts` et `src/main/agents/hook-server.ts`
+- [X] T091 [US5] Implémenter le Focus et le sélecteur de pastilles en réutilisant `Tile` et `TerminalView` dans `src/renderer/focus/FocusView.tsx` et `src/renderer/focus/AgentPills.tsx`
+- [X] T092 [US5] Ajouter l'action « Toujours pour ce worktree » à côté de Refuser / Autoriser en Focus dans `src/renderer/tiles/TileActions.tsx`
 
 **Checkpoint**: US5 fonctionnelle, US1–US4 toujours vertes
 
@@ -303,6 +307,7 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 - [ ] T114 [P] Revue de sécurité : CSP, `sandbox`, aucune commande shell construite depuis le renderer, jeton de hooks non journalisé, serveur de hooks lié à `127.0.0.1` uniquement ; corriger les écarts et ajouter un test par écart trouvé dans `tests/unit/main/security.test.ts`
 - [ ] T115 [P] Mettre à jour `README.md` (présentation, prérequis, `npm ci`, `npm run dev`, `npm run check`, `npm run test:e2e`, approbation des hooks Codex)
 - [ ] T116 Dérouler `specs/001-agent-workspace-core/quickstart.md` (scénarios automatisés + validation manuelle avec vrais CLI) sur macOS et Windows et consigner les résultats dans la PR
+- [ ] T141 Rappel (décisions utilisateur du 2026-09-24) : interface en shadcn/ui + Tailwind v4 (research.md R16) et effets React Bits (R15), pour coller aux maquettes `docs/maquettes` (direction 1c, `CONSIGNES-UI.md`). Plan amendé ; ajouter à la main (sans régénérer `tasks.md`) les tâches tests d'abord : migration écran par écran des CSS Modules et des dialogues faits main (suppression de `use-dialog-keys`) ; enrobage `DotGrid` (mouvement réduit, tokens, hors terminaux) ; captures Playwright à 1024 px et en grand écran. Reste à obtenir l'accord de l'utilisateur sur l'exclusion de `src/renderer/effects/vendor/**` de la couverture et du lint. L'installation elle-même est T142 (début de phase 7) ; la migration et les effets passent avant T111
 - [ ] T117 Proposer à l'utilisateur (sans l'appliquer sans son accord) la protection de la branche `main` exigeant les jobs CI `check` et `e2e` (Constitution II)
 
 ---
@@ -451,3 +456,7 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 - [X] T139 Tests puis implémentation : ne compter dans le badge du bouton À faire que les éléments en attente (répondre, limite de débit, consigne), pas l'élément informatif du terminal libre, dans `tests/unit/renderer/workspace/WorkspaceView.test.tsx` et `src/renderer/workspace/WorkspaceView.tsx` per FR-029 / US4/AC3 (partial)
 - [X] T140 Garder la barre d'une tuile dans la tuile quand la colonne À faire la rétrécit (3×2 à 1024 px) : message d'erreur tronqué avant les boutons, boutons renvoyés à la ligne, vérifié par `tests/e2e/us3-tiles.spec.ts` en CI, dans `src/renderer/tiles/tiles.module.css` per FR-024 / US3/AC6 (contradicts)
+
+## Phase 17: Convergence
+
+- [ ] T143 Vérifier avec le vrai Codex (caractérisation, comme T049) que « Toujours pour ce worktree » autorise bien une demande suivante de même `ruleKey` : les touches `answerKeys('allow')` sont tapées pendant l'appel du hook `PermissionRequest`, peut-être avant que Codex affiche sa boîte ; si elles se perdent, répondre par la sortie du hook quand Codex l'accepte (`permissionDecision`) ou taper après l'affichage de la boîte, test de contrat à l'appui dans `tests/contract/codex.contract.test.ts` et `src/main/agents/adapters/codex.ts` per FR-034 / US5/AC4 (partial)

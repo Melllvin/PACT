@@ -74,6 +74,11 @@ export interface CliAdapter {
   mapHookEvent(payload: unknown): AgentSignal | null;
   mapOutput(chunk: string, ctx: OutputContext): AgentSignal | null;
   answerKeys(answer: 'allow' | 'deny'): string;
+  /**
+   * Reply to the hook that announced a permission request, allowing it without a dialog
+   * (« Toujours pour ce worktree », FR-034). Without it, PACT types `answerKeys('allow')`.
+   */
+  permissionDecision?(behavior: 'allow'): unknown;
   parseRateLimitReset(text: string): Date | null;
 }
 

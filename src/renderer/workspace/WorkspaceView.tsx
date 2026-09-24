@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar } from '../app/Toolbar';
+import { FocusView } from '../focus/FocusView';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
@@ -12,7 +13,8 @@ import styles from './workspace.module.css';
 
 /** The tile actions, each about one agent (FR-024, FR-037). */
 export type AgentActions = {
-  onAnswer: (agentId: string, answer: 'allow' | 'deny') => void;
+  /** `always`: « Toujours pour ce worktree », from the Focus (FR-034). */
+  onAnswer: (agentId: string, answer: 'allow' | 'deny', always?: boolean) => void;
   onResume: (agentId: string) => void;
   onRestart: (agentId: string) => void;
   onLog: (agentId: string) => void;
@@ -56,6 +58,9 @@ export function WorkspaceView({
   const canAdd = agents.length < MAX_AGENTS;
   const [todoOpen, setTodoOpen] = useState(true);
   const todos = deriveTodos(workspace, cliName);
+  // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const focused = agents.some((agent) => agent.id === focusedId) ? focusedId : null;
 
   return (
     <>
@@ -83,7 +88,20 @@ export function WorkspaceView({
             </p>
           )}
           {available && !hasTiles && <EmptyWorkspace onAddAgents={launch} />}
-          {available && hasTiles && (
+          {available && focused && (
+            <FocusView
+              agents={agents}
+              agentId={focused}
+              name={cliName}
+              terminals={terminals}
+              onSelect={setFocusedId}
+              onBack={() => {
+                setFocusedId(null);
+              }}
+              {...actions}
+            />
+          )}
+          {available && hasTiles && !focused && (
             <TileGrid onAdd={canAdd ? launch : undefined}>
               {agents.map((agent) => (
                 <Tile
@@ -105,6 +123,9 @@ export function WorkspaceView({
                   }}
                   onClose={() => {
                     actions.onClose(agent.id);
+                  }}
+                  onExpand={() => {
+                    setFocusedId(agent.id);
                   }}
                 />
               ))}

@@ -38,14 +38,16 @@ test('starts on the home tab with the state loaded from the main process', async
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('serves a strict Content-Security-Policy in the built app', async () => {
+test('serves a Content-Security-Policy strict on scripts in the built app', async () => {
   const page = await launched.app.firstWindow();
   const csp = await page
     .locator('meta[http-equiv="Content-Security-Policy"]')
     .getAttribute('content');
   expect(csp).toContain("default-src 'self'");
-  expect(csp).not.toContain('unsafe-inline');
+  expect(csp).toContain("script-src 'self';");
   expect(csp).not.toContain('unsafe-eval');
+  // Injected styles only (xterm, Radix): scripts stay strict (research.md R11).
+  expect(csp).toContain("style-src 'self' 'unsafe-inline'");
 });
 
 test('loads the embedded 1c fonts', async () => {

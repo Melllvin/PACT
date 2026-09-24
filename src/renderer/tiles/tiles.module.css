@@ -95,7 +95,9 @@ button.slot:focus-visible {
   font-size: var(--text-sm);
 }
 
-.bar button {
+/* .actions: the same buttons in the À faire column (FR-028). */
+.bar button,
+.actions button {
   padding: 2px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -116,12 +118,14 @@ button.slot:focus-visible {
   color: var(--text);
 }
 
-.bar .allow {
+.bar .allow,
+.actions .allow {
   border-color: var(--accept);
   color: var(--accept);
 }
 
-.bar .deny {
+.bar .deny,
+.actions .deny {
   border-color: var(--danger);
   color: var(--danger);
 }

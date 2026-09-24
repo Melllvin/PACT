@@ -100,7 +100,17 @@ body {
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-base);
+  /* Tailwind's preflight sets 1.5; the 1c screens were drawn with the browser default. */
+  line-height: normal;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Tailwind's preflight makes headings inherit their weight; the 1c titles are bold. */
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 600;
 }
 
 button {

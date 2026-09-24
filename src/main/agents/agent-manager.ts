@@ -66,6 +66,8 @@ export class AgentManager {
   private readonly onBranch: NonNullable<Options['onBranch']>;
   private readonly branches: BranchWatcher;
   private readonly running = new Map<string, Running>();
+  /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
+  private readonly pendingRule = new Map<string, string>();
   /** Initial prompts « Relancer » types again once the new session shows its prompt. */
   private readonly retype = new Map<string, string>();
   private readonly unsubscribe: (() => void)[];
@@ -132,15 +134,28 @@ export class AgentManager {
     }
   }
 
-  /** « ✓ Autoriser » / « ✕ Refuser »: the keys the CLI expects, typed in its terminal. */
-  async answer(id: string, answer: 'allow' | 'deny'): Promise<void> {
+  /**
+   * « ✓ Autoriser » / « ✕ Refuser »: the keys the CLI expects, typed in its terminal.
+   * « Toujours pour ce worktree » (`always`) also keeps the request's rule on the agent, so
+   * later requests with the same ruleKey are allowed without asking (FR-034).
+   */
+  async answer(id: string, answer: 'allow' | 'deny', always = false): Promise<void> {
     const { workspace, agent } = this.find(id);
     const running = this.running.get(id);
     if (agent.state !== 'awaiting-answer' || !running) {
       throw new IpcFailure('INVALID_INPUT', 'Cet agent n’attend pas de réponse.');
     }
+    const rule = always && answer === 'allow' ? this.pendingRule.get(id) : undefined;
+    this.pendingRule.delete(id);
     this.pty.write(id, running.adapter.answerKeys(answer));
-    await this.change(workspace.id, id, (a) => ({ ...a, state: 'working' }));
+    await this.change(workspace.id, id, (a) => ({
+      ...a,
+      state: 'working',
+      alwaysAllowRules:
+        rule === undefined || a.alwaysAllowRules.includes(rule)
+          ? a.alwaysAllowRules
+          : [...a.alwaysAllowRules, rule],
+    }));
   }
 
   /**
@@ -224,6 +239,7 @@ export class AgentManager {
   /** Ends the process without it counting as a crash: PACT asked for it. */
   private async stop(id: string) {
     this.retype.delete(id);
+    this.pendingRule.delete(id);
     this.branches.unwatch(id);
     if (!this.running.delete(id)) return;
     this.hooks.unregister(id);
@@ -353,7 +369,13 @@ export class AgentManager {
     const { adapter } = cli;
     const token = this.hooks.register(agent.id, (payload) => {
       const signal = adapter.mapHookEvent(payload);
-      if (signal) void this.apply(agent.id, signal);
+      if (!signal) return {};
+      if (this.alwaysAllowed(agent.id, signal)) {
+        if (adapter.permissionDecision) return adapter.permissionDecision('allow');
+        this.pty.write(agent.id, adapter.answerKeys('allow'));
+        return {};
+      }
+      void this.apply(agent.id, signal);
       return {};
     });
     const input = {
@@ -385,6 +407,12 @@ export class AgentManager {
     this.branches.watch(agent.id, agent.worktreePath, agent.branch);
   }
 
+  /** A request the user already allowed for this worktree (FR-034). */
+  private alwaysAllowed(id: string, signal: AgentSignal) {
+    if (signal.type !== 'awaiting-answer' || signal.ruleKey === undefined) return false;
+    return this.find(id).agent.alwaysAllowRules.includes(signal.ruleKey);
+  }
+
   private readOutput(id: string, data: string) {
     const running = this.running.get(id);
     if (!running) return;
@@ -401,12 +429,19 @@ export class AgentManager {
     this.hooks.unregister(id);
     this.branches.unwatch(id);
     this.retype.delete(id);
+    this.pendingRule.delete(id);
     await this.change(running.workspaceId, id, (agent) => applyExit(agent, code));
   }
 
   private async apply(id: string, signal: AgentSignal) {
     const running = this.running.get(id);
     if (!running) return;
+    // A request without a ruleKey (a Notification) keeps the one its PermissionRequest gave.
+    if (signal.type === 'awaiting-answer') {
+      if (signal.ruleKey !== undefined) this.pendingRule.set(id, signal.ruleKey);
+    } else {
+      this.pendingRule.delete(id);
+    }
     await this.change(running.workspaceId, id, (agent) => applySignal(agent, signal));
     if (signal.type === 'turn-finished') await this.branches.check(id);
   }

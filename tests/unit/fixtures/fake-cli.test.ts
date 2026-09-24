@@ -109,7 +109,11 @@ describe('fake CLI', () => {
     fake.send('Nettoie');
     await fake.waitFor('? Exécuter : rm fichier.txt (allow/deny)');
     await fake.waitForHook('awaiting-answer');
-    expect(fake.hooks.at(-1)?.body).toEqual({ type: 'awaiting-answer', summary: 'rm fichier.txt' });
+    expect(fake.hooks.at(-1)?.body).toEqual({
+      type: 'awaiting-answer',
+      summary: 'rm fichier.txt',
+      ruleKey: 'Bash(rm fichier.txt)',
+    });
 
     fake.send('something else');
     await new Promise((r) => setTimeout(r, 100));

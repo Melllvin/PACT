@@ -11,7 +11,7 @@ type Dependencies = {
   permissions: { set(choice: PermissionChoice): Promise<void> };
   agents: {
     launch(request: LaunchRequest): Promise<Agent[]>;
-    answer(id: string, answer: 'allow' | 'deny'): Promise<void>;
+    answer(id: string, answer: 'allow' | 'deny', always: boolean): Promise<void>;
     resume(id: string): Promise<void>;
     restart(id: string): Promise<void>;
     close(id: string, options: { removeWorktree: boolean }): Promise<void>;
@@ -45,8 +45,8 @@ export function createAgentServices({
       await freeTerminals.open(workspaceId, count);
       return launched;
     },
-    'agent:answer': ({ agentId, answer }: IpcInput<'agent:answer'>) =>
-      agents.answer(agentId, answer),
+    'agent:answer': ({ agentId, answer, always }: IpcInput<'agent:answer'>) =>
+      agents.answer(agentId, answer, always ?? false),
     'agent:resume': ({ agentId }: IpcInput<'agent:resume'>) => agents.resume(agentId),
     'agent:restart': ({ agentId }: IpcInput<'agent:restart'>) => agents.restart(agentId),
     'agent:close': ({ agentId, removeWorktree }: IpcInput<'agent:close'>) =>

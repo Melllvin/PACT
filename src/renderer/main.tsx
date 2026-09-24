@@ -5,7 +5,7 @@ import { App } from './app/App';
 import { createAppStore } from './store/app-store';
 import { createTerminalRegistry } from './tiles/terminal-registry';
 import { createXterm } from './tiles/xterm-factory';
-import './theme/tokens.css';
+import './theme/globals.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root is missing from index.html');
