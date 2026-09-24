@@ -43,6 +43,16 @@ describe('findRegressions', () => {
     ]);
   });
 
+  it('matches accented roots whatever their Unicode normalization (macOS paths are NFD)', () => {
+    const nfd = '/Users/me/Développement/PACT';
+    const nfc = '/Users/me/Développement/PACT';
+    const base = summary(nfd, { 'src/a.ts': [90, 80] });
+    const head = summary(nfd, { 'src/a.ts': [80, 80] });
+    expect(findRegressions(base, nfc, head, nfc)).toEqual([
+      { file: 'src/a.ts', metric: 'lines', base: 90, head: 80 },
+    ]);
+  });
+
   it('ignores new and deleted files (new files are held by the fixed thresholds)', () => {
     const base = summary('/base', { 'src/old.ts': [100, 100] });
     const head = summary('/head', { 'src/new.ts': [10, 10] });

@@ -35,6 +35,44 @@ jobs:
           path: coverage/
           if-no-files-found: ignore
 
+  # Constitution III: coverage must not decrease from one PR to the next. Coverage differs per
+  # platform (OS-specific branches), so the comparison is made on a single OS against the base.
+  coverage-guard:
+    if: github.event_name == 'pull_request'
+    needs: check
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .coverage-base
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/download-artifact@v8
+        with:
+          name: coverage-macos-latest
+          path: coverage
+      - name: Measure base coverage
+        id: base
+        working-directory: .coverage-base
+        run: |
+          if [ ! -f package.json ] || ! grep -q '"coverage"' package.json; then
+            echo "Base has no coverage script: nothing to compare." && exit 0
+          fi
+          npm ci
+          npx vitest run --coverage --coverage.reporter=json-summary --coverage.reportOnFailure || true
+          test -f coverage/coverage-summary.json && echo "measured=true" >> "$GITHUB_OUTPUT"
+      - name: Compare with pull request coverage
+        if: steps.base.outputs.measured == 'true'
+        run: >-
+          node --no-warnings --experimental-strip-types scripts/coverage-guard.ts
+          .coverage-base/coverage/coverage-summary.json "$GITHUB_WORKSPACE/.coverage-base"
+          coverage/coverage-summary.json "$GITHUB_WORKSPACE"
+
   e2e:
     needs: check
     strategy:
