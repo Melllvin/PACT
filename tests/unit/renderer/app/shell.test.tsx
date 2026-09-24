@@ -165,3 +165,57 @@ describe('home tab (1a)', () => {
     expect(screen.queryByRole('button', { name: 'Fermer Nouvel onglet' })).toBeNull();
   });
 });
+
+describe('À faire button (T086)', () => {
+  it('opens and closes the column, pressed while it is open', async () => {
+    const onToggleTodo = vi.fn();
+    const { rerender } = render(<Toolbar todoCount={2} todoOpen onToggleTodo={onToggleTodo} />);
+    const button = screen.getByRole('button', { name: /À faire/ });
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(button);
+    expect(onToggleTodo).toHaveBeenCalledOnce();
+    rerender(<Toolbar todoCount={2} todoOpen={false} onToggleTodo={onToggleTodo} />);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.textContent).toContain('2');
+  });
+});
+
+describe('TabBar indicators (FR-030)', () => {
+  const withAgents = [
+    { id: 'w1', name: 'atelier-web', agents: [{ state: 'awaiting-answer' as const }] },
+    { id: 'w2', name: 'api-facturation', agents: [{ state: 'error' as const }] },
+    { id: 'w3', name: 'docs', agents: [{ state: 'working' as const }] },
+  ];
+
+  it('marks inactive tabs ◆ when an agent waits, ✕ when one is in error', () => {
+    render(
+      <TabBar
+        workspaces={withAgents}
+        activeTab={{ kind: 'workspace', id: 'w3' }}
+        onSelect={vi.fn()}
+        onHome={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole('img', { name: 'atelier-web : un agent attend une réponse' }).textContent,
+    ).toBe('◆');
+    expect(
+      screen.getByRole('img', { name: 'api-facturation : un agent est en erreur' }).textContent,
+    ).toBe('✕');
+    expect(screen.getAllByRole('img')).toHaveLength(2);
+    expect(screen.getByRole('tab', { name: 'atelier-web' })).toBeDefined();
+  });
+
+  it('shows no indicator on the active tab', () => {
+    render(
+      <TabBar
+        workspaces={withAgents}
+        activeTab={{ kind: 'workspace', id: 'w1' }}
+        onSelect={vi.fn()}
+        onHome={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('img', { name: /atelier-web/ })).toBeNull();
+    expect(screen.getByRole('img', { name: /api-facturation/ })).toBeDefined();
+  });
+});
