@@ -7,6 +7,7 @@ import type { AgentDraft } from '../../../../src/shared/ipc';
 import type { Agent } from '../../../../src/shared/model';
 
 // T064 — US2 channels: agents:launch, permission:set, cli:redetect, terminal input and events.
+// T074 — US3 tile actions: agent:answer, agent:resume, agent:restart, agent:close, agent:log.
 
 const draft: AgentDraft = {
   cliId: 'fake',
@@ -23,7 +24,14 @@ const setup = () => {
   const deps = {
     registry: { detect: vi.fn(() => Promise.resolve([])) },
     permissions: { set: vi.fn(() => Promise.resolve()) },
-    agents: { launch: vi.fn(() => Promise.resolve(launched)) },
+    agents: {
+      launch: vi.fn(() => Promise.resolve(launched)),
+      answer: vi.fn(() => Promise.resolve()),
+      resume: vi.fn(() => Promise.resolve()),
+      restart: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => Promise.resolve()),
+      log: vi.fn(() => 'Erreur simulée'),
+    },
     freeTerminals: { open: vi.fn(() => Promise.resolve([])) },
     pty: { write: vi.fn(), resize: vi.fn() },
   };
@@ -78,6 +86,31 @@ describe('createAgentServices', () => {
     services['term:resize']({ termId: 't1', cols: 120, rows: 40 });
     expect(deps.pty.write).toHaveBeenCalledWith('t1', 'Ajoute un test\r');
     expect(deps.pty.resize).toHaveBeenCalledWith('t1', 120, 40);
+  });
+});
+
+describe('tile actions (US3)', () => {
+  const agentId = '7b0c5d0e-1f2a-4b3c-8d4e-5f6a7b8c9d0e';
+
+  it('answers, resumes and restarts the agent', async () => {
+    const { deps, services } = setup();
+    await services['agent:answer']({ agentId, answer: 'allow' });
+    await services['agent:resume']({ agentId });
+    await services['agent:restart']({ agentId });
+    expect(deps.agents.answer).toHaveBeenCalledWith(agentId, 'allow');
+    expect(deps.agents.resume).toHaveBeenCalledWith(agentId);
+    expect(deps.agents.restart).toHaveBeenCalledWith(agentId);
+  });
+
+  it('closes the agent, keeping or removing its worktree (FR-037)', async () => {
+    const { deps, services } = setup();
+    await services['agent:close']({ agentId, removeWorktree: true });
+    expect(deps.agents.close).toHaveBeenCalledWith(agentId, { removeWorktree: true });
+  });
+
+  it('returns the output kept for « Journal »', () => {
+    const { services } = setup();
+    expect(services['agent:log']({ agentId })).toBe('Erreur simulée');
   });
 });
 
