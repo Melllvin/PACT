@@ -396,3 +396,19 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
   dupliquer.
 - Hors socle : Aperçus, Revue, Workflows, Skills, Notifications, Réglages complets, « Copier la
   consigne ».
+
+---
+
+## Phase 11: Convergence
+
+- [ ] T118 CRITICAL — Protéger la branche `main` dès maintenant (la CI existe depuis T010) en exigeant les jobs `check` et `e2e` sur macOS et Windows, après accord explicite de l'utilisateur ; T117 reste la trace de validation finale per Constitution II (contradicts)
+- [ ] T119 CRITICAL — Ajouter en CI un contrôle de non-régression de couverture : comparer `coverage/coverage-summary.json` de la PR à celui de `main` et échouer si la couverture lignes/branches baisse sur les fichiers modifiés, en plus des seuils fixes de `vitest.config.ts`, dans `.github/workflows/ci.yml` et `scripts/coverage-guard.mjs` (test dans `tests/unit/scripts/coverage-guard.test.ts`) per Constitution III (missing)
+- [ ] T120 CRITICAL — Justifier la dépendance `globals` (utilisée par `eslint.config.js`) dans `specs/001-agent-workspace-core/research.md` R12, ou la retirer si typescript-eslint suffit per Constitution, contraintes techniques (contradicts)
+- [ ] T121 Tests puis implémentation : quand le dossier d'un workspace est supprimé ou déplacé, le workspace passe `unavailable` **et ses agents sont arrêtés proprement** (PTY tués, état persisté) dans `tests/integration/workspace/workspace-service.test.ts` et `src/main/workspace/workspace-service.ts` per spec Edge Cases (dossier supprimé) (missing)
+- [ ] T122 Tests puis implémentation de l'avertissement « modifications locales non incluses » affiché avant le lancement d'agents quand le dépôt a des modifications non commitées (réutilise `GitService.hasChanges`), dans `tests/unit/renderer/launch/QuickLaunch.test.tsx` et `src/renderer/launch/QuickLaunch.tsx` per spec Edge Cases (modifications non commitées) (partial)
+- [ ] T123 Tests puis implémentation du message d'accueil « aucun CLI détecté » expliquant comment installer Claude Code / Codex ou ajouter un CLI dans `tests/unit/renderer/home/Home.test.tsx` et `src/renderer/home/DetectedClis.tsx` per spec Edge Cases (aucun CLI détecté) (partial)
+- [ ] T124 Test e2e : un agent fake `burst-output` continue à produire pendant qu'un autre onglet workspace est actif ; au retour, aucune sortie perdue et l'état est à jour dans `tests/e2e/us3-background-tab.spec.ts` per FR-026 (partial)
+- [ ] T125 Exécuter la suite e2e smoke sur l'app packagée (`electron-builder --dir`) en CI macOS et Windows, en vérifiant le chargement de node-pty hors asar, via `tests/e2e/helpers/launch-app.ts` (option `PACT_E2E_PACKAGED=1`) et `.github/workflows/ci.yml` per plan R12 / R14 (partial)
+- [ ] T126 Aligner `contracts/cli-adapter.md` et les types de T034 : ajouter `agentId` à `LaunchInput` (requis pour `PACT_AGENT_ID`) et `cwd` à `LaunchSpec` (obligation 1), et harmoniser le chemin de la suite de contrat (`tests/contract/cli-adapter.contract.ts`) avant d'implémenter T024 / T034 per contracts/cli-adapter.md (contradicts)
+- [ ] T127 Vérifier si `style-src 'unsafe-inline'` est nécessaire hors mode dev ; le cas échéant, le limiter au serveur de développement (CSP de production `default-src 'self'` stricte), avec assertion e2e sur la CSP servie, dans `src/renderer/index.html` et `electron.vite.config.ts` per T011 (partial)
+- [ ] T128 Justifier dans la revue de sécurité (T114) le blocage de `window.open` et de la navigation (`src/main/window.ts`), ajouté sans tâche dédiée, ou le retirer per T114 (unrequested)
