@@ -178,4 +178,6 @@ export interface PactApi {
   /** Rejects with a plain `IpcError` object (it must survive the context bridge). */
   invoke<C extends IpcRequestChannel>(channel: C, ...input: InputArgs<C>): Promise<IpcOutput<C>>;
   on<C extends IpcEventChannel>(channel: C, listener: (payload: IpcEvent<C>) => void): () => void;
+  /** Path of a dropped file: the sandboxed renderer cannot read it itself (webUtils). */
+  pathForFile(file: File): string;
 }

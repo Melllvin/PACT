@@ -36,6 +36,7 @@ describe('window.pact', () => {
     vi.doMock('electron', () => ({
       contextBridge: { exposeInMainWorld },
       ipcRenderer: fakeIpcRenderer(),
+      webUtils: { getPathForFile: vi.fn() },
     }));
     await import('../../../src/preload/index');
     expect(exposeInMainWorld).toHaveBeenCalledWith(

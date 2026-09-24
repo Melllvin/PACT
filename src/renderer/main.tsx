@@ -9,6 +9,9 @@ if (!root) throw new Error('#root is missing from index.html');
 
 createRoot(root).render(
   <StrictMode>
-    <App store={createAppStore(window.pact)} />
+    <App
+      store={createAppStore(window.pact)}
+      getPathForFile={(file) => window.pact.pathForFile(file)}
+    />
   </StrictMode>,
 );

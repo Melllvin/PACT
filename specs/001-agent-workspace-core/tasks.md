@@ -116,7 +116,7 @@ dépôt ouvert ; redémarrer → dépôt dans les récents.
 - [x] T045 [US1] Brancher les handlers `app:getState`, `workspace:open`, `workspace:initRepo`, `workspace:clone`, `workspace:close` et l'événement `workspace:status`, plus le sélecteur de dossier natif (`dialog.showOpenDialog`) dans `src/main/ipc/workspace-handlers.ts`
 - [x] T046 [P] [US1] Implémenter l'accueil (1a) avec recherche, zone de dépôt (`webUtils.getPathForFile` via preload), boîte de clonage dans `src/renderer/home/Home.tsx`, `src/renderer/home/CloneDialog.tsx`, `src/renderer/home/DropZone.tsx`
 - [x] T047 [P] [US1] Implémenter le workspace vide (1b) et l'affichage « indisponible » dans `src/renderer/workspace/EmptyWorkspace.tsx` et `src/renderer/workspace/WorkspaceView.tsx`
-- [ ] T048 [US1] Relier onglets, accueil et workspaces dans le store et `App.tsx` (onglet d'accueil ouvert par « + », fermeture d'onglet) dans `src/renderer/app/App.tsx`
+- [x] T048 [US1] Relier onglets, accueil et workspaces dans le store et `App.tsx` (onglet d'accueil ouvert par « + », fermeture d'onglet) dans `src/renderer/app/App.tsx`
 
 **Checkpoint**: US1 fonctionnelle et testée seule
 

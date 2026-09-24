@@ -187,6 +187,7 @@ describe('US1 actions', () => {
   it('switches to the existing tab when the repository is already open (FR-004)', async () => {
     const { store } = setup({
       'workspace:open': () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the preload rejects plain objects (contextBridge)
         throw { code: 'ALREADY_OPEN', message: 'Déjà ouvert', workspaceId: 'w1' };
       },
     });
@@ -199,6 +200,7 @@ describe('US1 actions', () => {
   it('keeps the refused path so the home screen can offer to initialize it', async () => {
     const { store } = setup({
       'workspace:open': () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the preload rejects plain objects (contextBridge)
         throw { code: 'NOT_A_REPO', message: '« notes » n’est pas un dépôt Git.' };
       },
     });

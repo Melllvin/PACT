@@ -97,3 +97,21 @@ button:disabled {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.tabGroup {
+  display: inline-flex;
+  align-items: center;
+}
+
+.close {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.close:hover {
+  color: var(--text);
+}

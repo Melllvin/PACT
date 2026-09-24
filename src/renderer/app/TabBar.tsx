@@ -6,10 +6,11 @@ type Props = {
   activeTab: ActiveTab;
   onSelect: (id: string) => void;
   onHome: () => void;
+  onClose?: (id: string) => void;
 };
 
 /** One tab per open workspace, a home tab opened by « + » (FR-002), settings inactive in the core. */
-export function TabBar({ workspaces, activeTab, onSelect, onHome }: Props) {
+export function TabBar({ workspaces, activeTab, onSelect, onHome, onClose }: Props) {
   const homeOpen = activeTab.kind === 'home';
   return (
     <header className={styles.tabBar}>
@@ -18,17 +19,29 @@ export function TabBar({ workspaces, activeTab, onSelect, onHome }: Props) {
         {workspaces.map(({ id, name }) => {
           const selected = activeTab.kind === 'workspace' && activeTab.id === id;
           return (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={selected}
-              className={styles.tab}
-              onClick={() => {
-                onSelect(id);
-              }}
-            >
-              {name}
-            </button>
+            <span key={id} className={styles.tabGroup}>
+              <button
+                role="tab"
+                aria-selected={selected}
+                className={styles.tab}
+                onClick={() => {
+                  onSelect(id);
+                }}
+              >
+                {name}
+              </button>
+              {onClose && (
+                <button
+                  className={styles.close}
+                  aria-label={`Fermer ${name}`}
+                  onClick={() => {
+                    onClose(id);
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </span>
           );
         })}
         {homeOpen && (

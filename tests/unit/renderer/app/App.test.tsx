@@ -58,6 +58,7 @@ describe('App', () => {
     const store = createAppStore({
       invoke: vi.fn(() => Promise.reject(new Error('Disque illisible'))),
       on: () => () => undefined,
+      pathForFile: () => '',
     });
     render(<App store={store} />);
     expect((await screen.findByRole('alert')).textContent).toContain('Disque illisible');
