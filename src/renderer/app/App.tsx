@@ -26,7 +26,7 @@ export function App({ store }: { store: AppStore }) {
         onSelect={selectWorkspace}
         onHome={openHome}
       />
-      {workspace && <Toolbar todoCount={0} onAddAgents={() => undefined} />}
+      {workspace && <Toolbar todoCount={0} />}
       <main className={styles.stage}>
         {status === 'error' && (
           <p role="alert" className={styles.error}>

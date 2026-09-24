@@ -101,6 +101,13 @@ describe('Toolbar', () => {
   });
 });
 
+describe('Toolbar without launcher', () => {
+  it('disables + Agents until an action is wired (quick launch comes with US2)', () => {
+    render(<Toolbar todoCount={0} />);
+    expect(screen.getByRole('button', { name: /\+ Agents/ }).hasAttribute('disabled')).toBe(true);
+  });
+});
+
 describe('Legend', () => {
   it('explains every status icon (FR-041)', () => {
     render(<Legend />);

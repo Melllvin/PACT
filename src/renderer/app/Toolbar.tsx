@@ -1,6 +1,7 @@
 import styles from './shell.module.css';
 
-type Props = { todoCount: number; onAddAgents: () => void };
+/** Without `onAddAgents`, « + Agents » stays disabled rather than doing nothing. */
+type Props = { todoCount: number; onAddAgents?: () => void };
 
 /** Workspace views; Comparer and Revue stay visible but inactive in the core (FR-006). */
 export function Toolbar({ todoCount, onAddAgents }: Props) {
@@ -19,7 +20,7 @@ export function Toolbar({ todoCount, onAddAgents }: Props) {
       <button className={styles.viewButton}>
         À faire <span className={styles.count}>{todoCount}</span>
       </button>
-      <button className={styles.primary} onClick={onAddAgents}>
+      <button className={styles.primary} onClick={onAddAgents} disabled={!onAddAgents}>
         + Agents
       </button>
     </nav>
