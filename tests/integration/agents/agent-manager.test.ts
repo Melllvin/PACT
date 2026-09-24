@@ -99,9 +99,11 @@ const launch = (
 const agentsOnDisk = async () => (await stores.workspace(workspace.id).read())?.agents ?? [];
 const current = (id: string) => workspaces.get(workspace.id)?.agents.find((a) => a.id === id);
 
+/** Waits for the announced state: the manager saves a transition before it emits it. */
 const waitForState = async (id: string, state: AgentState, timeoutMs = 10_000) => {
   const start = Date.now();
-  while (current(id)?.state !== state) {
+  const announced = () => events.findLast((e) => e.agentId === id)?.state;
+  while (current(id)?.state !== state || announced() !== state) {
     if (Date.now() - start > timeoutMs) {
       throw new Error(
         `${id} stayed ${String(current(id)?.state)} instead of ${state}\n${pty.history(id)}`,
