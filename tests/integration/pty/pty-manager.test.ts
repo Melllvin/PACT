@@ -110,18 +110,26 @@ describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
   });
 
   it('resizes the terminal', async () => {
-    const script =
-      // getWindowSize() queries the console each time; `columns` may be cached on Windows.
-      'process.stdin.on("data", () => console.log("SIZE=" + process.stdout.getWindowSize().join("x")))';
-    manager.start('size', {
-      file: process.execPath,
-      args: ['-e', script],
-      env: env(),
-      cwd: dir,
-      cols: 80,
-      rows: 24,
-    });
-    await new Promise((r) => setTimeout(r, 300));
+    // The probe must read the size live: on Windows, libuv caches the console size in a child
+    // Node process that reads in line mode, so PowerShell asks the console directly instead.
+    const probe = isWindows
+      ? {
+          file: 'powershell.exe',
+          args: [
+            '-NoProfile',
+            '-Command',
+            'while ($null -ne ($l = [Console]::In.ReadLine())) { Write-Output ("SIZE=" + [Console]::WindowWidth + "x" + [Console]::WindowHeight) }',
+          ],
+        }
+      : {
+          file: process.execPath,
+          args: [
+            '-e',
+            'process.stdin.on("data", () => console.log("SIZE=" + process.stdout.getWindowSize().join("x")))',
+          ],
+        };
+    manager.start('size', { ...probe, env: env(), cwd: dir, cols: 80, rows: 24 });
+    await new Promise((r) => setTimeout(r, isWindows ? 1500 : 300));
     manager.write('size', 'a\r');
     await waitFor('size', 'SIZE=80x24');
     manager.resize('size', 100, 30);
