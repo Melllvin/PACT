@@ -80,6 +80,11 @@ describe('WorkspaceView', () => {
     expect(terminals.attach).toHaveBeenCalledTimes(2);
   });
 
+  it('names a tile after its CLI id when the CLI is no longer known', () => {
+    render(<WorkspaceView workspace={workspace({ agents: [agent(1, { cliId: 'aider' })] })} />);
+    expect(screen.getByRole('article', { name: 'aider 1' })).toBeDefined();
+  });
+
   it('adds a tile per free terminal', () => {
     render(
       <WorkspaceView

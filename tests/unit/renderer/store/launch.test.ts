@@ -42,10 +42,12 @@ function setup({
   permission = null,
   ws = workspace(),
   launch = () => Promise.resolve([launchedAgent]),
+  setPermission = () => Promise.resolve(undefined),
 }: {
   permission?: PermissionPreference | null;
   ws?: Workspace;
   launch?: () => Promise<unknown>;
+  setPermission?: () => Promise<unknown>;
 } = {}) {
   let snapshot: IpcOutput<'app:getState'> = {
     workspaces: [ws],
@@ -60,7 +62,7 @@ function setup({
       case 'agents:launch':
         return launch();
       case 'permission:set':
-        return Promise.resolve(undefined);
+        return setPermission();
       case 'cli:redetect':
         return Promise.resolve([cli('codex')]);
       default:
@@ -187,6 +189,46 @@ describe('launch flow', () => {
       step: 'counts',
       error: 'Six agents au plus par projet.',
     });
+  });
+
+  it('opens free terminals alone without asking for a permission level', async () => {
+    const { store, invoke } = setup();
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    await store.getState().requestLaunch({ agents: {}, freeTerminal: 2 });
+    expect(invoke).toHaveBeenCalledWith(
+      'agents:launch',
+      expect.objectContaining({ agents: [], freeTerminals: 2 }),
+    );
+    expect(store.getState().launcher).toBeNull();
+  });
+
+  it('goes back to the launcher when the choice cannot be saved', async () => {
+    const { store, invoke } = setup({
+      setPermission: () => Promise.reject(new Error('Disque plein')),
+    });
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    await store.getState().requestLaunch(counts);
+    await store
+      .getState()
+      .confirmPermission({ level: 'always-allow', autoResume: true, scope: 'global' });
+    expect(store.getState().launcher).toEqual({
+      workspaceId: 'w1',
+      step: 'counts',
+      error: 'Disque plein',
+    });
+    expect(invoke).not.toHaveBeenCalledWith('agents:launch', expect.anything());
+  });
+
+  it('does nothing without an open launcher or a pending permission step', async () => {
+    const { store, invoke } = setup();
+    await store.getState().load();
+    await store.getState().requestLaunch(counts);
+    await store
+      .getState()
+      .confirmPermission({ level: 'always-allow', autoResume: true, scope: 'global' });
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it('detects the CLIs again on request', async () => {

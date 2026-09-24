@@ -123,6 +123,19 @@ describe('app:getState with CLI detection', () => {
     const opened = await withHook['workspace:open']({ path: await makeRepo('app') });
     expect(onOpened).toHaveBeenCalledWith(opened.id);
   });
+
+  it('returns the opened workspace even when preparing it closed it', async () => {
+    const withHook = createAppServices({
+      stores,
+      workspaces,
+      clones: new CloneJobs({ git: new GitService({ env: gitEnv }), workspaces, emit: vi.fn() }),
+      pickFolder,
+      onOpened: (id) => workspaces.close(id),
+    });
+    const opened = await withHook['workspace:open']({ path: await makeRepo('app') });
+    expect(workspaces.get(opened.id)).toBeUndefined();
+    expect(opened.name).toBe('app');
+  });
 });
 
 describe('workspace channels', () => {

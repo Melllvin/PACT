@@ -16,7 +16,7 @@ type Props = {
   /** Resolves a dropped file to its path (window.pact.pathForFile in the app). */
   getPathForFile: (file: File) => string;
   /** Terminals of the agents and free terminals, created once outside React (main.tsx). */
-  terminals?: TerminalRegistry;
+  terminals?: TerminalRegistry | undefined;
 };
 
 export function App({ store, getPathForFile, terminals }: Props) {
@@ -37,7 +37,8 @@ export function App({ store, getPathForFile, terminals }: Props) {
   const shown = useRef(new Set<string>());
   useEffect(() => {
     const current = new Set(termIds.split(' ').filter(Boolean));
-    for (const id of shown.current) if (!current.has(id)) terminals?.dispose(id);
+    const gone = [...shown.current].filter((id) => !current.has(id));
+    if (terminals) for (const id of gone) terminals.dispose(id);
     shown.current = current;
   }, [termIds, terminals]);
 

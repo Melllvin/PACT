@@ -120,6 +120,17 @@ describe('worktrees', () => {
     expect(await service.currentBranch(created.path)).toBe('feature/login');
   });
 
+  it('puts a chosen branch in a free folder when the usual one is taken', async () => {
+    await mkdir(join(repo, '.worktrees', 'codex-3'), { recursive: true });
+    const created = await service.addWorktree(repo, {
+      cli: 'codex',
+      position: 3,
+      base: 'main',
+      branch: 'feature/login',
+    });
+    expect(created.path).toBe(join(repo, '.worktrees', 'codex-3-2'));
+  });
+
   it('refuses a chosen branch that already exists instead of reusing it', async () => {
     git(repo, 'branch', 'feature/login');
     await expect(
