@@ -51,7 +51,7 @@ describe('Tile', () => {
 
   it('comes in after the tiles before it when the view changes, unless motion is reduced (FR-042)', () => {
     const { tile } = setup({ position: 3 });
-    expect(tile().className).toMatch(/animate-enter/);
+    expect(tile().className).toMatch(/animate-tile-enter/);
     expect(tile().className).toMatch(/motion-reduce:animate-none/);
     expect(tile().style.getPropertyValue('--enter-index')).toBe('2');
   });

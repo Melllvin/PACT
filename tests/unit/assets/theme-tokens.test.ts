@@ -65,6 +65,14 @@ describe('Tailwind theme', () => {
   const variable = (name: string) =>
     new RegExp(`--${name}:\\s*([^;]+);`).exec(globals)?.[1]?.trim();
 
+  // T111 / FR-042: after the particles, the tiles come in, then their borders light up.
+  it('brings a tile in, then lights its border in the agent color', () => {
+    const tileEnter = variable('animate-tile-enter') ?? '';
+    expect(tileEnter).toMatch(/view-enter/);
+    expect(tileEnter).toMatch(/border-in/);
+    expect(globals).toMatch(/@keyframes border-in/);
+  });
+
   it('loads Tailwind, its animations and the 1c tokens, without any network request', () => {
     expect(globals).toMatch(/@import ['"]tailwindcss['"]/);
     expect(globals).toMatch(/@import ['"]tw-animate-css['"]/);

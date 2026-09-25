@@ -214,6 +214,22 @@ describe('drawing on a sized canvas', () => {
     expect(called('stroke')).toBe(34);
   });
 
+  // T111 / FR-042: a change of view sends particles first; the tiles and borders follow in CSS.
+  it('sends a burst of particles when the view changes, not when it first shows', () => {
+    allowMotion(true);
+    const { rerender } = render(<AmbientCanvas mode="workspace" view="w1" />);
+    step(0);
+    expect(called('fillRect')).toBe(0);
+    expect(frames).toHaveLength(0);
+
+    rerender(<AmbientCanvas mode="workspace" view="w2" />);
+    step(0.2);
+    expect(called('fillRect')).toBeGreaterThanOrEqual(700);
+    expect(frames).toHaveLength(1);
+    step(REST_DELAY);
+    expect(frames).toHaveLength(0);
+  });
+
   it('draws three layers of waves', () => {
     allowMotion(true);
     render(<Waves />);
