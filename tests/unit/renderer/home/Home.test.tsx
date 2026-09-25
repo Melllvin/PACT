@@ -110,6 +110,20 @@ describe('Home (1a)', () => {
     expect(within(row).getByLabelText('1 agent en attente').textContent).toBe('◆ 1');
   });
 
+  it('brings its projects in one after the other, unless motion is reduced (FR-042)', () => {
+    renderHome();
+    const rows = [section('Déjà ouverts'), section('Récents')].flatMap((s) =>
+      within(s).getAllByRole('listitem'),
+    );
+    expect(rows.map((row) => row.style.getPropertyValue('--enter-index'))).toEqual(
+      rows.map((_, index) => String(index)),
+    );
+    for (const row of rows)
+      expect(row.className).toMatch(
+        /animate-enter.*motion-reduce:animate-none|motion-reduce:animate-none.*animate-enter/,
+      );
+  });
+
   it('goes to the existing tab instead of opening the repository again (FR-004)', async () => {
     const props = renderHome();
     await userEvent.click(

@@ -49,6 +49,13 @@ describe('Tile', () => {
     ).toEqual(['Branche et port', 'Agrandir', 'Fermer l’agent']);
   });
 
+  it('comes in after the tiles before it when the view changes, unless motion is reduced (FR-042)', () => {
+    const { tile } = setup({ position: 3 });
+    expect(tile().className).toMatch(/animate-enter/);
+    expect(tile().className).toMatch(/motion-reduce:animate-none/);
+    expect(tile().style.getPropertyValue('--enter-index')).toBe('2');
+  });
+
   it('shows neither number, title nor state label (FR-020)', () => {
     const { tile } = setup({ state: 'working' });
     expect(tile().textContent).not.toMatch(/Claude Code|1|en cours|▶/);
