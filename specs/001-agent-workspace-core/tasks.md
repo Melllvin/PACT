@@ -309,6 +309,7 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 - [ ] T116 Dérouler `specs/001-agent-workspace-core/quickstart.md` (scénarios automatisés + validation manuelle avec vrais CLI) sur macOS et Windows et consigner les résultats dans la PR
 - [ ] T141 Rappel (décisions utilisateur du 2026-09-24) : interface en shadcn/ui + Tailwind v4 (research.md R16) et effets React Bits (R15), pour coller aux maquettes `docs/maquettes` (direction 1c, `CONSIGNES-UI.md`). Plan amendé ; ajouter à la main (sans régénérer `tasks.md`) les tâches tests d'abord : migration écran par écran des CSS Modules et des dialogues faits main (suppression de `use-dialog-keys`) ; enrobage `DotGrid` (mouvement réduit, tokens, hors terminaux) ; captures Playwright à 1024 px et en grand écran. Reste à obtenir l'accord de l'utilisateur sur l'exclusion de `src/renderer/effects/vendor/**` de la couverture et du lint. L'installation elle-même est T142 (début de phase 7) ; la migration et les effets passent avant T111
 - [ ] T117 Proposer à l'utilisateur (sans l'appliquer sans son accord) la protection de la branche `main` exigeant les jobs CI `check` et `e2e` (Constitution II)
+- [ ] T146 Stabiliser les tests d'intégration sous Windows (ConPTY, git, surveillance de fichiers : `agent-actions` « Reprendre tape continue », `workspace-service` « availability », `agent-manager` validation des branches) en trouvant la cause de chaque échec, puis retirer le `retry` Windows du projet `integration` de `vitest.config.ts` (Constitution II)
 
 ---
 
