@@ -88,6 +88,14 @@ const renderHome = (overrides: Partial<HomeProps> = {}) => {
 const section = (name: string) => screen.getByRole('region', { name });
 
 describe('Home (1a)', () => {
+  it('puts « Autre dépôt » and what is given aside in a column of their own (1a)', () => {
+    renderHome({ aside: <section aria-label="Agents détectés" /> });
+    const column = screen.getByRole('complementary');
+    expect(within(column).getByRole('region', { name: 'Autre dépôt' })).toBeDefined();
+    expect(within(column).getByRole('region', { name: 'Agents détectés' })).toBeDefined();
+    expect(within(column).queryByRole('region', { name: 'Récents' })).toBeNull();
+  });
+
   it('is titled « Ouvrir un workspace »', () => {
     renderHome();
     expect(screen.getByRole('heading', { name: 'Ouvrir un workspace' })).toBeDefined();
@@ -242,6 +250,14 @@ describe('Clone dialog', () => {
     const progress = screen.getByRole('progressbar', { name: 'Clonage' });
     expect(progress.getAttribute('aria-valuenow')).toBe('42');
     expect(screen.getByText(/Réception d’objets/)).toBeDefined();
+  });
+
+  it('closes with Escape, without cloning (modal dialog)', async () => {
+    const props = renderHome();
+    await userEvent.click(screen.getByRole('button', { name: 'Cloner depuis une URL…' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Cloner un dépôt' })).toBeNull();
+    expect(props.onClone).not.toHaveBeenCalled();
   });
 
   it('shows a clear clone failure', () => {
