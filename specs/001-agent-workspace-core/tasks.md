@@ -466,3 +466,7 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 - [X] T144 Retirer `agents:reorder` de `src/shared/ipc.ts` et de `contracts/ipc.md` (l'ordre du brouillon fixe l'ordre des tuiles au lancement, décision T100), ou l'implémenter, per contracts/ipc.md, US6/AC4 (contradicts)
 - [X] T145 Reconnaître une limite de débit dans la sortie d'un « Autre CLI » (`GenericAdapter.mapOutput` → `failed` / `rate-limit` avec `resetAt` via `parseRateLimitReset`) per research.md « Limite de débit — détection » (partial)
+
+## Phase 19: Convergence
+
+- [ ] T147 Caractériser sur un vrai Claude Code les notifications `quota_auto_resume_fired` / `_stale` / `_disabled` (champ, moment, `UserPromptSubmit` associé) et aligner le scénario `rate-limit-native-resume` du faux CLI et `ClaudeCodeAdapter.mapHookEvent` sur la forme relevée per research.md R6 « Pas de double reprise » (partial)
