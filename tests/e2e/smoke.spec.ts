@@ -75,3 +75,9 @@ test('paints the ambient canvas behind the home tab, not over its content (R17)'
   expect(await canvas.evaluate((element) => getComputedStyle(element).pointerEvents)).toBe('none');
   await expect(page.getByRole('button', { name: 'Choisir un dépôt Git…' })).toBeVisible();
 });
+
+// T125: the CI replays this file and us2 on the app packaged by `electron-builder --dir`.
+test('runs the packaged app when PACT_E2E_PACKAGED=1, the built sources otherwise', async () => {
+  const packaged = await launched.app.evaluate(({ app }) => app.isPackaged);
+  expect(packaged).toBe(process.env.PACT_E2E_PACKAGED === '1');
+});
