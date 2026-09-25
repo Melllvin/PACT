@@ -44,10 +44,21 @@ export function DetectedClis({ clis, onRedetect, onAdd }: Props) {
       className="flex flex-col gap-2.5 rounded-[14px] border border-white/6 bg-surface px-4 py-3.5 animate-enter motion-reduce:animate-none"
     >
       <h3 className={LABEL}>Agents détectés</h3>
-      {clis.length === 0 && (
-        <p className="m-0 text-[12px] text-muted-foreground">
-          Aucun CLI d’agent détecté. Installez Claude Code ou Codex, puis détectez à nouveau.
-        </p>
+      {!clis.some((cli) => cli.status === 'installed') && (
+        <div
+          role="note"
+          className="flex flex-col gap-1.5 rounded-[10px] border border-white/6 bg-white/2 px-3 py-2.5 text-[12px] text-muted-foreground"
+        >
+          <p className="m-0">
+            Aucun CLI d’agent détecté : le lancement d’agents reste désactivé. Installez-en un, puis
+            « Détecter à nouveau » :
+          </p>
+          <code className="font-mono text-[11px] text-foreground">
+            npm i -g @anthropic-ai/claude-code
+          </code>
+          <code className="font-mono text-[11px] text-foreground">npm i -g @openai/codex</code>
+          <p className="m-0">Ou ajoutez le vôtre avec « Autre CLI — ajouter ».</p>
+        </div>
       )}
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {clis.map((cli) => (
