@@ -11,8 +11,13 @@ function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
 
 /**
  * `onEnter`: Enter confirms the default choice from anywhere in the dialog but a button, which
- * acts itself (« Entrée = choix par défaut », 1m).
+ * acts itself (« Entrée = choix par défaut », 1m). Radix radios and checkboxes are buttons that
+ * Enter does not toggle: from them, Enter confirms too.
  */
+const actsOnEnter = (target: EventTarget) =>
+  target instanceof HTMLButtonElement &&
+  !['radio', 'checkbox'].includes(target.getAttribute('role') ?? '');
+
 function DialogContent({
   className,
   children,
@@ -34,7 +39,7 @@ function DialogContent({
         onKeyDown={
           onEnter &&
           ((event) => {
-            if (event.key !== 'Enter' || event.target instanceof HTMLButtonElement) return;
+            if (event.key !== 'Enter' || actsOnEnter(event.target)) return;
             event.preventDefault();
             onEnter();
           })

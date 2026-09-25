@@ -12,7 +12,7 @@ import {
 } from '../../shared/launch-draft';
 import type { Agent, CliDefinition, PermissionLevel } from '../../shared/model';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 /** research.md R5: the three levels, as 1d names them. */
 const LEVELS: [PermissionLevel, string][] = [
@@ -189,23 +189,24 @@ export function AgentInspector({
       </Field>
 
       <Field label="Permissions" {...field('permissionLevel')}>
-        <span className="flex w-fit overflow-hidden rounded-lg border border-white/8 text-[11.5px] font-medium group-data-[inherited=true]:border-dashed">
+        <ToggleGroup
+          type="single"
+          variant="strip"
+          aria-label="Permissions"
+          value={settings.permissionLevel ?? ''}
+          onValueChange={(level) => {
+            // A single choice stays chosen: pressing it again does not clear it.
+            const chosen = LEVELS.find(([value]) => value === level);
+            if (chosen) set('permissionLevel', chosen[0]);
+          }}
+          className="overflow-hidden rounded-lg border border-white/8 group-data-[inherited=true]:border-dashed"
+        >
           {LEVELS.map(([level, label]) => (
-            <button
-              key={level}
-              aria-pressed={settings.permissionLevel === level}
-              className={cn(
-                'cursor-pointer px-[9px] py-[3px] not-first:border-l not-first:border-white/8',
-                settings.permissionLevel === level && 'bg-primary text-primary-foreground',
-              )}
-              onClick={() => {
-                set('permissionLevel', level);
-              }}
-            >
+            <ToggleGroupItem key={level} value={level}>
               {label}
-            </button>
+            </ToggleGroupItem>
           ))}
-        </span>
+        </ToggleGroup>
       </Field>
 
       <h4 className={SECTION}>Git</h4>

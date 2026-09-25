@@ -1,5 +1,7 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Toggle } from '@/components/ui/toggle';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 /**
  * Without `onAddAgents`, « + Agents » stays disabled rather than doing nothing; `showTodo` is off
@@ -14,9 +16,6 @@ type Props = {
   onAddAgents?: (() => void) | undefined;
 };
 
-const VIEW =
-  'flex h-[26px] w-[78px] cursor-pointer items-center justify-center rounded-[7px] text-[12.5px] text-muted-foreground transition-[background-color,color] duration-300 disabled:cursor-default disabled:text-[#4a4a52] aria-pressed:bg-white/8 aria-pressed:text-foreground';
-
 /** Workspace views; Comparer and Revue stay visible but inactive in the core (FR-006). */
 export function Toolbar({
   todoCount,
@@ -27,33 +26,27 @@ export function Toolbar({
 }: Props) {
   return (
     <nav role="toolbar" aria-label="Vues" className="flex items-center gap-2">
-      <span className="flex rounded-[10px] border border-white/6 bg-white/3 p-[3px]">
-        <button className={VIEW} aria-pressed>
+      <ToggleGroup
+        type="single"
+        value="tiles"
+        aria-label="Vue"
+        variant="segment"
+        className="rounded-[10px] border border-white/6 bg-white/3 p-[3px]"
+      >
+        <ToggleGroupItem value="tiles" className="w-[78px]">
           Tuiles
-        </button>
-        <button className={VIEW} disabled>
+        </ToggleGroupItem>
+        <ToggleGroupItem value="compare" className="w-[78px]" disabled>
           Comparer
-        </button>
-        <button className={VIEW} disabled>
+        </ToggleGroupItem>
+        <ToggleGroupItem value="review" className="w-[78px]" disabled>
           Revue
-        </button>
-      </span>
+        </ToggleGroupItem>
+      </ToggleGroup>
       {showTodo && (
-        <button
-          className="flex h-8 flex-none cursor-pointer items-center gap-2 rounded-[9px] border border-white/7 px-3 text-[12.5px] whitespace-nowrap transition-[background-color,border-color] duration-250 hover:border-white/14 aria-pressed:bg-white/5"
-          aria-pressed={todoOpen}
-          onClick={onToggleTodo}
-        >
-          À faire{' '}
-          <span
-            className={cn(
-              'flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] px-[5px] font-mono text-[10.5px] font-medium transition-[background-color] duration-300',
-              todoCount > 0 ? 'bg-waiting text-[#1a1206]' : 'bg-white/10 text-[#a1a1aa]',
-            )}
-          >
-            {todoCount}
-          </span>
-        </button>
+        <Toggle pressed={todoOpen} onPressedChange={() => onToggleTodo?.()}>
+          À faire <Badge variant={todoCount > 0 ? 'waiting' : 'muted'}>{todoCount}</Badge>
+        </Toggle>
       )}
       <Button
         variant="contrast"

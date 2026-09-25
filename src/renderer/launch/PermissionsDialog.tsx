@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { CliDefinition, PermissionLevel, PermissionPreference } from '../../shared/model';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogBody,
@@ -9,6 +11,8 @@ import {
   DialogFooter,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 type LaunchedCli = Pick<CliDefinition, 'id' | 'name' | 'adapter'>;
 
@@ -78,35 +82,24 @@ export function PermissionsDialog({ agentCount, clis, onConfirm, onCancel }: Pro
           <DialogDescription className="font-mono text-[11px]">
             Demandé une seule fois, au premier lancement
           </DialogDescription>
-          <div role="radiogroup" aria-label="Que peuvent faire les agents ?" className="contents">
+          <RadioGroup
+            aria-label="Que peuvent faire les agents ?"
+            value={level}
+            onValueChange={(value) => {
+              const chosen = LEVELS.find((option) => option.level === value);
+              if (chosen) setLevel(chosen.level);
+            }}
+          >
             {LEVELS.map((option) => (
               <label
                 key={option.level}
-                className="flex cursor-pointer gap-2.5 rounded-[7px] border border-white/8 px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/8 has-focus-visible:ring-2 has-focus-visible:ring-ring/60"
+                className="flex cursor-pointer gap-2.5 rounded-xl border border-white/8 px-3 py-2.5 transition-[background-color,border-color] duration-200 has-data-[state=checked]:border-primary/60 has-data-[state=checked]:bg-primary/6"
               >
-                <input
-                  type="radio"
-                  name="level"
-                  className="peer sr-only"
-                  checked={level === option.level}
-                  onChange={() => {
-                    setLevel(option.level);
-                  }}
-                />
-                <span
-                  aria-hidden
-                  className="text-[14px] text-muted-foreground peer-checked:text-primary"
-                >
-                  {level === option.level ? '◉' : '○'}
-                </span>
+                <RadioGroupItem value={option.level} />
                 <span className="flex flex-col gap-[3px]">
-                  <span className="flex items-center gap-2 text-[13.5px] font-semibold">
+                  <span className="flex items-center gap-2 text-[13.5px] font-medium">
                     {option.name}
-                    {option.level === 'always-allow' && (
-                      <span className="rounded-[3px] bg-primary px-1.5 py-px font-mono text-[10px] font-normal text-primary-foreground">
-                        défaut
-                      </span>
-                    )}
+                    {option.level === 'always-allow' && <Badge variant="primary">défaut</Badge>}
                   </span>
                   {clis.map((cli) => (
                     <span key={cli.id} className="text-[12px] leading-[1.4] text-muted-foreground">
@@ -116,42 +109,34 @@ export function PermissionsDialog({ agentCount, clis, onConfirm, onCancel }: Pro
                 </span>
               </label>
             ))}
-          </div>
+          </RadioGroup>
           <div className="mt-1 flex items-center gap-2.5">
             <span id="permission-scope" className="flex-1 text-[12.5px] text-muted-foreground">
               S’applique à
             </span>
-            <div
-              role="radiogroup"
+            <ToggleGroup
+              type="single"
+              variant="strip"
               aria-labelledby="permission-scope"
-              className="flex overflow-hidden rounded-lg border border-white/8 text-[11.5px] font-medium"
+              value={scope}
+              onValueChange={(value) => {
+                const chosen = SCOPES.find(([scopeValue]) => scopeValue === value);
+                if (chosen) setScope(chosen[0]);
+              }}
+              className="overflow-hidden rounded-lg border border-white/8"
             >
               {SCOPES.map(([value, name]) => (
-                <label
-                  key={value}
-                  className="cursor-pointer px-[9px] py-[3px] not-first:border-l not-first:border-white/8 has-checked:bg-white/8 has-checked:text-foreground has-focus-visible:ring-2 has-focus-visible:ring-ring/60 has-focus-visible:ring-inset"
-                >
-                  <input
-                    type="radio"
-                    name="scope"
-                    className="sr-only"
-                    checked={scope === value}
-                    onChange={() => {
-                      setScope(value);
-                    }}
-                  />
+                <ToggleGroupItem key={value} value={value}>
                   {name}
-                </label>
+                </ToggleGroupItem>
               ))}
-            </div>
+            </ToggleGroup>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-[12.5px]">
-            <input
-              type="checkbox"
-              className="size-3.5 accent-(--action)"
+            <Checkbox
               checked={autoResume}
-              onChange={(event) => {
-                setAutoResume(event.target.checked);
+              onCheckedChange={(value) => {
+                setAutoResume(value === true);
               }}
             />
             Reprendre automatiquement après une limite de débit

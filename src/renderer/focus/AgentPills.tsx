@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { Agent } from '../../shared/model';
-import { cn } from '@/lib/utils';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 type Props = {
   agents: Agent[];
@@ -12,23 +12,25 @@ type Props = {
 /** Screen 1p: one pill per agent, in its color, to change agent without the grid (US5). */
 export function AgentPills({ agents, current, name, onSelect }: Props) {
   return (
-    <div role="group" aria-label="Agents" className="flex gap-1.5">
+    <ToggleGroup
+      type="single"
+      aria-label="Agents"
+      value={current}
+      onValueChange={(agentId) => {
+        // Pressing the current pill again keeps it.
+        if (agentId) onSelect(agentId);
+      }}
+      className="gap-1.5"
+    >
       {agents.map((agent) => {
         const waiting = agent.state === 'awaiting-answer';
-        const selected = agent.id === current;
         return (
-          <button
+          <ToggleGroupItem
             key={agent.id}
+            value={agent.id}
             aria-label={`${name(agent.cliId)} ${String(agent.position)}${waiting ? ', attend votre réponse' : ''}`}
-            aria-pressed={selected}
-            onClick={() => {
-              onSelect(agent.id);
-            }}
             style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}
-            className={cn(
-              'flex cursor-pointer items-center gap-1.5 rounded-[5px] border border-white/8 px-2 py-1',
-              selected && 'border-(--agent-color) bg-secondary',
-            )}
+            className="h-7 gap-1.5 rounded-lg border border-white/8 px-2 data-[state=on]:border-(--agent-color) data-[state=on]:bg-white/5"
           >
             <span aria-hidden className="size-2 rounded-full bg-(--agent-color)" />
             {waiting && (
@@ -36,9 +38,9 @@ export function AgentPills({ agents, current, name, onSelect }: Props) {
                 ◆
               </span>
             )}
-          </button>
+          </ToggleGroupItem>
         );
       })}
-    </div>
+    </ToggleGroup>
   );
 }

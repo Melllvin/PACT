@@ -7,6 +7,7 @@ import {
   DialogFooter,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 type Props = {
   name: string;
@@ -16,7 +17,7 @@ type Props = {
 };
 
 const CHOICE =
-  'flex cursor-pointer gap-2.5 rounded-[7px] border border-white/8 px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/8 has-focus-visible:ring-2 has-focus-visible:ring-ring/60';
+  'flex cursor-pointer gap-2.5 rounded-xl border border-white/8 px-3 py-2.5 transition-[background-color,border-color] duration-200 has-data-[state=checked]:border-primary/60 has-data-[state=checked]:bg-primary/6';
 
 /** FR-037: closing an agent asks whether its worktree and branch stay. Keeping is the default. */
 export function CloseAgentDialog({ name, branch, onConfirm, onCancel }: Props) {
@@ -27,20 +28,9 @@ export function CloseAgentDialog({ name, branch, onConfirm, onCancel }: Props) {
 
   const choice = (value: boolean, title: string, detail: string) => (
     <label className={CHOICE}>
-      <input
-        type="radio"
-        name="worktree"
-        className="sr-only"
-        checked={remove === value}
-        onChange={() => {
-          setRemove(value);
-        }}
-      />
-      <span aria-hidden className="text-[14px] text-muted-foreground">
-        {remove === value ? '◉' : '○'}
-      </span>
+      <RadioGroupItem value={String(value)} />
       <span className="flex flex-col gap-[3px]">
-        <span className="text-[13.5px] font-semibold">{title}</span>
+        <span className="text-[13.5px] font-medium">{title}</span>
         <span className="text-[12px] leading-[1.4] text-muted-foreground">{detail}</span>
       </span>
     </label>
@@ -57,14 +47,20 @@ export function CloseAgentDialog({ name, branch, onConfirm, onCancel }: Props) {
           <DialogTitle className="font-sans text-[16px] font-semibold tracking-normal text-foreground normal-case">
             Fermer {name}
           </DialogTitle>
-          <div role="radiogroup" aria-label="Son worktree et sa branche" className="contents">
+          <RadioGroup
+            aria-label="Son worktree et sa branche"
+            value={String(remove)}
+            onValueChange={(value) => {
+              setRemove(value === 'true');
+            }}
+          >
             {choice(false, 'Conserver', 'Le travail reste disponible dans le dépôt.')}
             {choice(
               true,
               'Supprimer',
               `Le worktree et la branche ${branch} sont effacés, modifications non commitées comprises.`,
             )}
-          </div>
+          </RadioGroup>
         </DialogBody>
         <DialogFooter className="justify-end px-[18px]">
           <Button variant="ghost" size="md" onClick={onCancel}>
