@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Tile } from '../../../../src/renderer/tiles/Tile';
@@ -37,6 +37,16 @@ describe('Tile', () => {
     const { tile, terminals } = setup({ color: 'magenta' });
     expect(tile().style.getPropertyValue('--agent-color')).toBe('var(--agent-magenta)');
     expect(terminals.attach).toHaveBeenCalledWith(agent(1).id, expect.any(HTMLElement));
+  });
+
+  it('groups ⎇, ⤢ and the close button as the tools of the tile (1f)', () => {
+    const { tile } = setup({}, { onExpand: vi.fn() });
+    const tools = within(tile()).getByRole('toolbar', { name: 'Outils' });
+    expect(within(tools).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Branche et port',
+      'Agrandir',
+      'Fermer l’agent',
+    ]);
   });
 
   it('shows neither number, title nor state label (FR-020)', () => {

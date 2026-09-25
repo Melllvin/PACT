@@ -63,6 +63,27 @@ describe('TodoColumn', () => {
     expect(item('En cours ▸ zsh — main').style.getPropertyValue('--agent-color')).toBe('');
   });
 
+  it('is titled « À faire » with the number of items that wait on the user (1f)', () => {
+    setup();
+    const heading = screen.getByRole('heading', { level: 2, name: /^À faire/ });
+    expect(heading.textContent).toBe('À faire 2');
+  });
+
+  it('shows the kind of request apart from its agent and hint (1f)', () => {
+    setup([
+      {
+        id: `${waiting.id}:prompt`,
+        agentId: waiting.id,
+        kind: 'prompt',
+        title: 'Donner une consigne · Claude Code · tapez dans le terminal',
+        actions: [],
+      },
+    ]);
+    expect(screen.getByText('Donner une consigne')).toBeDefined();
+    expect(screen.getByText('Claude Code')).toBeDefined();
+    expect(screen.getByText('tapez dans le terminal')).toBeDefined();
+  });
+
   it('answers from the column with the buttons of the tile (FR-028)', async () => {
     const user = userEvent.setup();
     const actions = setup();
