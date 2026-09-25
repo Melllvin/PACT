@@ -283,6 +283,20 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
     }).not.toThrow();
   });
 
+  it('keeps the resume of a closed workspace for the next time it opens', async () => {
+    const id = await limited();
+    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await workspaces.close(workspace.id);
+    clock.advanceTo(RESET);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(pty.history(id)).not.toContain('Session reprise');
+    workspace = await workspaces.open(workspace.path);
+    await manager.restore(workspace.id);
+    clock.advanceTo(RESET); // the time has passed: due at once
+    await waitForState(id, 'awaiting-prompt');
+    expect(pty.history(id)).toContain('Session reprise');
+  });
+
   it('drops the resume when the agent cannot start again at its time', async () => {
     const id = await limited();
     await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);

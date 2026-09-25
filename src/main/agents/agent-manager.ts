@@ -135,17 +135,15 @@ export class AgentManager {
   async restore(workspaceId: string): Promise<void> {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) return;
-    await this.markStale(workspace);
-    for (const agent of this.workspaces.get(workspaceId)?.agents ?? []) {
-      if (agent.state === 'error') this.resumes.sync(agent);
-    }
+    for (const agent of await this.markStale(workspace)) this.resumes.sync(agent);
   }
 
-  private async markStale({ id: workspaceId, agents }: Workspace) {
+  /** The agents of the workspace, those without a process marked « à reprendre ». */
+  private async markStale({ id: workspaceId, agents }: Workspace): Promise<Agent[]> {
     const stale = (agent: Agent) =>
       agent.state !== 'closed' && agent.state !== 'error' && !this.pty.has(agent.id);
     const changed = agents.filter(stale);
-    if (changed.length === 0) return;
+    if (changed.length === 0) return agents;
     const updated = await this.workspaces.update(workspaceId, (ws) => ({
       ...ws,
       agents: ws.agents.map((agent) =>
@@ -161,6 +159,7 @@ export class AgentManager {
     for (const agent of updated.agents) {
       if (changed.some((c) => c.id === agent.id)) this.emit(agent);
     }
+    return updated.agents;
   }
 
   /**
