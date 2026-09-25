@@ -133,7 +133,7 @@ afterEach(async () => {
   await hooks.stop();
   workspaces.dispose();
   await stores.workspace(workspace.id).read();
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
 const RULE = 'Bash(rm fichier.txt)';

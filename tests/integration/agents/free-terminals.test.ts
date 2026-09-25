@@ -61,7 +61,7 @@ afterEach(async () => {
   await pty.dispose();
   workspaces.dispose();
   await stores.workspace(workspace.id).read();
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
 describe.skipIf(isWindows)('FreeTerminals', () => {

@@ -162,7 +162,7 @@ afterEach(async () => {
   workspaces.dispose();
   // Reads queue behind the last writes: nothing is left writing into the folder removed below.
   await stores.workspace(workspace.id).read();
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
 describe('AgentManager.launch', { timeout: 30_000 }, () => {
