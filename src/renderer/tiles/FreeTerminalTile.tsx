@@ -11,6 +11,7 @@ type Props = {
 export function FreeTerminalTile({ terminal, terminals }: Props) {
   return (
     <article
+      data-fx-shield
       aria-label="Terminal libre"
       className="relative flex min-h-0 min-w-0 flex-col rounded-[14px] border border-white/8 bg-surface"
     >

@@ -66,6 +66,7 @@ export function FocusView({
   const failed = agent.state === 'error';
   return (
     <section
+      data-fx-shield
       aria-label={`Focus : ${title}`}
       data-state={agent.state}
       style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}

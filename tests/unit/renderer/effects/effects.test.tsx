@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { AmbientCanvas } from '../../../../src/renderer/effects/AmbientCanvas';
 import { REST_DELAY } from '../../../../src/renderer/effects/field';
 import { Waves } from '../../../../src/renderer/effects/Waves';
@@ -7,7 +7,9 @@ import { Waves } from '../../../../src/renderer/effects/Waves';
 /** A 2D context that accepts every call, gradients included. */
 function fakeContext() {
   const gradient = { addColorStop: vi.fn() };
-  return new Proxy({} as Record<string | symbol, unknown>, {
+  const calls: Record<string | symbol, unknown> = {};
+  lastContext = calls;
+  return new Proxy(calls, {
     get(target, key) {
       if (!(key in target)) target[key] = vi.fn(() => gradient);
       return target[key];
@@ -19,10 +21,12 @@ function fakeContext() {
   }) as unknown as CanvasRenderingContext2D;
 }
 
+let lastContext: Record<string | symbol, unknown>;
 let reduce: boolean;
 let listeners: (() => void)[];
 let frames: FrameRequestCallback[];
 let clock: number;
+let getContext: MockInstance<HTMLCanvasElement['getContext']>;
 
 function allowMotion(value: boolean) {
   reduce = !value;
@@ -60,9 +64,9 @@ beforeEach(() => {
     vi.fn((frame: FrameRequestCallback) => frames.push(frame)),
   );
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
-    () => fakeContext() as never,
-  );
+  getContext = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockImplementation(() => fakeContext());
 });
 
 afterEach(() => {
@@ -99,7 +103,7 @@ describe('AmbientCanvas (R17, FR-042)', () => {
 
   it('starts no loop without a 2D canvas', () => {
     allowMotion(true);
-    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
+    getContext.mockReturnValue(null);
     render(<AmbientCanvas mode="workspace" />);
     fireEvent.pointerMove(window, { clientX: 40, clientY: 40 });
     expect(frames).toHaveLength(0);
@@ -156,6 +160,67 @@ describe('AmbientCanvas (R17, FR-042)', () => {
     const { unmount } = render(<AmbientCanvas mode="home" />);
     unmount();
     expect(cancelAnimationFrame).toHaveBeenCalled();
+  });
+});
+
+describe('drawing on a sized canvas', () => {
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'clientWidth', 'get').mockReturnValue(120);
+    vi.spyOn(HTMLCanvasElement.prototype, 'clientHeight', 'get').mockReturnValue(60);
+  });
+
+  /** How many times the page called a method of the last 2D context, 0 if never. */
+  const called = (method: string) =>
+    method in lastContext ? vi.mocked(lastContext[method] as () => void).mock.calls.length : 0;
+
+  it('draws the dots, the orb around the « + », the glow and the sparks in a workspace', () => {
+    allowMotion(true);
+    render(
+      <>
+        <span data-orb-anchor />
+        <AmbientCanvas mode="workspace" />
+      </>,
+    );
+    fireEvent.pointerMove(window, { clientX: 30, clientY: 20 });
+    fireEvent.pointerDown(window, { clientX: 30, clientY: 20 });
+    step(0.2);
+    expect(called('arc')).toBeGreaterThan(0);
+    expect(called('createRadialGradient')).toBeGreaterThan(4);
+    expect(called('stroke')).toBe(8);
+  });
+
+  it('sends neither wave nor spark from a click on a tile', () => {
+    allowMotion(true);
+    render(
+      <>
+        <article data-fx-shield />
+        <AmbientCanvas mode="workspace" />
+      </>,
+    );
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 100, 100),
+    );
+    fireEvent.pointerDown(window, { clientX: 30, clientY: 20 });
+    step(0.2);
+    expect(called('stroke')).toBe(0);
+  });
+
+  it('draws the fibers on the home tab', () => {
+    allowMotion(true);
+    render(<AmbientCanvas mode="home" />);
+    fireEvent.pointerMove(window, { clientX: 30, clientY: 20 });
+    fireEvent.pointerLeave(document.documentElement);
+    step(0.2);
+    expect(called('stroke')).toBe(34);
+  });
+
+  it('draws three layers of waves', () => {
+    allowMotion(true);
+    render(<Waves />);
+    step(0.2);
+    expect(called('arc')).toBeGreaterThan(0);
+    expect(called('rect')).toBeGreaterThan(0);
+    expect(called('closePath')).toBeGreaterThan(0);
   });
 });
 

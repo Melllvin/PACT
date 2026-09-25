@@ -9,6 +9,7 @@ import type { AppStore } from '../store/app-store';
 import { CloseAgentDialog } from '../tiles/CloseAgentDialog';
 import { LogPanel } from '../tiles/LogPanel';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
+import { AmbientCanvas } from '../effects/AmbientCanvas';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { Legend } from './Legend';
 import { TabBar } from './TabBar';
@@ -65,92 +66,96 @@ export function App({ store, getPathForFile, terminals }: Props) {
         onCloseHome={state.closeHome}
         toolbarRef={setToolbarSlot}
       />
-      <main className="relative min-h-0 overflow-auto">
-        {status === 'error' && (
-          <p role="alert" className="m-4 text-destructive">
-            {error}
-          </p>
-        )}
-        {status === 'ready' && workspace && (
-          <WorkspaceView
-            workspace={workspace}
-            clis={state.clis}
-            terminals={terminals}
-            toolbarSlot={toolbarSlot}
-            onAddAgents={() => {
-              state.openLauncher(workspace.id);
-            }}
-            actions={{
-              onAnswer: (id, answer, always) => void state.answerAgent(id, answer, always),
-              onResume: (id) => void state.resumeAgent(id),
-              onRestart: (id) => void state.restartAgent(id),
-              onLog: (id) => void state.openLog(id),
-              onCancelAutoResume: (id) => void state.cancelAutoResume(id),
-              onClose: state.requestCloseAgent,
-            }}
-            actionError={state.actionError}
-          />
-        )}
-        {closing && (
-          <CloseAgentDialog
-            name={agentName(closing)}
-            branch={closing.branch}
-            onConfirm={(removeWorktree) => void state.closeAgent(removeWorktree)}
-            onCancel={state.cancelCloseAgent}
-          />
-        )}
-        {state.log && logged && (
-          <LogPanel name={agentName(logged)} text={state.log.text} onClose={state.closeLog} />
-        )}
-        {launcher?.step === 'counts' && launching && (
-          <LaunchPanel
-            clis={state.clis}
-            counters={launching.quickLaunchCounters}
-            running={launching.agents}
-            taken={workspaces.flatMap((w) => w.agents)}
-            initialDraft={launcher.draft ?? null}
-            error={launcher.error ?? null}
-            onLaunch={(draft) => void state.requestLaunch(draft)}
-            onClose={state.closeLauncher}
-          />
-        )}
-        {launcher?.step === 'permission' && (
-          <PermissionsDialog
-            agentCount={launcher.draft.agents.length}
-            clis={state.clis.filter((cli) =>
-              launcher.draft.agents.some((agent) => agent.cliId === cli.id),
-            )}
-            onConfirm={(choice) => void state.confirmPermission(choice)}
-            onCancel={state.closeLauncher}
-          />
-        )}
-        {status === 'ready' && !workspace && (
-          <Home
-            workspaces={workspaces}
-            recents={state.recents}
-            now={now}
-            openError={state.openError}
-            clone={state.clone}
-            onGoTo={state.selectWorkspace}
-            onOpenPath={(path) => void state.openRepository(path)}
-            onInitRepo={(path) => void state.initRepository(path)}
-            onPickRepository={() => void state.pickRepository()}
-            onPickCloneDestination={state.pickCloneDestination}
-            onClone={(url, destination) => void state.startClone(url, destination)}
-            getPathForFile={getPathForFile}
-            aside={
-              <>
-                <DetectedClis
-                  clis={state.clis}
-                  onRedetect={() => void state.redetectClis()}
-                  onAdd={state.addCli}
-                />
-                <Legend />
-              </>
-            }
-          />
-        )}
-      </main>
+      {/* The ambient canvas stays put while the content scrolls, under it (R17). */}
+      <div className="relative isolate min-h-0">
+        {status === 'ready' && <AmbientCanvas mode={workspace ? 'workspace' : 'home'} />}
+        <main className="h-full overflow-auto">
+          {status === 'error' && (
+            <p role="alert" className="m-4 text-destructive">
+              {error}
+            </p>
+          )}
+          {status === 'ready' && workspace && (
+            <WorkspaceView
+              workspace={workspace}
+              clis={state.clis}
+              terminals={terminals}
+              toolbarSlot={toolbarSlot}
+              onAddAgents={() => {
+                state.openLauncher(workspace.id);
+              }}
+              actions={{
+                onAnswer: (id, answer, always) => void state.answerAgent(id, answer, always),
+                onResume: (id) => void state.resumeAgent(id),
+                onRestart: (id) => void state.restartAgent(id),
+                onLog: (id) => void state.openLog(id),
+                onCancelAutoResume: (id) => void state.cancelAutoResume(id),
+                onClose: state.requestCloseAgent,
+              }}
+              actionError={state.actionError}
+            />
+          )}
+          {closing && (
+            <CloseAgentDialog
+              name={agentName(closing)}
+              branch={closing.branch}
+              onConfirm={(removeWorktree) => void state.closeAgent(removeWorktree)}
+              onCancel={state.cancelCloseAgent}
+            />
+          )}
+          {state.log && logged && (
+            <LogPanel name={agentName(logged)} text={state.log.text} onClose={state.closeLog} />
+          )}
+          {launcher?.step === 'counts' && launching && (
+            <LaunchPanel
+              clis={state.clis}
+              counters={launching.quickLaunchCounters}
+              running={launching.agents}
+              taken={workspaces.flatMap((w) => w.agents)}
+              initialDraft={launcher.draft ?? null}
+              error={launcher.error ?? null}
+              onLaunch={(draft) => void state.requestLaunch(draft)}
+              onClose={state.closeLauncher}
+            />
+          )}
+          {launcher?.step === 'permission' && (
+            <PermissionsDialog
+              agentCount={launcher.draft.agents.length}
+              clis={state.clis.filter((cli) =>
+                launcher.draft.agents.some((agent) => agent.cliId === cli.id),
+              )}
+              onConfirm={(choice) => void state.confirmPermission(choice)}
+              onCancel={state.closeLauncher}
+            />
+          )}
+          {status === 'ready' && !workspace && (
+            <Home
+              workspaces={workspaces}
+              recents={state.recents}
+              now={now}
+              openError={state.openError}
+              clone={state.clone}
+              onGoTo={state.selectWorkspace}
+              onOpenPath={(path) => void state.openRepository(path)}
+              onInitRepo={(path) => void state.initRepository(path)}
+              onPickRepository={() => void state.pickRepository()}
+              onPickCloneDestination={state.pickCloneDestination}
+              onClone={(url, destination) => void state.startClone(url, destination)}
+              getPathForFile={getPathForFile}
+              aside={
+                <>
+                  <DetectedClis
+                    clis={state.clis}
+                    onRedetect={() => void state.redetectClis()}
+                    onAdd={state.addCli}
+                  />
+                  <Legend />
+                </>
+              }
+            />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

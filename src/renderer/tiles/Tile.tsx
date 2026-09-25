@@ -53,6 +53,7 @@ export function Tile({ agent, name, terminals, onClose, onExpand, ...actions }: 
   const acting = agent.state === 'awaiting-answer' || failed;
   return (
     <article
+      data-fx-shield
       aria-label={`${title}, ${STATE_LABELS[agent.state]}`}
       data-state={agent.state}
       data-pulse={pulses}

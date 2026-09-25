@@ -1,5 +1,6 @@
 import { countsOf, withCount, type LaunchDraft } from '../../shared/launch-draft';
 import { MAX_AGENTS, type CliDefinition } from '../../shared/model';
+import { Waves } from '../effects/Waves';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -131,6 +132,7 @@ export function QuickLaunch({
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent aria-describedby={undefined}>
+        <Waves />
         <DialogBody>
           <DialogTitle>Ajouter au workspace</DialogTitle>
           {detected.length === 0 && (
