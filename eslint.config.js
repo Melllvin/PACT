@@ -11,6 +11,8 @@ export default tseslint.config(
       '.tsbuild/**',
       'test-results/**',
       'playwright-report/**',
+      // React Bits effects copied as published (research.md R15).
+      'src/renderer/effects/vendor/**',
       'docs/**',
       '.agents/**',
       '.claude/**',
