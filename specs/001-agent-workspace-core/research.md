@@ -454,3 +454,34 @@ supporté, `on-failure` déprécié ; `sandbox_mode` : `read-only`, `workspace-w
   - Radix seul, sans shadcn : mêmes primitives, sans le style.
   - React Aria : accessibilité de référence, API plus lourde pour une dizaine de composants.
   - Kits stylés (MUI, Mantine, Chakra) : design propre qui lutte contre 1c.
+
+## R17. Direction « Maquette interactive » (amendement du 2026-09-25)
+
+- **Contexte** : l'utilisateur a fourni `docs/maquettes/Maquette interactive.dc.html` (projet
+  claude.ai/design, lu par le MCP `claude_design`) et choisi « visuel + effets » : l'apparence de
+  tous les écrans existants et les effets d'ambiance suivent cette maquette ; les fonctions qu'elle
+  ajoute hors spec (Comparer, Revue, Réglages, Workflows, notifications, raccourcis) ne sont pas
+  construites. Le nom reste PACT (la maquette dit « relais »).
+- **Tokens** (remplacent ceux de R10, mêmes noms de variables) : fond `#09090b`, surface
+  `#0c0c0f`, texte `#ededef`, texte secondaire `#8b8b93`, bordure `#232327` ; agents : Purple
+  `#a58be0`, Cyan `#72c3e3`, Green `#5fc98a`, Magenta `#dc79b0`, Yellow `#cfc86a`, Slate
+  `#7d89b0` ; états : attend `#e0a458`, erreur/refuser `#e06464`, accepter `#4fcf7d`, action
+  `#7cc8e8` ; rayon 10 px (tuiles 14 px).
+- **Écart assumé** : la maquette donne au 6e agent `#dc9a5e`, presque la couleur « attend »
+  `#e0a458`. FR-016 et FR-040 réservent l'orange à ◆ attend : le 6e agent reste un gris-bleu
+  (Slate).
+- **Polices** : Geist et Geist Mono (Vercel, SIL OFL 1.1) embarquées pour l'interface. Le terminal
+  garde JetBrains Mono : Geist Mono n'a ni le braille (spinners des CLI) ni ◆ ✓ ✕ ⎇.
+- **Effets** (remplacent la `DotGrid` React Bits de R15, T156) : code maison dans
+  `src/renderer/effects/`, porté de la maquette : grille de points qui fuit le curseur et ondule
+  au clic (workspace), fibres ondulantes (accueil), halo coloré autour du « + » du workspace vide,
+  halo et étincelles du curseur, vagues dans l'en-tête du menu rapide. Les calculs sont des
+  fonctions pures testées ; le dessin est un canvas 2D.
+- **Contraintes gardées** : rien n'est peint au-dessus ou à l'intérieur d'un terminal (FR-020) :
+  halo et étincelles vivent sur le canvas de fond, sous les tuiles opaques ; rien n'est dessiné
+  sous `prefers-reduced-motion` ni sans canvas ; la boucle `requestAnimationFrame` s'arrête au
+  repos (ni souris, ni onde en cours, fenêtre cachée) (FR-042, SC de performance).
+- **Alternatives** : garder la `DotGrid` React Bits (dépend de `gsap`, ne rend ni l'onde au clic ni
+  les fibres de la maquette) ; peindre le halo au-dessus de tout comme la maquette (contraire à
+  FR-020).
+

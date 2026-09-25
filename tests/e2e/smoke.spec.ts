@@ -50,17 +50,14 @@ test('serves a Content-Security-Policy strict on scripts in the built app', asyn
   expect(csp).toContain("style-src 'self' 'unsafe-inline'");
 });
 
-test('loads the embedded 1c fonts', async () => {
+test('loads the embedded fonts: Geist for the interface, JetBrains Mono for the terminals', async () => {
   const page = await launched.app.firstWindow();
   const loaded = await page.evaluate(async () => {
-    await document.fonts.load('13px "Instrument Sans"');
-    await document.fonts.load('13px "JetBrains Mono"');
-    return [
-      document.fonts.check('13px "Instrument Sans"'),
-      document.fonts.check('13px "JetBrains Mono"'),
-    ];
+    const fonts = ['13px "Geist"', '13px "Geist Mono"', '13px "JetBrains Mono"'];
+    await Promise.all(fonts.map((font) => document.fonts.load(font)));
+    return fonts.map((font) => document.fonts.check(font));
   });
-  expect(loaded).toEqual([true, true]);
+  expect(loaded).toEqual([true, true, true]);
 });
 
 test('keeps app data in an isolated directory in test mode', async () => {
