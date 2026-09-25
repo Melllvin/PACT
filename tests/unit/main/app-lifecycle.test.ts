@@ -128,3 +128,30 @@ describe('quitQuestion', () => {
     expect(quitQuestion(1).message).toBe('1 agent est actif. Quitter PACT ?');
   });
 });
+
+describe('guardQuit deadline', () => {
+  it('quits after the deadline when a stop never ends, so PACT never stays open', async () => {
+    vi.useFakeTimers();
+    try {
+      const listeners: Listener[] = [];
+      const app = {
+        on: (_name: string, listener: Listener) => listeners.push(listener),
+        quit: vi.fn(),
+      };
+      guardQuit({
+        app,
+        activeAgents: () => 0,
+        confirm: () => Promise.resolve(true),
+        shutdown: () => new Promise<void>(() => undefined),
+        deadlineMs: 5000,
+      });
+      for (const listener of listeners) listener({ preventDefault: vi.fn() });
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(app.quit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(app.quit).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
