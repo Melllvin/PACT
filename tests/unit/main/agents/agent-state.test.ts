@@ -121,6 +121,19 @@ describe('applySignal', () => {
     expect(applySignal(failed, { type: 'turn-finished' })).toBe(failed);
   });
 
+  it('keeps a scheduled resume only while the rate limit lasts (FR-036)', () => {
+    const scheduledResume = { agentId: 'a1', at: '2030-01-01T09:30:00.000Z', attempt: 0 };
+    const limited = agent({ ...rateLimited, scheduledResume });
+    const again = { type: 'failed', kind: 'rate-limit', message: 'Toujours limité' } as const;
+    expect(applySignal(limited, again).scheduledResume).toEqual(scheduledResume);
+    expect(applySignal(limited, { type: 'awaiting-answer', summary: 'Continuer ?' })).toMatchObject(
+      { state: 'awaiting-answer', scheduledResume: null },
+    );
+    expect(
+      applySignal(limited, { type: 'failed', kind: 'crash', message: 'Erreur' }),
+    ).toMatchObject({ state: 'error', scheduledResume: null });
+  });
+
   it('returns the same agent when nothing changes', () => {
     const done = agent({ state: 'done', sessionId: 's1' });
     expect(applySignal(done, { type: 'turn-finished', sessionId: 's1' })).toBe(done);

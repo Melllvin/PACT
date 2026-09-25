@@ -70,6 +70,8 @@ let clock: TestClock;
 let events: AgentStateEvent[];
 let scenario: string;
 let autoResume: boolean;
+/** Set when the shell environment fails: the agent cannot start again. */
+let envError: Error | null;
 
 const createManager = async () => {
   const adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: process.platform });
@@ -87,7 +89,10 @@ const createManager = async () => {
     pty,
     hooks,
     hookUrl: () => hookUrl,
-    resolveEnv: () => Promise.resolve({ ...gitEnv, FAKE_CLI_SCENARIO: scenarioPath(scenario) }),
+    resolveEnv: () =>
+      envError
+        ? Promise.reject(envError)
+        : Promise.resolve({ ...gitEnv, FAKE_CLI_SCENARIO: scenarioPath(scenario) }),
     isPortInUse: () => Promise.resolve(false),
     onState: (event) => events.push(event),
     autoResume: () => Promise.resolve(autoResume),
@@ -161,6 +166,7 @@ beforeEach(async () => {
   events = [];
   scenario = 'rate-limit';
   autoResume = true;
+  envError = null;
   manager = await createManager();
 }, 30_000);
 
@@ -255,6 +261,33 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
     clock.advanceTo('2030-01-01T12:00:00.000Z');
     await new Promise((r) => setTimeout(r, 200));
     expect(continues(write)).toBe(1);
+  });
+
+  it('drops the resume when the agent cannot start again at its time', async () => {
+    const id = await limited();
+    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    envError = new Error('shell gone');
+    clock.advanceTo(RESET);
+    await waitFor(() => current(id)?.scheduledResume === null, 'resume kept', id);
+    expect(current(id)).toMatchObject({ state: 'error', lastError: { kind: 'rate-limit' } });
+  });
+
+  it('does not resume a saved resume whose error is no longer a rate limit', async () => {
+    const id = await limited();
+    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await manager.dispose();
+    await workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) =>
+        a.id === id ? { ...a, lastError: { code: 1, kind: 'crash', message: 'Arrêté' } } : a,
+      ),
+    }));
+    manager = await createManager();
+    await manager.restore(workspace.id);
+    clock.advanceTo(RESET);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(current(id)).toMatchObject({ state: 'error', lastError: { kind: 'crash' } });
+    expect(pty.history(id)).not.toContain('Session reprise');
   });
 
   it('resumes after a restart of PACT a resume saved before it', async () => {
