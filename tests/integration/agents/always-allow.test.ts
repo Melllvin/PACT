@@ -147,6 +147,8 @@ const firstTurn = async (id: string, always: boolean) => {
   pty.write(id, 'Supprime le fichier\r');
   await waitForState(id, 'awaiting-answer');
   await manager.answer(id, 'allow', always);
+  // The Stop hook may come before the terminal output (ConPTY on Windows).
+  await waitFor(() => allowedTimes(id) === 1, 'request not allowed', id);
   await waitForState(id, 'done');
 };
 
