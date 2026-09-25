@@ -284,7 +284,7 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 - [X] T103 [P] [US7] Tests de la planification (horloge simulée) : heure de levée connue → reprise à cette heure ; inconnue → backoff « 1, 2, 4, 8, 15, 15… min » ; annulation par Annuler / Reprendre / Relancer / fermeture, par `UserPromptSubmit` ou par la notification `quota_auto_resume_fired` ; `autoResume` désactivé → aucune programmation dans `tests/unit/main/agents/auto-resume.test.ts`
 - [X] T104 [P] [US7] Tests de `parseRateLimitReset` pour Claude Code et Codex (formats relevés en T049, fuseau local) dans `tests/unit/main/agents/rate-limit-parse.test.ts`
 - [X] T105 [US7] Tests d'intégration avec le faux CLI : `rate-limit` (processus terminé → `buildResume`), `rate-limit-alive` (processus vivant → « continue » + Entrée), `rate-limit-native-resume` (aucune seconde reprise) dans `tests/integration/agents/auto-resume.test.ts`
-- [ ] T106 [P] [US7] Test e2e avec horloge simulée : tuile et À faire affichent « reprise auto à HH:MM · Annuler », reprise sans action, Annuler supprime la programmation dans `tests/e2e/us7-auto-resume.spec.ts`
+- [X] T106 [P] [US7] Test e2e avec horloge simulée : tuile et À faire affichent « reprise auto à HH:MM · Annuler », reprise sans action, Annuler supprime la programmation dans `tests/e2e/us7-auto-resume.spec.ts`
 
 ### Implementation for User Story 7
 

@@ -13,7 +13,7 @@ import { createAgentServices, forwardTerminalEvents } from './ipc/agent-handlers
 import { createEventEmitter, registerHandlers } from './ipc/handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
-import { applyTestMode } from './test-mode';
+import { applyTestMode, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
 import { CloneJobs } from './workspace/clone-job';
 import { WorkspaceService } from './workspace/workspace-service';
@@ -60,6 +60,9 @@ void app.whenReady().then(async () => {
   const pty = new PtyManager();
   forwardTerminalEvents(pty, emit);
   const permissions = new PermissionService({ stores, workspaces });
+  // The e2e harness moves this clock itself from the main process (T106).
+  const clock = testClock(process.env);
+  if (clock) Object.assign(globalThis, { pactTestClock: clock });
   const agents = new AgentManager({
     workspaces,
     registry,
@@ -77,6 +80,7 @@ void app.whenReady().then(async () => {
     // FR-035: « reprise auto » of screen 1m, off until chosen.
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
+    ...(clock ? { clock } : {}),
   });
   const freeTerminals = new FreeTerminals({
     workspaces,
