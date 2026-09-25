@@ -6,6 +6,7 @@ import { CliRegistry } from './agents/cli-registry';
 import { FreeTerminals } from './agents/free-terminals';
 import { HookServer } from './agents/hook-server';
 import { PermissionService } from './agents/permission-service';
+import { guardQuit, quitQuestion } from './app-lifecycle';
 import { createAppServices, devServerUrl, trustedSenderCheck } from './app-services';
 import { resolveShellEnv } from './env/shell-env';
 import { GitService } from './git/git-service';
@@ -150,13 +151,26 @@ void app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow(windowEnv);
   });
-  app.on('will-quit', () => {
-    workspaces.dispose();
+  guardQuit({
+    app,
+    activeAgents: () => agents.activeCount(),
+    confirm: async (count) => {
+      const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const question = quitQuestion(count);
+      const { response } = window
+        ? await dialog.showMessageBox(window, question)
+        : await dialog.showMessageBox(question);
+      return response === 0;
+    },
     // Agent states stay saved as they are; the processes end with the app (FR-038).
-    void Promise.all([agents.dispose(), freeTerminals.dispose()]).then(async () => {
+    shutdown: async () => {
+      workspaces.dispose();
+      await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
       await hooks.stop();
-    });
+    },
+    // e2e runs close the app themselves; no one is there to answer.
+    skipConfirm: process.env.PACT_TEST_MODE === '1',
   });
 });
 

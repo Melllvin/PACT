@@ -252,6 +252,11 @@ export class AgentManager {
     this.emit({ ...agent, state: 'closed' });
   }
 
+  /** Agents whose process runs now; quitting asks first while there are some (T110). */
+  activeCount(): number {
+    return this.running.size;
+  }
+
   /** Stops every agent process on quit; their last known state stays saved. */
   async dispose(): Promise<void> {
     if (this.disposed) return;

@@ -85,10 +85,11 @@ describe('guardQuit', () => {
     expect(again.preventDefault).not.toHaveBeenCalled();
   });
 
-  it('ignores a new quit while the question is open or the stop is running', async () => {
-    const { confirm, listeners, quit } = setup({ active: 1 });
-    await quit();
+  it('ignores a new quit while the question is open or the stop is running', () => {
+    const { confirm, listeners } = setup({ active: 1 });
+    const first = { preventDefault: vi.fn() };
     const again = { preventDefault: vi.fn() };
+    for (const listener of listeners) listener(first);
     for (const listener of listeners) listener(again);
     expect(again.preventDefault).toHaveBeenCalled();
     expect(confirm).toHaveBeenCalledOnce();
