@@ -164,6 +164,7 @@ describe('Tile', () => {
         onResume={vi.fn()}
         onRestart={vi.fn()}
         onLog={vi.fn()}
+        onCancelAutoResume={vi.fn()}
         onClose={vi.fn()}
       />,
     );

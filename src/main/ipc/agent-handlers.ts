@@ -5,7 +5,7 @@ import type { CliRegistry } from '../agents/cli-registry';
 import type { PermissionChoice } from '../agents/permission-service';
 
 // T064 — US2 channels (contracts/ipc.md). `term:write` and `term:resize` come with them: the user
-// types the first prompt in the agent's terminal (FR-018). T074 — the US3 tile actions.
+// types the first prompt in the agent's terminal (FR-018). T074 — the US3 tile actions. T109 — US7.
 
 type Dependencies = {
   registry: Pick<CliRegistry, 'add' | 'detect'>;
@@ -17,6 +17,7 @@ type Dependencies = {
     restart(id: string): Promise<void>;
     close(id: string, options: { removeWorktree: boolean }): Promise<void>;
     log(id: string): string;
+    cancelAutoResume(id: string): Promise<void>;
   };
   freeTerminals: { open(workspaceId: string, count: number): Promise<unknown> };
   pty: {
@@ -54,6 +55,8 @@ export function createAgentServices({
     'agent:close': ({ agentId, removeWorktree }: IpcInput<'agent:close'>) =>
       agents.close(agentId, { removeWorktree }),
     'agent:log': ({ agentId }: IpcInput<'agent:log'>) => agents.log(agentId),
+    'agent:cancelAutoResume': ({ agentId }: IpcInput<'agent:cancelAutoResume'>) =>
+      agents.cancelAutoResume(agentId),
     'term:write': ({ termId, data }: IpcInput<'term:write'>) => {
       pty.write(termId, data);
     },

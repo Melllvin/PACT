@@ -290,7 +290,7 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 
 - [X] T107 [US7] Implémenter `parseRateLimitReset` dans `src/main/agents/adapters/claude-code.ts` et `src/main/agents/adapters/codex.ts`
 - [X] T108 [US7] Implémenter le planificateur de reprise (horloge injectable, persistance de `ScheduledResume`, reprise au redémarrage de l'app) dans `src/main/agents/auto-resume.ts` et le brancher dans `AgentManager`
-- [ ] T109 [US7] Brancher `agent:cancelAutoResume` dans `src/main/ipc/agent-handlers.ts` et afficher « reprise auto à HH:MM · Annuler » dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/todo/TodoItem.tsx` (élément `rate-limit`)
+- [X] T109 [US7] Brancher `agent:cancelAutoResume` dans `src/main/ipc/agent-handlers.ts` et afficher « reprise auto à HH:MM · Annuler » dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/todo/TodoItem.tsx` (élément `rate-limit`)
 
 **Checkpoint**: toutes les stories fonctionnelles
 

@@ -67,7 +67,7 @@ export function Tile({ agent, name, terminals, onClose, onExpand, ...actions }: 
         {failed && agent.lastError && (
           <span className={styles.failure}>{agent.lastError.message}</span>
         )}
-        <TileActions state={agent.state} {...actions} />
+        <TileActions state={agent.state} scheduledResume={agent.scheduledResume} {...actions} />
       </footer>
     </article>
   );

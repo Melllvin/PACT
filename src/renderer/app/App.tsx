@@ -83,6 +83,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
               onResume: (id) => void state.resumeAgent(id),
               onRestart: (id) => void state.restartAgent(id),
               onLog: (id) => void state.openLog(id),
+              onCancelAutoResume: (id) => void state.cancelAutoResume(id),
               onClose: state.requestCloseAgent,
             }}
             actionError={state.actionError}
