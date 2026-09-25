@@ -39,7 +39,7 @@ const clock: Clock = {
   now: () => new Date(),
   setTimeout: (run, ms) => setTimeout(run, ms),
   clearTimeout: (timer) => {
-    clearTimeout(timer);
+    clearTimeout(timer as ReturnType<typeof setTimeout>);
   },
 };
 

@@ -96,7 +96,10 @@ export class ClaudeCodeAdapter implements CliAdapter {
 
   mapHookEvent(payload: unknown): AgentSignal | null {
     const parsed = hookPayloadSchema.safeParse(payload);
-    return parsed.success ? mapEvent(parsed.data) : null;
+    const signal = parsed.success ? mapEvent(parsed.data) : null;
+    if (signal?.type !== 'failed' || signal.kind !== 'rate-limit') return signal;
+    const resetAt = this.parseRateLimitReset(signal.message);
+    return resetAt ? { ...signal, resetAt } : signal;
   }
 
   mapOutput(chunk: string, _ctx: OutputContext): AgentSignal | null {
@@ -184,6 +187,10 @@ function mapEvent(event: HookPayload): AgentSignal | null {
         : { type: 'awaiting-answer', summary: command, ruleKey: `${tool}(${command})` };
     }
     case 'Notification':
+      // Claude Code resumed by itself after a quota: PACT must not resume it too (FR-036).
+      // Its `_stale` and `_disabled` siblings mean it will not: PACT's resume stays.
+      if (event.notification_type === 'quota_auto_resume_fired')
+        return { type: 'prompt-submitted' };
       return event.notification_type === 'permission_prompt' ||
         event.notification_type === 'agent_needs_input'
         ? { type: 'awaiting-answer', summary: event.message ?? 'Claude attend une réponse' }

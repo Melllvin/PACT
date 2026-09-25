@@ -18,14 +18,16 @@ export function applySignal(agent: Agent, signal: AgentSignal): Agent {
           : agent.state;
       return change(agent, { sessionId, state });
     }
+    // A prompt taken again (typed, or the CLI's own resume after a quota) ends any scheduled resume.
     case 'prompt-submitted':
       return change(agent, {
         state: 'working',
         lastError: null,
+        scheduledResume: null,
         initialPrompt: agent.initialPrompt ?? signal.prompt ?? null,
       });
     case 'awaiting-answer':
-      return change(agent, { state: 'awaiting-answer', lastError: null });
+      return change(agent, { state: 'awaiting-answer', lastError: null, scheduledResume: null });
     case 'turn-finished': {
       const other =
         signal.sessionId !== undefined &&
@@ -35,12 +37,15 @@ export function applySignal(agent: Agent, signal: AgentSignal): Agent {
       return change(agent, {
         state: 'done',
         sessionId: agent.sessionId ?? signal.sessionId ?? null,
+        scheduledResume: null,
       });
     }
+    // A scheduled resume lasts only as long as the rate limit (FR-036).
     case 'failed':
       return change(agent, {
         state: 'error',
         lastError: { code: null, kind: signal.kind, message: signal.message },
+        ...(signal.kind === 'rate-limit' ? {} : { scheduledResume: null }),
       });
   }
 }

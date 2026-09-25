@@ -59,6 +59,7 @@ void app.whenReady().then(async () => {
   const hookUrl = await hooks.start();
   const pty = new PtyManager();
   forwardTerminalEvents(pty, emit);
+  const permissions = new PermissionService({ stores, workspaces });
   const agents = new AgentManager({
     workspaces,
     registry,
@@ -73,6 +74,9 @@ void app.whenReady().then(async () => {
     onBranch: (event) => {
       emit('agent:branch', event);
     },
+    // FR-035: « reprise auto » of screen 1m, off until chosen.
+    autoResume: async (workspaceId) =>
+      (await permissions.resolve(workspaceId))?.autoResume ?? false,
   });
   const freeTerminals = new FreeTerminals({
     workspaces,
@@ -124,7 +128,7 @@ void app.whenReady().then(async () => {
       }),
       ...createAgentServices({
         registry,
-        permissions: new PermissionService({ stores, workspaces }),
+        permissions,
         agents,
         freeTerminals,
         pty,

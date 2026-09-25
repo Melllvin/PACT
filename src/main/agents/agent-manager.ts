@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { IpcFailure, type AgentDraft, type IpcEvent } from '../../shared/ipc';
 import { freeColors, freePositions } from '../../shared/launch-draft';
-import { MAX_AGENTS, type Agent, type Workspace } from '../../shared/model';
+import { MAX_AGENTS, type Agent, type ScheduledResume, type Workspace } from '../../shared/model';
 import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
 import type { PtyManager } from '../pty/pty-manager';
 import { IDLE_QUESTION_MS } from './adapters/generic';
 import type { AgentSignal, CliAdapter, ResolvedEnv } from './adapters/types';
 import { applyExit, applySignal } from './agent-state';
+import { AutoResume, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
@@ -40,6 +41,9 @@ type Options = {
   onBranch?: (event: AgentBranchEvent) => void;
   /** Quiet time after which the output is read again for a question (generic adapter). */
   idleMs?: number;
+  /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
+  autoResume?: (workspaceId: string) => Promise<boolean>;
+  clock?: Clock;
 };
 
 export type LaunchRequest = {
@@ -75,6 +79,8 @@ export class AgentManager {
   private readonly onBranch: NonNullable<Options['onBranch']>;
   private readonly branches: BranchWatcher;
   private readonly idleMs: number;
+  private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
+  private readonly resumes: AutoResume;
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
@@ -97,6 +103,11 @@ export class AgentManager {
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
+    this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
+    this.resumes = new AutoResume({
+      ...(options.clock ? { clock: options.clock } : {}),
+      onDue: (resume) => void this.resumeDue(resume),
+    });
     this.branches = new BranchWatcher({
       currentBranch: (path) => this.git.currentBranch(path),
       onBranch: (id, branch) => void this.renamed(id, branch),
@@ -119,14 +130,21 @@ export class AgentManager {
 
   /**
    * After a restart no agent process exists any more: live agents become « à reprendre »
-   * (FR-038). A rate limit keeps its reason and its scheduled resume.
+   * (FR-038). A rate limit keeps its reason and its scheduled resume, armed again.
    */
   async restore(workspaceId: string): Promise<void> {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) return;
+    await this.markStale(workspace);
+    for (const agent of this.workspaces.get(workspaceId)?.agents ?? []) {
+      if (agent.state === 'error') this.resumes.sync(agent);
+    }
+  }
+
+  private async markStale({ id: workspaceId, agents }: Workspace) {
     const stale = (agent: Agent) =>
       agent.state !== 'closed' && agent.state !== 'error' && !this.pty.has(agent.id);
-    const changed = workspace.agents.filter(stale);
+    const changed = agents.filter(stale);
     if (changed.length === 0) return;
     const updated = await this.workspaces.update(workspaceId, (ws) => ({
       ...ws,
@@ -175,22 +193,21 @@ export class AgentManager {
    */
   async resume(id: string): Promise<void> {
     const { workspace, agent } = this.inError(id);
-    if (this.running.has(id)) {
-      this.pty.write(id, 'continue\r');
-      await this.change(workspace.id, id, (a) => ({
-        ...a,
-        state: 'working',
-        lastError: null,
-        scheduledResume: null,
-      }));
-      return;
-    }
-    await this.startAgain(workspace, agent, agent.sessionId);
+    this.resumes.forget(id);
+    await this.resumeNow(workspace, agent);
+  }
+
+  /** « Annuler » of « reprise auto à HH:MM »: the agent stays in error (FR-036). */
+  async cancelAutoResume(id: string): Promise<void> {
+    const { workspace } = this.find(id);
+    this.resumes.forget(id);
+    await this.change(workspace.id, id, (a) => ({ ...a, scheduledResume: null }));
   }
 
   /** « Relancer »: a new session, then the initial prompt typed again (FR-024, R6). */
   async restart(id: string): Promise<void> {
     const { workspace, agent } = this.inError(id);
+    this.resumes.forget(id);
     await this.stop(id);
     if (agent.initialPrompt !== null) this.retype.set(id, agent.initialPrompt);
     await this.startAgain(workspace, agent, null);
@@ -205,6 +222,7 @@ export class AgentManager {
   /** Stops the agent and forgets it; its worktree and branch go only when asked (FR-037). */
   async close(id: string, { removeWorktree }: { removeWorktree: boolean }): Promise<void> {
     const { workspace, agent } = this.find(id);
+    this.resumes.forget(id);
     await this.stop(id);
     if (removeWorktree) {
       // The agent may have renamed its branch since the last check.
@@ -228,6 +246,7 @@ export class AgentManager {
     this.disposed = true;
     for (const stop of this.unsubscribe) stop();
     this.branches.dispose();
+    this.resumes.dispose();
     await Promise.all([...this.running.keys()].map((id) => this.stop(id)));
   }
 
@@ -275,7 +294,51 @@ export class AgentManager {
     }));
     const started: Agent = { ...agent, ...fields };
     this.emit(started);
+    this.resumes.sync(started);
     this.start(started, workspace.path, cli, env);
+  }
+
+  /**
+   * The same session (R6). A process still alive after a rate limit gets « continue » typed in
+   * its prompt instead (data-model « AgentState »).
+   */
+  private async resumeNow(workspace: Workspace, agent: Agent) {
+    if (this.running.has(agent.id)) {
+      this.pty.write(agent.id, 'continue\r');
+      await this.change(workspace.id, agent.id, (a) => ({
+        ...a,
+        state: 'working',
+        lastError: null,
+        scheduledResume: null,
+      }));
+      return;
+    }
+    await this.startAgain(workspace, agent, agent.sessionId);
+  }
+
+  /** The time of a scheduled resume: only if nothing took it over meanwhile (FR-036). */
+  private async resumeDue(resume: ScheduledResume) {
+    const found = this.workspaces
+      .list()
+      .flatMap((workspace) => workspace.agents.map((agent) => ({ workspace, agent })))
+      .find(({ agent }) => agent.id === resume.agentId);
+    if (!found) return;
+    const { workspace, agent } = found;
+    const scheduled = agent.scheduledResume;
+    if (
+      agent.state !== 'error' ||
+      agent.lastError?.kind !== 'rate-limit' ||
+      scheduled?.at !== resume.at ||
+      scheduled.attempt !== resume.attempt
+    ) {
+      return;
+    }
+    try {
+      await this.resumeNow(workspace, agent);
+    } catch {
+      // Its CLI is gone (uninstalled since): the manual actions remain.
+      await this.change(workspace.id, agent.id, (a) => ({ ...a, scheduledResume: null }));
+    }
   }
 
   private async renamed(id: string, branch: string) {
@@ -467,8 +530,28 @@ export class AgentManager {
     } else {
       this.pendingRule.delete(id);
     }
-    await this.change(running.workspaceId, id, (agent) => applySignal(agent, signal));
-    if (signal.type === 'turn-finished') await this.branches.check(id);
+    const resetAt = signal.type === 'failed' ? signal.resetAt : undefined;
+    const schedule =
+      signal.type === 'failed' &&
+      signal.kind === 'rate-limit' &&
+      (await this.autoResumeOn(running.workspaceId));
+    // Planned once, outside `change` (its callback may run twice), then saved with the error:
+    // one agent:state event carries both.
+    const before = this.find(id).agent;
+    const resume =
+      schedule && applySignal(before, signal).state === 'error'
+        ? this.resumes.plan(before, resetAt)
+        : null;
+    await this.change(running.workspaceId, id, (agent) => {
+      const next = applySignal(agent, signal);
+      return resume && next.state === 'error' && !next.scheduledResume
+        ? { ...next, scheduledResume: resume }
+        : next;
+    });
+    if (signal.type === 'turn-finished') {
+      if (this.find(id).agent.state === 'done') this.resumes.forget(id);
+      await this.branches.check(id);
+    }
   }
 
   /** Saves and announces a transition; `next` runs on the latest agent, inside the update. */
@@ -482,6 +565,7 @@ export class AgentManager {
     }));
     if (!changed) return;
     this.emit(changed);
+    this.resumes.sync(changed);
     const prompt = this.retype.get(id);
     if (changed.state === 'awaiting-prompt' && prompt !== undefined && this.running.has(id)) {
       this.retype.delete(id);
