@@ -42,11 +42,11 @@ describe('Tile', () => {
   it('groups ⎇, ⤢ and the close button as the tools of the tile (1f)', () => {
     const { tile } = setup({}, { onExpand: vi.fn() });
     const tools = within(tile()).getByRole('toolbar', { name: 'Outils' });
-    expect(within(tools).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Branche et port',
-      'Agrandir',
-      'Fermer l’agent',
-    ]);
+    expect(
+      within(tools)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Branche et port', 'Agrandir', 'Fermer l’agent']);
   });
 
   it('shows neither number, title nor state label (FR-020)', () => {

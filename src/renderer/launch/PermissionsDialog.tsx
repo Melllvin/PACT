@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { CliDefinition, PermissionLevel, PermissionPreference } from '../../shared/model';
-import type { KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -68,17 +67,10 @@ export function PermissionsDialog({ agentCount, clis, onConfirm, onCancel }: Pro
   const confirm = () => {
     onConfirm({ level, autoResume, scope });
   };
-  /** « Entrée = choix par défaut »: Enter launches from anywhere but a button, which acts itself. */
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
-      event.preventDefault();
-      confirm();
-    }
-  };
 
   return (
     <Dialog open onOpenChange={onCancel}>
-      <DialogContent className="w-[min(480px,calc(100vw-32px))]" onKeyDown={onKeyDown}>
+      <DialogContent className="w-[min(480px,calc(100vw-32px))]" onEnter={confirm}>
         <DialogBody className="gap-2.5 px-[18px] py-4">
           <DialogTitle className="font-sans text-[16px] font-semibold tracking-normal text-foreground normal-case">
             Autorisations des agents

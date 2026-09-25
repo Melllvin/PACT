@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import styles from './tiles.module.css';
+import { Button } from '@/components/ui/button';
 
 type Props = { branch: string; port: number };
 
@@ -14,9 +14,10 @@ export function BranchTooltip({ branch, port }: Props) {
     setOpen(false);
   };
   return (
-    <span className={styles.branch}>
-      <button
-        className={styles.icon}
+    <span className="relative flex">
+      <Button
+        variant="ghost"
+        size="icon"
         aria-label="Branche et port"
         aria-describedby={open ? id : undefined}
         onMouseEnter={show}
@@ -25,9 +26,13 @@ export function BranchTooltip({ branch, port }: Props) {
         onBlur={hide}
       >
         ⎇
-      </button>
+      </Button>
       {open && (
-        <span role="tooltip" id={id} className={styles.tooltip}>
+        <span
+          role="tooltip"
+          id={id}
+          className="absolute top-[calc(100%+4px)] right-0 z-10 rounded-[5px] border border-border bg-card px-2 py-1 font-mono text-[11px] whitespace-nowrap text-foreground shadow-[0_8px_20px_rgb(0_0_0/40%)]"
+        >
           {branch} · :{port}
         </span>
       )}

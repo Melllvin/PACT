@@ -8,11 +8,16 @@ function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
+/**
+ * `onEnter`: Enter confirms the default choice from anywhere in the dialog but a button, which
+ * acts itself (« Entrée = choix par défaut », 1m).
+ */
 function DialogContent({
   className,
   children,
+  onEnter,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { onEnter?: () => void }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay
@@ -25,6 +30,14 @@ function DialogContent({
           'fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-48px)] w-[min(380px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[10px] border border-border bg-card text-card-foreground shadow-[0_24px_60px_rgb(0_0_0/55%)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:animate-none',
           className,
         )}
+        onKeyDown={
+          onEnter &&
+          ((event) => {
+            if (event.key !== 'Enter' || event.target instanceof HTMLButtonElement) return;
+            event.preventDefault();
+            onEnter();
+          })
+        }
         {...props}
       >
         {children}

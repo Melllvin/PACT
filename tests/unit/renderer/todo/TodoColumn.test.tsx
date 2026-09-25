@@ -99,7 +99,7 @@ describe('TodoColumn', () => {
   it('recovers from a rate limit with « Journal », « Relancer » and « Reprendre »', async () => {
     const user = userEvent.setup();
     const actions = setup();
-    const limit = within(item('✕ Limite de débit · Claude Code'));
+    const limit = within(item('✕ Limite de débit'));
     await user.click(limit.getByRole('button', { name: 'Journal' }));
     await user.click(limit.getByRole('button', { name: 'Relancer' }));
     await user.click(limit.getByRole('button', { name: 'Reprendre' }));
@@ -111,7 +111,7 @@ describe('TodoColumn', () => {
   it('shows the scheduled resume of the rate limit, with « Annuler » (FR-036)', async () => {
     const user = userEvent.setup();
     const actions = setup();
-    const limit = within(item('✕ Limite de débit · Claude Code'));
+    const limit = within(item('✕ Limite de débit'));
     expect(limit.getByText(`reprise auto à ${time}`)).toBeDefined();
     await user.click(limit.getByRole('button', { name: 'Annuler' }));
     expect(actions.onCancelAutoResume).toHaveBeenCalledWith(limited.id);

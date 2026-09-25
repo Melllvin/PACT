@@ -37,3 +37,34 @@
   --font-sans: var(--font-ui);
   --font-mono: var(--font-mono);
 }
+
+/* One pulse of the tile border per change of state (FR-023), and the À faire items unfolding
+   as they come in (1l). */
+@theme {
+  --animate-tile-pulse: tile-pulse 700ms ease-out forwards;
+  --animate-unfold: unfold 180ms ease-out;
+
+  @keyframes tile-pulse {
+    from {
+      opacity: 1;
+      box-shadow: 0 0 0 0 var(--agent-color);
+    }
+    to {
+      opacity: 0;
+      box-shadow: 0 0 0 8px transparent;
+    }
+  }
+
+  @keyframes unfold {
+    from {
+      max-height: 0;
+      opacity: 0;
+      transform: scaleY(0.6);
+    }
+    to {
+      max-height: 120px;
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
