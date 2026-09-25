@@ -71,6 +71,12 @@ describe('agent actions', () => {
     expect(store.getState().actionError).toBeNull();
   });
 
+  it('cancels the scheduled resume (FR-036)', async () => {
+    const { store, invoke } = await setup();
+    await store.getState().cancelAutoResume(id);
+    expect(invoke).toHaveBeenCalledWith('agent:cancelAutoResume', { agentId: id });
+  });
+
   it('sends « Toujours pour ce worktree » with the answer (FR-034)', async () => {
     const { store, invoke } = await setup();
     await store.getState().answerAgent(id, 'allow', true);

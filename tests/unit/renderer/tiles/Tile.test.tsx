@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Tile } from '../../../../src/renderer/tiles/Tile';
 import type { Agent } from '../../../../src/shared/model';
-import { agent } from './fixtures';
+import { agent, rateLimited, scheduledResume, time } from './fixtures';
 
 // T070 — the agent tile (FR-020…FR-024, US3 scenarios 3 to 6, screens 1f and 1n).
 
@@ -13,6 +13,7 @@ const setup = (overrides: Partial<Agent> = {}, extra: { onExpand?: () => void } 
     onResume: vi.fn(),
     onRestart: vi.fn(),
     onLog: vi.fn(),
+    onCancelAutoResume: vi.fn(),
     onClose: vi.fn(),
   };
   const terminals = { attach: vi.fn(() => () => undefined) };
@@ -106,6 +107,21 @@ describe('Tile', () => {
     expect(actions.onRestart).toHaveBeenCalledOnce();
     expect(actions.onResume).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: '✓ Autoriser' })).toBeNull();
+  });
+
+  it('shows the scheduled resume with « Annuler » after a rate limit (FR-036)', async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({ ...rateLimited, scheduledResume });
+    expect(screen.getByText(`reprise auto à ${time}`)).toBeDefined();
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(actions.onCancelAutoResume).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Reprendre' })).toBeDefined();
+  });
+
+  it('shows no scheduled resume when there is none', () => {
+    setup(rateLimited);
+    expect(screen.queryByText(/reprise auto/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Annuler' })).toBeNull();
   });
 
   it.each(['starting', 'awaiting-prompt', 'working', 'done'] as const)(

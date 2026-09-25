@@ -6,10 +6,7 @@ import { ipcRequests } from '../../../../src/shared/ipc';
 // contracts/ipc.md — a channel the renderer may call is served by the main process.
 
 /** Declared ahead of the story that serves it. */
-const pending = new Set([
-  // T109: « reprise auto à HH:MM · Annuler » (US7).
-  'agent:cancelAutoResume',
-]);
+const pending = new Set<string>();
 
 describe('IPC channels', () => {
   it('serves every request channel of the contract', () => {
