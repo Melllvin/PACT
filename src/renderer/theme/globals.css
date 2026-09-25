@@ -29,6 +29,7 @@
   --color-ring: var(--action);
   --color-waiting: var(--waiting);
   --color-accept: var(--accept);
+  --color-surface: var(--surface);
   --color-raised: var(--raised);
   --color-dim: var(--text-dim);
 
