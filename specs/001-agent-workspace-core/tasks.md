@@ -257,7 +257,7 @@ réglages appliqués ; CLI ajouté → proposé au lancement.
 - [X] T094 [P] [US6] Tests de l'adaptateur générique : suite de contrat ; heuristique « attend une réponse » après 3 s d'inactivité si la dernière sortie finit par `?` ou `(y/n)` ; fin de processus → `turn-finished` ou `failed` selon le code dans `tests/contract/generic.contract.test.ts`
 - [X] T095 [P] [US6] Tests de `cli:add` : CLI enregistré avec `origin: custom`, id `custom-<slug>`, avertissement si la commande est introuvable, proposé dans les compteurs du mode rapide dans `tests/unit/main/agents/cli-registry-custom.test.ts`
 - [X] T096 [P] [US6] Tests du panneau détaillé (1d) : liste à gauche identifiée par couleur, glisser-déposer, inspecteur (CLI, modèle, permissions Demander / Auto · worktree / Tout auto, branche de base, branche « auto — choisie par l'agent », port · commande), pointillés pour l'hérité, ≠ pour le surchargé dans `tests/unit/renderer/launch/DetailedLaunch.test.tsx`
-- [ ] T097 [P] [US6] Test e2e : mode détaillé, 2 agents fake avec branches et port personnalisés → réglages appliqués ; conflit de port → lancement bloqué ; ajout d'un CLI personnalisé depuis l'accueil dans `tests/e2e/us6-detailed-launch.spec.ts`
+- [X] T097 [P] [US6] Test e2e : mode détaillé, 2 agents fake avec branches et port personnalisés → réglages appliqués ; conflit de port → lancement bloqué ; ajout d'un CLI personnalisé depuis l'accueil dans `tests/e2e/us6-detailed-launch.spec.ts`
 
 ### Implementation for User Story 6
 
