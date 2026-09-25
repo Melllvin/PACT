@@ -470,3 +470,4 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 ## Phase 19: Convergence
 
 - [ ] T147 Caractériser sur un vrai Claude Code les notifications `quota_auto_resume_fired` / `_stale` / `_disabled` (champ, moment, `UserPromptSubmit` associé) et aligner le scénario `rate-limit-native-resume` du faux CLI et `ClaudeCodeAdapter.mapHookEvent` sur la forme relevée per research.md R6 « Pas de double reprise » (partial)
+- [ ] T148 Annuler la reprise programmée quand l'utilisateur valide une ligne (Entrée) dans le terminal d'un agent en limite de débit, pour les CLI sans hook de prompt (Codex sans hooks approuvés, « Autre CLI »), via `term:write` → `AgentManager` per FR-036 « toute action manuelle MUST l'annuler » (partial)

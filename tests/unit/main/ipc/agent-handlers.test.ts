@@ -37,6 +37,7 @@ const setup = () => {
       close: vi.fn(() => Promise.resolve()),
       log: vi.fn(() => 'Erreur simulée'),
       cancelAutoResume: vi.fn(() => Promise.resolve()),
+      typed: vi.fn(),
     },
     freeTerminals: { open: vi.fn(() => Promise.resolve([])) },
     pty: { write: vi.fn(), resize: vi.fn() },
@@ -97,6 +98,7 @@ describe('createAgentServices', () => {
     services['term:write']({ termId: 't1', data: 'Ajoute un test\r' });
     services['term:resize']({ termId: 't1', cols: 120, rows: 40 });
     expect(deps.pty.write).toHaveBeenCalledWith('t1', 'Ajoute un test\r');
+    expect(deps.agents.typed).toHaveBeenCalledWith('t1', 'Ajoute un test\r');
     expect(deps.pty.resize).toHaveBeenCalledWith('t1', 120, 40);
   });
 });

@@ -263,6 +263,26 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
     expect(continues(write)).toBe(1);
   });
 
+  it('a line the user types in the terminal replaces the scheduled resume (no prompt hook)', async () => {
+    scenario = 'rate-limit-alive';
+    const id = await limited();
+    await waitForState(id, 'error');
+    const write = vi.spyOn(pty, 'write');
+    manager.typed(id, 'con');
+    expect(current(id)?.scheduledResume).not.toBeNull();
+    manager.typed(id, 'tinue\r');
+    await waitFor(() => current(id)?.scheduledResume === null, 'resume kept', id);
+    clock.advanceTo('2030-01-01T12:00:00.000Z');
+    await new Promise((r) => setTimeout(r, 200));
+    expect(continues(write)).toBe(0);
+  });
+
+  it('ignores what is typed in a terminal that is no agent', () => {
+    expect(() => {
+      manager.typed('free-terminal', 'ls\r');
+    }).not.toThrow();
+  });
+
   it('drops the resume when the agent cannot start again at its time', async () => {
     const id = await limited();
     await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
