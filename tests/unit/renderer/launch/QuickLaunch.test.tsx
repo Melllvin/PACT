@@ -64,6 +64,20 @@ describe('QuickLaunch', () => {
     expect(screen.queryByRole('group', { name: 'Gemini' })).toBeNull();
   });
 
+  it('warns that uncommitted changes stay out of the worktrees, in both modes (T122)', async () => {
+    const user = userEvent.setup();
+    renderLauncher({ localChanges: true });
+    const warning = /modifications locales non commitées ne seront pas incluses/;
+    expect(screen.getByRole('note').textContent).toMatch(warning);
+    await user.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
+    expect(screen.getByRole('note').textContent).toMatch(warning);
+  });
+
+  it('says nothing of local changes when there are none', () => {
+    renderLauncher();
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
   it('starts with one agent of the first CLI when nothing was launched here yet', () => {
     renderLauncher();
     expect(count('Claude Code')).toBe('1');
@@ -209,5 +223,21 @@ describe('QuickLaunch', () => {
     const { onClose } = renderLauncher();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('says what « Autre CLI… » and « Terminal libre » launch, as 1c does', () => {
+    renderLauncher();
+    expect(within(row('Autre CLI…')).getByText('aider, gemini…')).toBeDefined();
+    expect(within(row('Terminal libre')).getByText('dépôt principal')).toBeDefined();
+  });
+
+  it('keeps the focus inside the launcher (modal dialog)', async () => {
+    const user = userEvent.setup();
+    renderLauncher();
+    const dialog = screen.getByRole('dialog', { name: 'Ajouter au workspace' });
+    for (let step = 0; step < 12; step++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
   });
 });

@@ -1,4 +1,7 @@
-import styles from './shell.module.css';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 /**
  * Without `onAddAgents`, « + Agents » stays disabled rather than doing nothing; `showTodo` is off
@@ -22,25 +25,38 @@ export function Toolbar({
   onAddAgents,
 }: Props) {
   return (
-    <nav role="toolbar" aria-label="Vues" className={styles.toolbar}>
-      <button className={styles.viewButton} aria-pressed>
-        Tuiles
-      </button>
-      <button className={styles.viewButton} disabled>
-        Comparer
-      </button>
-      <button className={styles.viewButton} disabled>
-        Revue
-      </button>
-      <span className={styles.spacer} />
+    <nav role="toolbar" aria-label="Vues" className="flex items-center gap-2">
+      <ToggleGroup
+        type="single"
+        value="tiles"
+        aria-label="Vue"
+        variant="segment"
+        className="rounded-[10px] border border-white/6 bg-white/3 p-[3px]"
+      >
+        <ToggleGroupItem value="tiles" className="w-[78px]">
+          Tuiles
+        </ToggleGroupItem>
+        <ToggleGroupItem value="compare" className="w-[78px]" disabled>
+          Comparer
+        </ToggleGroupItem>
+        <ToggleGroupItem value="review" className="w-[78px]" disabled>
+          Revue
+        </ToggleGroupItem>
+      </ToggleGroup>
       {showTodo && (
-        <button className={styles.viewButton} aria-pressed={todoOpen} onClick={onToggleTodo}>
-          À faire <span className={styles.count}>{todoCount}</span>
-        </button>
+        <Toggle pressed={todoOpen} onPressedChange={() => onToggleTodo?.()}>
+          À faire <Badge variant={todoCount > 0 ? 'waiting' : 'muted'}>{todoCount}</Badge>
+        </Toggle>
       )}
-      <button className={styles.primary} onClick={onAddAgents} disabled={!onAddAgents}>
+      <Button
+        variant="contrast"
+        size="md"
+        className="h-8 rounded-[9px] px-3 text-[12.5px]"
+        onClick={onAddAgents}
+        disabled={!onAddAgents}
+      >
         + Agents
-      </button>
+      </Button>
     </nav>
   );
 }

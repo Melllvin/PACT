@@ -30,4 +30,13 @@ describe('LogPanel', () => {
     await userEvent.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps the focus inside the panel (modal dialog)', async () => {
+    render(<LogPanel name="Claude Code 1" text="x" onClose={vi.fn()} />);
+    const panel = screen.getByRole('dialog', { name: 'Journal de Claude Code 1' });
+    for (let step = 0; step < 4; step++) {
+      await userEvent.tab();
+      expect(panel.contains(document.activeElement)).toBe(true);
+    }
+  });
 });

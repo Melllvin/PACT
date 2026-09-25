@@ -29,6 +29,9 @@
   --color-ring: var(--action);
   --color-waiting: var(--waiting);
   --color-accept: var(--accept);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-dim: var(--text-dim);
 
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
@@ -36,4 +39,65 @@
 
   --font-sans: var(--font-ui);
   --font-mono: var(--font-mono);
+  --font-terminal: var(--font-terminal);
+}
+
+/* One pulse of the tile border per change of state (FR-023), the À faire items unfolding as they
+   come in (1l), and the elements of a view coming in one after the other (FR-042): each sets its
+   rank in --enter-index. Easing and timings from the interactive mockup (R17). */
+@theme {
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-tile-pulse: tile-pulse 1200ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  --animate-unfold: unfold 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-enter: view-enter 560ms cubic-bezier(0.2, 0.8, 0.2, 1)
+    calc(min(var(--enter-index, 0), 10) * 45ms) backwards;
+  /* FR-042: after the particles of a change of view, the tile comes in, then its border lights. */
+  --animate-tile-enter:
+    view-enter 480ms cubic-bezier(0.2, 0.8, 0.2, 1)
+      calc(80ms + min(var(--enter-index, 0), 10) * 70ms) backwards,
+    border-in 420ms ease-out calc(560ms + min(var(--enter-index, 0), 10) * 70ms) backwards;
+
+  @keyframes view-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+      filter: blur(6px);
+    }
+  }
+
+  @keyframes tile-pulse {
+    from {
+      box-shadow: 0 0 0 0 transparent;
+    }
+    30% {
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--pulse-color, var(--agent-color)) 35%, transparent),
+        0 0 36px color-mix(in srgb, var(--pulse-color, var(--agent-color)) 30%, transparent);
+    }
+    to {
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+
+  @keyframes border-in {
+    from {
+      border-color: color-mix(in srgb, var(--border) 60%, transparent);
+      box-shadow: 0 0 0 0 transparent;
+    }
+    60% {
+      border-color: var(--agent-color);
+      box-shadow: 0 0 14px 0 color-mix(in srgb, var(--agent-color) 45%, transparent);
+    }
+    to {
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+
+  @keyframes unfold {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.98);
+      filter: blur(6px);
+    }
+  }
 }

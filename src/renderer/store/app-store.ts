@@ -18,7 +18,14 @@ export type View = 'tiles' | 'focus';
  * refused launch or a failed choice brings the launcher back as it was.
  */
 export type Launcher =
-  | { workspaceId: string; step: 'counts'; draft?: LaunchDraft; error?: string }
+  | {
+      workspaceId: string;
+      step: 'counts';
+      draft?: LaunchDraft;
+      error?: string;
+      /** The repository has uncommitted changes, which the worktrees leave out (T122). */
+      localChanges?: boolean;
+    }
   | { workspaceId: string; step: 'permission'; draft: LaunchDraft };
 type AppSnapshot = IpcOutput<'app:getState'>;
 
@@ -343,7 +350,17 @@ export function createAppStore(api: PactApi) {
       },
 
       openLauncher(workspaceId) {
-        set({ launcher: { workspaceId, step: 'counts' } });
+        const opened = { workspaceId, step: 'counts' } as const;
+        set({ launcher: opened });
+        // Only a warning: the launcher never waits for it, and a failed check says nothing.
+        void Promise.resolve(api.invoke('workspace:hasLocalChanges', { id: workspaceId })).then(
+          (localChanges) => {
+            if (localChanges && get().launcher === opened) {
+              set({ launcher: { ...opened, localChanges } });
+            }
+          },
+          () => undefined,
+        );
       },
 
       closeLauncher() {

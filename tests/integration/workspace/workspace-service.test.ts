@@ -321,3 +321,21 @@ describe('WorkspaceService.update', () => {
     });
   });
 });
+
+// Spec edge case « modifications non commitées »: the launcher warns they stay out (T122).
+describe('hasLocalChanges', () => {
+  it('tells whether the main working tree has uncommitted changes', async () => {
+    const repo = await makeRepo('app');
+    const service = createService();
+    const { id } = await service.open(repo);
+    expect(await service.hasLocalChanges(id)).toBe(false);
+    await writeFile(join(repo, 'notes.txt'), 'brouillon\n');
+    expect(await service.hasLocalChanges(id)).toBe(true);
+  });
+
+  it('refuses an unknown workspace', async () => {
+    await expect(createService().hasLocalChanges('nope')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+});

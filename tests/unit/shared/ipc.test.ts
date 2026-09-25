@@ -40,6 +40,7 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
     ],
   },
   'workspace:close': { valid: { id: 'abc' }, invalid: [{ id: '' }] },
+  'workspace:hasLocalChanges': { valid: { id: 'abc' }, invalid: [{ id: '' }, {}] },
   'dialog:pickFolder': {
     valid: { purpose: 'open-repository' },
     invalid: [{ purpose: 'anything' }, {}],

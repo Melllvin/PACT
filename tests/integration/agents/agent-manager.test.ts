@@ -221,6 +221,16 @@ describe('AgentManager.launch', { timeout: 30_000 }, () => {
     expect(saved.every((a) => a.sessionId !== null)).toBe(true);
   });
 
+  it('counts the agents whose process runs, for the quit question (T110)', async () => {
+    const manager = await createManager();
+    expect(manager.activeCount()).toBe(0);
+    const agents = await launch(manager, [draft(), draft()]);
+    for (const agent of agents) await waitForState(agent.id, 'awaiting-prompt');
+    expect(manager.activeCount()).toBe(2);
+    await manager.dispose();
+    expect(manager.activeCount()).toBe(0);
+  });
+
   it('keeps assigning colors in order across launches', async () => {
     const manager = await createManager();
     await launch(manager, [draft(), draft(), draft()]);

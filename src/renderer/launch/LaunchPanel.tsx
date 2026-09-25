@@ -15,6 +15,8 @@ export type LaunchPanelProps = {
   /** Draft of a refused launch, to start again from it. */
   initialDraft: LaunchDraft | null;
   error: string | null;
+  /** The repository has uncommitted changes, left out of the worktrees (T122). */
+  localChanges?: boolean;
   onLaunch: (draft: LaunchDraft) => void;
   onClose: () => void;
 };
@@ -40,6 +42,7 @@ export function LaunchPanel({
   taken,
   initialDraft,
   error,
+  localChanges = false,
   onLaunch,
   onClose,
 }: LaunchPanelProps) {
@@ -54,6 +57,7 @@ export function LaunchPanel({
       running={running}
       taken={taken}
       error={error}
+      localChanges={localChanges}
       onLaunch={() => {
         onLaunch(draft);
       }}
@@ -69,6 +73,7 @@ export function LaunchPanel({
       onChange={setDraft}
       existingAgents={running.length}
       error={error}
+      localChanges={localChanges}
       onLaunch={() => {
         onLaunch(draft);
       }}

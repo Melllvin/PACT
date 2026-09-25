@@ -88,6 +88,14 @@ const renderHome = (overrides: Partial<HomeProps> = {}) => {
 const section = (name: string) => screen.getByRole('region', { name });
 
 describe('Home (1a)', () => {
+  it('puts « Autre dépôt » and what is given aside in a column of their own (1a)', () => {
+    renderHome({ aside: <section aria-label="Agents détectés" /> });
+    const column = screen.getByRole('complementary');
+    expect(within(column).getByRole('region', { name: 'Autre dépôt' })).toBeDefined();
+    expect(within(column).getByRole('region', { name: 'Agents détectés' })).toBeDefined();
+    expect(within(column).queryByRole('region', { name: 'Récents' })).toBeNull();
+  });
+
   it('is titled « Ouvrir un workspace »', () => {
     renderHome();
     expect(screen.getByRole('heading', { name: 'Ouvrir un workspace' })).toBeDefined();
@@ -100,6 +108,20 @@ describe('Home (1a)', () => {
     expect(row.textContent).toContain('/Users/me/code/atelier-web · main · 2 worktrees');
     expect(within(row).getAllByRole('img', { name: /Agent/ })).toHaveLength(2);
     expect(within(row).getByLabelText('1 agent en attente').textContent).toBe('◆ 1');
+  });
+
+  it('brings its projects in one after the other, unless motion is reduced (FR-042)', () => {
+    renderHome();
+    const rows = [section('Déjà ouverts'), section('Récents')].flatMap((s) =>
+      within(s).getAllByRole('listitem'),
+    );
+    expect(rows.map((row) => row.style.getPropertyValue('--enter-index'))).toEqual(
+      rows.map((_, index) => String(index)),
+    );
+    for (const row of rows)
+      expect(row.className).toMatch(
+        /animate-enter.*motion-reduce:animate-none|motion-reduce:animate-none.*animate-enter/,
+      );
   });
 
   it('goes to the existing tab instead of opening the repository again (FR-004)', async () => {
@@ -242,6 +264,14 @@ describe('Clone dialog', () => {
     const progress = screen.getByRole('progressbar', { name: 'Clonage' });
     expect(progress.getAttribute('aria-valuenow')).toBe('42');
     expect(screen.getByText(/Réception d’objets/)).toBeDefined();
+  });
+
+  it('closes with Escape, without cloning (modal dialog)', async () => {
+    const props = renderHome();
+    await userEvent.click(screen.getByRole('button', { name: 'Cloner depuis une URL…' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Cloner un dépôt' })).toBeNull();
+    expect(props.onClone).not.toHaveBeenCalled();
   });
 
   it('shows a clear clone failure', () => {

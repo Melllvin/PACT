@@ -63,6 +63,27 @@ describe('TodoColumn', () => {
     expect(item('En cours ▸ zsh — main').style.getPropertyValue('--agent-color')).toBe('');
   });
 
+  it('is titled « À faire » with the number of items that wait on the user (1f)', () => {
+    setup();
+    const heading = screen.getByRole('heading', { level: 2, name: /^À faire/ });
+    expect(heading.textContent).toBe('À faire 2');
+  });
+
+  it('shows the kind of request apart from its agent and hint (1f)', () => {
+    setup([
+      {
+        id: `${waiting.id}:prompt`,
+        agentId: waiting.id,
+        kind: 'prompt',
+        title: 'Donner une consigne · Claude Code · tapez dans le terminal',
+        actions: [],
+      },
+    ]);
+    expect(screen.getByText('Donner une consigne')).toBeDefined();
+    expect(screen.getByText('Claude Code')).toBeDefined();
+    expect(screen.getByText('tapez dans le terminal')).toBeDefined();
+  });
+
   it('answers from the column with the buttons of the tile (FR-028)', async () => {
     const user = userEvent.setup();
     const actions = setup();
@@ -78,7 +99,7 @@ describe('TodoColumn', () => {
   it('recovers from a rate limit with « Journal », « Relancer » and « Reprendre »', async () => {
     const user = userEvent.setup();
     const actions = setup();
-    const limit = within(item('✕ Limite de débit · Claude Code'));
+    const limit = within(item('✕ Limite de débit'));
     await user.click(limit.getByRole('button', { name: 'Journal' }));
     await user.click(limit.getByRole('button', { name: 'Relancer' }));
     await user.click(limit.getByRole('button', { name: 'Reprendre' }));
@@ -90,7 +111,7 @@ describe('TodoColumn', () => {
   it('shows the scheduled resume of the rate limit, with « Annuler » (FR-036)', async () => {
     const user = userEvent.setup();
     const actions = setup();
-    const limit = within(item('✕ Limite de débit · Claude Code'));
+    const limit = within(item('✕ Limite de débit'));
     expect(limit.getByText(`reprise auto à ${time}`)).toBeDefined();
     await user.click(limit.getByRole('button', { name: 'Annuler' }));
     expect(actions.onCancelAutoResume).toHaveBeenCalledWith(limited.id);

@@ -121,8 +121,8 @@ describe('DetailedLaunch', () => {
     ).toEqual(['Par défaut du CLI', 'gpt-5-codex', 'gpt-5']);
     expect(
       within(field('Permissions'))
-        .getAllByRole('button')
-        .map((b) => b.textContent),
+        .getAllByRole('radio')
+        .map((level) => level.textContent),
     ).toEqual(['Demander', 'Auto · worktree', 'Tout auto']);
     expect(within(field('Branche')).getByRole('textbox')).toHaveProperty(
       'placeholder',
@@ -135,11 +135,11 @@ describe('DetailedLaunch', () => {
 
   it('applies a common setting to every agent that does not override it (US6 scenario 2)', async () => {
     const { user, draft } = setup();
-    await user.click(within(field('Permissions')).getByRole('button', { name: 'Tout auto' }));
+    await user.click(within(field('Permissions')).getByRole('radio', { name: 'Tout auto' }));
     expect(draft()?.common.permissionLevel).toBe('always-allow');
     await user.click(agent(0));
-    const allAuto = within(field('Permissions')).getByRole('button', { name: 'Tout auto' });
-    expect(allAuto.getAttribute('aria-pressed')).toBe('true');
+    const allAuto = within(field('Permissions')).getByRole('radio', { name: 'Tout auto' });
+    expect(allAuto.getAttribute('aria-checked')).toBe('true');
     expect(inherited('Permissions')).toBe(true);
   });
 
@@ -148,7 +148,7 @@ describe('DetailedLaunch', () => {
     await user.click(agent(2));
     expect(inherited('Modèle')).toBe(true);
     await user.selectOptions(within(field('Modèle')).getByRole('combobox'), 'gpt-5');
-    await user.click(within(field('Permissions')).getByRole('button', { name: 'Demander' }));
+    await user.click(within(field('Permissions')).getByRole('radio', { name: 'Demander' }));
     expect(inherited('Modèle')).toBe(false);
     expect(within(field('Modèle')).getByLabelText('diffère du commun')).toBeDefined();
     expect(within(items()[2] as HTMLElement).getByText('≠ 2')).toBeDefined();
@@ -269,6 +269,25 @@ describe('DetailedLaunch', () => {
   it('shows why main refused the launch (BRANCH_CONFLICT, PORT_CONFLICT)', () => {
     setup({ error: 'La branche « feature/x » existe déjà.' });
     expect(screen.getByRole('alert').textContent).toBe('La branche « feature/x » existe déjà.');
+  });
+
+  it('groups the settings of an agent as 1d does: Agent, Git, Aperçu', async () => {
+    const { user } = setup();
+    await user.click(agent(2));
+    expect(
+      within(inspector())
+        .getAllByRole('heading', { level: 4 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Agent', 'Git', 'Aperçu']);
+  });
+
+  it('keeps the focus inside the panel (modal dialog)', async () => {
+    const { user } = setup();
+    const dialog = screen.getByRole('dialog', { name: 'Lancer des agents' });
+    for (let step = 0; step < 20; step++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
   });
 
   it('explains its marks', () => {

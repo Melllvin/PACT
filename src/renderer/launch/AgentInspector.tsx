@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import {
   differences,
   effective,
+  preview,
   setAgent,
   setCommon,
   setOverride,
@@ -9,8 +10,9 @@ import {
   type LaunchDraft,
   type SettingKey,
 } from '../../shared/launch-draft';
-import type { CliDefinition, PermissionLevel } from '../../shared/model';
-import { cn } from '@/lib/utils';
+import type { Agent, CliDefinition, PermissionLevel } from '../../shared/model';
+import { Button } from '@/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 /** research.md R5: the three levels, as 1d names them. */
 const LEVELS: [PermissionLevel, string][] = [
@@ -20,14 +22,15 @@ const LEVELS: [PermissionLevel, string][] = [
 ];
 
 const CONTROL =
-  'w-full rounded-sm border border-border bg-transparent px-2 py-1 font-mono text-sm text-foreground';
-const BUTTON = 'cursor-pointer rounded-sm border border-border px-2.5 py-1 text-sm';
+  'w-full min-w-0 rounded-[10px] border border-white/8 bg-white/2 px-[9px] py-1.5 text-[12.5px] text-foreground group-data-[inherited=true]:border-dashed group-data-[inherited=true]:bg-transparent group-data-[inherited=true]:text-muted-foreground';
 
 type AgentInspectorProps = {
   draft: LaunchDraft;
   onChange: (draft: LaunchDraft) => void;
   /** Installed CLIs, in the order the CLI field offers them. */
   clis: CliDefinition[];
+  /** Agents of this workspace: the color the inspected agent will get. */
+  running: Pick<Agent, 'position' | 'color'>[];
   /** The agent inspected, or null for « Commun à tous ». */
   index: number | null;
   onDuplicate: () => void;
@@ -50,22 +53,19 @@ function Field({ label, inherited = false, differs = false, onReset, children }:
       role="group"
       aria-label={label}
       data-inherited={inherited}
-      className={cn(
-        'grid grid-cols-[110px_1fr_auto] items-center gap-2 rounded-sm border border-transparent p-1',
-        inherited && 'border-dashed border-border',
-      )}
+      className="group grid grid-cols-[96px_minmax(0,1fr)_32px] items-center gap-2.5"
     >
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-[12px] text-muted-foreground">{label}</span>
       {children}
-      <span className="flex items-center gap-1">
+      <span className="flex items-center gap-1 font-mono text-[11px]">
         {differs && (
-          <span aria-label="diffère du commun" className="text-(--waiting)">
+          <span aria-label="diffère du commun" className="text-primary">
             ≠
           </span>
         )}
         {onReset && (
           <button
-            className="cursor-pointer text-xs text-muted-foreground"
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
             title="Revenir au commun"
             aria-label="Revenir au commun"
             onClick={onReset}
@@ -78,12 +78,16 @@ function Field({ label, inherited = false, differs = false, onReset, children }:
   );
 }
 
+const SECTION =
+  'm-0 mt-1 font-mono text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase';
+
 /** Right of 1d: what the selected item sets, the agent showing in full only what it overrides. */
 export function AgentInspector({
   draft,
   onChange,
   clis,
   index,
+  running,
   onDuplicate,
   onRemove,
 }: AgentInspectorProps) {
@@ -92,6 +96,7 @@ export function AgentInspector({
   const changed = index === null ? [] : differences(draft, index);
   const cli = agent ? clis.find((c) => c.id === agent.cliId) : undefined;
   const models = agent ? (cli?.models ?? []) : [...new Set(clis.flatMap((c) => c.models))];
+  const color = index === null ? undefined : preview(draft, running)[index]?.color;
 
   /** A common value, or an agent override; an agent set back to the common value inherits it. */
   const set = <K extends SettingKey>(key: K, value: CommonSettings[K]) => {
@@ -121,20 +126,30 @@ export function AgentInspector({
   };
 
   return (
-    <section aria-label="Inspecteur" className="flex min-h-0 flex-col gap-2 overflow-auto">
+    <section
+      aria-label="Inspecteur"
+      className="flex min-h-0 min-w-0 flex-col gap-[9px] overflow-auto px-4 py-3.5"
+    >
       <header className="flex items-center gap-2">
-        <h3 className="flex-1 text-base">{agent ? (cli?.name ?? agent.cliId) : 'Commun à tous'}</h3>
+        {color && (
+          <span
+            aria-hidden
+            className="size-2.5 flex-none rounded-full"
+            style={{ background: `var(--agent-${color})` }}
+          />
+        )}
+        <h3 className="m-0 flex-1 text-[15px] font-semibold">
+          {agent ? (cli?.name ?? agent.cliId) : 'Commun à tous'}
+        </h3>
         {agent && (
           <>
-            <button className={BUTTON} onClick={onDuplicate}>
-              Dupliquer
-            </button>
-            <button className={BUTTON} onClick={onRemove}>
-              Retirer
-            </button>
+            <Button onClick={onDuplicate}>Dupliquer</Button>
+            <Button onClick={onRemove}>Retirer</Button>
           </>
         )}
       </header>
+
+      <h4 className={SECTION}>Agent</h4>
 
       {agent && index !== null && (
         <Field label="CLI">
@@ -174,25 +189,27 @@ export function AgentInspector({
       </Field>
 
       <Field label="Permissions" {...field('permissionLevel')}>
-        <span className="flex flex-wrap gap-1">
+        <ToggleGroup
+          type="single"
+          variant="strip"
+          aria-label="Permissions"
+          value={settings.permissionLevel ?? ''}
+          onValueChange={(level) => {
+            // A single choice stays chosen: pressing it again does not clear it.
+            const chosen = LEVELS.find(([value]) => value === level);
+            if (chosen) set('permissionLevel', chosen[0]);
+          }}
+          className="overflow-hidden rounded-lg border border-white/8 group-data-[inherited=true]:border-dashed"
+        >
           {LEVELS.map(([level, label]) => (
-            <button
-              key={level}
-              aria-pressed={settings.permissionLevel === level}
-              className={cn(
-                BUTTON,
-                settings.permissionLevel === level && 'border-primary text-primary',
-              )}
-              onClick={() => {
-                set('permissionLevel', level);
-              }}
-            >
+            <ToggleGroupItem key={level} value={level}>
               {label}
-            </button>
+            </ToggleGroupItem>
           ))}
-        </span>
+        </ToggleGroup>
       </Field>
 
+      <h4 className={SECTION}>Git</h4>
       <Field label="Branche de base" {...field('baseBranch')}>
         <input
           aria-label="Branche de base"
@@ -218,6 +235,12 @@ export function AgentInspector({
               }}
             />
           </Field>
+        </>
+      )}
+
+      <h4 className={SECTION}>Aperçu</h4>
+      {agent && index !== null && (
+        <>
           <Field label="Port">
             <input
               aria-label="Port"

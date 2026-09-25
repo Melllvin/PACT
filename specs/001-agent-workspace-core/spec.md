@@ -19,6 +19,12 @@ Source de vérité visuelle : `docs/maquettes/Maquettes hi-fi.dc.html` (directio
 `docs/maquettes/Grille reactive.dc.html` (animations). Écrans couverts par ce socle : 1a, 1b, 1c,
 1d, 1m, 1e, 1f, 1l, 1n, 1p. Consigne de rédaction des libellés : `docs/maquettes/CONSIGNES-UI.md`.
 
+**Amendement du 2026-09-25** : l'apparence (palette, typographie, formes, effets) suit désormais
+`docs/maquettes/Maquette interactive.dc.html` (research.md R17). La direction 1c reste la
+référence pour la structure des écrans et les libellés ; les vues et réglages que seule la maquette
+interactive montre (Comparer, Revue, Réglages, Workflows, notifications, raccourcis clavier) restent
+hors de cette spec.
+
 ## Périmètre
 
 **Inclus dans cette spec (socle)** : onglets workspaces + accueil, détection et ajout de CLI,
