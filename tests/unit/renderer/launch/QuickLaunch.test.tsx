@@ -1,10 +1,11 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { QuickLaunch, type QuickLaunchProps } from '../../../../src/renderer/launch/QuickLaunch';
-import type { CliDefinition } from '../../../../src/shared/model';
+import { LaunchPanel, type LaunchPanelProps } from '../../../../src/renderer/launch/LaunchPanel';
+import { countsOf, type LaunchDraft } from '../../../../src/shared/launch-draft';
+import type { Agent, CliDefinition } from '../../../../src/shared/model';
 
-// Screen 1c — mode rapide (FR-009, FR-010, US2 scenarios 2, 5, 7, 8).
+// Screen 1c — mode rapide (FR-009, FR-010, US2 scenarios 2, 5, 7, 8), and the way to 1d (US6).
 
 const cli = (id: string, name: string, overrides: Partial<CliDefinition> = {}): CliDefinition => ({
   id,
@@ -21,21 +22,31 @@ const cli = (id: string, name: string, overrides: Partial<CliDefinition> = {}): 
 
 const detected = [cli('claude-code', 'Claude Code'), cli('codex', 'Codex', { adapter: 'codex' })];
 
-const renderLauncher = (props: Partial<QuickLaunchProps> = {}) => {
-  const onLaunch = vi.fn();
+const running = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({ position: i + 1 }) as Agent);
+
+const renderLauncher = (props: Partial<LaunchPanelProps> = {}) => {
+  const onLaunch = vi.fn<(draft: LaunchDraft) => void>();
   const onClose = vi.fn();
   render(
-    <QuickLaunch
+    <LaunchPanel
       clis={detected}
       counters={{ freeTerminal: 0 }}
-      existingAgents={0}
+      running={[]}
+      taken={[]}
+      initialDraft={null}
       error={null}
       onLaunch={onLaunch}
       onClose={onClose}
       {...props}
     />,
   );
-  return { onLaunch, onClose };
+  /** What was launched, as the quick mode's counters. */
+  const launched = () => {
+    const [draft] = onLaunch.mock.lastCall ?? [];
+    return draft && countsOf(draft);
+  };
+  return { onLaunch, onClose, launched };
 };
 
 const row = (name: string) => screen.getByRole('group', { name });
@@ -70,15 +81,12 @@ describe('QuickLaunch', () => {
 
   it('launches what the counters say', async () => {
     const user = userEvent.setup();
-    const { onLaunch } = renderLauncher();
+    const { launched } = renderLauncher();
     await user.click(within(row('Claude Code')).getByRole('button', { name: '+' }));
     await user.click(within(row('Codex')).getByRole('button', { name: '+' }));
     await user.click(within(row('Terminal libre')).getByRole('button', { name: '+' }));
     await user.click(screen.getByRole('button', { name: 'Lancer 3 agents' }));
-    expect(onLaunch).toHaveBeenCalledWith({
-      agents: { 'claude-code': 2, codex: 1 },
-      freeTerminal: 1,
-    });
+    expect(launched()).toEqual({ agents: { 'claude-code': 2, codex: 1 }, freeTerminal: 1 });
   });
 
   it('never goes below zero', async () => {
@@ -95,14 +103,21 @@ describe('QuickLaunch', () => {
 
   it('opens a free terminal alone', async () => {
     const user = userEvent.setup();
-    const { onLaunch } = renderLauncher({ counters: { freeTerminal: 1, 'claude-code': 0 } });
+    const { launched } = renderLauncher({ counters: { freeTerminal: 1, 'claude-code': 0 } });
     await user.click(screen.getByRole('button', { name: 'Ouvrir 1 terminal' }));
-    expect(onLaunch).toHaveBeenCalledWith({ agents: {}, freeTerminal: 1 });
+    expect(launched()).toEqual({ agents: {}, freeTerminal: 1 });
+  });
+
+  it('opens several free terminals alone', async () => {
+    const user = userEvent.setup();
+    const { launched } = renderLauncher({ counters: { freeTerminal: 2, 'claude-code': 0 } });
+    await user.click(screen.getByRole('button', { name: 'Ouvrir 2 terminaux' }));
+    expect(launched()).toEqual({ agents: {}, freeTerminal: 2 });
   });
 
   it('stops at six agents per workspace (US2 scenario 8)', async () => {
     const user = userEvent.setup();
-    renderLauncher({ existingAgents: 4 });
+    renderLauncher({ running: running(4) });
     await user.click(within(row('Codex')).getByRole('button', { name: '+' }));
     expect(within(row('Codex')).getByRole('button', { name: '+' }).hasAttribute('disabled')).toBe(
       true,
@@ -123,13 +138,13 @@ describe('QuickLaunch', () => {
   it('launches the first added CLI through « Autre CLI… », disabled without one', async () => {
     const user = userEvent.setup();
     const aider = cli('custom-aider', 'Aider', { adapter: 'generic', origin: 'custom' });
-    const { onLaunch } = renderLauncher({
+    const { launched } = renderLauncher({
       clis: [...detected, aider],
       counters: { freeTerminal: 0, codex: 0 },
     });
     await user.click(within(row('Autre CLI…')).getByRole('button', { name: '+' }));
     await user.click(screen.getByRole('button', { name: 'Lancer 1 agent' }));
-    expect(onLaunch).toHaveBeenCalledWith({ agents: { 'custom-aider': 1 }, freeTerminal: 0 });
+    expect(launched()).toEqual({ agents: { 'custom-aider': 1 }, freeTerminal: 0 });
   });
 
   it('disables « Autre CLI… » until a CLI is added', () => {
@@ -150,6 +165,43 @@ describe('QuickLaunch', () => {
   it('shows why a launch was refused', () => {
     renderLauncher({ error: 'Six agents au plus par projet.' });
     expect(screen.getByRole('alert').textContent).toBe('Six agents au plus par projet.');
+  });
+
+  it('starts again from the draft of a refused launch', () => {
+    const draft: LaunchDraft = {
+      common: { model: null, permissionLevel: null, baseBranch: null, startCommand: null },
+      agents: [{ key: 'a1', cliId: 'codex', overrides: {}, branch: null, port: null }],
+      freeTerminal: 2,
+      nextKey: 2,
+    };
+    renderLauncher({ initialDraft: draft, counters: { freeTerminal: 0, 'claude-code': 3 } });
+    expect(count('Claude Code')).toBe('0');
+    expect(count('Codex')).toBe('1');
+    expect(count('Terminal libre')).toBe('2');
+  });
+
+  it('opens the detailed mode with the same agents, and comes back without loss (US6 scenario 1)', async () => {
+    const user = userEvent.setup();
+    const { launched, onLaunch } = renderLauncher({
+      counters: { freeTerminal: 0, 'claude-code': 2, codex: 1 },
+    });
+    await user.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
+    const agents = screen.getByRole('list', { name: 'Agents' });
+    expect(within(agents).getAllByRole('listitem')).toHaveLength(3);
+
+    await user.click(within(agents).getAllByRole('button', { name: /^Codex/ })[0] as HTMLElement);
+    await user.type(screen.getByRole('textbox', { name: 'Commande' }), 'npm run dev');
+    await user.click(screen.getByRole('button', { name: '← Mode rapide' }));
+    expect(count('Codex')).toBe('1');
+    await user.click(within(row('Claude Code')).getByRole('button', { name: '+' }));
+    await user.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
+    expect(
+      within(screen.getByRole('list', { name: 'Agents' })).getAllByRole('listitem'),
+    ).toHaveLength(4);
+    await user.click(screen.getByRole('button', { name: 'Lancer 4 agents' }));
+    expect(launched()).toEqual({ agents: { 'claude-code': 3, codex: 1 }, freeTerminal: 0 });
+    const codex = onLaunch.mock.lastCall?.[0].agents.find((agent) => agent.cliId === 'codex');
+    expect(codex?.overrides).toEqual({ startCommand: 'npm run dev' });
   });
 
   it('closes with Escape', async () => {

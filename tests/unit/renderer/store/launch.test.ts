@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createAppStore } from '../../../../src/renderer/store/app-store';
+import { draftFromCounts, setCommon, setOverride } from '../../../../src/shared/launch-draft';
 import type { IpcOutput, PactApi } from '../../../../src/shared/ipc';
 import type {
   Agent,
@@ -43,11 +44,20 @@ function setup({
   ws = workspace(),
   launch = () => Promise.resolve([launchedAgent]),
   setPermission = () => Promise.resolve(undefined),
+  addCli = (input: unknown) =>
+    Promise.resolve({
+      ...cli('codex'),
+      ...(input as object),
+      id: 'custom-aider',
+      adapter: 'generic',
+      origin: 'custom',
+    }),
 }: {
   permission?: PermissionPreference | null;
   ws?: Workspace;
   launch?: () => Promise<unknown>;
   setPermission?: () => Promise<unknown>;
+  addCli?: (input: unknown) => Promise<unknown>;
 } = {}) {
   let snapshot: IpcOutput<'app:getState'> = {
     workspaces: [ws],
@@ -63,6 +73,8 @@ function setup({
         return launch();
       case 'permission:set':
         return setPermission();
+      case 'cli:add':
+        return addCli(input);
       case 'cli:redetect':
         return Promise.resolve([cli('codex')]);
       default:
@@ -77,7 +89,7 @@ function setup({
   return { store, invoke, setSnapshot };
 }
 
-const counts = { agents: { 'claude-code': 2, codex: 1 }, freeTerminal: 1 };
+const draft = draftFromCounts({ 'claude-code': 2, codex: 1 }, 1);
 
 describe('launch flow', () => {
   it('opens and closes the quick launcher of a workspace', async () => {
@@ -93,8 +105,8 @@ describe('launch flow', () => {
     const { store, invoke } = setup();
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch(counts);
-    expect(store.getState().launcher).toEqual({ workspaceId: 'w1', step: 'permission', counts });
+    await store.getState().requestLaunch(draft);
+    expect(store.getState().launcher).toEqual({ workspaceId: 'w1', step: 'permission', draft });
     expect(invoke).not.toHaveBeenCalledWith('agents:launch', expect.anything());
   });
 
@@ -102,7 +114,7 @@ describe('launch flow', () => {
     const { store, invoke, setSnapshot } = setup();
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch(counts);
+    await store.getState().requestLaunch(draft);
     setSnapshot({ workspaces: [workspace({ agents: [launchedAgent] })] });
     await store
       .getState()
@@ -129,11 +141,39 @@ describe('launch flow', () => {
     expect(store.getState().workspaces[0]?.agents).toEqual([launchedAgent]);
   });
 
+  it('keeps what the detailed mode set through the permission step (US6)', async () => {
+    const { store, invoke } = setup();
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    await store.getState().requestLaunch(setOverride(draft, 2, 'startCommand', 'npm run dev'));
+    await store
+      .getState()
+      .confirmPermission({ level: 'always-allow', autoResume: true, scope: 'global' });
+    const launch = invoke.mock.calls.find(([channel]) => channel === 'agents:launch')?.[1];
+    const drafts = (launch as { agents: { startCommand: string | null }[] }).agents;
+    expect(drafts.map((d) => d.startCommand)).toEqual([null, null, 'npm run dev']);
+  });
+
+  it('keeps a model only for the CLIs that offer it', async () => {
+    const { store, invoke, setSnapshot } = setup({
+      permission: { level: 'always-allow', autoResume: true, scope: 'global' },
+    });
+    setSnapshot({ clis: [{ ...cli('claude-code'), models: ['opus'] }, cli('codex')] });
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    // « gone »: a CLI removed since the launcher opened.
+    const withGone = draftFromCounts({ 'claude-code': 2, codex: 1, gone: 1 }, 0);
+    await store.getState().requestLaunch(setCommon(withGone, 'model', 'opus'));
+    const launch = invoke.mock.calls.find(([channel]) => channel === 'agents:launch')?.[1];
+    const drafts = (launch as { agents: { model: string | null }[] }).agents;
+    expect(drafts.map((d) => d.model)).toEqual(['opus', 'opus', null, null]);
+  });
+
   it('keeps a « Ce projet » choice on the workspace only', async () => {
     const { store, invoke } = setup();
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch(counts);
+    await store.getState().requestLaunch(draft);
     await store
       .getState()
       .confirmPermission({ level: 'always-ask', autoResume: false, scope: 'project' });
@@ -155,7 +195,7 @@ describe('launch flow', () => {
     });
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch({ agents: { codex: 1 }, freeTerminal: 0 });
+    await store.getState().requestLaunch(draftFromCounts({ codex: 1 }, 0));
     const launch = invoke.mock.calls.find(([channel]) => channel === 'agents:launch')?.[1];
     expect(launch).toMatchObject({ agents: [{ cliId: 'codex', permissionLevel: 'always-ask' }] });
     expect(invoke).not.toHaveBeenCalledWith('permission:set', expect.anything());
@@ -167,7 +207,7 @@ describe('launch flow', () => {
     });
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch({ agents: {}, freeTerminal: 1 });
+    await store.getState().requestLaunch(draftFromCounts({}, 1));
     const launch = invoke.mock.calls.find(([channel]) => channel === 'agents:launch')?.[1];
     expect(launch).toMatchObject({
       counters: { freeTerminal: 1, 'claude-code': 0, codex: 0 },
@@ -183,10 +223,11 @@ describe('launch flow', () => {
     });
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch(counts);
+    await store.getState().requestLaunch(draft);
     expect(store.getState().launcher).toEqual({
       workspaceId: 'w1',
       step: 'counts',
+      draft,
       error: 'Six agents au plus par projet.',
     });
   });
@@ -195,7 +236,7 @@ describe('launch flow', () => {
     const { store, invoke } = setup();
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch({ agents: {}, freeTerminal: 2 });
+    await store.getState().requestLaunch(draftFromCounts({}, 2));
     expect(invoke).toHaveBeenCalledWith(
       'agents:launch',
       expect.objectContaining({ agents: [], freeTerminals: 2 }),
@@ -209,13 +250,14 @@ describe('launch flow', () => {
     });
     await store.getState().load();
     store.getState().openLauncher('w1');
-    await store.getState().requestLaunch(counts);
+    await store.getState().requestLaunch(draft);
     await store
       .getState()
       .confirmPermission({ level: 'always-allow', autoResume: true, scope: 'global' });
     expect(store.getState().launcher).toEqual({
       workspaceId: 'w1',
       step: 'counts',
+      draft,
       error: 'Disque plein',
     });
     expect(invoke).not.toHaveBeenCalledWith('agents:launch', expect.anything());
@@ -224,11 +266,33 @@ describe('launch flow', () => {
   it('does nothing without an open launcher or a pending permission step', async () => {
     const { store, invoke } = setup();
     await store.getState().load();
-    await store.getState().requestLaunch(counts);
+    await store.getState().requestLaunch(draft);
     await store
       .getState()
       .confirmPermission({ level: 'always-allow', autoResume: true, scope: 'global' });
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds a CLI typed by the user to the list (FR-008)', async () => {
+    const { store, invoke } = setup();
+    await store.getState().load();
+    expect(await store.getState().addCli('Aider', 'aider --no-git')).toBeNull();
+    expect(invoke).toHaveBeenCalledWith('cli:add', { name: 'Aider', command: 'aider --no-git' });
+    expect(store.getState().clis.map((c) => c.id)).toEqual([
+      'claude-code',
+      'codex',
+      'custom-aider',
+    ]);
+  });
+
+  it('gives back why a CLI could not be added', async () => {
+    const { store } = setup({
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      addCli: () => Promise.reject({ code: 'INVALID_INPUT', message: 'Nom requis.' }),
+    });
+    await store.getState().load();
+    expect(await store.getState().addCli('', 'aider')).toBe('Nom requis.');
+    expect(store.getState().clis).toHaveLength(2);
   });
 
   it('detects the CLIs again on request', async () => {

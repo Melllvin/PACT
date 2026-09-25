@@ -222,6 +222,14 @@ describe('US1 actions', () => {
     expect(store.getState().openError).toBeNull();
   });
 
+  it('adds an opened repository next to the tabs already open', async () => {
+    const { store } = setup({ 'workspace:open': () => workspace('w1') });
+    await store.getState().load();
+    store.setState({ workspaces: [workspace('w0'), workspace('w1')] });
+    await store.getState().openRepository('/w1');
+    expect(store.getState().workspaces.map((w) => w.id)).toEqual(['w0', 'w1']);
+  });
+
   it('switches to the existing tab when the repository is already open (FR-004)', async () => {
     const { store } = setup({
       'workspace:open': () => {

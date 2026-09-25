@@ -1,25 +1,27 @@
-import { useState } from 'react';
-import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
-import type { LaunchCounts } from '../store/app-store';
+import { countsOf, withCount, type LaunchDraft } from '../../shared/launch-draft';
+import { MAX_AGENTS, type CliDefinition } from '../../shared/model';
 import styles from './launch.module.css';
 import { useDialogKeys } from './use-dialog-keys';
 
 export type QuickLaunchProps = {
   clis: CliDefinition[];
-  /** Counters last used in this workspace (FR-010). */
-  counters: Workspace['quickLaunchCounters'];
+  /** Shared with the detailed mode: counters only add or remove agents (FR-011). */
+  draft: LaunchDraft;
+  onChange: (draft: LaunchDraft) => void;
   /** Agents already in the workspace, counted against the limit of six. */
   existingAgents: number;
   error: string | null;
-  onLaunch: (counts: LaunchCounts) => void;
+  onLaunch: () => void;
+  onDetailed: () => void;
   onClose: () => void;
 };
 
 const MAX_FREE_TERMINALS = 6;
 
-const agentsLabel = (count: number) => `Lancer ${String(count)} agent${count > 1 ? 's' : ''}`;
+export const agentsLabel = (count: number) =>
+  `Lancer ${String(count)} agent${count > 1 ? 's' : ''}`;
 const terminalsLabel = (count: number) =>
-  `Ouvrir ${String(count)} terminal${count > 1 ? 'aux' : ''}`;
+  `Ouvrir ${String(count)} ${count > 1 ? 'terminaux' : 'terminal'}`;
 
 type CounterProps = {
   label: string;
@@ -55,42 +57,34 @@ function Counter({ label, value, canAdd, onChange }: CounterProps) {
   );
 }
 
+/** The CLIs the quick mode counts: the detected ones, and the first one added by hand. */
+export function launchableClis(clis: CliDefinition[]) {
+  const installed = clis.filter((cli) => cli.status === 'installed');
+  return {
+    detected: installed.filter((cli) => cli.origin === 'detected'),
+    // « Autre CLI… » launches the first CLI added by hand.
+    other: installed.find((cli) => cli.origin === 'custom'),
+  };
+}
+
 /** Screen 1c — mode rapide: how many agents of each CLI, and free terminals (FR-009, FR-010). */
 export function QuickLaunch({
   clis,
-  counters,
+  draft,
+  onChange,
   existingAgents,
   error,
   onLaunch,
+  onDetailed,
   onClose,
 }: QuickLaunchProps) {
-  const installed = clis.filter((cli) => cli.status === 'installed');
-  const detected = installed.filter((cli) => cli.origin === 'detected');
-  // « Autre CLI… » launches the first CLI added by hand.
-  const other = installed.find((cli) => cli.origin === 'custom');
-  const firstLaunch = Object.keys(counters).every((key) => key === 'freeTerminal');
+  const { detected, other } = launchableClis(clis);
+  const { agents, freeTerminal } = countsOf(draft);
 
-  const [agents, setAgents] = useState<Record<string, number>>(() =>
-    Object.fromEntries(
-      [...detected, ...(other ? [other] : [])].map((cli, index) => [
-        cli.id,
-        counters[cli.id] ?? (firstLaunch && index === 0 ? 1 : 0),
-      ]),
-    ),
-  );
-  const [freeTerminal, setFreeTerminal] = useState(counters.freeTerminal);
-
-  const total = Object.values(agents).reduce((sum, count) => sum + count, 0);
+  const total = draft.agents.length;
   const full = existingAgents + total >= MAX_AGENTS;
   const label = total === 0 && freeTerminal > 0 ? terminalsLabel(freeTerminal) : agentsLabel(total);
 
-  const launch = () => {
-    if (total === 0 && freeTerminal === 0) return;
-    onLaunch({
-      agents: Object.fromEntries(Object.entries(agents).filter(([, count]) => count > 0)),
-      freeTerminal,
-    });
-  };
   useDialogKeys({ onEscape: onClose });
 
   const counter = (cli: CliDefinition, name = cli.name) => (
@@ -100,7 +94,7 @@ export function QuickLaunch({
       value={agents[cli.id] ?? 0}
       canAdd={!full}
       onChange={(value) => {
-        setAgents({ ...agents, [cli.id]: value });
+        onChange(withCount(draft, cli.id, value));
       }}
     />
   );
@@ -118,13 +112,23 @@ export function QuickLaunch({
       {other ? (
         counter(other, 'Autre CLI…')
       ) : (
-        <Counter label="Autre CLI…" value={0} canAdd={false} onChange={() => undefined} />
+        <Counter
+          label="Autre CLI…"
+          value={0}
+          canAdd={false}
+          // Both buttons stay disabled until a CLI is added: nothing ever changes this counter.
+          /* v8 ignore start */
+          onChange={() => undefined}
+          /* v8 ignore stop */
+        />
       )}
       <Counter
         label="Terminal libre"
         value={freeTerminal}
         canAdd={freeTerminal < MAX_FREE_TERMINALS}
-        onChange={setFreeTerminal}
+        onChange={(value) => {
+          onChange({ ...draft, freeTerminal: value });
+        }}
       />
       {full && <p className={styles.hint}>{MAX_AGENTS} agents au plus par workspace.</p>}
       <label className={styles.field}>
@@ -139,12 +143,13 @@ export function QuickLaunch({
         </p>
       )}
       <div className={styles.actions}>
+        <button onClick={onDetailed}>Mode détaillé…</button>
         <span className={styles.spacer} />
         <button onClick={onClose}>Annuler</button>
         <button
           className={styles.primary}
           disabled={total === 0 && freeTerminal === 0}
-          onClick={launch}
+          onClick={onLaunch}
         >
           {label}
         </button>

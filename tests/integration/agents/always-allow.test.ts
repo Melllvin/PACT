@@ -133,7 +133,7 @@ afterEach(async () => {
   await hooks.stop();
   workspaces.dispose();
   await stores.workspace(workspace.id).read();
-  await rm(root, { recursive: true, force: true });
+  await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
 const RULE = 'Bash(rm fichier.txt)';
@@ -147,6 +147,8 @@ const firstTurn = async (id: string, always: boolean) => {
   pty.write(id, 'Supprime le fichier\r');
   await waitForState(id, 'awaiting-answer');
   await manager.answer(id, 'allow', always);
+  // The Stop hook may come before the terminal output (ConPTY on Windows).
+  await waitFor(() => allowedTimes(id) === 1, 'request not allowed', id);
   await waitForState(id, 'done');
 };
 

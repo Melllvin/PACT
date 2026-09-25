@@ -4,7 +4,7 @@ import {
   forwardTerminalEvents,
 } from '../../../../src/main/ipc/agent-handlers';
 import type { AgentDraft } from '../../../../src/shared/ipc';
-import type { Agent } from '../../../../src/shared/model';
+import type { Agent, CliDefinition } from '../../../../src/shared/model';
 
 // T064 — US2 channels: agents:launch, permission:set, cli:redetect, terminal input and events.
 // T074 — US3 tile actions: agent:answer, agent:resume, agent:restart, agent:close, agent:log.
@@ -19,10 +19,15 @@ const draft: AgentDraft = {
   startCommand: null,
 };
 
+const custom = { id: 'custom-aider' } as unknown as CliDefinition;
+
 const setup = () => {
   const launched = [{ id: 'a1' }] as unknown as Agent[];
   const deps = {
-    registry: { detect: vi.fn(() => Promise.resolve([])) },
+    registry: {
+      detect: vi.fn(() => Promise.resolve([])),
+      add: vi.fn(() => Promise.resolve(custom)),
+    },
     permissions: { set: vi.fn(() => Promise.resolve()) },
     agents: {
       launch: vi.fn(() => Promise.resolve(launched)),
@@ -78,6 +83,12 @@ describe('createAgentServices', () => {
     expect(deps.permissions.set).toHaveBeenCalledWith(choice);
     await services['cli:redetect']();
     expect(deps.registry.detect).toHaveBeenCalledOnce();
+  });
+
+  it('adds a CLI typed by the user and returns it (cli:add, FR-008)', async () => {
+    const { deps, services } = setup();
+    expect(await services['cli:add']({ name: 'Aider', command: 'aider' })).toBe(custom);
+    expect(deps.registry.add).toHaveBeenCalledWith({ name: 'Aider', command: 'aider' });
   });
 
   it('passes what the user types and the terminal size to the pseudo-terminal', () => {

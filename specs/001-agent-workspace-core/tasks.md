@@ -253,19 +253,19 @@ réglages appliqués ; CLI ajouté → proposé au lancement.
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T093 [P] [US6] Tests du brouillon de lancement (logique pure) : « Commun à tous » hérité par défaut, surcharge marquée ≠ et comptée par agent, la surcharge prime au lancement, réordonnancement → positions, ports et couleurs recalculés, dupliquer / retirer, détection des conflits de branche et de port, bascule mode rapide ↔ détaillé sans perte dans `tests/unit/shared/launch-draft.test.ts`
-- [ ] T094 [P] [US6] Tests de l'adaptateur générique : suite de contrat ; heuristique « attend une réponse » après 3 s d'inactivité si la dernière sortie finit par `?` ou `(y/n)` ; fin de processus → `turn-finished` ou `failed` selon le code dans `tests/contract/generic.contract.test.ts`
-- [ ] T095 [P] [US6] Tests de `cli:add` : CLI enregistré avec `origin: custom`, id `custom-<slug>`, avertissement si la commande est introuvable, proposé dans les compteurs du mode rapide dans `tests/unit/main/agents/cli-registry-custom.test.ts`
-- [ ] T096 [P] [US6] Tests du panneau détaillé (1d) : liste à gauche identifiée par couleur, glisser-déposer, inspecteur (CLI, modèle, permissions Demander / Auto · worktree / Tout auto, branche de base, branche « auto — choisie par l'agent », port · commande), pointillés pour l'hérité, ≠ pour le surchargé dans `tests/unit/renderer/launch/DetailedLaunch.test.tsx`
-- [ ] T097 [P] [US6] Test e2e : mode détaillé, 2 agents fake avec branches et port personnalisés → réglages appliqués ; conflit de port → lancement bloqué ; ajout d'un CLI personnalisé depuis l'accueil dans `tests/e2e/us6-detailed-launch.spec.ts`
+- [X] T093 [P] [US6] Tests du brouillon de lancement (logique pure) : « Commun à tous » hérité par défaut, surcharge marquée ≠ et comptée par agent, la surcharge prime au lancement, réordonnancement → positions, ports et couleurs recalculés, dupliquer / retirer, détection des conflits de branche et de port, bascule mode rapide ↔ détaillé sans perte dans `tests/unit/shared/launch-draft.test.ts`
+- [X] T094 [P] [US6] Tests de l'adaptateur générique : suite de contrat ; heuristique « attend une réponse » après 3 s d'inactivité si la dernière sortie finit par `?` ou `(y/n)` ; fin de processus → `turn-finished` ou `failed` selon le code dans `tests/contract/generic.contract.test.ts`
+- [X] T095 [P] [US6] Tests de `cli:add` : CLI enregistré avec `origin: custom`, id `custom-<slug>`, avertissement si la commande est introuvable, proposé dans les compteurs du mode rapide dans `tests/unit/main/agents/cli-registry-custom.test.ts`
+- [X] T096 [P] [US6] Tests du panneau détaillé (1d) : liste à gauche identifiée par couleur, glisser-déposer, inspecteur (CLI, modèle, permissions Demander / Auto · worktree / Tout auto, branche de base, branche « auto — choisie par l'agent », port · commande), pointillés pour l'hérité, ≠ pour le surchargé dans `tests/unit/renderer/launch/DetailedLaunch.test.tsx`
+- [X] T097 [P] [US6] Test e2e : mode détaillé, 2 agents fake avec branches et port personnalisés → réglages appliqués ; conflit de port → lancement bloqué ; ajout d'un CLI personnalisé depuis l'accueil dans `tests/e2e/us6-detailed-launch.spec.ts`
 
 ### Implementation for User Story 6
 
-- [ ] T098 [P] [US6] Implémenter la logique du brouillon de lancement dans `src/shared/launch-draft.ts` et l'utiliser aussi dans `QuickLaunch` (T065) pour ne pas dupliquer la validation
-- [ ] T099 [P] [US6] Implémenter l'adaptateur générique dans `src/main/agents/adapters/generic.ts`
-- [ ] T100 [US6] Implémenter `cli:add` et `agents:reorder` dans `src/main/agents/cli-registry.ts`, `src/main/agents/agent-manager.ts` et `src/main/ipc/agent-handlers.ts`
-- [ ] T101 [US6] Implémenter le panneau maître-détail (1d) dans `src/renderer/launch/DetailedLaunch.tsx`, `src/renderer/launch/AgentInspector.tsx`, `src/renderer/launch/AgentList.tsx`
-- [ ] T102 [US6] Implémenter « Autre CLI — ajouter » sur l'accueil dans `src/renderer/home/AddCliDialog.tsx`
+- [X] T098 [P] [US6] Implémenter la logique du brouillon de lancement dans `src/shared/launch-draft.ts` et l'utiliser aussi dans `QuickLaunch` (T065) pour ne pas dupliquer la validation
+- [X] T099 [P] [US6] Implémenter l'adaptateur générique dans `src/main/agents/adapters/generic.ts`
+- [X] T100 [US6] Implémenter `cli:add` et `agents:reorder` dans `src/main/agents/cli-registry.ts`, `src/main/agents/agent-manager.ts` et `src/main/ipc/agent-handlers.ts` — `agents:reorder` non implémenté : l'ordre du brouillon (mode détaillé) fixe positions, ports et couleurs au lancement ; réordonner des agents en cours contredirait FR-016 (un agent garde sa couleur)
+- [X] T101 [US6] Implémenter le panneau maître-détail (1d) dans `src/renderer/launch/DetailedLaunch.tsx`, `src/renderer/launch/AgentInspector.tsx`, `src/renderer/launch/AgentList.tsx`
+- [X] T102 [US6] Implémenter « Autre CLI — ajouter » sur l'accueil dans `src/renderer/home/AddCliDialog.tsx`
 
 **Checkpoint**: US6 fonctionnelle, US1–US5 toujours vertes
 
@@ -309,6 +309,7 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 - [ ] T116 Dérouler `specs/001-agent-workspace-core/quickstart.md` (scénarios automatisés + validation manuelle avec vrais CLI) sur macOS et Windows et consigner les résultats dans la PR
 - [ ] T141 Rappel (décisions utilisateur du 2026-09-24) : interface en shadcn/ui + Tailwind v4 (research.md R16) et effets React Bits (R15), pour coller aux maquettes `docs/maquettes` (direction 1c, `CONSIGNES-UI.md`). Plan amendé ; ajouter à la main (sans régénérer `tasks.md`) les tâches tests d'abord : migration écran par écran des CSS Modules et des dialogues faits main (suppression de `use-dialog-keys`) ; enrobage `DotGrid` (mouvement réduit, tokens, hors terminaux) ; captures Playwright à 1024 px et en grand écran. Reste à obtenir l'accord de l'utilisateur sur l'exclusion de `src/renderer/effects/vendor/**` de la couverture et du lint. L'installation elle-même est T142 (début de phase 7) ; la migration et les effets passent avant T111
 - [ ] T117 Proposer à l'utilisateur (sans l'appliquer sans son accord) la protection de la branche `main` exigeant les jobs CI `check` et `e2e` (Constitution II)
+- [ ] T146 Stabiliser les tests d'intégration sous Windows (ConPTY, git, surveillance de fichiers : `agent-actions` « Reprendre tape continue », `workspace-service` « availability », `agent-manager` validation des branches) en trouvant la cause de chaque échec, puis retirer le `retry` Windows du projet `integration` de `vitest.config.ts` (Constitution II)
 
 ---
 
@@ -460,3 +461,8 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 ## Phase 17: Convergence
 
 - [ ] T143 Vérifier avec le vrai Codex (caractérisation, comme T049) que « Toujours pour ce worktree » autorise bien une demande suivante de même `ruleKey` : les touches `answerKeys('allow')` sont tapées pendant l'appel du hook `PermissionRequest`, peut-être avant que Codex affiche sa boîte ; si elles se perdent, répondre par la sortie du hook quand Codex l'accepte (`permissionDecision`) ou taper après l'affichage de la boîte, test de contrat à l'appui dans `tests/contract/codex.contract.test.ts` et `src/main/agents/adapters/codex.ts` per FR-034 / US5/AC4 (partial)
+
+## Phase 18: Convergence
+
+- [X] T144 Retirer `agents:reorder` de `src/shared/ipc.ts` et de `contracts/ipc.md` (l'ordre du brouillon fixe l'ordre des tuiles au lancement, décision T100), ou l'implémenter, per contracts/ipc.md, US6/AC4 (contradicts)
+- [X] T145 Reconnaître une limite de débit dans la sortie d'un « Autre CLI » (`GenericAdapter.mapOutput` → `failed` / `rate-limit` avec `resetAt` via `parseRateLimitReset`) per research.md « Limite de débit — détection » (partial)

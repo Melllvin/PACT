@@ -4,21 +4,22 @@ import {
   type IpcError,
   type IpcEvent,
   type IpcOutput,
-  type AgentDraft,
   type PactApi,
 } from '../../shared/ipc';
+import { countsOf, toAgentDrafts, type LaunchDraft } from '../../shared/launch-draft';
 import type { Agent, PermissionLevel, PermissionPreference, Workspace } from '../../shared/model';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
 
 export type ActiveTab = { kind: 'home' } | { kind: 'workspace'; id: string };
 export type View = 'tiles' | 'focus';
-/** What the quick launcher (1c) asks for: agents per CLI id, plus free terminals. */
-export type LaunchCounts = { agents: Record<string, number>; freeTerminal: number };
-/** 1c, then 1m when no permission level is known yet (FR-012). */
+/**
+ * 1c or 1d, then 1m when no permission level is known yet (FR-012). The draft goes along, so a
+ * refused launch or a failed choice brings the launcher back as it was.
+ */
 export type Launcher =
-  | { workspaceId: string; step: 'counts'; error?: string }
-  | { workspaceId: string; step: 'permission'; counts: LaunchCounts };
+  | { workspaceId: string; step: 'counts'; draft?: LaunchDraft; error?: string }
+  | { workspaceId: string; step: 'permission'; draft: LaunchDraft };
 type AppSnapshot = IpcOutput<'app:getState'>;
 
 export type AppState = {
@@ -60,10 +61,12 @@ export type AppState = {
   openLauncher: (workspaceId: string) => void;
   closeLauncher: () => void;
   /** Launches straight away when a level is known, otherwise asks for it first (1m). */
-  requestLaunch: (counts: LaunchCounts) => Promise<void>;
+  requestLaunch: (draft: LaunchDraft) => Promise<void>;
   /** Saves the level chosen in 1m, then launches what 1c asked for. */
   confirmPermission: (choice: PermissionPreference) => Promise<void>;
   redetectClis: () => Promise<void>;
+  /** « Autre CLI — ajouter »; resolves with why it was refused, or null (FR-008). */
+  addCli: (name: string, command: string) => Promise<string | null>;
   /** `always`: « Toujours pour ce worktree » (FR-034). */
   answerAgent: (agentId: string, answer: 'allow' | 'deny', always?: boolean) => Promise<void>;
   resumeAgent: (agentId: string) => Promise<void>;
@@ -149,25 +152,17 @@ export function createAppStore(api: PactApi) {
       });
     };
 
-    /** Agents keep the level they were launched with; drafts leave the rest to the main process. */
-    const drafts = (counts: LaunchCounts, level: PermissionLevel): AgentDraft[] =>
-      Object.entries(counts.agents).flatMap(([cliId, count]) =>
-        Array.from({ length: count }, () => ({
-          cliId,
-          model: null,
-          permissionLevel: level,
-          baseBranch: null,
-          branch: null,
-          port: null,
-          startCommand: null,
-        })),
-      );
-
-    const launch = async (workspaceId: string, counts: LaunchCounts, level: PermissionLevel) => {
+    const launch = async (workspaceId: string, draft: LaunchDraft, level: PermissionLevel) => {
+      const counts = countsOf(draft);
       try {
         await api.invoke('agents:launch', {
           workspaceId,
-          agents: drafts(counts, level),
+          // Agents keep the level they were launched with (FR-012).
+          agents: toAgentDrafts(
+            draft,
+            level,
+            (cliId) => get().clis.find((cli) => cli.id === cliId)?.models ?? [],
+          ),
           freeTerminals: counts.freeTerminal,
           // A zero for every installed CLI: the next launcher starts from exactly these (FR-010).
           counters: {
@@ -184,7 +179,7 @@ export function createAppStore(api: PactApi) {
         const { workspaces } = await api.invoke('app:getState');
         set({ workspaces, launcher: null });
       } catch (error) {
-        set({ launcher: { workspaceId, step: 'counts', error: asIpcError(error).message } });
+        set({ launcher: { workspaceId, step: 'counts', draft, error: asIpcError(error).message } });
       }
     };
 
@@ -353,36 +348,47 @@ export function createAppStore(api: PactApi) {
         set({ launcher: null });
       },
 
-      async requestLaunch(counts) {
+      async requestLaunch(draft) {
         const { launcher, workspaces, permission } = get();
         if (!launcher) return;
         const { workspaceId } = launcher;
         const workspace = workspaces.find((w) => w.id === workspaceId);
         const level = workspace?.permissionOverride?.level ?? permission?.level;
-        const hasAgents = Object.values(counts.agents).some((count) => count > 0);
-        if (level) await launch(workspaceId, counts, level);
+        if (level) await launch(workspaceId, draft, level);
         // Free terminals alone run no agent: no permission to ask for.
-        else if (!hasAgents) await launch(workspaceId, counts, 'always-ask');
-        else set({ launcher: { workspaceId, step: 'permission', counts } });
+        else if (draft.agents.length === 0) await launch(workspaceId, draft, 'always-ask');
+        else set({ launcher: { workspaceId, step: 'permission', draft } });
       },
 
       async confirmPermission(choice) {
         const { launcher } = get();
         if (launcher?.step !== 'permission') return;
-        const { workspaceId, counts } = launcher;
+        const { workspaceId, draft } = launcher;
         const project = choice.scope === 'project';
         try {
           await api.invoke('permission:set', { ...choice, ...(project ? { workspaceId } : {}) });
         } catch (error) {
-          set({ launcher: { workspaceId, step: 'counts', error: asIpcError(error).message } });
+          set({
+            launcher: { workspaceId, step: 'counts', draft, error: asIpcError(error).message },
+          });
           return;
         }
         if (!project) set({ permission: choice });
-        await launch(workspaceId, counts, choice.level);
+        await launch(workspaceId, draft, choice.level);
       },
 
       async redetectClis() {
         set({ clis: await api.invoke('cli:redetect') });
+      },
+
+      async addCli(name, command) {
+        try {
+          const added = await api.invoke('cli:add', { name, command });
+          set({ clis: [...get().clis.filter((cli) => cli.id !== added.id), added] });
+          return null;
+        } catch (error) {
+          return asIpcError(error).message;
+        }
       },
 
       answerAgent: (agentId, answer, always) =>

@@ -37,6 +37,7 @@ describe('DetectedClis', () => {
           }),
         ]}
         onRedetect={vi.fn()}
+        onAdd={vi.fn()}
       />,
     );
     expect(item('Claude Code').textContent).toMatch(/✓.*2\.1\.281/);
@@ -56,6 +57,7 @@ describe('DetectedClis', () => {
           }),
         ]}
         onRedetect={vi.fn()}
+        onAdd={vi.fn()}
       />,
     );
     expect(item('Codex').textContent).toMatch(/0\.40\.0.*mettez-le à jour/);
@@ -66,6 +68,7 @@ describe('DetectedClis', () => {
       <DetectedClis
         clis={[cli({ id: 'codex', name: 'Codex', adapter: 'codex', version: '0.156.1' })]}
         onRedetect={vi.fn()}
+        onAdd={vi.fn()}
       />,
     );
     expect(within(item('Codex')).getByText(/Trust all/)).toBeDefined();
@@ -74,9 +77,67 @@ describe('DetectedClis', () => {
   it('detects again on request', async () => {
     const user = userEvent.setup();
     const onRedetect = vi.fn();
-    render(<DetectedClis clis={[]} onRedetect={onRedetect} />);
+    render(<DetectedClis clis={[]} onRedetect={onRedetect} onAdd={vi.fn()} />);
     expect(screen.getByText(/Aucun CLI d’agent détecté/)).toBeDefined();
     await user.click(screen.getByRole('button', { name: 'Détecter à nouveau' }));
     expect(onRedetect).toHaveBeenCalled();
+  });
+
+  it('warns when the command of a CLI added by hand is not found (US6 scenario 6)', () => {
+    render(
+      <DetectedClis
+        clis={[
+          cli({
+            id: 'custom-goose',
+            name: 'Goose',
+            adapter: 'generic',
+            command: 'goose',
+            origin: 'custom',
+            status: 'missing',
+            resolvedPath: null,
+            version: null,
+          }),
+        ]}
+        onRedetect={vi.fn()}
+        onAdd={vi.fn()}
+      />,
+    );
+    expect(item('Goose').textContent).toMatch(/commande « goose » introuvable/);
+  });
+
+  it('adds another CLI from its name and command', async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn(() => Promise.resolve(null));
+    render(<DetectedClis clis={[]} onRedetect={vi.fn()} onAdd={onAdd} />);
+    await user.click(screen.getByRole('button', { name: 'Autre CLI — ajouter' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ajouter un CLI' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Nom' }), 'Aider');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Commande' }), 'aider --no-git');
+    await user.click(within(dialog).getByRole('button', { name: 'Ajouter' }));
+    expect(onAdd).toHaveBeenCalledWith('Aider', 'aider --no-git');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('closes the dialog on « Annuler » without adding anything', async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn(() => Promise.resolve(null));
+    render(<DetectedClis clis={[]} onRedetect={vi.fn()} onAdd={onAdd} />);
+    await user.click(screen.getByRole('button', { name: 'Autre CLI — ajouter' }));
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dialog open with the reason when the CLI is refused', async () => {
+    const user = userEvent.setup();
+    render(
+      <DetectedClis clis={[]} onRedetect={vi.fn()} onAdd={() => Promise.resolve('Nom requis.')} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Autre CLI — ajouter' }));
+    const dialog = screen.getByRole('dialog', { name: 'Ajouter un CLI' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Nom' }), 'x');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Commande' }), 'x');
+    await user.click(within(dialog).getByRole('button', { name: 'Ajouter' }));
+    expect(within(dialog).getByRole('alert').textContent).toBe('Nom requis.');
   });
 });
