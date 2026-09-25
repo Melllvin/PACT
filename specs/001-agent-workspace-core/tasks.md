@@ -265,7 +265,7 @@ réglages appliqués ; CLI ajouté → proposé au lancement.
 - [X] T099 [P] [US6] Implémenter l'adaptateur générique dans `src/main/agents/adapters/generic.ts`
 - [X] T100 [US6] Implémenter `cli:add` et `agents:reorder` dans `src/main/agents/cli-registry.ts`, `src/main/agents/agent-manager.ts` et `src/main/ipc/agent-handlers.ts` — `agents:reorder` non implémenté : l'ordre du brouillon (mode détaillé) fixe positions, ports et couleurs au lancement ; réordonner des agents en cours contredirait FR-016 (un agent garde sa couleur)
 - [X] T101 [US6] Implémenter le panneau maître-détail (1d) dans `src/renderer/launch/DetailedLaunch.tsx`, `src/renderer/launch/AgentInspector.tsx`, `src/renderer/launch/AgentList.tsx`
-- [ ] T102 [US6] Implémenter « Autre CLI — ajouter » sur l'accueil dans `src/renderer/home/AddCliDialog.tsx`
+- [X] T102 [US6] Implémenter « Autre CLI — ajouter » sur l'accueil dans `src/renderer/home/AddCliDialog.tsx`
 
 **Checkpoint**: US6 fonctionnelle, US1–US5 toujours vertes
 

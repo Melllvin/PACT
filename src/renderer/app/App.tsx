@@ -137,7 +137,11 @@ export function App({ store, getPathForFile, terminals }: Props) {
               onClone={(url, destination) => void state.startClone(url, destination)}
               getPathForFile={getPathForFile}
             />
-            <DetectedClis clis={state.clis} onRedetect={() => void state.redetectClis()} />
+            <DetectedClis
+              clis={state.clis}
+              onRedetect={() => void state.redetectClis()}
+              onAdd={state.addCli}
+            />
             <Legend />
           </>
         )}

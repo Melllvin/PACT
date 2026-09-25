@@ -65,6 +65,8 @@ export type AppState = {
   /** Saves the level chosen in 1m, then launches what 1c asked for. */
   confirmPermission: (choice: PermissionPreference) => Promise<void>;
   redetectClis: () => Promise<void>;
+  /** « Autre CLI — ajouter »; resolves with why it was refused, or null (FR-008). */
+  addCli: (name: string, command: string) => Promise<string | null>;
   /** `always`: « Toujours pour ce worktree » (FR-034). */
   answerAgent: (agentId: string, answer: 'allow' | 'deny', always?: boolean) => Promise<void>;
   resumeAgent: (agentId: string) => Promise<void>;
@@ -377,6 +379,16 @@ export function createAppStore(api: PactApi) {
 
       async redetectClis() {
         set({ clis: await api.invoke('cli:redetect') });
+      },
+
+      async addCli(name, command) {
+        try {
+          const added = await api.invoke('cli:add', { name, command });
+          set({ clis: [...get().clis.filter((cli) => cli.id !== added.id), added] });
+          return null;
+        } catch (error) {
+          return asIpcError(error).message;
+        }
       },
 
       answerAgent: (agentId, answer, always) =>
