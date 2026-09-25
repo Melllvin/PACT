@@ -44,11 +44,20 @@ function setup({
   ws = workspace(),
   launch = () => Promise.resolve([launchedAgent]),
   setPermission = () => Promise.resolve(undefined),
+  addCli = (input: unknown) =>
+    Promise.resolve({
+      ...cli('codex'),
+      ...(input as object),
+      id: 'custom-aider',
+      adapter: 'generic',
+      origin: 'custom',
+    }),
 }: {
   permission?: PermissionPreference | null;
   ws?: Workspace;
   launch?: () => Promise<unknown>;
   setPermission?: () => Promise<unknown>;
+  addCli?: (input: unknown) => Promise<unknown>;
 } = {}) {
   let snapshot: IpcOutput<'app:getState'> = {
     workspaces: [ws],
@@ -64,6 +73,8 @@ function setup({
         return launch();
       case 'permission:set':
         return setPermission();
+      case 'cli:add':
+        return addCli(input);
       case 'cli:redetect':
         return Promise.resolve([cli('codex')]);
       default:
@@ -245,6 +256,28 @@ describe('launch flow', () => {
       .getState()
       .confirmPermission({ level: 'always-allow', autoResume: true, scope: 'global' });
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds a CLI typed by the user to the list (FR-008)', async () => {
+    const { store, invoke } = setup();
+    await store.getState().load();
+    expect(await store.getState().addCli('Aider', 'aider --no-git')).toBeNull();
+    expect(invoke).toHaveBeenCalledWith('cli:add', { name: 'Aider', command: 'aider --no-git' });
+    expect(store.getState().clis.map((c) => c.id)).toEqual([
+      'claude-code',
+      'codex',
+      'custom-aider',
+    ]);
+  });
+
+  it('gives back why a CLI could not be added', async () => {
+    const { store } = setup({
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      addCli: () => Promise.reject({ code: 'INVALID_INPUT', message: 'Nom requis.' }),
+    });
+    await store.getState().load();
+    expect(await store.getState().addCli('', 'aider')).toBe('Nom requis.');
+    expect(store.getState().clis).toHaveLength(2);
   });
 
   it('detects the CLIs again on request', async () => {
