@@ -463,5 +463,5 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 ## Phase 18: Convergence
 
-- [ ] T144 Retirer `agents:reorder` de `src/shared/ipc.ts` et de `contracts/ipc.md` (l'ordre du brouillon fixe l'ordre des tuiles au lancement, décision T100), ou l'implémenter, per contracts/ipc.md, US6/AC4 (contradicts)
-- [ ] T145 Reconnaître une limite de débit dans la sortie d'un « Autre CLI » (`GenericAdapter.mapOutput` → `failed` / `rate-limit` avec `resetAt` via `parseRateLimitReset`) per research.md « Limite de débit — détection » (partial)
+- [X] T144 Retirer `agents:reorder` de `src/shared/ipc.ts` et de `contracts/ipc.md` (l'ordre du brouillon fixe l'ordre des tuiles au lancement, décision T100), ou l'implémenter, per contracts/ipc.md, US6/AC4 (contradicts)
+- [X] T145 Reconnaître une limite de débit dans la sortie d'un « Autre CLI » (`GenericAdapter.mapOutput` → `failed` / `rate-limit` avec `resetAt` via `parseRateLimitReset`) per research.md « Limite de débit — détection » (partial)

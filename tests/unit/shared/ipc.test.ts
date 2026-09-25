@@ -79,10 +79,6 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       { workspaceId: 'w1', agents: [draft], freeTerminals: -1, counters: { freeTerminal: 0 } },
     ],
   },
-  'agents:reorder': {
-    valid: { workspaceId: 'w1', order: [agentId] },
-    invalid: [{ workspaceId: 'w1', order: ['x'] }],
-  },
   'agent:answer': {
     valid: { agentId, answer: 'allow', always: true },
     invalid: [

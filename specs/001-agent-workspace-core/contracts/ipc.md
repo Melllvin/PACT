@@ -16,8 +16,7 @@ preload (côté renderer) et dans le handler (côté main). Le renderer n'a acc�
 | `cli:add` | `{ name, command }` | `CliDefinition` (avec `status`) | FR-008 |
 | `cli:redetect` | — | `CliDefinition[]` | FR-007 |
 | `permission:set` | `PermissionPreference & { workspaceId? }` (inclut `autoResume`) | — | FR-012, FR-035 |
-| `agents:launch` | `{ workspaceId, agents: AgentDraft[], freeTerminals: number, counters }` | `Agent[]` \| erreurs de validation (`LIMIT`, `BRANCH_CONFLICT`, `PORT_CONFLICT`) | FR-009…FR-018 |
-| `agents:reorder` | `{ workspaceId, order: agentId[] }` | — | US6 sc. 4 |
+| `agents:launch` | `{ workspaceId, agents: AgentDraft[], freeTerminals: number, counters }` | `Agent[]` \| erreurs de validation (`LIMIT`, `BRANCH_CONFLICT`, `PORT_CONFLICT`) ; l'ordre de `agents` est celui des tuiles | FR-009…FR-018, US6 sc. 4 |
 | `agent:answer` | `{ agentId, answer: 'allow' \| 'deny', always?: boolean }` | — | FR-024, FR-034 |
 | `agent:resume` | `{ agentId }` | — | FR-024 |
 | `agent:restart` | `{ agentId }` | — | FR-024 |

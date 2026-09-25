@@ -126,7 +126,6 @@ export const ipcRequests = {
     }),
     z.array(agentSchema),
   ),
-  'agents:reorder': request(z.object({ workspaceId: nonEmpty, order: z.array(z.uuid()) }), none),
   'agent:answer': request(
     agentRef.extend({ answer: z.enum(['allow', 'deny']), always: z.boolean().optional() }),
     none,
