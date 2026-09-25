@@ -492,7 +492,7 @@ Décisions utilisateur du 2026-09-25 : suivre `docs/maquettes/Maquette interacti
 l'apparence et les effets de tous les écrans existants (research.md R17), sans construire Comparer,
 Revue, Réglages, Workflows, notifications ni raccourcis ; le nom reste PACT ; même PR que la phase 10.
 
-- [ ] T158 Tests d'abord puis tokens R17 dans `src/renderer/theme/tokens.css`, polices Geist et Geist Mono embarquées avec leur licence OFL dans `src/renderer/theme/fonts/`, fond de fenêtre (`src/main/window.ts`) et thème xterm (`src/renderer/tiles/xterm-factory.ts`) alignés, JetBrains Mono gardée pour le terminal
+- [X] T158 Tests d'abord puis tokens R17 dans `src/renderer/theme/tokens.css`, polices Geist et Geist Mono embarquées avec leur licence OFL dans `src/renderer/theme/fonts/`, fond de fenêtre (`src/main/window.ts`) et thème xterm (`src/renderer/tiles/xterm-factory.ts`) alignés, JetBrains Mono gardée pour le terminal
 - [ ] T159 Tests d'abord puis primitives (`button`, `dialog`, `input`) et écrans restylés selon la maquette interactive : barre d'onglets, accueil, workspace vide, tuiles, Focus, À faire, menu rapide, autorisations, mode détaillé, dialogues, sans changer rôles, noms accessibles ni structure testée ; entrée échelonnée des éléments au changement de vue, coupée en `prefers-reduced-motion` (FR-042)
 - [ ] T160 Tests d'abord puis effets d'ambiance de R17 dans `src/renderer/effects/` (remplace T156) : fonctions pures testées (déplacement des points par le curseur et les ondes, fibres, zone des tuiles), canvas de fond sous les tuiles (rien sur les terminaux, FR-020), vagues du menu rapide ; rien sous `prefers-reduced-motion` ni sans canvas, boucle arrêtée au repos
 

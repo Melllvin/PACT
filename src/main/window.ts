@@ -12,7 +12,8 @@ export function createMainWindow(env: NodeJS.ProcessEnv): BrowserWindow {
     width: 1440,
     height: 900,
     title: 'PACT',
-    backgroundColor: '#0d1117',
+    // --bg of tokens.css: no flash of another color before the page paints.
+    backgroundColor: '#09090b',
     webPreferences: {
       preload: fromHere('../preload/index.cjs'),
       contextIsolation: true,
