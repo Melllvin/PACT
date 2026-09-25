@@ -51,6 +51,11 @@
   --animate-unfold: unfold 480ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --animate-enter: view-enter 560ms cubic-bezier(0.2, 0.8, 0.2, 1)
     calc(min(var(--enter-index, 0), 10) * 45ms) backwards;
+  /* FR-042: after the particles of a change of view, the tile comes in, then its border lights. */
+  --animate-tile-enter:
+    view-enter 480ms cubic-bezier(0.2, 0.8, 0.2, 1)
+      calc(80ms + min(var(--enter-index, 0), 10) * 70ms) backwards,
+    border-in 420ms ease-out calc(560ms + min(var(--enter-index, 0), 10) * 70ms) backwards;
 
   @keyframes view-enter {
     from {
@@ -68,6 +73,20 @@
       box-shadow:
         0 0 0 3px color-mix(in srgb, var(--pulse-color, var(--agent-color)) 35%, transparent),
         0 0 36px color-mix(in srgb, var(--pulse-color, var(--agent-color)) 30%, transparent);
+    }
+    to {
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+
+  @keyframes border-in {
+    from {
+      border-color: color-mix(in srgb, var(--border) 60%, transparent);
+      box-shadow: 0 0 0 0 transparent;
+    }
+    60% {
+      border-color: var(--agent-color);
+      box-shadow: 0 0 14px 0 color-mix(in srgb, var(--agent-color) 45%, transparent);
     }
     to {
       box-shadow: 0 0 0 0 transparent;

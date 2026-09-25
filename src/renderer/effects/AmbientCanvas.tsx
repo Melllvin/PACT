@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { drawDots, drawFibers, drawGlow, drawOrb, drawSparks } from './draw';
+import { drawBurst, drawDots, drawFibers, drawGlow, drawOrb, drawSparks } from './draw';
 import { SHOCK_LIFE, SPARK_LIFE, atRest, followGlow, insideAny, type Point } from './field';
 import { fit, useMotionAllowed } from './motion';
+import { BURST_LIFE, burstMotes, type Mote } from './transition';
 
 type Stamp = Point & { t: number };
 
@@ -16,9 +17,19 @@ const seconds = () => performance.now() / 1000;
  * the cursor glow and click sparks. It lies under the content, so the opaque tiles hide it, and
  * its loop stops at rest (FR-042).
  */
-export function AmbientCanvas({ mode }: { mode: 'home' | 'workspace' }) {
+export function AmbientCanvas({
+  mode,
+  view = mode,
+}: {
+  mode: 'home' | 'workspace';
+  /** The tab in front: when it changes, particles come first (FR-042). */
+  view?: string;
+}) {
   const allowed = useMotionAllowed();
   const ref = useRef<HTMLCanvasElement>(null);
+  const shown = useRef(view);
+  /** Where the last click was, from which the particles of a change of view leave. */
+  const lastDown = useRef<Point | null>(null);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -31,6 +42,17 @@ export function AmbientCanvas({ mode }: { mode: 'home' | 'workspace' }) {
     let shocks: Stamp[] = [];
     let sparks: Stamp[] = [];
     let frame = 0;
+    let burst: { start: number; origin: Point; motes: Mote[] } | null = null;
+    if (shown.current !== view) {
+      shown.current = view;
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      burst = {
+        start: seconds(),
+        origin: lastDown.current ?? { x: width * 0.8, y: 0 },
+        motes: burstMotes(width, height),
+      };
+    }
 
     const local = (point: Point) => {
       const box = canvas.getBoundingClientRect();
@@ -52,6 +74,8 @@ export function AmbientCanvas({ mode }: { mode: 'home' | 'workspace' }) {
           drawOrb(context, local(center), now, mouse);
         }
       }
+      if (burst && now - burst.start > BURST_LIFE) burst = null;
+      if (burst) drawBurst(context, burst.motes, local(burst.origin), now - burst.start);
       glow = mouse ? followGlow(glow, mouse) : null;
       if (glow) drawGlow(context, glow);
       drawSparks(
@@ -66,7 +90,7 @@ export function AmbientCanvas({ mode }: { mode: 'home' | 'workspace' }) {
       const now = seconds();
       const target = paint(now);
       if (document.hidden) return;
-      if (!atRest({ now, lastPointer, shocks, sparks, glow, target })) {
+      if (burst || !atRest({ now, lastPointer, shocks, sparks, glow, target })) {
         frame = requestAnimationFrame(tick);
       }
     };
@@ -90,6 +114,7 @@ export function AmbientCanvas({ mode }: { mode: 'home' | 'workspace' }) {
     };
     const onDown = (event: PointerEvent) => {
       const point = { x: event.clientX, y: event.clientY };
+      lastDown.current = point;
       lastPointer = seconds();
       if (!shielded(point)) {
         shocks = [...shocks.slice(-3), { ...point, t: lastPointer }];
@@ -118,7 +143,7 @@ export function AmbientCanvas({ mode }: { mode: 'home' | 'workspace' }) {
       document.documentElement.removeEventListener('pointerleave', onLeave);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [allowed, mode]);
+  }, [allowed, mode, view]);
 
   if (!allowed) return null;
   return (

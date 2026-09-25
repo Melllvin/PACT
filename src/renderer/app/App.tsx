@@ -68,7 +68,12 @@ export function App({ store, getPathForFile, terminals }: Props) {
       />
       {/* The ambient canvas stays put while the content scrolls, under it (R17). */}
       <div className="relative isolate min-h-0">
-        {status === 'ready' && <AmbientCanvas mode={workspace ? 'workspace' : 'home'} />}
+        {status === 'ready' && (
+          <AmbientCanvas
+            mode={workspace ? 'workspace' : 'home'}
+            view={workspace ? workspace.id : 'home'}
+          />
+        )}
         <main className="h-full overflow-auto">
           {status === 'error' && (
             <p role="alert" className="m-4 text-destructive">

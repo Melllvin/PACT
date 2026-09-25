@@ -7,6 +7,7 @@ import {
   type Point,
   type Wave,
 } from './field';
+import { moteAt, type Mote } from './transition';
 
 /** Drawing of the ambient effects, ported from the interactive mockup (research.md R17). */
 
@@ -165,4 +166,17 @@ export function drawWaves(c: Context, width: number, height: number, t: number) 
       c.fill();
     }
   });
+}
+
+/** The particles of a change of view (FR-042), `elapsed` seconds after it. */
+export function drawBurst(c: Context, motes: readonly Mote[], origin: Point, elapsed: number) {
+  c.save();
+  for (const mote of motes) {
+    const at = moteAt(mote, origin, elapsed);
+    if (!at) continue;
+    c.globalAlpha = at.alpha;
+    c.fillStyle = mote.color === 'action' ? '#7cc8e8' : (ORB_COLORS[mote.color] ?? '#7cc8e8');
+    c.fillRect(at.x - mote.size / 4, at.y - mote.size / 4, mote.size / 2, mote.size / 2);
+  }
+  c.restore();
 }
