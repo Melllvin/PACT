@@ -65,6 +65,7 @@ const isParentClaudeVariable = (name: string) =>
   name === 'CLAUDECODE' || name.startsWith('CLAUDE_CODE_');
 
 const RESTORED_MESSAGE = 'PACT a redémarré : agent à reprendre.';
+const UNAVAILABLE_MESSAGE = 'Dossier du workspace introuvable : agent arrêté.';
 
 export class AgentManager {
   private readonly workspaces: WorkspaceAccess;
@@ -138,8 +139,27 @@ export class AgentManager {
     for (const agent of await this.markStale(workspace)) this.resumes.sync(agent);
   }
 
+  /**
+   * The folder of the workspace is gone (spec edge case, T121): its agents stop cleanly and wait,
+   * marked, to be resumed once it is back.
+   */
+  async suspend(workspaceId: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) return;
+    await Promise.all(
+      [...this.running]
+        .filter(([, running]) => running.workspaceId === workspaceId)
+        .map(([id]) => this.stop(id)),
+    );
+    const current = this.workspaces.get(workspaceId);
+    if (current) await this.markStale(current, UNAVAILABLE_MESSAGE);
+  }
+
   /** The agents of the workspace, those without a process marked « à reprendre ». */
-  private async markStale({ id: workspaceId, agents }: Workspace): Promise<Agent[]> {
+  private async markStale(
+    { id: workspaceId, agents }: Workspace,
+    message = RESTORED_MESSAGE,
+  ): Promise<Agent[]> {
     const stale = (agent: Agent) =>
       agent.state !== 'closed' && agent.state !== 'error' && !this.pty.has(agent.id);
     const changed = agents.filter(stale);
@@ -151,7 +171,7 @@ export class AgentManager {
           ? {
               ...agent,
               state: 'error' as const,
-              lastError: { code: null, kind: 'crash' as const, message: RESTORED_MESSAGE },
+              lastError: { code: null, kind: 'crash' as const, message },
             }
           : agent,
       ),

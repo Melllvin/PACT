@@ -38,6 +38,13 @@ void app.whenReady().then(async () => {
     stores,
     onStatus: (event) => {
       emit('workspace:status', event);
+      // Spec edge case « dossier supprimé » (T121): what runs there stops; shells come back with it.
+      if (event.status === 'unavailable') {
+        void agents.suspend(event.id);
+        void freeTerminals.suspend(event.id);
+      } else {
+        void freeTerminals.restore(event.id);
+      }
     },
   });
 
