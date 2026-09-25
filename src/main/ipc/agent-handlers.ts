@@ -1,13 +1,14 @@
 import type { IpcEvent, IpcEventChannel, IpcInput } from '../../shared/ipc';
-import type { Agent, CliDefinition } from '../../shared/model';
+import type { Agent } from '../../shared/model';
 import type { LaunchRequest } from '../agents/agent-manager';
+import type { CliRegistry } from '../agents/cli-registry';
 import type { PermissionChoice } from '../agents/permission-service';
 
 // T064 — US2 channels (contracts/ipc.md). `term:write` and `term:resize` come with them: the user
 // types the first prompt in the agent's terminal (FR-018). T074 — the US3 tile actions.
 
 type Dependencies = {
-  registry: { detect(): Promise<CliDefinition[]> };
+  registry: Pick<CliRegistry, 'add' | 'detect'>;
   permissions: { set(choice: PermissionChoice): Promise<void> };
   agents: {
     launch(request: LaunchRequest): Promise<Agent[]>;
@@ -33,6 +34,7 @@ export function createAgentServices({
 }: Dependencies) {
   return {
     'cli:redetect': () => registry.detect(),
+    'cli:add': (cli: IpcInput<'cli:add'>) => registry.add(cli),
     'permission:set': (choice: PermissionChoice) => permissions.set(choice),
     /** Agents first: a refused batch (LIMIT, conflicts) opens nothing at all. */
     async 'agents:launch'({
