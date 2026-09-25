@@ -82,38 +82,41 @@
   --text-lg: 14px;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+/* In the base layer, after Tailwind's preflight: Tailwind utilities still override these. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
-  /* Tailwind's preflight sets 1.5; the 1c screens were drawn with the browser default. */
-  line-height: normal;
-  -webkit-font-smoothing: antialiased;
-}
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: var(--text-base);
+    /* Tailwind's preflight sets 1.5; the 1c screens were drawn with the browser default. */
+    line-height: normal;
+    -webkit-font-smoothing: antialiased;
+  }
 
-/* Tailwind's preflight makes headings inherit their weight; the 1c titles are bold. */
-h1,
-h2,
-h3,
-h4 {
-  font-weight: 600;
-}
+  /* Tailwind's preflight makes headings inherit their weight; the 1c titles are bold. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 600;
+  }
 
-button {
-  font: inherit;
-  color: inherit;
+  button {
+    font: inherit;
+    color: inherit;
+  }
 }

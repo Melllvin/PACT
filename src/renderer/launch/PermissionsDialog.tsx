@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import type { CliDefinition, PermissionLevel, PermissionPreference } from '../../shared/model';
-import styles from './launch.module.css';
-import { useDialogKeys } from './use-dialog-keys';
+import type { KeyboardEvent } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 type LaunchedCli = Pick<CliDefinition, 'id' | 'name' | 'adapter'>;
 
@@ -17,6 +25,11 @@ const LEVELS: { level: PermissionLevel; name: string }[] = [
   { level: 'always-allow', name: 'Toujours autoriser' },
   { level: 'ask-sensitive', name: 'Demander pour les actions sensibles' },
   { level: 'always-ask', name: 'Toujours demander' },
+];
+
+const SCOPES: [PermissionPreference['scope'], string][] = [
+  ['project', 'Ce projet'],
+  ['global', 'Tous les projets'],
 ];
 
 /**
@@ -55,76 +68,114 @@ export function PermissionsDialog({ agentCount, clis, onConfirm, onCancel }: Pro
   const confirm = () => {
     onConfirm({ level, autoResume, scope });
   };
-  useDialogKeys({ onEscape: onCancel, onEnter: confirm });
+  /** « Entrée = choix par défaut »: Enter launches from anywhere but a button, which acts itself. */
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
+      event.preventDefault();
+      confirm();
+    }
+  };
 
   return (
-    <div role="dialog" aria-label="Autorisations des agents" className={styles.dialog}>
-      <h2>Autorisations des agents</h2>
-      <fieldset className={styles.choices}>
-        <legend>Que peuvent faire les agents ?</legend>
-        {LEVELS.map((option) => (
-          <label key={option.level} className={styles.choice}>
+    <Dialog open onOpenChange={onCancel}>
+      <DialogContent className="w-[min(480px,calc(100vw-32px))]" onKeyDown={onKeyDown}>
+        <DialogBody className="gap-2.5 px-[18px] py-4">
+          <DialogTitle className="font-sans text-[16px] font-semibold tracking-normal text-foreground normal-case">
+            Autorisations des agents
+          </DialogTitle>
+          <DialogDescription className="font-mono text-[11px]">
+            Demandé une seule fois, au premier lancement
+          </DialogDescription>
+          <div role="radiogroup" aria-label="Que peuvent faire les agents ?" className="contents">
+            {LEVELS.map((option) => (
+              <label
+                key={option.level}
+                className="flex cursor-pointer gap-2.5 rounded-[7px] border border-border px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/8 has-focus-visible:ring-2 has-focus-visible:ring-ring/60"
+              >
+                <input
+                  type="radio"
+                  name="level"
+                  className="peer sr-only"
+                  checked={level === option.level}
+                  onChange={() => {
+                    setLevel(option.level);
+                  }}
+                />
+                <span
+                  aria-hidden
+                  className="text-[14px] text-muted-foreground peer-checked:text-primary"
+                >
+                  {level === option.level ? '◉' : '○'}
+                </span>
+                <span className="flex flex-col gap-[3px]">
+                  <span className="flex items-center gap-2 text-[13.5px] font-semibold">
+                    {option.name}
+                    {option.level === 'always-allow' && (
+                      <span className="rounded-[3px] bg-primary px-1.5 py-px font-mono text-[10px] font-normal text-primary-foreground">
+                        défaut
+                      </span>
+                    )}
+                  </span>
+                  {clis.map((cli) => (
+                    <span key={cli.id} className="text-[12px] leading-[1.4] text-muted-foreground">
+                      {cli.name} : {describe(cli, option.level)}
+                    </span>
+                  ))}
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-1 flex items-center gap-2.5">
+            <span id="permission-scope" className="flex-1 text-[12.5px] text-muted-foreground">
+              S’applique à
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby="permission-scope"
+              className="flex overflow-hidden rounded-md border border-border text-[11.5px] font-medium"
+            >
+              {SCOPES.map(([value, name]) => (
+                <label
+                  key={value}
+                  className="cursor-pointer px-[9px] py-[3px] not-first:border-l not-first:border-border has-checked:bg-primary has-checked:text-primary-foreground has-focus-visible:ring-2 has-focus-visible:ring-ring/60 has-focus-visible:ring-inset"
+                >
+                  <input
+                    type="radio"
+                    name="scope"
+                    className="sr-only"
+                    checked={scope === value}
+                    onChange={() => {
+                      setScope(value);
+                    }}
+                  />
+                  {name}
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-[12.5px]">
             <input
-              type="radio"
-              name="level"
-              checked={level === option.level}
-              onChange={() => {
-                setLevel(option.level);
+              type="checkbox"
+              className="size-3.5 accent-(--action)"
+              checked={autoResume}
+              onChange={(event) => {
+                setAutoResume(event.target.checked);
               }}
             />
-            <span>
-              <strong>{option.name}</strong>
-              {clis.map((cli) => (
-                <span key={cli.id} className={styles.detail}>
-                  {cli.name} : {describe(cli, option.level)}
-                </span>
-              ))}
-            </span>
+            Reprendre automatiquement après une limite de débit
           </label>
-        ))}
-      </fieldset>
-      <fieldset className={styles.choices}>
-        <legend>Pour</legend>
-        <label className={styles.inline}>
-          <input
-            type="radio"
-            name="scope"
-            checked={scope === 'global'}
-            onChange={() => {
-              setScope('global');
-            }}
-          />
-          Tous les projets
-        </label>
-        <label className={styles.inline}>
-          <input
-            type="radio"
-            name="scope"
-            checked={scope === 'project'}
-            onChange={() => {
-              setScope('project');
-            }}
-          />
-          Ce projet
-        </label>
-      </fieldset>
-      <label className={styles.inline}>
-        <input
-          type="checkbox"
-          checked={autoResume}
-          onChange={(event) => {
-            setAutoResume(event.target.checked);
-          }}
-        />
-        Reprendre automatiquement après une limite de débit
-      </label>
-      <div className={styles.actions}>
-        <span className={styles.spacer} />
-        <button onClick={onCancel}>Annuler</button>
-        <button className={styles.primary} onClick={confirm}>
-          Lancer {agentCount} agent{agentCount > 1 ? 's' : ''}
-        </button>
-      </div>
-    </div>
+        </DialogBody>
+        <DialogFooter className="px-[18px]">
+          <span className="font-mono text-[10.5px] text-[#5c6574]">Entrée = choix par défaut</span>
+          <span className="flex-1" />
+          <Button variant="ghost" size="md" onClick={onCancel}>
+            Annuler
+          </Button>
+          <Button variant="primary" size="md" onClick={confirm}>
+            Lancer {agentCount} agent{agentCount > 1 ? 's' : ''}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
