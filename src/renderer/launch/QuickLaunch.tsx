@@ -21,7 +21,7 @@ const MAX_FREE_TERMINALS = 6;
 export const agentsLabel = (count: number) =>
   `Lancer ${String(count)} agent${count > 1 ? 's' : ''}`;
 const terminalsLabel = (count: number) =>
-  `Ouvrir ${String(count)} terminal${count > 1 ? 'aux' : ''}`;
+  `Ouvrir ${String(count)} ${count > 1 ? 'terminaux' : 'terminal'}`;
 
 type CounterProps = {
   label: string;
@@ -85,10 +85,6 @@ export function QuickLaunch({
   const full = existingAgents + total >= MAX_AGENTS;
   const label = total === 0 && freeTerminal > 0 ? terminalsLabel(freeTerminal) : agentsLabel(total);
 
-  const launch = () => {
-    if (total === 0 && freeTerminal === 0) return;
-    onLaunch();
-  };
   useDialogKeys({ onEscape: onClose });
 
   const counter = (cli: CliDefinition, name = cli.name) => (
@@ -116,7 +112,15 @@ export function QuickLaunch({
       {other ? (
         counter(other, 'Autre CLI…')
       ) : (
-        <Counter label="Autre CLI…" value={0} canAdd={false} onChange={() => undefined} />
+        <Counter
+          label="Autre CLI…"
+          value={0}
+          canAdd={false}
+          // Both buttons stay disabled until a CLI is added: nothing ever changes this counter.
+          /* v8 ignore start */
+          onChange={() => undefined}
+          /* v8 ignore stop */
+        />
       )}
       <Counter
         label="Terminal libre"
@@ -145,7 +149,7 @@ export function QuickLaunch({
         <button
           className={styles.primary}
           disabled={total === 0 && freeTerminal === 0}
-          onClick={launch}
+          onClick={onLaunch}
         >
           {label}
         </button>

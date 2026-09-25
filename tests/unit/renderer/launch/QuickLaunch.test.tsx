@@ -108,6 +108,13 @@ describe('QuickLaunch', () => {
     expect(launched()).toEqual({ agents: {}, freeTerminal: 1 });
   });
 
+  it('opens several free terminals alone', async () => {
+    const user = userEvent.setup();
+    const { launched } = renderLauncher({ counters: { freeTerminal: 2, 'claude-code': 0 } });
+    await user.click(screen.getByRole('button', { name: 'Ouvrir 2 terminaux' }));
+    expect(launched()).toEqual({ agents: {}, freeTerminal: 2 });
+  });
+
   it('stops at six agents per workspace (US2 scenario 8)', async () => {
     const user = userEvent.setup();
     renderLauncher({ running: running(4) });

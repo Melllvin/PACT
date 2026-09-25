@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createAppStore } from '../../../../src/renderer/store/app-store';
-import { draftFromCounts, setOverride } from '../../../../src/shared/launch-draft';
+import { draftFromCounts, setCommon, setOverride } from '../../../../src/shared/launch-draft';
 import type { IpcOutput, PactApi } from '../../../../src/shared/ipc';
 import type {
   Agent,
@@ -152,6 +152,21 @@ describe('launch flow', () => {
     const launch = invoke.mock.calls.find(([channel]) => channel === 'agents:launch')?.[1];
     const drafts = (launch as { agents: { startCommand: string | null }[] }).agents;
     expect(drafts.map((d) => d.startCommand)).toEqual([null, null, 'npm run dev']);
+  });
+
+  it('keeps a model only for the CLIs that offer it', async () => {
+    const { store, invoke, setSnapshot } = setup({
+      permission: { level: 'always-allow', autoResume: true, scope: 'global' },
+    });
+    setSnapshot({ clis: [{ ...cli('claude-code'), models: ['opus'] }, cli('codex')] });
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    // « gone »: a CLI removed since the launcher opened.
+    const withGone = draftFromCounts({ 'claude-code': 2, codex: 1, gone: 1 }, 0);
+    await store.getState().requestLaunch(setCommon(withGone, 'model', 'opus'));
+    const launch = invoke.mock.calls.find(([channel]) => channel === 'agents:launch')?.[1];
+    const drafts = (launch as { agents: { model: string | null }[] }).agents;
+    expect(drafts.map((d) => d.model)).toEqual(['opus', 'opus', null, null]);
   });
 
   it('keeps a « Ce projet » choice on the workspace only', async () => {

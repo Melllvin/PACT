@@ -118,6 +118,16 @@ describe('DetectedClis', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('closes the dialog on « Annuler » without adding anything', async () => {
+    const user = userEvent.setup();
+    const onAdd = vi.fn(() => Promise.resolve(null));
+    render(<DetectedClis clis={[]} onRedetect={vi.fn()} onAdd={onAdd} />);
+    await user.click(screen.getByRole('button', { name: 'Autre CLI — ajouter' }));
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
   it('keeps the dialog open with the reason when the CLI is refused', async () => {
     const user = userEvent.setup();
     render(
