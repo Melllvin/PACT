@@ -422,10 +422,16 @@ describe('AgentManager terminal and environment', { timeout: 30_000 }, () => {
     const [agent] = await launch(await createManager({ adapter, idleMs: 150 }), [draft()]);
     const id = agent?.id ?? '';
     await waitForState(id, 'awaiting-prompt');
+    // The prompt, idle but no question: asked again, nothing changes.
+    const start = Date.now();
+    while (!adapter.contexts.some((ctx) => ctx.idleMs === 150) && Date.now() - start < 5000) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(adapter.contexts).toContainEqual({ idleMs: 150 });
+    expect(current(id)?.state).toBe('awaiting-prompt');
     pty.write(id, 'Supprime le fichier\r');
     await waitForState(id, 'awaiting-answer');
     expect(current(id)?.state).toBe('awaiting-answer');
-    expect(adapter.contexts).toContainEqual({ idleMs: 150 });
   });
 
   it('shows a crash with the exit code', async () => {
@@ -506,6 +512,11 @@ describe('AgentManager restart of the app (FR-038)', { timeout: 30_000 }, () => 
       lastError: { kind: 'rate-limit', message: 'Limite atteinte' },
       scheduledResume,
     });
+  });
+
+  it('restores nothing for a workspace that is not open', async () => {
+    await expect((await createManager()).restore('unknown')).resolves.toBeUndefined();
+    expect(events).toEqual([]);
   });
 
   it('stops the agents without recording their exit as a crash', async () => {
