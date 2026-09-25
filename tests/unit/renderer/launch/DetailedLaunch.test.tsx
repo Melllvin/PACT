@@ -271,6 +271,25 @@ describe('DetailedLaunch', () => {
     expect(screen.getByRole('alert').textContent).toBe('La branche « feature/x » existe déjà.');
   });
 
+  it('groups the settings of an agent as 1d does: Agent, Git, Aperçu', async () => {
+    const { user } = setup();
+    await user.click(agent(2));
+    expect(
+      within(inspector())
+        .getAllByRole('heading', { level: 4 })
+        .map((heading) => heading.textContent),
+    ).toEqual(['Agent', 'Git', 'Aperçu']);
+  });
+
+  it('keeps the focus inside the panel (modal dialog)', async () => {
+    const { user } = setup();
+    const dialog = screen.getByRole('dialog', { name: 'Lancer des agents' });
+    for (let step = 0; step < 20; step++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+  });
+
   it('explains its marks', () => {
     setup();
     expect(screen.getByText(/≠ diffère du commun · pointillés = hérité/)).toBeDefined();

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { PermissionsDialog } from '../../../../src/renderer/launch/PermissionsDialog';
@@ -101,6 +101,36 @@ describe('PermissionsDialog', () => {
       autoResume: false,
       scope: 'project',
     });
+  });
+
+  it('marks the default level and says Enter picks it (1m)', () => {
+    renderDialog();
+    const allowAll = radio('Toujours autoriser').closest('label');
+    expect(allowAll && within(allowAll).getByText('défaut')).toBeTruthy();
+    expect(screen.getByText('Entrée = choix par défaut')).toBeDefined();
+    expect(screen.getByRole('radiogroup', { name: 'S’applique à' })).toBeDefined();
+  });
+
+  it('launches the choices made with Enter too', async () => {
+    const user = userEvent.setup();
+    const { onConfirm } = renderDialog();
+    await user.click(radio('Toujours demander'));
+    await user.keyboard('{Enter}');
+    expect(onConfirm).toHaveBeenCalledWith({
+      level: 'always-ask',
+      autoResume: true,
+      scope: 'global',
+    });
+  });
+
+  it('keeps the focus inside the dialog (modal dialog)', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Autorisations des agents' });
+    for (let step = 0; step < 10; step++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
   });
 
   it('can be dismissed with Escape', async () => {

@@ -210,4 +210,20 @@ describe('QuickLaunch', () => {
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('says what « Autre CLI… » and « Terminal libre » launch, as 1c does', () => {
+    renderLauncher();
+    expect(within(row('Autre CLI…')).getByText('aider, gemini…')).toBeDefined();
+    expect(within(row('Terminal libre')).getByText('dépôt principal')).toBeDefined();
+  });
+
+  it('keeps the focus inside the launcher (modal dialog)', async () => {
+    const user = userEvent.setup();
+    renderLauncher();
+    const dialog = screen.getByRole('dialog', { name: 'Ajouter au workspace' });
+    for (let step = 0; step < 12; step++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+  });
 });
