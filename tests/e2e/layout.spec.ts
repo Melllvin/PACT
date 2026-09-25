@@ -123,12 +123,14 @@ for (const size of SIZES) {
     // Six tiles, 3×2, beside the À faire column.
     await launcher.getByRole('button', { name: 'Lancer 6 agents' }).click();
     await page.keyboard.press('Enter');
+    // Six worktrees in one go take a while under ConPTY.
     await expect(page.getByRole('region', { name: 'Tuiles' })).toHaveAttribute(
       'data-layout',
       '3x2',
+      { timeout: 20_000 },
     );
     const tiles = page.getByRole('article', { name: /^Faux CLI \d/ });
-    await expect(tiles).toHaveCount(6);
+    await expect(tiles).toHaveCount(6, { timeout: 20_000 });
     for (const tile of await tiles.all()) {
       await expectInView(page, tile);
       // The tools never cover the output of the CLI.

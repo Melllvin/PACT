@@ -67,6 +67,8 @@ test('keeps app data in an isolated directory in test mode', async () => {
 
 test('paints the ambient canvas behind the home tab, not over its content (R17)', async () => {
   const page = await launched.app.firstWindow();
+  // Pinned: Windows runners may turn animations off, which the effects honour.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   const canvas = page.locator('canvas[aria-hidden="true"]');
   await expect(canvas).toHaveCount(1);
   // Clicks go through to the page: the canvas is out of the pointer's way.

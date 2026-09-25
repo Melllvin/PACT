@@ -56,8 +56,6 @@ export default defineConfig({
         'src/renderer/main.tsx',
         // Thin wrapper over xterm.js, which needs a real browser; the e2e suite covers it.
         'src/renderer/tiles/xterm-factory.ts',
-        // React Bits effects copied as published (research.md R15, user decision of 2026-09-25).
-        'src/renderer/effects/vendor/**',
       ],
       // Constitution 1.1.0 — minimum line and branch coverage, enforced in CI.
       thresholds: {
