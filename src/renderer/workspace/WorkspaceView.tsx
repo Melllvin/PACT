@@ -46,7 +46,8 @@ type Props = {
   toolbarSlot?: HTMLElement | null;
 };
 
-const ALERT = 'm-0 rounded-md border border-destructive px-3 py-2.5 text-[12.5px]';
+const ALERT =
+  'm-0 rounded-xl border border-destructive/40 bg-destructive/8 px-3.5 py-3 text-[13px]';
 
 export function WorkspaceView({
   workspace,
@@ -89,7 +90,7 @@ export function WorkspaceView({
       <div className="flex h-full min-h-0">
         <section
           aria-label={workspace.name}
-          className="flex h-full min-w-0 flex-1 flex-col gap-2.5 p-2.5"
+          className="flex h-full min-w-0 flex-1 flex-col gap-3 p-3.5"
         >
           {!available && (
             <p role="alert" className={ALERT}>

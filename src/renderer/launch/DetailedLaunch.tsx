@@ -61,7 +61,7 @@ export function DetailedLaunch({
         aria-describedby={undefined}
         className="h-[min(500px,calc(100vh-48px))] w-[min(800px,calc(100vw-32px))]"
       >
-        <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <header className="flex items-center gap-3 border-b border-white/8 px-4 py-3">
           <DialogTitle className="font-sans text-[15px] font-semibold tracking-normal text-foreground normal-case">
             Lancer des agents
           </DialogTitle>
@@ -102,7 +102,7 @@ export function DetailedLaunch({
         </div>
 
         {(found.length > 0 || error) && (
-          <div className="flex flex-col gap-1 border-t border-border px-4 py-2">
+          <div className="flex flex-col gap-1 border-t border-white/8 px-4 py-2">
             {found.map((conflict) => (
               <p
                 key={`${String(conflict.index)}-${conflict.kind}`}
@@ -120,14 +120,14 @@ export function DetailedLaunch({
           </div>
         )}
         <DialogFooter className="py-2.5">
-          <span className="flex-1 font-mono text-[10.5px] text-[#5c6574]">
+          <span className="flex-1 font-mono text-[10.5px] text-dim">
             ≠ diffère du commun · pointillés = hérité
           </span>
           <Button size="md" onClick={onClose}>
             Annuler
           </Button>
           <Button
-            variant="primary"
+            variant="contrast"
             size="md"
             disabled={found.length > 0 || (total === 0 && draft.freeTerminal === 0)}
             onClick={onLaunch}

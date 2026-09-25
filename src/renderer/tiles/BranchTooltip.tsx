@@ -31,7 +31,7 @@ export function BranchTooltip({ branch, port }: Props) {
         <span
           role="tooltip"
           id={id}
-          className="absolute top-[calc(100%+4px)] right-0 z-10 rounded-[5px] border border-border bg-card px-2 py-1 font-mono text-[11px] whitespace-nowrap text-foreground shadow-[0_8px_20px_rgb(0_0_0/40%)]"
+          className="absolute top-[calc(100%+4px)] right-0 z-10 rounded-lg border border-white/8 bg-raised px-2 py-1 font-mono text-[11px] whitespace-nowrap text-foreground shadow-[0_8px_20px_rgb(0_0_0/40%)]"
         >
           {branch} · :{port}
         </span>

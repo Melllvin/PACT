@@ -1,13 +1,13 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-// shadcn/ui Input on the 1c fields: sunken background, 5px radius, cyan border on focus.
+// shadcn/ui Input as in the interactive mockup: faint fill, 10px radius, cyan border on focus.
 function Input({ className, ...props }: React.ComponentProps<'input'>) {
   return (
     <input
       data-slot="input"
       className={cn(
-        'w-full min-w-0 rounded-[5px] border border-border bg-[#0a0d12] px-2.5 py-1.5 text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:border-primary read-only:text-muted-foreground',
+        'h-9 w-full min-w-0 rounded-[10px] border border-white/8 bg-white/2 px-3 text-[13px] text-foreground transition-[border-color] duration-200 outline-none placeholder:text-[#5c5c64] focus-visible:border-primary/50 read-only:text-muted-foreground',
         className,
       )}
       {...props}

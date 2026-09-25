@@ -54,12 +54,12 @@ export function AgentList({
   };
 
   return (
-    <nav className="flex min-h-0 flex-col gap-1 border-r border-border p-2.5">
+    <nav className="flex min-h-0 flex-col gap-1 border-r border-white/8 p-2.5">
       <button
         className={cn(
           ITEM,
-          'rounded-md border border-border px-[9px] py-2',
-          selected === 'common' && 'border-primary bg-[#1a2029]',
+          'rounded-lg border border-white/8 px-[9px] py-2',
+          selected === 'common' && 'border-primary bg-white/5',
         )}
         aria-current={selected === 'common'}
         onClick={() => {
@@ -88,8 +88,8 @@ export function AgentList({
                 } as CSSProperties
               }
               className={cn(
-                'flex items-center gap-2 rounded-md border border-transparent px-[9px] py-2',
-                selected === agent.key && 'border-(--agent-color) bg-[#1a2029]',
+                'flex items-center gap-2 rounded-lg border border-transparent px-[9px] py-2',
+                selected === agent.key && 'border-(--agent-color) bg-white/5',
               )}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -108,7 +108,7 @@ export function AgentList({
                 }}
                 aria-label={`Déplacer ${name}`}
                 draggable
-                className="cursor-grab text-[11px] text-[#5c6574] hover:text-muted-foreground"
+                className="cursor-grab text-[11px] text-dim hover:text-muted-foreground"
                 onDragStart={(event) => {
                   dragged.current = index;
                   event.dataTransfer.effectAllowed = 'move';
@@ -148,7 +148,7 @@ export function AgentList({
         + Ajouter un agent
       </button>
       <span className="flex-1" />
-      <p className="m-0 font-mono text-[10px] text-[#5c6574]">Glisser = ordre des tuiles.</p>
+      <p className="m-0 font-mono text-[10px] text-dim">Glisser = ordre des tuiles.</p>
     </nav>
   );
 }

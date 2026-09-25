@@ -15,7 +15,7 @@ const ICONS = { installed: '✓', 'unsupported-version': '!', missing: '○' } a
 const ICON_COLORS = {
   installed: 'text-accept',
   'unsupported-version': 'text-waiting',
-  missing: 'text-[#5c6574]',
+  missing: 'text-dim',
 } as const;
 
 function describe(cli: CliDefinition) {
@@ -41,7 +41,7 @@ export function DetectedClis({ clis, onRedetect, onAdd }: Props) {
   return (
     <section
       aria-label="Agents détectés"
-      className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3.5 py-3"
+      className="flex flex-col gap-2.5 rounded-[14px] border border-white/6 bg-surface px-4 py-3.5 animate-enter motion-reduce:animate-none"
     >
       <h3 className={LABEL}>Agents détectés</h3>
       {clis.length === 0 && (
@@ -70,7 +70,7 @@ export function DetectedClis({ clis, onRedetect, onAdd }: Props) {
         ))}
       </ul>
       <span className="flex items-center gap-1.5">
-        <span aria-hidden className="text-[#5c6574]">
+        <span aria-hidden className="text-dim">
           ○
         </span>
         <button

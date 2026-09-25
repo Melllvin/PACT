@@ -16,7 +16,7 @@ type Props = {
 };
 
 const CHOICE =
-  'flex cursor-pointer gap-2.5 rounded-[7px] border border-border px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/8 has-focus-visible:ring-2 has-focus-visible:ring-ring/60';
+  'flex cursor-pointer gap-2.5 rounded-[7px] border border-white/8 px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/8 has-focus-visible:ring-2 has-focus-visible:ring-ring/60';
 
 /** FR-037: closing an agent asks whether its worktree and branch stay. Keeping is the default. */
 export function CloseAgentDialog({ name, branch, onConfirm, onCancel }: Props) {

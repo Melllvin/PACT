@@ -69,17 +69,17 @@ export function FocusView({
       aria-label={`Focus : ${title}`}
       data-state={agent.state}
       style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border-2 border-(--agent-color) bg-background"
+      className="flex h-full min-h-0 animate-enter flex-col overflow-hidden rounded-[14px] border border-[color-mix(in_srgb,var(--agent-color)_55%,transparent)] bg-surface motion-reduce:animate-none"
     >
-      <header className="flex flex-none items-center gap-3 border-b border-border bg-card px-2.5">
+      <header className="flex h-12 flex-none items-center gap-3 border-b border-white/6 px-3.5">
         <button
           onClick={onBack}
-          className="cursor-pointer rounded-sm border border-border px-2.5 py-0.5 text-xs font-semibold"
+          className="flex h-7 cursor-pointer items-center rounded-lg border border-white/8 px-2.5 text-[12.5px] text-muted-foreground transition-colors hover:border-white/16 hover:text-foreground"
         >
           ‹ Tuiles
         </button>
         <AgentPills agents={agents} current={agent.id} name={name} onSelect={onSelect} />
-        <span aria-hidden className="h-[18px] w-px bg-border" />
+        <span aria-hidden className="h-[18px] w-px bg-white/8" />
         <Tabs value="terminal">
           <TabsList variant="line" className="h-auto gap-4 p-0">
             <TabsTrigger value="terminal" className={TAB}>
@@ -94,7 +94,7 @@ export function FocusView({
           </TabsList>
         </Tabs>
         <span className="flex-1" />
-        <span className="font-mono text-[10.5px] text-muted-foreground">
+        <span className="font-mono text-[11px] text-dim">
           ⎇ {agent.branch} · :{agent.port}
         </span>
       </header>
@@ -103,9 +103,11 @@ export function FocusView({
           <TerminalView termId={agent.id} registry={terminals} label={`Terminal de ${title}`} />
         )}
       </div>
-      <footer className="flex flex-none items-center justify-end gap-2 border-t border-border bg-card px-2.5 py-1.5 text-sm">
+      <footer className="flex flex-none items-center justify-end gap-2 border-t border-white/6 px-3.5 py-2.5 text-[13px]">
         {failed && agent.lastError && (
-          <span className="mr-auto text-destructive">{agent.lastError.message}</span>
+          <span className="mr-auto font-mono text-[12px] text-[#f2a0a0]">
+            {agent.lastError.message}
+          </span>
         )}
         <TileActions
           state={agent.state}

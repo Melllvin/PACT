@@ -15,7 +15,7 @@ type Props = {
 };
 
 const VIEW =
-  'flex items-center gap-[5px] px-[11px] py-1 not-first:border-l not-first:border-border disabled:text-[#5c6574] aria-pressed:bg-primary aria-pressed:text-primary-foreground';
+  'flex h-[26px] w-[78px] cursor-pointer items-center justify-center rounded-[7px] text-[12.5px] text-muted-foreground transition-[background-color,color] duration-300 disabled:cursor-default disabled:text-[#4a4a52] aria-pressed:bg-white/8 aria-pressed:text-foreground';
 
 /** Workspace views; Comparer and Revue stay visible but inactive in the core (FR-006). */
 export function Toolbar({
@@ -27,7 +27,7 @@ export function Toolbar({
 }: Props) {
   return (
     <nav role="toolbar" aria-label="Vues" className="flex items-center gap-2">
-      <span className="flex overflow-hidden rounded-md border border-border text-[12px] font-medium">
+      <span className="flex rounded-[10px] border border-white/6 bg-white/3 p-[3px]">
         <button className={VIEW} aria-pressed>
           Tuiles
         </button>
@@ -40,22 +40,28 @@ export function Toolbar({
       </span>
       {showTodo && (
         <button
-          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[12px] font-medium aria-pressed:bg-card"
+          className="flex h-8 flex-none cursor-pointer items-center gap-2 rounded-[9px] border border-white/7 px-3 text-[12.5px] whitespace-nowrap transition-[background-color,border-color] duration-250 hover:border-white/14 aria-pressed:bg-white/5"
           aria-pressed={todoOpen}
           onClick={onToggleTodo}
         >
           À faire{' '}
           <span
             className={cn(
-              'rounded-[3px] px-[5px] font-mono text-[10.5px]',
-              todoCount > 0 ? 'bg-waiting text-[#17100a]' : 'text-muted-foreground',
+              'flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] px-[5px] font-mono text-[10.5px] font-medium transition-[background-color] duration-300',
+              todoCount > 0 ? 'bg-waiting text-[#1a1206]' : 'bg-white/10 text-[#a1a1aa]',
             )}
           >
             {todoCount}
           </span>
         </button>
       )}
-      <Button variant="primary" onClick={onAddAgents} disabled={!onAddAgents}>
+      <Button
+        variant="contrast"
+        size="md"
+        className="h-8 rounded-[9px] px-3 text-[12.5px]"
+        onClick={onAddAgents}
+        disabled={!onAddAgents}
+      >
         + Agents
       </Button>
     </nav>

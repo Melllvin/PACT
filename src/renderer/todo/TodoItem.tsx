@@ -34,7 +34,7 @@ export function TodoItem({
       <li
         data-kind={todo.kind}
         style={style}
-        className="mt-auto border-t border-border pt-2.5 text-[11.5px] text-muted-foreground"
+        className="mt-auto border-t border-white/6 pt-3 text-[12px] text-dim"
       >
         {todo.title}
       </li>
@@ -45,20 +45,23 @@ export function TodoItem({
       data-kind={todo.kind}
       style={style}
       className={cn(
-        'flex origin-top animate-unfold flex-col gap-1.5 overflow-hidden rounded-md border border-border bg-[#131820] px-2.5 py-[9px] motion-reduce:animate-none',
-        todo.kind === 'answer' && 'border-[1.5px] border-waiting bg-[rgb(214_147_79/10%)]',
+        'flex origin-top animate-unfold flex-col gap-2.5 overflow-hidden rounded-xl border border-white/6 bg-surface p-3 motion-reduce:animate-none',
+        todo.kind === 'answer' && 'border-waiting/30 bg-waiting/6',
+        todo.kind === 'rate-limit' && 'border-destructive/30 bg-destructive/6',
       )}
     >
-      <span className="text-[12.5px] font-semibold text-foreground">{what}</span>
+      <span className="font-mono text-[12px] leading-[1.5] break-words text-foreground">
+        {what}
+      </span>
       {who !== undefined && (
-        <span className="order-first flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className="order-first flex items-center gap-2 text-[12px] text-[#a1a1aa]">
           {separator}
-          <span aria-hidden className="size-2 flex-none rounded-full bg-(--agent-color)" />
-          <span>{who}</span>
+          <span aria-hidden className="size-[7px] flex-none rounded-full bg-(--agent-color)" />
+          <span className="min-w-0 truncate">{who}</span>
         </span>
       )}
       {hints.length > 0 && (
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-[12px] text-dim">
           {separator}
           <span>{hints.join(SEPARATOR)}</span>
         </span>

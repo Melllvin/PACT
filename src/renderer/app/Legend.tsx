@@ -4,10 +4,23 @@ export function Legend() {
     <p
       role="note"
       aria-label="Légende"
-      className="m-0 px-1 font-mono text-[10.5px] text-muted-foreground"
+      className="m-0 flex flex-wrap gap-3.5 px-1 font-mono text-[11px] text-dim"
     >
-      <span className="text-waiting">◆ attend</span> · <span>✓ prêt</span> ·{' '}
-      <span className="text-destructive">✕ erreur</span> · <span>⎇ branche</span>
+      <span>
+        <span className="text-waiting">◆</span> attend
+      </span>
+      <span className="sr-only"> · </span>
+      <span>
+        <span className="text-accept">✓</span> prêt
+      </span>
+      <span className="sr-only"> · </span>
+      <span>
+        <span className="text-destructive">✕</span> erreur
+      </span>
+      <span className="sr-only"> · </span>
+      <span>
+        <span className="text-[#a1a1aa]">⎇</span> branche
+      </span>
     </p>
   );
 }

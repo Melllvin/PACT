@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { IpcError } from '../../shared/ipc';
 import type { RecentProject, Workspace } from '../../shared/model';
 import { CloneDialog } from './CloneDialog';
@@ -27,8 +27,12 @@ export type HomeProps = {
   aside?: ReactNode;
 };
 
-const CARD = 'flex items-center gap-3.5 rounded-lg border border-border bg-card px-3.5 py-[11px]';
-const LIST = 'm-0 flex list-none flex-col gap-2 p-0';
+const ROW =
+  '-mx-3 flex items-center gap-4 rounded-xl border-b border-white/4 px-3 py-4 transition-[background-color] duration-250 hover:bg-white/3 animate-enter motion-reduce:animate-none';
+const LIST = 'm-0 flex list-none flex-col border-t border-white/6 p-0';
+
+/** Staggered entry across both lists (FR-042): Déjà ouverts first, then Récents. */
+const enterIndex = (index: number) => ({ '--enter-index': String(index) }) as CSSProperties;
 
 const DAY_MS = 86_400_000;
 
@@ -59,24 +63,37 @@ export function Home(props: HomeProps) {
   const recent = recents.filter((r) => !openPaths.has(r.path) && matches(r.name, r.path));
 
   return (
-    <div className="grid min-h-full grid-cols-[minmax(0,1fr)_300px] gap-[18px] px-10 py-7">
-      <div className="flex min-w-0 flex-col gap-3.5">
-        <h2 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Ouvrir un workspace</h2>
-        <input
-          type="search"
-          aria-label="Rechercher…"
-          placeholder="⌕ Rechercher…"
-          className="rounded-[5px] border border-border bg-[#0a0d12] px-2.5 py-[7px] text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-primary"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-          }}
-        />
+    <div className="mx-auto grid min-h-full max-w-[1040px] grid-cols-[minmax(0,680px)_300px] justify-center gap-10 px-6 pt-[72px] pb-12">
+      <div className="flex min-w-0 flex-col gap-7">
+        <div className="flex flex-col gap-3 animate-enter motion-reduce:animate-none">
+          <span className={LABEL}>Nouvel onglet</span>
+          <h2 className="m-0 text-[40px] leading-[1.05] font-normal tracking-[-0.035em]">
+            Ouvrir un workspace
+          </h2>
+          <p className="m-0 text-[14.5px] leading-[1.55] text-pretty text-muted-foreground">
+            Chaque projet garde ses agents, leurs branches et leurs worktrees.
+          </p>
+        </div>
+        <label className="flex h-11 items-center gap-2.5 rounded-xl border border-white/8 bg-white/2 px-3.5 animate-enter focus-within:border-primary/50 motion-reduce:animate-none">
+          <span aria-hidden className="text-[14px] text-dim">
+            ⌕
+          </span>
+          <input
+            type="search"
+            aria-label="Rechercher…"
+            placeholder="Rechercher…"
+            className="min-w-0 flex-1 border-0 bg-transparent text-[14px] text-foreground outline-none placeholder:text-[#5c5c64]"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+            }}
+          />
+        </label>
 
         {openError && (
           <div
             role="alert"
-            className="flex items-center justify-between gap-3 rounded-md border border-destructive px-3 py-2.5 text-[12.5px]"
+            className="flex items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/8 px-3.5 py-3 text-[13px]"
           >
             <p className="m-0">{openError.message}</p>
             {openError.code === 'NOT_A_REPO' && (
@@ -92,17 +109,19 @@ export function Home(props: HomeProps) {
         )}
 
         {open.length > 0 && (
-          <section aria-label="Déjà ouverts" className="flex flex-col gap-2">
+          <section aria-label="Déjà ouverts" className="flex flex-col gap-3">
             <h3 className={LABEL}>Déjà ouverts</h3>
             <ul className={LIST}>
-              {open.map((workspace) => {
+              {open.map((workspace, index) => {
                 const waiting = workspace.agents.filter(
                   (a) => a.state === 'awaiting-answer',
                 ).length;
                 return (
-                  <li key={workspace.id} className={`${CARD} py-3`}>
+                  <li key={workspace.id} className={ROW} style={enterIndex(index)}>
                     <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <h4 className="m-0 text-[15px] font-semibold">{workspace.name}</h4>
+                      <h4 className="m-0 text-[15px] font-medium tracking-[-0.01em]">
+                        {workspace.name}
+                      </h4>
                       <p className={`${META} truncate`}>
                         {workspace.path} · {workspace.mainBranch} ·{' '}
                         {plural(workspace.agents.length, 'worktree')}
@@ -120,7 +139,7 @@ export function Home(props: HomeProps) {
                       ))}
                       {waiting > 0 && (
                         <span
-                          className="ml-1.5 font-mono text-[11px] text-waiting"
+                          className="ml-1.5 font-mono text-[12px] text-waiting"
                           aria-label={`${plural(waiting, 'agent')} en attente`}
                         >
                           ◆ {waiting}
@@ -128,6 +147,7 @@ export function Home(props: HomeProps) {
                       )}
                     </span>
                     <Button
+                      variant="ghost"
                       onClick={() => {
                         props.onGoTo(workspace.id);
                       }}
@@ -142,13 +162,15 @@ export function Home(props: HomeProps) {
         )}
 
         {recent.length > 0 && (
-          <section aria-label="Récents" className="flex flex-col gap-2">
+          <section aria-label="Récents" className="flex flex-col gap-3">
             <h3 className={LABEL}>Récents</h3>
             <ul className={LIST}>
-              {recent.map((project) => (
-                <li key={project.path} className={CARD}>
+              {recent.map((project, index) => (
+                <li key={project.path} className={ROW} style={enterIndex(open.length + index)}>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
-                    <h4 className="m-0 text-[14px] font-semibold">{project.name}</h4>
+                    <h4 className="m-0 text-[15px] font-medium tracking-[-0.01em]">
+                      {project.name}
+                    </h4>
                     <p className={`${META} truncate`}>
                       {project.path} · {project.branch}
                     </p>
@@ -161,6 +183,7 @@ export function Home(props: HomeProps) {
                       : lastOpened(project.lastOpenedAt, now)}
                   </span>
                   <Button
+                    variant="ghost"
                     onClick={() => {
                       props.onOpenPath(project.path);
                     }}
@@ -174,7 +197,7 @@ export function Home(props: HomeProps) {
         )}
       </div>
 
-      <aside className="flex flex-col gap-3.5">
+      <aside className="flex flex-col gap-5 pt-[118px]">
         <section aria-label="Autre dépôt">
           <DropZone
             getPathForFile={props.getPathForFile}
@@ -203,7 +226,7 @@ export function Home(props: HomeProps) {
         {clone?.status === 'failed' && (
           <p
             role="alert"
-            className="m-0 rounded-md border border-destructive px-3 py-2.5 text-[12.5px]"
+            className="m-0 rounded-xl border border-destructive/40 bg-destructive/8 px-3.5 py-3 text-[13px]"
           >
             {clone.message}
           </p>

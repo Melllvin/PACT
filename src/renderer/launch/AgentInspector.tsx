@@ -22,7 +22,7 @@ const LEVELS: [PermissionLevel, string][] = [
 ];
 
 const CONTROL =
-  'w-full min-w-0 rounded-[5px] border border-border bg-[#0a0d12] px-[9px] py-1.5 text-[12.5px] text-foreground group-data-[inherited=true]:border-dashed group-data-[inherited=true]:bg-transparent group-data-[inherited=true]:text-muted-foreground';
+  'w-full min-w-0 rounded-[10px] border border-white/8 bg-white/2 px-[9px] py-1.5 text-[12.5px] text-foreground group-data-[inherited=true]:border-dashed group-data-[inherited=true]:bg-transparent group-data-[inherited=true]:text-muted-foreground';
 
 type AgentInspectorProps = {
   draft: LaunchDraft;
@@ -189,13 +189,13 @@ export function AgentInspector({
       </Field>
 
       <Field label="Permissions" {...field('permissionLevel')}>
-        <span className="flex w-fit overflow-hidden rounded-md border border-border text-[11.5px] font-medium group-data-[inherited=true]:border-dashed">
+        <span className="flex w-fit overflow-hidden rounded-lg border border-white/8 text-[11.5px] font-medium group-data-[inherited=true]:border-dashed">
           {LEVELS.map(([level, label]) => (
             <button
               key={level}
               aria-pressed={settings.permissionLevel === level}
               className={cn(
-                'cursor-pointer px-[9px] py-[3px] not-first:border-l not-first:border-border',
+                'cursor-pointer px-[9px] py-[3px] not-first:border-l not-first:border-white/8',
                 settings.permissionLevel === level && 'bg-primary text-primary-foreground',
               )}
               onClick={() => {

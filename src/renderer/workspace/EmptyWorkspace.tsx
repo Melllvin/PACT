@@ -2,17 +2,20 @@
 export function EmptyWorkspace({ onAddAgents }: { onAddAgents?: (() => void) | undefined }) {
   return (
     <button
-      className="group flex min-h-0 w-full flex-1 cursor-pointer flex-col items-center justify-center gap-2.5 rounded-md border-[1.5px] border-dashed border-border bg-[rgb(13_17_23/60%)] text-[12.5px] text-muted-foreground transition-colors enabled:hover:border-primary/60 enabled:hover:text-foreground disabled:cursor-default"
+      className="group flex min-h-0 w-full flex-1 cursor-pointer flex-col items-center justify-center gap-[22px] text-[15px] font-medium text-foreground disabled:cursor-default"
       onClick={onAddAgents}
       disabled={!onAddAgents}
     >
       <span
         aria-hidden
-        className="flex size-14 items-center justify-center rounded-full border-[1.5px] border-primary text-[28px] text-primary"
+        data-orb-anchor
+        className="flex size-28 animate-enter items-center justify-center rounded-3xl border border-dashed border-white/16 text-[34px] font-extralight text-[#a1a1aa] transition-[border-color,color,transform,background-color] duration-300 ease-out-soft group-enabled:group-hover:scale-[1.04] group-enabled:group-hover:border-white/35 group-enabled:group-hover:bg-white/2 group-enabled:group-hover:text-white motion-reduce:animate-none motion-reduce:transition-none"
       >
         +
       </span>
-      Ajouter des agents
+      <span className="animate-enter [--enter-index:1] motion-reduce:animate-none">
+        Ajouter des agents
+      </span>
     </button>
   );
 }

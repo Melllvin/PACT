@@ -65,7 +65,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
         onCloseHome={state.closeHome}
         toolbarRef={setToolbarSlot}
       />
-      <main className="min-h-0 overflow-auto bg-[radial-gradient(circle,#263041_1px,transparent_1.6px)] bg-size-[20px_20px]">
+      <main className="relative min-h-0 overflow-auto">
         {status === 'error' && (
           <p role="alert" className="m-4 text-destructive">
             {error}

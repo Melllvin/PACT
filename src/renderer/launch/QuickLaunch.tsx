@@ -50,9 +50,9 @@ function Counter({ label, hint, value, canAdd, onChange }: CounterProps) {
         <span className={cn('text-[13.5px] font-semibold', value === 0 && 'text-muted-foreground')}>
           {label}
         </span>
-        {hint && <span className="font-mono text-[10.5px] text-[#5c6574]">{hint}</span>}
+        {hint && <span className="font-mono text-[10.5px] text-dim">{hint}</span>}
       </span>
-      <span className="flex items-center rounded-[5px] border border-border font-mono text-[12px]">
+      <span className="flex items-center rounded-[5px] border border-white/8 font-mono text-[12px]">
         <button
           type="button"
           className={STEP}
@@ -66,8 +66,8 @@ function Counter({ label, hint, value, canAdd, onChange }: CounterProps) {
         <span
           role="status"
           className={cn(
-            'w-6 border-x border-border py-[3px] text-center',
-            value === 0 && 'text-[#5c6574]',
+            'w-6 border-x border-white/8 py-[3px] text-center',
+            value === 0 && 'text-dim',
           )}
         >
           {value}
@@ -173,7 +173,7 @@ export function QuickLaunch({
             <span className="flex-1">Workflow</span>
             <select
               defaultValue="free"
-              className="rounded-[5px] border border-border bg-[#0a0d12] px-2.5 py-1.5 text-[12.5px] text-muted-foreground"
+              className="rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-1.5 text-[12.5px] text-muted-foreground"
             >
               <option value="free">Libre</option>
             </select>
@@ -196,7 +196,7 @@ export function QuickLaunch({
             Annuler
           </Button>
           <Button
-            variant="primary"
+            variant="contrast"
             size="md"
             disabled={total === 0 && freeTerminal === 0}
             onClick={onLaunch}

@@ -22,12 +22,12 @@ const INDICATORS = {
 };
 
 const TAB =
-  'flex items-center gap-1.5 rounded-md border border-transparent py-1 pr-1.5 pl-[11px] text-[12.5px] text-muted-foreground has-[[aria-selected=true]]:border-border has-[[aria-selected=true]]:bg-card has-[[aria-selected=true]]:font-semibold has-[[aria-selected=true]]:text-foreground';
+  'flex h-[30px] flex-none items-center gap-2 rounded-lg pr-1.5 pl-3 text-[13px] whitespace-nowrap text-muted-foreground transition-[background-color,color] duration-250 hover:text-foreground has-[[aria-selected=true]]:bg-white/7 has-[[aria-selected=true]]:text-foreground';
 const TAB_BUTTON = 'cursor-pointer outline-none focus-visible:underline';
 const CLOSE =
-  'flex size-4 cursor-pointer items-center justify-center rounded-sm text-[10px] text-muted-foreground hover:bg-white/5 hover:text-foreground';
+  'flex size-[18px] cursor-pointer items-center justify-center rounded-[5px] text-[10px] text-dim hover:bg-white/6 hover:text-foreground';
 const ICON =
-  'flex size-[26px] cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:cursor-default disabled:opacity-45';
+  'flex size-8 flex-none cursor-pointer items-center justify-center rounded-[9px] text-muted-foreground transition-[background-color,color] duration-250 enabled:hover:text-foreground disabled:cursor-default disabled:opacity-45';
 
 /** One tab per open workspace, a home tab opened by « + » (FR-002), settings inactive in the core. */
 export function TabBar({
@@ -41,8 +41,11 @@ export function TabBar({
 }: Props) {
   const homeOpen = activeTab.kind === 'home';
   return (
-    <header className="flex h-[42px] flex-none items-center gap-2 border-b border-border bg-[#11151c] px-3.5">
-      <h1 className="sr-only">PACT</h1>
+    <header className="relative z-10 flex h-[52px] flex-none items-center gap-1 border-b border-white/6 px-3.5">
+      <h1 className="m-0 mr-1.5 flex h-5 flex-none items-center gap-[9px] border-r border-white/7 pr-4 pl-1 text-[13.5px] font-medium tracking-[-0.01em]">
+        <span aria-hidden className="size-[9px] rounded-full bg-foreground" />
+        PACT
+      </h1>
       <div role="tablist" aria-label="Espaces de travail" className="flex min-w-0 gap-1">
         {workspaces.map(({ id, name, agents = [] }) => {
           const selected = activeTab.kind === 'workspace' && activeTab.id === id;
@@ -64,7 +67,7 @@ export function TabBar({
                 <span
                   role="img"
                   aria-label={`${name} : ${INDICATORS[indicator].label}`}
-                  className={cn('text-[10px]', INDICATORS[indicator].className)}
+                  className={cn('text-[8px]', INDICATORS[indicator].className)}
                 >
                   {INDICATORS[indicator].icon}
                 </span>
@@ -97,7 +100,11 @@ export function TabBar({
         )}
       </div>
       <button
-        className={cn(ICON, 'size-6 text-[16px]')}
+        className={cn(
+          ICON,
+          'size-[30px] rounded-lg text-[17px] font-light',
+          homeOpen && 'bg-white/7 text-foreground',
+        )}
         aria-label="Nouvel onglet"
         onClick={onHome}
       >
@@ -105,7 +112,7 @@ export function TabBar({
       </button>
       <span className="flex-1" />
       <div ref={toolbarRef} className="contents" />
-      <button className={cn(ICON, 'text-[15px]')} aria-label="Réglages" disabled>
+      <button className={cn(ICON, 'ml-1.5 text-[15px]')} aria-label="Réglages" disabled>
         ⚙
       </button>
     </header>

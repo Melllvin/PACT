@@ -26,7 +26,7 @@ export function AgentPills({ agents, current, name, onSelect }: Props) {
             }}
             style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}
             className={cn(
-              'flex cursor-pointer items-center gap-1.5 rounded-[5px] border border-border px-2 py-1',
+              'flex cursor-pointer items-center gap-1.5 rounded-[5px] border border-white/8 px-2 py-1',
               selected && 'border-(--agent-color) bg-secondary',
             )}
           >

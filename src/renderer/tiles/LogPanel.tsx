@@ -30,7 +30,7 @@ export function LogPanel({ name, text, onClose }: Props) {
         <DialogBody>
           <DialogTitle>Journal de {name}</DialogTitle>
           {output ? (
-            <pre className="m-0 max-h-[60vh] overflow-auto rounded-md border border-border bg-[#0a0d12] p-2.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap">
+            <pre className="m-0 max-h-[60vh] overflow-auto rounded-[10px] border border-white/6 bg-surface p-2.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap">
               {output}
             </pre>
           ) : (
