@@ -300,15 +300,15 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 
 **Purpose**: exigences transverses, performance, sécurité, validation finale
 
-- [ ] T110 [P] Tests puis implémentation de la confirmation de fermeture de l'app quand des agents sont actifs, et arrêt propre de tous les PTY dans `tests/unit/main/app-lifecycle.test.ts` et `src/main/app-lifecycle.ts`
+- [X] T110 [P] Tests puis implémentation de la confirmation de fermeture de l'app quand des agents sont actifs, et arrêt propre de tous les PTY dans `tests/unit/main/app-lifecycle.test.ts` et `src/main/app-lifecycle.ts`
 - [ ] T111 [P] Tests puis implémentation des animations 1c (grille de points réactive autour du curseur, transition particules → tuiles → bordures, entrée dépliée des éléments À faire), désactivées si `prefers-reduced-motion` (FR-042), aucun effet dans les terminaux, dans `tests/unit/renderer/effects/effects.test.tsx`, `src/renderer/effects/DotGrid.tsx`, `src/renderer/effects/ViewTransition.tsx` — en partie couverte par T159 et T160 (R17) : points réactifs au curseur et au clic, entrée dépliée des éléments À faire, entrée échelonnée des vues, dans `src/renderer/effects/` ; les fichiers `DotGrid.tsx` et `ViewTransition.tsx` ne sont plus prévus. Reste la transition particules → tuiles → bordures au lancement
 - [ ] T112 Test e2e de performance SC-002 : 6 agents fake `burst-output` → latence d'écho d'une frappe < 100 ms (p95) et passage d'état visible dans À faire < 2 s (SC-003) dans `tests/e2e/perf.spec.ts`
 - [ ] T113 [P] Test e2e des chemins avec espaces et accents (dépôt dans « Mes Projets/Développement ») sur macOS et Windows dans `tests/e2e/paths.spec.ts`
-- [ ] T114 [P] Revue de sécurité : CSP, `sandbox`, aucune commande shell construite depuis le renderer, jeton de hooks non journalisé, serveur de hooks lié à `127.0.0.1` uniquement ; corriger les écarts et ajouter un test par écart trouvé dans `tests/unit/main/security.test.ts`
+- [X] T114 [P] Revue de sécurité : CSP, `sandbox`, aucune commande shell construite depuis le renderer, jeton de hooks non journalisé, serveur de hooks lié à `127.0.0.1` uniquement ; corriger les écarts et ajouter un test par écart trouvé dans `tests/unit/main/security.test.ts`
 - [ ] T115 [P] Mettre à jour `README.md` (présentation, prérequis, `npm ci`, `npm run dev`, `npm run check`, `npm run test:e2e`, approbation des hooks Codex)
 - [ ] T116 Dérouler `specs/001-agent-workspace-core/quickstart.md` (scénarios automatisés + validation manuelle avec vrais CLI) sur macOS et Windows et consigner les résultats dans la PR
 - [X] T141 Rappel (décisions utilisateur du 2026-09-24) : interface en shadcn/ui + Tailwind v4 (research.md R16) et effets React Bits (R15), pour coller aux maquettes `docs/maquettes` (direction 1c, `CONSIGNES-UI.md`). Plan amendé ; ajouter à la main (sans régénérer `tasks.md`) les tâches tests d'abord : migration écran par écran des CSS Modules et des dialogues faits main (suppression de `use-dialog-keys`) ; enrobage `DotGrid` (mouvement réduit, tokens, hors terminaux) ; captures Playwright à 1024 px et en grand écran. Reste à obtenir l'accord de l'utilisateur sur l'exclusion de `src/renderer/effects/vendor/**` de la couverture et du lint. L'installation elle-même est T142 (début de phase 7) ; la migration et les effets passent avant T111 — fait : tâches ajoutées (T149–T157) puis direction amendée vers la maquette interactive (R17, T158–T160) ; les effets sont maison, l'exclusion `src/renderer/effects/vendor/**` accordée n'a plus d'objet et a été retirée
-- [ ] T117 Proposer à l'utilisateur (sans l'appliquer sans son accord) la protection de la branche `main` exigeant les jobs CI `check` et `e2e` (Constitution II)
+- [X] T117 Proposer à l'utilisateur (sans l'appliquer sans son accord) la protection de la branche `main` exigeant les jobs CI `check` et `e2e` (Constitution II) — déjà en place via T118 : `main` exige check et e2e sur macOS et Windows plus coverage-guard, enforce_admins actif (vérifié par `gh api` le 2026-09-25)
 - [ ] T146 Stabiliser les tests d'intégration sous Windows (ConPTY, git, surveillance de fichiers : `agent-actions` « Reprendre tape continue », `workspace-service` « availability », `agent-manager` validation des branches) en trouvant la cause de chaque échec, puis retirer le `retry` Windows du projet `integration` de `vitest.config.ts` (Constitution II)
 
 ---
@@ -421,14 +421,14 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 - [ ] T125 Exécuter la suite e2e smoke sur l'app packagée (`electron-builder --dir`) en CI macOS et Windows, en vérifiant le chargement de node-pty hors asar, via `tests/e2e/helpers/launch-app.ts` (option `PACT_E2E_PACKAGED=1`) et `.github/workflows/ci.yml` per plan R12 / R14 (partial)
 - [x] T126 Aligner `contracts/cli-adapter.md` et les types de T034 : ajouter `agentId` à `LaunchInput` (requis pour `PACT_AGENT_ID`) et `cwd` à `LaunchSpec` (obligation 1), et harmoniser le chemin de la suite de contrat (`tests/contract/cli-adapter.contract.ts`) avant d'implémenter T024 / T034 per contracts/cli-adapter.md (contradicts)
 - [x] T127 Vérifier si `style-src 'unsafe-inline'` est nécessaire hors mode dev ; le cas échéant, le limiter au serveur de développement (CSP de production `default-src 'self'` stricte), avec assertion e2e sur la CSP servie, dans `src/renderer/index.html` et `electron.vite.config.ts` per T011 (partial)
-- [ ] T128 Justifier dans la revue de sécurité (T114) le blocage de `window.open` et de la navigation (`src/main/window.ts`), ajouté sans tâche dédiée, ou le retirer per T114 (unrequested)
+- [X] T128 Justifier dans la revue de sécurité (T114) le blocage de `window.open` et de la navigation (`src/main/window.ts`), ajouté sans tâche dédiée, ou le retirer per T114 (unrequested)
 
 ---
 
 ## Phase 12: Convergence
 
 - [x] T129 Consigner dans `specs/001-agent-workspace-core/research.md` R3 que la résolution des commandes cherche directement dans le PATH (avec PATHEXT sous Windows) au lieu de lancer `which` / `where.exe` : même résultat, aucun processus lancé, testable sur les deux OS, vérifié sur la CI Windows per research R3 / T019 (contradicts)
-- [ ] T130 Justifier dans la revue de sécurité (T114) le contrôle d'origine IPC (`trustedSenderCheck`), l'ignorance d'`ELECTRON_RENDERER_URL` dans une app packagée et le service `app:getState` câblé dès la phase 2 (`src/main/app-services.ts`) per T114 (unrequested)
+- [X] T130 Justifier dans la revue de sécurité (T114) le contrôle d'origine IPC (`trustedSenderCheck`), l'ignorance d'`ELECTRON_RENDERER_URL` dans une app packagée et le service `app:getState` câblé dès la phase 2 (`src/main/app-services.ts`) per T114 (unrequested)
 
 ---
 
