@@ -14,13 +14,24 @@ type Options = {
   shutdown: () => Promise<void>;
   /** e2e runs: no one is there to answer. */
   skipConfirm?: boolean;
+  /** Past this, the app quits even if a stop has not finished. */
+  deadlineMs?: number;
 };
+
+const DEADLINE_MS = 5000;
 
 /**
  * T110: holds the quit while agents are active until the user confirms, then lets the app exit
  * only once every PTY is stopped. Agent states stay saved as they are (FR-038).
  */
-export function guardQuit({ app, activeAgents, confirm, shutdown, skipConfirm }: Options): void {
+export function guardQuit({
+  app,
+  activeAgents,
+  confirm,
+  shutdown,
+  skipConfirm,
+  deadlineMs = DEADLINE_MS,
+}: Options): void {
   let phase: 'open' | 'busy' | 'done' = 'open';
   app.on('before-quit', (event) => {
     if (phase === 'done') return;
@@ -33,7 +44,12 @@ export function guardQuit({ app, activeAgents, confirm, shutdown, skipConfirm }:
         phase = 'open';
         return;
       }
-      await shutdown().catch(() => undefined);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, deadlineMs);
+      });
+      await Promise.race([shutdown().catch(() => undefined), deadline]);
+      clearTimeout(timer);
       phase = 'done';
       app.quit();
     })();
