@@ -1,4 +1,5 @@
-import styles from './shell.module.css';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 /**
  * Without `onAddAgents`, « + Agents » stays disabled rather than doing nothing; `showTodo` is off
@@ -13,6 +14,9 @@ type Props = {
   onAddAgents?: (() => void) | undefined;
 };
 
+const VIEW =
+  'flex items-center gap-[5px] px-[11px] py-1 not-first:border-l not-first:border-border disabled:text-[#5c6574] aria-pressed:bg-primary aria-pressed:text-primary-foreground';
+
 /** Workspace views; Comparer and Revue stay visible but inactive in the core (FR-006). */
 export function Toolbar({
   todoCount,
@@ -22,25 +26,38 @@ export function Toolbar({
   onAddAgents,
 }: Props) {
   return (
-    <nav role="toolbar" aria-label="Vues" className={styles.toolbar}>
-      <button className={styles.viewButton} aria-pressed>
-        Tuiles
-      </button>
-      <button className={styles.viewButton} disabled>
-        Comparer
-      </button>
-      <button className={styles.viewButton} disabled>
-        Revue
-      </button>
-      <span className={styles.spacer} />
+    <nav role="toolbar" aria-label="Vues" className="flex items-center gap-2">
+      <span className="flex overflow-hidden rounded-md border border-border text-[12px] font-medium">
+        <button className={VIEW} aria-pressed>
+          Tuiles
+        </button>
+        <button className={VIEW} disabled>
+          Comparer
+        </button>
+        <button className={VIEW} disabled>
+          Revue
+        </button>
+      </span>
       {showTodo && (
-        <button className={styles.viewButton} aria-pressed={todoOpen} onClick={onToggleTodo}>
-          À faire <span className={styles.count}>{todoCount}</span>
+        <button
+          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[12px] font-medium aria-pressed:bg-card"
+          aria-pressed={todoOpen}
+          onClick={onToggleTodo}
+        >
+          À faire{' '}
+          <span
+            className={cn(
+              'rounded-[3px] px-[5px] font-mono text-[10.5px]',
+              todoCount > 0 ? 'bg-waiting text-[#17100a]' : 'text-muted-foreground',
+            )}
+          >
+            {todoCount}
+          </span>
         </button>
       )}
-      <button className={styles.primary} onClick={onAddAgents} disabled={!onAddAgents}>
+      <Button variant="primary" onClick={onAddAgents} disabled={!onAddAgents}>
         + Agents
-      </button>
+      </Button>
     </nav>
   );
 }

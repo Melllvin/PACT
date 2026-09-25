@@ -12,7 +12,6 @@ import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { Legend } from './Legend';
 import { TabBar } from './TabBar';
-import styles from './shell.module.css';
 
 type Props = {
   store: AppStore;
@@ -26,6 +25,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
   const state = useStore(store);
   const { status, error, workspaces, activeTab, launcher } = state;
   const [now] = useState(() => new Date());
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const disconnect = store.getState().connect();
@@ -55,7 +55,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
   const logged = state.log === null ? undefined : agentsById.get(state.log.agentId);
 
   return (
-    <div className={styles.app}>
+    <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
       <TabBar
         workspaces={workspaces}
         activeTab={activeTab}
@@ -63,10 +63,11 @@ export function App({ store, getPathForFile, terminals }: Props) {
         onHome={state.openHome}
         onClose={(id) => void state.closeWorkspace(id)}
         onCloseHome={state.closeHome}
+        toolbarRef={setToolbarSlot}
       />
-      <main className={styles.stage}>
+      <main className="min-h-0 overflow-auto bg-[radial-gradient(circle,#263041_1px,transparent_1.6px)] bg-size-[20px_20px]">
         {status === 'error' && (
-          <p role="alert" className={styles.error}>
+          <p role="alert" className="m-4 text-destructive">
             {error}
           </p>
         )}
@@ -75,6 +76,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
             workspace={workspace}
             clis={state.clis}
             terminals={terminals}
+            toolbarSlot={toolbarSlot}
             onAddAgents={() => {
               state.openLauncher(workspace.id);
             }}
@@ -123,28 +125,30 @@ export function App({ store, getPathForFile, terminals }: Props) {
           />
         )}
         {status === 'ready' && !workspace && (
-          <>
-            <Home
-              workspaces={workspaces}
-              recents={state.recents}
-              now={now}
-              openError={state.openError}
-              clone={state.clone}
-              onGoTo={state.selectWorkspace}
-              onOpenPath={(path) => void state.openRepository(path)}
-              onInitRepo={(path) => void state.initRepository(path)}
-              onPickRepository={() => void state.pickRepository()}
-              onPickCloneDestination={state.pickCloneDestination}
-              onClone={(url, destination) => void state.startClone(url, destination)}
-              getPathForFile={getPathForFile}
-            />
-            <DetectedClis
-              clis={state.clis}
-              onRedetect={() => void state.redetectClis()}
-              onAdd={state.addCli}
-            />
-            <Legend />
-          </>
+          <Home
+            workspaces={workspaces}
+            recents={state.recents}
+            now={now}
+            openError={state.openError}
+            clone={state.clone}
+            onGoTo={state.selectWorkspace}
+            onOpenPath={(path) => void state.openRepository(path)}
+            onInitRepo={(path) => void state.initRepository(path)}
+            onPickRepository={() => void state.pickRepository()}
+            onPickCloneDestination={state.pickCloneDestination}
+            onClone={(url, destination) => void state.startClone(url, destination)}
+            getPathForFile={getPathForFile}
+            aside={
+              <>
+                <DetectedClis
+                  clis={state.clis}
+                  onRedetect={() => void state.redetectClis()}
+                  onAdd={state.addCli}
+                />
+                <Legend />
+              </>
+            }
+          />
         )}
       </main>
     </div>

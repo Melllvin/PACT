@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import styles from './home.module.css';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 type Props = {
   /** The sandboxed renderer cannot read file paths: the preload resolves them (webUtils). */
@@ -13,7 +14,10 @@ export function DropZone({ getPathForFile, onDropPath, onPick, onClone }: Props)
   const [over, setOver] = useState(false);
   return (
     <div
-      className={[styles.drop, over && styles.dropOver].filter(Boolean).join(' ')}
+      className={cn(
+        'flex flex-col items-center gap-2.5 rounded-[10px] border-[1.5px] border-dashed border-border bg-[rgb(13_17_23/70%)] px-[18px] py-[22px] text-center transition-colors',
+        over && 'border-primary',
+      )}
       onDragOver={(event) => {
         event.preventDefault();
         setOver(true);
@@ -28,12 +32,15 @@ export function DropZone({ getPathForFile, onDropPath, onPick, onClone }: Props)
         if (file) onDropPath(getPathForFile(file));
       }}
     >
-      <p className={styles.dropTitle}>Déposez un dossier Git ici</p>
-      <p className={styles.meta}>ou</p>
-      <button className={styles.primary} onClick={onPick}>
+      <h3 className="m-0 text-[14px] font-semibold">Autre dépôt</h3>
+      <p className="m-0 text-[12.5px] text-muted-foreground">Déposez un dossier Git ici</p>
+      <p className="m-0 font-mono text-[11px] text-muted-foreground">ou</p>
+      <Button variant="primary" size="md" onClick={onPick}>
         Choisir un dépôt Git…
-      </button>
-      <button onClick={onClone}>Cloner depuis une URL…</button>
+      </Button>
+      <Button size="md" onClick={onClone}>
+        Cloner depuis une URL…
+      </Button>
     </div>
   );
 }

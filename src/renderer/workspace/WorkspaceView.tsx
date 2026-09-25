@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar } from '../app/Toolbar';
@@ -9,7 +10,6 @@ import { TileGrid } from '../tiles/TileGrid';
 import { TodoColumn } from '../todo/TodoColumn';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { EmptyWorkspace } from './EmptyWorkspace';
-import styles from './workspace.module.css';
 
 /** The tile actions, each about one agent (FR-024, FR-037). */
 export type AgentActions = {
@@ -42,7 +42,11 @@ type Props = {
   actions?: AgentActions;
   /** Why the last tile action was refused. */
   actionError?: string | null;
+  /** The place the tab bar keeps for the views (1b); without it they sit above the tiles. */
+  toolbarSlot?: HTMLElement | null;
 };
+
+const ALERT = 'm-0 rounded-md border border-destructive px-3 py-2.5 text-[12.5px]';
 
 export function WorkspaceView({
   workspace,
@@ -51,6 +55,7 @@ export function WorkspaceView({
   onAddAgents,
   actions = NO_ACTIONS,
   actionError = null,
+  toolbarSlot = null,
 }: Props) {
   const available = workspace.status === 'available';
   const launch = available ? onAddAgents : undefined;
@@ -65,28 +70,35 @@ export function WorkspaceView({
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const focused = agents.some((agent) => agent.id === focusedId) ? focusedId : null;
 
+  // The À faire column and its button appear with the first agent (FR-006).
+  const toolbar = (
+    <Toolbar
+      todoCount={todos.filter((todo) => todo.kind !== 'info').length}
+      showTodo={hasAgents}
+      todoOpen={todoOpen}
+      onToggleTodo={() => {
+        setTodoOpen((open) => !open);
+      }}
+      onAddAgents={launch}
+    />
+  );
+
   return (
     <>
-      {/* The À faire column and its button appear with the first agent (FR-006). */}
-      <Toolbar
-        todoCount={todos.filter((todo) => todo.kind !== 'info').length}
-        showTodo={hasAgents}
-        todoOpen={todoOpen}
-        onToggleTodo={() => {
-          setTodoOpen((open) => !open);
-        }}
-        onAddAgents={launch}
-      />
-      <div className={styles.body}>
-        <section aria-label={workspace.name} className={styles.stage}>
+      {toolbarSlot ? createPortal(toolbar, toolbarSlot) : toolbar}
+      <div className="flex h-full min-h-0">
+        <section
+          aria-label={workspace.name}
+          className="flex h-full min-w-0 flex-1 flex-col gap-2.5 p-2.5"
+        >
           {!available && (
-            <p role="alert" className={styles.unavailable}>
+            <p role="alert" className={ALERT}>
               Dossier introuvable : {workspace.path}. Le workspace reviendra dès que le dossier sera
               de retour.
             </p>
           )}
           {actionError && (
-            <p role="alert" className={styles.unavailable}>
+            <p role="alert" className={ALERT}>
               {actionError}
             </p>
           )}
