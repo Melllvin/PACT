@@ -87,6 +87,43 @@ describe('generic adapter specifics', () => {
       expect(adapter.mapOutput('', { idleMs: 5000 })).toBeNull();
     });
 
+    it('reports a rate limit the CLI stays stuck on, with its reset time', () => {
+      expect(
+        adapter.mapOutput('Working…\nRate limit reached, try again at 3pm\n', { idleMs: 3000 }),
+      ).toEqual({
+        type: 'failed',
+        kind: 'rate-limit',
+        message: 'Rate limit reached, try again at 3pm',
+        resetAt: new Date(2030, 0, 1, 15, 0),
+      });
+      expect(adapter.mapOutput('Error: 429 Too Many Requests', { idleMs: 3000 })).toEqual({
+        type: 'failed',
+        kind: 'rate-limit',
+        message: 'Error: 429 Too Many Requests',
+      });
+    });
+
+    it('finds the rate limit above the prompt the CLI prints again', () => {
+      expect(
+        adapter.mapOutput('Usage limit reached for today.\n\n> ', { idleMs: 3000 }),
+      ).toMatchObject({
+        type: 'failed',
+        kind: 'rate-limit',
+        message: 'Usage limit reached for today.',
+      });
+    });
+
+    it('leaves a rate limit alone while the CLI waits and retries on its own', () => {
+      expect(
+        adapter.mapOutput('Rate limit reached, try again at 3pm', { idleMs: 1000 }),
+      ).toBeNull();
+      expect(
+        adapter.mapOutput('litellm.RateLimitError: rate limited. Retrying in 20 seconds...', {
+          idleMs: 5000,
+        }),
+      ).toBeNull();
+    });
+
     it('ends the turn when the process exits with 0, fails otherwise', () => {
       expect(adapter.mapOutput('', { exitCode: 0 })).toEqual({ type: 'turn-finished' });
       expect(adapter.mapOutput('', { exitCode: 2 })).toEqual({
