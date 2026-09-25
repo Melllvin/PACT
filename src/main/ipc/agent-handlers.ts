@@ -18,6 +18,7 @@ type Dependencies = {
     close(id: string, options: { removeWorktree: boolean }): Promise<void>;
     log(id: string): string;
     cancelAutoResume(id: string): Promise<void>;
+    typed(id: string, data: string): void;
   };
   freeTerminals: { open(workspaceId: string, count: number): Promise<unknown> };
   pty: {
@@ -59,6 +60,7 @@ export function createAgentServices({
       agents.cancelAutoResume(agentId),
     'term:write': ({ termId, data }: IpcInput<'term:write'>) => {
       pty.write(termId, data);
+      agents.typed(termId, data);
     },
     'term:resize': ({ termId, cols, rows }: IpcInput<'term:resize'>) => {
       pty.resize(termId, cols, rows);

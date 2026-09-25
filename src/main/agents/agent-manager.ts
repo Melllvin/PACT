@@ -204,6 +204,19 @@ export class AgentManager {
     await this.change(workspace.id, id, (a) => ({ ...a, scheduledResume: null }));
   }
 
+  /**
+   * A line the user sends in the terminal is a manual action too: it replaces the scheduled resume
+   * of CLIs without a prompt hook (FR-036). Free terminals are no agents: nothing to do.
+   */
+  typed(id: string, data: string): void {
+    if (!data.includes('\r')) return;
+    const found = this.workspaces
+      .list()
+      .flatMap((workspace) => workspace.agents)
+      .find((agent) => agent.id === id);
+    if (found?.scheduledResume) void this.cancelAutoResume(id);
+  }
+
   /** « Relancer »: a new session, then the initial prompt typed again (FR-024, R6). */
   async restart(id: string): Promise<void> {
     const { workspace, agent } = this.inError(id);
