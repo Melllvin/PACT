@@ -43,16 +43,18 @@ describe('generic adapter specifics', () => {
   });
 
   it('is installed when its command is found in PATH, missing otherwise', async () => {
+    // The real host: PATH is split and PATHEXT applied the way this OS does it.
+    const host = new GenericAdapter({ command: 'aider --no-git', platform: process.platform });
     dir = await mkdtemp(join(tmpdir(), 'pact-generic-'));
-    const executable = join(dir, 'aider');
+    const executable = join(dir, process.platform === 'win32' ? 'aider.cmd' : 'aider');
     await writeFile(executable, '#!/bin/sh\n');
     await chmod(executable, 0o755);
-    expect(await adapter.detect({ PATH: dir })).toEqual({
+    expect(await host.detect({ PATH: dir })).toEqual({
       resolvedPath: executable,
       version: null,
       status: 'installed',
     });
-    expect(await adapter.detect({ PATH: tmpdir() })).toEqual({
+    expect(await host.detect({ PATH: '' })).toEqual({
       resolvedPath: null,
       version: null,
       status: 'missing',
