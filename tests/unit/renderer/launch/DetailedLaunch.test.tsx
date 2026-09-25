@@ -82,7 +82,7 @@ const cliNames = () =>
 
 describe('DetailedLaunch', () => {
   it('lists « Commun à tous » and the agents, each in the color of its future tile', () => {
-    setup({ running: [{ position: 1, color: 'purple' } as Agent] });
+    setup({ running: [{ position: 1, color: 'purple' }] });
     expect(screen.getByRole('button', { name: /Commun à tous/ })).toBeDefined();
     expect(screen.getByText('Agents · 3')).toBeDefined();
     expect(items().map((item) => item.style.getPropertyValue('--agent-color'))).toEqual([
@@ -236,7 +236,7 @@ describe('DetailedLaunch', () => {
 
   it('blocks the launch while two agents share a branch or a port (US6 scenario 5)', async () => {
     const onLaunch = vi.fn();
-    const { user } = setup({ onLaunch, taken: [{ branch: 'main-work', port: 3005 } as Agent] });
+    const { user } = setup({ onLaunch, taken: [{ branch: 'main-work', port: 3005 }] });
     await user.click(agent(0));
     await user.type(within(field('Branche')).getByRole('textbox'), 'feature/x');
     await user.click(agent(1));

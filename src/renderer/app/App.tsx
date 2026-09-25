@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import { DetectedClis } from '../home/DetectedClis';
 import { Home } from '../home/Home';
 import { PermissionsDialog } from '../launch/PermissionsDialog';
-import { QuickLaunch } from '../launch/QuickLaunch';
+import { LaunchPanel } from '../launch/LaunchPanel';
 import type { Agent } from '../../shared/model';
 import type { AppStore } from '../store/app-store';
 import { CloseAgentDialog } from '../tiles/CloseAgentDialog';
@@ -100,19 +100,23 @@ export function App({ store, getPathForFile, terminals }: Props) {
           <LogPanel name={agentName(logged)} text={state.log.text} onClose={state.closeLog} />
         )}
         {launcher?.step === 'counts' && launching && (
-          <QuickLaunch
+          <LaunchPanel
             clis={state.clis}
             counters={launching.quickLaunchCounters}
-            existingAgents={launching.agents.length}
+            running={launching.agents}
+            taken={workspaces.flatMap((w) => w.agents)}
+            initialDraft={launcher.draft ?? null}
             error={launcher.error ?? null}
-            onLaunch={(counts) => void state.requestLaunch(counts)}
+            onLaunch={(draft) => void state.requestLaunch(draft)}
             onClose={state.closeLauncher}
           />
         )}
         {launcher?.step === 'permission' && (
           <PermissionsDialog
-            agentCount={Object.values(launcher.counts.agents).reduce((sum, n) => sum + n, 0)}
-            clis={state.clis.filter((cli) => (launcher.counts.agents[cli.id] ?? 0) > 0)}
+            agentCount={launcher.draft.agents.length}
+            clis={state.clis.filter((cli) =>
+              launcher.draft.agents.some((agent) => agent.cliId === cli.id),
+            )}
             onConfirm={(choice) => void state.confirmPermission(choice)}
             onCancel={state.closeLauncher}
           />
