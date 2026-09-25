@@ -86,6 +86,11 @@ describe('Tailwind theme', () => {
     ['primary', 'var(--action)'],
     ['primary-foreground', 'var(--bg)'],
     ['destructive', 'var(--danger)'],
+    ['surface', 'var(--surface)'],
+    ['raised', 'var(--raised)'],
+    ['dim', 'var(--text-dim)'],
+    ['waiting', 'var(--waiting)'],
+    ['accept', 'var(--accept)'],
   ])('gives the Tailwind color %s the 1c token %s', (name, value) => {
     expect(variable(`color-${name}`)).toBe(value);
   });
