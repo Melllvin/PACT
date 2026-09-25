@@ -64,3 +64,12 @@ test('keeps app data in an isolated directory in test mode', async () => {
   const userData = await launched.app.evaluate(({ app }) => app.getPath('userData'));
   expect(userData).toContain('pact-e2e-');
 });
+
+test('paints the ambient canvas behind the home tab, not over its content (R17)', async () => {
+  const page = await launched.app.firstWindow();
+  const canvas = page.locator('canvas[aria-hidden="true"]');
+  await expect(canvas).toHaveCount(1);
+  // Clicks go through to the page: the canvas is out of the pointer's way.
+  expect(await canvas.evaluate((element) => getComputedStyle(element).pointerEvents)).toBe('none');
+  await expect(page.getByRole('button', { name: 'Choisir un dépôt Git…' })).toBeVisible();
+});
