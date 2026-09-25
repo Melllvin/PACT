@@ -484,7 +484,7 @@ Décisions utilisateur du 2026-09-25 : une seule PR pour la phase 10 ; `src/rend
 - [X] T154 Tests d'abord puis colonne À faire en cartes (pastille, libellé court, titre, commande ou « tapez dans le terminal », carte de réponse bordée orange), dans `src/renderer/todo/` ; suppression de `todo.module.css`
 - [X] T155 Tests d'abord puis dialogues « Fermer l'agent », « Journal » et « Ajouter un CLI » en Dialog shadcn, test « Dialog shadcn ouvert sans erreur console » (reste de T142), suppression de `use-dialog-keys`
 - [X] T156 Tests d'abord puis grille de points React Bits `DotGrid` copiée dans `src/renderer/effects/vendor/`, enrobée dans `src/renderer/effects/` : tokens de la grille réactive 1c, rien sous `prefers-reduced-motion`, sans `matchMedia` ou sans canvas, jamais sous un terminal (FR-042, FR-020), boucle à l'arrêt quand le pointeur ne bouge plus — remplacée par T160 (R17)
-- [ ] T157 Captures Playwright de l'accueil, du workspace vide, du menu rapide et de 6 tuiles à 1024 px et en grand écran, gardées en artefacts ; assertions de mise en page (aucun débordement, éléments visibles) plutôt que comparaison de pixels, dans `tests/e2e/layout.spec.ts`
+- [X] T157 Captures Playwright de l'accueil, du workspace vide, du menu rapide et de 6 tuiles à 1024 px et en grand écran, gardées en artefacts ; assertions de mise en page (aucun débordement, éléments visibles) plutôt que comparaison de pixels, dans `tests/e2e/layout.spec.ts`
 
 ## Phase 21: Direction « Maquette interactive » (ajout manuel)
 

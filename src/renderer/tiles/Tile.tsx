@@ -82,7 +82,7 @@ export function Tile({ agent, name, terminals, onClose, onExpand, ...actions }: 
           termId={agent.id}
           registry={terminals}
           label={`Terminal de ${title}`}
-          className={cn('px-4 pt-3.5', acting ? 'pb-14' : 'pb-3.5')}
+          className={cn('px-4 pt-10', acting ? 'pb-14' : 'pb-3.5')}
         />
       )}
       <div

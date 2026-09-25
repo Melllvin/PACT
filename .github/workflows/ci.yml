@@ -96,3 +96,10 @@ jobs:
           path: |
             test-results/
             playwright-report/
+      # Layout captures at 1024 px and on a large screen, kept for review (T157).
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: layout-${{ matrix.os }}
+          path: test-results/layout/
+          if-no-files-found: ignore
