@@ -249,6 +249,43 @@ describe('Claude Code hook payloads (captured in T049)', () => {
     ).toEqual({ type: 'failed', kind: 'crash', message: 'server_error' });
   });
 
+  it('StopFailure on a rate limit gives its reset time when the message has one (T104)', () => {
+    const now = new Date(2026, 8, 24, 14, 0);
+    const timed = new ClaudeCodeAdapter({
+      platform: 'darwin',
+      bridge,
+      run: installed,
+      now: () => now,
+    });
+    expect(
+      timed.mapHookEvent({
+        ...common,
+        hook_event_name: 'StopFailure',
+        error: 'rate_limit',
+        error_details: "You've hit your limit · resets 3pm",
+      }),
+    ).toEqual({
+      type: 'failed',
+      kind: 'rate-limit',
+      message: "You've hit your limit · resets 3pm",
+      resetAt: new Date(2026, 8, 24, 15, 0),
+    });
+  });
+
+  it('quota_auto_resume_fired: Claude Code resumed on its own, as if a prompt was sent (FR-036)', () => {
+    const quota = (notification_type: string) =>
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'Notification',
+        message: 'Resuming',
+        notification_type,
+      });
+    expect(quota('quota_auto_resume_fired')).toEqual({ type: 'prompt-submitted' });
+    // Stale or disabled: Claude Code will not resume, PACT's resume stays.
+    expect(quota('quota_auto_resume_stale')).toBeNull();
+    expect(quota('quota_auto_resume_disabled')).toBeNull();
+  });
+
   it('ignores SessionEnd and events PACT does not use', () => {
     expect(
       adapter.mapHookEvent({ ...common, hook_event_name: 'SessionEnd', reason: 'other' }),

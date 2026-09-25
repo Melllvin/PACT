@@ -20,7 +20,7 @@ const agent = (overrides: Partial<Agent> = {}): Agent => ({
   model: null,
   permissionLevel: 'always-allow',
   position: 1,
-  color: 'violet',
+  color: 'purple',
   branch: 'agent/fake-1',
   baseBranch: 'main',
   worktreePath: '/w/.worktrees/fake-1',
