@@ -79,5 +79,5 @@ arguments quel que soit le niveau » et « reprendre = relancer la commande »
 |------------|--------------------|-------|
 | claude-code | hooks injectés via `--settings` : HTTP (jeton en en-tête `X-Pact-Token: $PACT_AGENT_TOKEN`) pour UserPromptSubmit, Notification (`permission_prompt`, `agent_needs_input`), Stop, StopFailure, PermissionRequest (« Toujours pour ce worktree ») ; commande `hook-bridge` pour SessionStart (HTTP refusé, T049). Réponses : `1` / Échap | code de sortie, écran de confiance du dossier |
 | codex | hooks `command` vers le `hook-bridge` injectés par `-c hooks.<Événement>=…` (SessionStart, UserPromptSubmit, PermissionRequest, Stop, confiance à accorder une fois dans l'écran « Hooks need review ») et `-c notify=[…, "--notify"]` (hors Windows) ; fil interne de titre ignoré. Réponses : `y` / Échap | code de sortie, écrans de confiance, « usage limit » |
-| generic | aucun | code de sortie, inactivité > 3 s après sortie terminée par `?` ou `(y/n)` = attend une réponse |
+| generic | aucun | code de sortie, inactivité > 3 s après sortie terminée par `?` ou `(y/n)` = attend une réponse ; inactivité > 3 s sur une ligne récente « rate limit », « usage limit », « quota exceeded/reached » ou « too many requests », sans « retry », = limite de débit (heure de levée lue si présente) |
 | fake | hooks HTTP du scénario | — |

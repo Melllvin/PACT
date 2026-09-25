@@ -18,6 +18,12 @@ import {
 export const IDLE_QUESTION_MS = 3000;
 
 const QUESTION = /(\?|\(y\/n\))$/i;
+/** Only plain wordings: an unknown CLI gives nothing else to go on (research.md, limite de débit). */
+const RATE_LIMIT = /rate.?limit|usage limit|quota (?:exceeded|reached)|too many requests/i;
+/** A CLI that retries on its own (aider, litellm) is waiting, not stuck. */
+const RETRYING = /retry|retrying/i;
+/** The CLI may print its prompt again below the message. */
+const RATE_LIMIT_LINES = 3;
 
 export class GenericAdapter implements CliAdapter {
   readonly id = 'generic';
@@ -78,7 +84,24 @@ export class GenericAdapter implements CliAdapter {
           };
     }
     if (idleMs === undefined || idleMs < IDLE_QUESTION_MS) return null;
-    const lastLine = chunk.trimEnd().split('\n').at(-1)?.trim() ?? '';
+    const lines = chunk
+      .trimEnd()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '');
+    const limit = lines
+      .slice(-RATE_LIMIT_LINES)
+      .findLast((line) => RATE_LIMIT.test(line) && !RETRYING.test(line));
+    if (limit) {
+      const resetAt = this.parseRateLimitReset(limit);
+      return {
+        type: 'failed',
+        kind: 'rate-limit',
+        message: limit,
+        ...(resetAt ? { resetAt } : {}),
+      };
+    }
+    const lastLine = lines.at(-1) ?? '';
     return QUESTION.test(lastLine) ? { type: 'awaiting-answer', summary: lastLine } : null;
   }
 
