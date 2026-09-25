@@ -1,6 +1,7 @@
 import { countsOf, withCount, type LaunchDraft } from '../../shared/launch-draft';
 import { MAX_AGENTS, type CliDefinition } from '../../shared/model';
 import { Waves } from '../effects/Waves';
+import { LocalChangesNotice } from './LocalChangesNotice';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,6 +20,8 @@ export type QuickLaunchProps = {
   /** Agents already in the workspace, counted against the limit of six. */
   existingAgents: number;
   error: string | null;
+  /** The repository has uncommitted changes, left out of the worktrees (T122). */
+  localChanges?: boolean;
   onLaunch: () => void;
   onDetailed: () => void;
   onClose: () => void;
@@ -105,6 +108,7 @@ export function QuickLaunch({
   onChange,
   existingAgents,
   error,
+  localChanges = false,
   onLaunch,
   onDetailed,
   onClose,
@@ -180,6 +184,7 @@ export function QuickLaunch({
               <option value="free">Libre</option>
             </select>
           </label>
+          {localChanges && <LocalChangesNotice />}
           {error && (
             <p
               role="alert"

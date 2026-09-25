@@ -10,6 +10,7 @@ import {
 import { MAX_AGENTS, type Agent, type CliDefinition } from '../../shared/model';
 import { AgentInspector } from './AgentInspector';
 import { AgentList, type Selection } from './AgentList';
+import { LocalChangesNotice } from './LocalChangesNotice';
 import { agentsLabel } from './QuickLaunch';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
@@ -24,6 +25,8 @@ export type DetailedLaunchProps = {
   taken: Pick<Agent, 'branch' | 'port'>[];
   /** Why main refused the launch (LIMIT, BRANCH_CONFLICT, PORT_CONFLICT). */
   error: string | null;
+  /** The repository has uncommitted changes, left out of the worktrees (T122). */
+  localChanges?: boolean;
   onLaunch: () => void;
   onQuick: () => void;
   onClose: () => void;
@@ -42,6 +45,7 @@ export function DetailedLaunch({
   running,
   taken,
   error,
+  localChanges = false,
   onLaunch,
   onQuick,
   onClose,
@@ -101,6 +105,7 @@ export function DetailedLaunch({
           />
         </div>
 
+        {localChanges && <LocalChangesNotice className="mx-4 mb-2" />}
         {(found.length > 0 || error) && (
           <div className="flex flex-col gap-1 border-t border-white/8 px-4 py-2">
             {found.map((conflict) => (

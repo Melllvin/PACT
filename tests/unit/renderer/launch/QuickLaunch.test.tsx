@@ -68,9 +68,9 @@ describe('QuickLaunch', () => {
     const user = userEvent.setup();
     renderLauncher({ localChanges: true });
     const warning = /modifications locales non commitées ne seront pas incluses/;
-    expect(screen.getByRole('note')).toHaveTextContent(warning);
+    expect(screen.getByRole('note').textContent).toMatch(warning);
     await user.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
-    expect(screen.getByRole('note')).toHaveTextContent(warning);
+    expect(screen.getByRole('note').textContent).toMatch(warning);
   });
 
   it('says nothing of local changes when there are none', () => {

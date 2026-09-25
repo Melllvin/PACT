@@ -110,6 +110,13 @@ export class WorkspaceService {
     return workspace;
   }
 
+  /** Worktrees start from the committed base branch: uncommitted changes stay out (T122). */
+  async hasLocalChanges(id: string): Promise<boolean> {
+    const workspace = this.get(id);
+    if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
+    return this.git.hasUncommittedChanges(workspace.path);
+  }
+
   async initRepo(path: string): Promise<Workspace> {
     await this.git.initRepo(path);
     return this.open(path);

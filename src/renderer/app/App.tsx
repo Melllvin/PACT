@@ -114,6 +114,7 @@ export function App({ store, getPathForFile, terminals }: Props) {
               taken={workspaces.flatMap((w) => w.agents)}
               initialDraft={launcher.draft ?? null}
               error={launcher.error ?? null}
+              localChanges={launcher.localChanges ?? false}
               onLaunch={(draft) => void state.requestLaunch(draft)}
               onClose={state.closeLauncher}
             />
