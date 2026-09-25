@@ -20,13 +20,15 @@ const renderDialog = (clis: Cli[] = [claude, codex]) => {
 };
 
 const radio = (name: string) => screen.getByRole('radio', { name: new RegExp(name) });
+/** Radix radios and checkboxes are buttons: their state is in aria-checked. */
+const checked = (element: HTMLElement) => element.getAttribute('aria-checked') === 'true';
 
 describe('PermissionsDialog', () => {
   it('offers the three levels, « Toujours autoriser » preselected', () => {
     renderDialog();
-    expect((radio('Toujours autoriser') as HTMLInputElement).checked).toBe(true);
-    expect((radio('Demander pour les actions sensibles') as HTMLInputElement).checked).toBe(false);
-    expect((radio('Toujours demander') as HTMLInputElement).checked).toBe(false);
+    expect(checked(radio('Toujours autoriser'))).toBe(true);
+    expect(checked(radio('Demander pour les actions sensibles'))).toBe(false);
+    expect(checked(radio('Toujours demander'))).toBe(false);
   });
 
   it('describes what each level really allows, without promising confinement', () => {
@@ -64,8 +66,8 @@ describe('PermissionsDialog', () => {
 
   it('offers the « Ce projet » and « Tous les projets » scopes', () => {
     renderDialog();
-    expect((radio('Tous les projets') as HTMLInputElement).checked).toBe(true);
-    expect((radio('Ce projet') as HTMLInputElement).checked).toBe(false);
+    expect(checked(radio('Tous les projets'))).toBe(true);
+    expect(checked(radio('Ce projet'))).toBe(false);
   });
 
   it('resumes automatically after a rate limit by default (FR-035)', () => {
@@ -73,7 +75,7 @@ describe('PermissionsDialog', () => {
     const option = screen.getByRole('checkbox', {
       name: 'Reprendre automatiquement après une limite de débit',
     });
-    expect((option as HTMLInputElement).checked).toBe(true);
+    expect(checked(option)).toBe(true);
   });
 
   it('launches the default choices with Enter', async () => {

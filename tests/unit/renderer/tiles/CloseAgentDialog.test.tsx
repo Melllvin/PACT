@@ -23,7 +23,9 @@ describe('CloseAgentDialog', () => {
   it('keeps the worktree and branch by default', async () => {
     const { onConfirm } = setup();
     expect(screen.getByRole('dialog', { name: 'Fermer Claude Code 1' })).toBeDefined();
-    expect(screen.getByRole('radio', { name: /Conserver/ })).toHaveProperty('checked', true);
+    expect(screen.getByRole('radio', { name: /Conserver/ }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Fermer l’agent' }));
     expect(onConfirm).toHaveBeenCalledWith(false);
   });

@@ -62,4 +62,29 @@ describe('Dialog', () => {
     await userEvent.keyboard('a');
     expect(onEnter).toHaveBeenCalledOnce();
   });
+
+  it('confirms with Enter from a choice, a radio or a checkbox, which Enter does not toggle', async () => {
+    const onEnter = vi.fn();
+    render(
+      <Dialog open>
+        <DialogContent onEnter={onEnter}>
+          <DialogBody>
+            <DialogTitle>Titre</DialogTitle>
+            <DialogDescription>Détail</DialogDescription>
+            <button role="radio" aria-checked>
+              Choix
+            </button>
+            <button role="checkbox" aria-checked>
+              Option
+            </button>
+          </DialogBody>
+        </DialogContent>
+      </Dialog>,
+    );
+    screen.getByRole('radio', { name: 'Choix' }).focus();
+    await userEvent.keyboard('{Enter}');
+    screen.getByRole('checkbox', { name: 'Option' }).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(onEnter).toHaveBeenCalledTimes(2);
+  });
 });

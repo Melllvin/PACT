@@ -5,3 +5,12 @@ import { afterEach } from 'vitest';
 afterEach(() => {
   cleanup();
 });
+
+// Radix measures popper content (tooltips) with ResizeObserver, which jsdom lacks.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

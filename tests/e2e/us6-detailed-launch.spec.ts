@@ -30,7 +30,8 @@ let launched: LaunchedApp | undefined;
 
 const branchAndPort = async (tile: Locator) => {
   await tile.getByRole('button', { name: 'Branche et port' }).hover();
-  const text = await tile.getByRole('tooltip').textContent();
+  // Radix renders the tooltip in a portal, out of the tile.
+  const text = await tile.page().getByRole('tooltip').textContent();
   await tile.page().mouse.move(0, 0);
   return text;
 };

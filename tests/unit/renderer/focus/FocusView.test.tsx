@@ -64,9 +64,9 @@ describe('FocusView', () => {
     }
   });
 
-  it('offers one pill per agent in its color, the current one pressed', () => {
+  it('offers one pill per agent in its color, the current one checked', () => {
     setup();
-    const pills = within(screen.getByRole('group', { name: 'Agents' })).getAllByRole('button');
+    const pills = within(screen.getByRole('radiogroup', { name: 'Agents' })).getAllByRole('radio');
     expect(pills.map((pill) => pill.getAttribute('aria-label'))).toEqual([
       'Claude Code 1',
       'Codex 2',
@@ -77,7 +77,7 @@ describe('FocusView', () => {
       'var(--agent-cyan)',
       'var(--agent-green)',
     ]);
-    expect(pills.map((pill) => pill.getAttribute('aria-pressed'))).toEqual([
+    expect(pills.map((pill) => pill.getAttribute('aria-checked'))).toEqual([
       'true',
       'false',
       'false',
@@ -87,7 +87,7 @@ describe('FocusView', () => {
   it('switches to another agent from its pill (US5 scenario 2)', async () => {
     const user = userEvent.setup();
     const { props } = setup();
-    await user.click(screen.getByRole('button', { name: 'Codex 2' }));
+    await user.click(screen.getByRole('radio', { name: 'Codex 2' }));
     expect(props.onSelect).toHaveBeenCalledWith(agent(2).id);
   });
 

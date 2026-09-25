@@ -68,6 +68,7 @@ describe('Tile', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
     await user.hover(screen.getByRole('button', { name: 'Branche et port' }));
     expect(screen.getByRole('tooltip').textContent).toBe('agent/claude-code-1 · :3001');
+    expect(document.querySelector('[data-slot="tooltip-content"]')).not.toBeNull();
     rerender({ branch: 'feature/login' });
     expect(screen.getByRole('tooltip').textContent).toBe('feature/login · :3001');
     await user.unhover(screen.getByRole('button', { name: 'Branche et port' }));
