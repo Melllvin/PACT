@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceView } from '../../../../src/renderer/workspace/WorkspaceView';
 import type { Agent, CliDefinition, Workspace } from '../../../../src/shared/model';
+import { rateLimited, scheduledResume } from '../tiles/fixtures';
 
 // T068, T069, T079 — the tiles of the agents and free terminals, in the grid.
 
@@ -159,10 +160,14 @@ describe('WorkspaceView', () => {
       onResume: vi.fn(),
       onRestart: vi.fn(),
       onLog: vi.fn(),
+      onCancelAutoResume: vi.fn(),
       onClose: vi.fn(),
     };
     const waiting = agent(1, { state: 'awaiting-answer' });
-    const failed = agent(2, { state: 'error' });
+    const failed = agent(2, {
+      ...rateLimited,
+      scheduledResume: { ...scheduledResume, agentId: agent(2).id },
+    });
     render(
       <WorkspaceView
         workspace={workspace({ agents: [waiting, failed] })}
@@ -172,14 +177,16 @@ describe('WorkspaceView', () => {
     );
     const tiles = within(screen.getByRole('region', { name: 'Tuiles' }));
     await user.click(tiles.getByRole('button', { name: '✓ Autoriser' }));
-    await user.click(screen.getByRole('button', { name: 'Journal' }));
-    await user.click(screen.getByRole('button', { name: 'Relancer' }));
-    await user.click(screen.getByRole('button', { name: 'Reprendre' }));
+    await user.click(tiles.getByRole('button', { name: 'Journal' }));
+    await user.click(tiles.getByRole('button', { name: 'Relancer' }));
+    await user.click(tiles.getByRole('button', { name: 'Reprendre' }));
+    await user.click(tiles.getByRole('button', { name: 'Annuler' }));
     await user.click(screen.getAllByRole('button', { name: 'Fermer l’agent' })[0] ?? document.body);
     expect(actions.onAnswer).toHaveBeenCalledWith(waiting.id, 'allow');
     expect(actions.onLog).toHaveBeenCalledWith(failed.id);
     expect(actions.onRestart).toHaveBeenCalledWith(failed.id);
     expect(actions.onResume).toHaveBeenCalledWith(failed.id);
+    expect(actions.onCancelAutoResume).toHaveBeenCalledWith(failed.id);
     expect(actions.onClose).toHaveBeenCalledWith(waiting.id);
   });
 
@@ -238,6 +245,7 @@ describe('À faire column (T082, T086)', () => {
           onResume: vi.fn(),
           onRestart: vi.fn(),
           onLog: vi.fn(),
+          onCancelAutoResume: vi.fn(),
           onClose: vi.fn(),
         }}
       />,

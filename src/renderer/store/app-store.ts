@@ -71,6 +71,8 @@ export type AppState = {
   answerAgent: (agentId: string, answer: 'allow' | 'deny', always?: boolean) => Promise<void>;
   resumeAgent: (agentId: string) => Promise<void>;
   restartAgent: (agentId: string) => Promise<void>;
+  /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
+  cancelAutoResume: (agentId: string) => Promise<void>;
   openLog: (agentId: string) => Promise<void>;
   closeLog: () => void;
   requestCloseAgent: (agentId: string) => void;
@@ -401,6 +403,7 @@ export function createAppStore(api: PactApi) {
         ),
       resumeAgent: (agentId) => act(() => api.invoke('agent:resume', { agentId })),
       restartAgent: (agentId) => act(() => api.invoke('agent:restart', { agentId })),
+      cancelAutoResume: (agentId) => act(() => api.invoke('agent:cancelAutoResume', { agentId })),
 
       openLog: (agentId) =>
         act(async () => {

@@ -30,3 +30,21 @@ export const freeTerminal = (n: number): FreeTerminal => ({
   cwd: '/w',
   shell: '/bin/zsh',
 });
+
+/** An agent stopped by a rate limit (US7). */
+export const rateLimited = {
+  state: 'error',
+  lastError: { code: null, kind: 'rate-limit', message: 'Limite de débit atteinte' },
+} as const satisfies Partial<Agent>;
+
+export const scheduledResume = {
+  agentId: uuid(1),
+  at: '2030-01-01T09:30:00.000Z',
+  attempt: 0,
+};
+
+/** The time of `scheduledResume` as the tiles show it, in the local time zone. */
+export const time = new Date(scheduledResume.at).toLocaleTimeString('fr-FR', {
+  hour: '2-digit',
+  minute: '2-digit',
+});

@@ -38,6 +38,7 @@ export function FocusView({
   onResume,
   onRestart,
   onLog,
+  onCancelAutoResume,
 }: Props) {
   const terminalBox = useRef<HTMLDivElement>(null);
   const back = useRef(onBack);
@@ -108,6 +109,7 @@ export function FocusView({
         )}
         <TileActions
           state={agent.state}
+          scheduledResume={agent.scheduledResume}
           onAnswer={(answer) => {
             onAnswer(agent.id, answer);
           }}
@@ -122,6 +124,9 @@ export function FocusView({
           }}
           onLog={() => {
             onLog(agent.id);
+          }}
+          onCancelAutoResume={() => {
+            onCancelAutoResume(agent.id);
           }}
         />
       </footer>

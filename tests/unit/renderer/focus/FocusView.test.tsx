@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { FocusView } from '../../../../src/renderer/focus/FocusView';
 import type { Agent } from '../../../../src/shared/model';
-import { agent } from '../tiles/fixtures';
+import { agent, rateLimited, scheduledResume, time } from '../tiles/fixtures';
 
 // T087 — Focus on one agent (US5, FR-034, screen 1p).
 
@@ -21,6 +21,7 @@ const setup = (agents = team(), agentId = agents[0]?.id ?? '') => {
     onResume: vi.fn(),
     onRestart: vi.fn(),
     onLog: vi.fn(),
+    onCancelAutoResume: vi.fn(),
     onClose: vi.fn(),
   };
   const terminals = { attach: vi.fn(() => () => undefined) };
@@ -143,5 +144,13 @@ describe('FocusView', () => {
     expect(props.onResume).toHaveBeenCalledWith(agent(1).id);
     expect(props.onLog).toHaveBeenCalledWith(agent(1).id);
     expect(props.onRestart).toHaveBeenCalledWith(agent(1).id);
+  });
+
+  it('shows the scheduled resume with « Annuler » (FR-036)', async () => {
+    const user = userEvent.setup();
+    const { props } = setup(team({ ...rateLimited, scheduledResume }));
+    expect(screen.getByText(`reprise auto à ${time}`)).toBeDefined();
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(props.onCancelAutoResume).toHaveBeenCalledWith(agent(1).id);
   });
 });

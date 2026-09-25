@@ -352,6 +352,19 @@ describe('App tile actions (US3)', () => {
     expect(invoke).toHaveBeenCalledWith('agent:restart', { agentId: failed.id });
   });
 
+  it('cancels the scheduled resume of an agent from its tile (FR-036)', async () => {
+    const scheduledResume = { agentId: failed.id, at: '2030-01-01T09:30:00.000Z', attempt: 0 };
+    const limited = {
+      ...failed,
+      lastError: { code: null, kind: 'rate-limit' as const, message: 'Limite' },
+      scheduledResume,
+    };
+    const invoke = setup([limited]);
+    const tiles = await screen.findByRole('region', { name: 'Tuiles' });
+    await userEvent.click(within(tiles).getByRole('button', { name: 'Annuler' }));
+    expect(invoke).toHaveBeenCalledWith('agent:cancelAutoResume', { agentId: failed.id });
+  });
+
   it('answers an agent from its tile', async () => {
     const invoke = setup([{ ...failed, state: 'awaiting-answer' }]);
     const tiles = await screen.findByRole('region', { name: 'Tuiles' });

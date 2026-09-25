@@ -11,7 +11,15 @@ type Props = Omit<AgentActions, 'onClose'> & {
 };
 
 /** One request, in the color of its agent, with the same buttons as its tile (FR-028). */
-export function TodoItem({ todo, agent, onAnswer, onResume, onRestart, onLog }: Props) {
+export function TodoItem({
+  todo,
+  agent,
+  onAnswer,
+  onResume,
+  onRestart,
+  onLog,
+  onCancelAutoResume,
+}: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   return (
     <li className={styles.item} data-kind={todo.kind} style={style}>
@@ -19,6 +27,7 @@ export function TodoItem({ todo, agent, onAnswer, onResume, onRestart, onLog }: 
       {agent && (
         <TileActions
           state={agent.state}
+          scheduledResume={agent.scheduledResume}
           onAnswer={(answer) => {
             onAnswer(agent.id, answer);
           }}
@@ -30,6 +39,9 @@ export function TodoItem({ todo, agent, onAnswer, onResume, onRestart, onLog }: 
           }}
           onLog={() => {
             onLog(agent.id);
+          }}
+          onCancelAutoResume={() => {
+            onCancelAutoResume(agent.id);
           }}
         />
       )}

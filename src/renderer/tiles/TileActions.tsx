@@ -1,4 +1,4 @@
-import type { AgentState } from '../../shared/model';
+import type { AgentState, ScheduledResume } from '../../shared/model';
 import styles from './tiles.module.css';
 
 export type TileActionHandlers = {
@@ -6,6 +6,8 @@ export type TileActionHandlers = {
   onResume: () => void;
   onRestart: () => void;
   onLog: () => void;
+  /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
+  onCancelAutoResume: () => void;
   /** « Toujours pour ce worktree », offered in the Focus only (FR-034). */
   onAlways?: (() => void) | undefined;
 };
@@ -17,8 +19,10 @@ export function TileActions({
   onResume,
   onRestart,
   onLog,
+  onCancelAutoResume,
   onAlways,
-}: TileActionHandlers & { state: AgentState }) {
+  scheduledResume = null,
+}: TileActionHandlers & { state: AgentState; scheduledResume?: ScheduledResume | null }) {
   if (state === 'awaiting-answer') {
     return (
       <span className={styles.actions}>
@@ -45,6 +49,12 @@ export function TileActions({
   if (state === 'error') {
     return (
       <span className={styles.actions}>
+        {scheduledResume && (
+          <>
+            <span className={styles.scheduled}>reprise auto à {resumeTime(scheduledResume)}</span>
+            <button onClick={onCancelAutoResume}>Annuler</button>
+          </>
+        )}
         <button onClick={onLog}>Journal</button>
         <button onClick={onRestart}>Relancer</button>
         <button className={styles.allow} onClick={onResume}>
@@ -54,4 +64,9 @@ export function TileActions({
     );
   }
   return null;
+}
+
+/** HH:MM in the local time zone, as the rate limit banners of the CLIs give it. */
+function resumeTime({ at }: ScheduledResume) {
+  return new Date(at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }

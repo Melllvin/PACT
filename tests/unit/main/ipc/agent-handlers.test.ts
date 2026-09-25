@@ -36,6 +36,8 @@ const setup = () => {
       restart: vi.fn(() => Promise.resolve()),
       close: vi.fn(() => Promise.resolve()),
       log: vi.fn(() => 'Erreur simulée'),
+      cancelAutoResume: vi.fn(() => Promise.resolve()),
+      typed: vi.fn(),
     },
     freeTerminals: { open: vi.fn(() => Promise.resolve([])) },
     pty: { write: vi.fn(), resize: vi.fn() },
@@ -96,6 +98,7 @@ describe('createAgentServices', () => {
     services['term:write']({ termId: 't1', data: 'Ajoute un test\r' });
     services['term:resize']({ termId: 't1', cols: 120, rows: 40 });
     expect(deps.pty.write).toHaveBeenCalledWith('t1', 'Ajoute un test\r');
+    expect(deps.agents.typed).toHaveBeenCalledWith('t1', 'Ajoute un test\r');
     expect(deps.pty.resize).toHaveBeenCalledWith('t1', 120, 40);
   });
 });
@@ -111,6 +114,12 @@ describe('tile actions (US3)', () => {
     expect(deps.agents.answer).toHaveBeenCalledWith(agentId, 'allow', false);
     expect(deps.agents.resume).toHaveBeenCalledWith(agentId);
     expect(deps.agents.restart).toHaveBeenCalledWith(agentId);
+  });
+
+  it('cancels the scheduled resume (FR-036)', async () => {
+    const { deps, services } = setup();
+    await services['agent:cancelAutoResume']({ agentId });
+    expect(deps.agents.cancelAutoResume).toHaveBeenCalledWith(agentId);
   });
 
   it('passes « Toujours pour ce worktree » on to the answer (FR-034)', async () => {

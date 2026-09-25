@@ -3,12 +3,16 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TodoColumn } from '../../../../src/renderer/todo/TodoColumn';
 import type { TodoItem } from '../../../../src/shared/model';
-import { agent } from '../tiles/fixtures';
+import { agent, rateLimited, scheduledResume, time } from '../tiles/fixtures';
 
 // T082 — the À faire column (screens 1f, 1l): agent colors, the tile buttons, an empty state.
 
 const waiting = agent(1, { color: 'cyan', state: 'awaiting-answer' });
-const limited = agent(2, { color: 'green', state: 'error' });
+const limited = agent(2, {
+  color: 'green',
+  ...rateLimited,
+  scheduledResume: { ...scheduledResume, agentId: agent(2).id },
+});
 
 const todos: TodoItem[] = [
   {
@@ -29,7 +33,13 @@ const todos: TodoItem[] = [
 ];
 
 const setup = (items = todos) => {
-  const actions = { onAnswer: vi.fn(), onResume: vi.fn(), onRestart: vi.fn(), onLog: vi.fn() };
+  const actions = {
+    onAnswer: vi.fn(),
+    onResume: vi.fn(),
+    onRestart: vi.fn(),
+    onLog: vi.fn(),
+    onCancelAutoResume: vi.fn(),
+  };
   render(<TodoColumn todos={items} agents={[waiting, limited]} {...actions} />);
   return actions;
 };
@@ -75,6 +85,15 @@ describe('TodoColumn', () => {
     expect(actions.onLog).toHaveBeenCalledWith(limited.id);
     expect(actions.onRestart).toHaveBeenCalledWith(limited.id);
     expect(actions.onResume).toHaveBeenCalledWith(limited.id);
+  });
+
+  it('shows the scheduled resume of the rate limit, with « Annuler » (FR-036)', async () => {
+    const user = userEvent.setup();
+    const actions = setup();
+    const limit = within(item('✕ Limite de débit · Claude Code'));
+    expect(limit.getByText(`reprise auto à ${time}`)).toBeDefined();
+    await user.click(limit.getByRole('button', { name: 'Annuler' }));
+    expect(actions.onCancelAutoResume).toHaveBeenCalledWith(limited.id);
   });
 
   it('says there is nothing to do (US4 scenario 5)', () => {

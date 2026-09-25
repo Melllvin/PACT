@@ -18,6 +18,8 @@ export type AgentActions = {
   onResume: (agentId: string) => void;
   onRestart: (agentId: string) => void;
   onLog: (agentId: string) => void;
+  /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
+  onCancelAutoResume: (agentId: string) => void;
   onClose: (agentId: string) => void;
 };
 
@@ -27,6 +29,7 @@ const NO_ACTIONS: AgentActions = {
   onResume: none,
   onRestart: none,
   onLog: none,
+  onCancelAutoResume: none,
   onClose: none,
 };
 
@@ -120,6 +123,9 @@ export function WorkspaceView({
                   }}
                   onLog={() => {
                     actions.onLog(agent.id);
+                  }}
+                  onCancelAutoResume={() => {
+                    actions.onCancelAutoResume(agent.id);
                   }}
                   onClose={() => {
                     actions.onClose(agent.id);

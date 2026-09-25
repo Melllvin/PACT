@@ -281,16 +281,16 @@ Annuler » → reprise à l'heure sans action ; désactivée → actions manuell
 
 ### Tests for User Story 7 ⚠️
 
-- [ ] T103 [P] [US7] Tests de la planification (horloge simulée) : heure de levée connue → reprise à cette heure ; inconnue → backoff « 1, 2, 4, 8, 15, 15… min » ; annulation par Annuler / Reprendre / Relancer / fermeture, par `UserPromptSubmit` ou par la notification `quota_auto_resume_fired` ; `autoResume` désactivé → aucune programmation dans `tests/unit/main/agents/auto-resume.test.ts`
-- [ ] T104 [P] [US7] Tests de `parseRateLimitReset` pour Claude Code et Codex (formats relevés en T049, fuseau local) dans `tests/unit/main/agents/rate-limit-parse.test.ts`
-- [ ] T105 [US7] Tests d'intégration avec le faux CLI : `rate-limit` (processus terminé → `buildResume`), `rate-limit-alive` (processus vivant → « continue » + Entrée), `rate-limit-native-resume` (aucune seconde reprise) dans `tests/integration/agents/auto-resume.test.ts`
-- [ ] T106 [P] [US7] Test e2e avec horloge simulée : tuile et À faire affichent « reprise auto à HH:MM · Annuler », reprise sans action, Annuler supprime la programmation dans `tests/e2e/us7-auto-resume.spec.ts`
+- [X] T103 [P] [US7] Tests de la planification (horloge simulée) : heure de levée connue → reprise à cette heure ; inconnue → backoff « 1, 2, 4, 8, 15, 15… min » ; annulation par Annuler / Reprendre / Relancer / fermeture, par `UserPromptSubmit` ou par la notification `quota_auto_resume_fired` ; `autoResume` désactivé → aucune programmation dans `tests/unit/main/agents/auto-resume.test.ts`
+- [X] T104 [P] [US7] Tests de `parseRateLimitReset` pour Claude Code et Codex (formats relevés en T049, fuseau local) dans `tests/unit/main/agents/rate-limit-parse.test.ts`
+- [X] T105 [US7] Tests d'intégration avec le faux CLI : `rate-limit` (processus terminé → `buildResume`), `rate-limit-alive` (processus vivant → « continue » + Entrée), `rate-limit-native-resume` (aucune seconde reprise) dans `tests/integration/agents/auto-resume.test.ts`
+- [X] T106 [P] [US7] Test e2e avec horloge simulée : tuile et À faire affichent « reprise auto à HH:MM · Annuler », reprise sans action, Annuler supprime la programmation dans `tests/e2e/us7-auto-resume.spec.ts`
 
 ### Implementation for User Story 7
 
-- [ ] T107 [US7] Implémenter `parseRateLimitReset` dans `src/main/agents/adapters/claude-code.ts` et `src/main/agents/adapters/codex.ts`
-- [ ] T108 [US7] Implémenter le planificateur de reprise (horloge injectable, persistance de `ScheduledResume`, reprise au redémarrage de l'app) dans `src/main/agents/auto-resume.ts` et le brancher dans `AgentManager`
-- [ ] T109 [US7] Brancher `agent:cancelAutoResume` dans `src/main/ipc/agent-handlers.ts` et afficher « reprise auto à HH:MM · Annuler » dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/todo/TodoItem.tsx` (élément `rate-limit`)
+- [X] T107 [US7] Implémenter `parseRateLimitReset` dans `src/main/agents/adapters/claude-code.ts` et `src/main/agents/adapters/codex.ts`
+- [X] T108 [US7] Implémenter le planificateur de reprise (horloge injectable, persistance de `ScheduledResume`, reprise au redémarrage de l'app) dans `src/main/agents/auto-resume.ts` et le brancher dans `AgentManager`
+- [X] T109 [US7] Brancher `agent:cancelAutoResume` dans `src/main/ipc/agent-handlers.ts` et afficher « reprise auto à HH:MM · Annuler » dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/todo/TodoItem.tsx` (élément `rate-limit`)
 
 **Checkpoint**: toutes les stories fonctionnelles
 
@@ -466,3 +466,8 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 
 - [X] T144 Retirer `agents:reorder` de `src/shared/ipc.ts` et de `contracts/ipc.md` (l'ordre du brouillon fixe l'ordre des tuiles au lancement, décision T100), ou l'implémenter, per contracts/ipc.md, US6/AC4 (contradicts)
 - [X] T145 Reconnaître une limite de débit dans la sortie d'un « Autre CLI » (`GenericAdapter.mapOutput` → `failed` / `rate-limit` avec `resetAt` via `parseRateLimitReset`) per research.md « Limite de débit — détection » (partial)
+
+## Phase 19: Convergence
+
+- [ ] T147 Caractériser sur un vrai Claude Code les notifications `quota_auto_resume_fired` / `_stale` / `_disabled` (champ, moment, `UserPromptSubmit` associé) et aligner le scénario `rate-limit-native-resume` du faux CLI et `ClaudeCodeAdapter.mapHookEvent` sur la forme relevée per research.md R6 « Pas de double reprise » (partial)
+- [X] T148 Annuler la reprise programmée quand l'utilisateur valide une ligne (Entrée) dans le terminal d'un agent en limite de débit, pour les CLI sans hook de prompt (Codex sans hooks approuvés, « Autre CLI »), via `term:write` → `AgentManager` per FR-036 « toute action manuelle MUST l'annuler » (partial)
