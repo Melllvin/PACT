@@ -460,3 +460,8 @@ Chaque PR : `check` + `e2e` verts sur macOS et Windows (Constitution II).
 ## Phase 17: Convergence
 
 - [ ] T143 Vérifier avec le vrai Codex (caractérisation, comme T049) que « Toujours pour ce worktree » autorise bien une demande suivante de même `ruleKey` : les touches `answerKeys('allow')` sont tapées pendant l'appel du hook `PermissionRequest`, peut-être avant que Codex affiche sa boîte ; si elles se perdent, répondre par la sortie du hook quand Codex l'accepte (`permissionDecision`) ou taper après l'affichage de la boîte, test de contrat à l'appui dans `tests/contract/codex.contract.test.ts` et `src/main/agents/adapters/codex.ts` per FR-034 / US5/AC4 (partial)
+
+## Phase 18: Convergence
+
+- [ ] T144 Retirer `agents:reorder` de `src/shared/ipc.ts` et de `contracts/ipc.md` (l'ordre du brouillon fixe l'ordre des tuiles au lancement, décision T100), ou l'implémenter, per contracts/ipc.md, US6/AC4 (contradicts)
+- [ ] T145 Reconnaître une limite de débit dans la sortie d'un « Autre CLI » (`GenericAdapter.mapOutput` → `failed` / `rate-limit` avec `resetAt` via `parseRateLimitReset`) per research.md « Limite de débit — détection » (partial)
