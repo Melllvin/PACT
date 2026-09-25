@@ -100,6 +100,17 @@ describe.skipIf(isWindows)('FreeTerminals', () => {
     await restarted.dispose();
   });
 
+  it('stops the shells of an unavailable workspace but keeps them, to reopen later (T121)', async () => {
+    const free = create();
+    const opened = await free.open(workspace.id, 1);
+    const id = opened[0]?.id ?? '';
+    await free.suspend(workspace.id);
+    expect(pty.has(id)).toBe(false);
+    expect(workspaces.get(workspace.id)?.freeTerminals).toEqual(opened);
+    await free.restore(workspace.id);
+    expect(pty.has(id)).toBe(true);
+  });
+
   it('opens nothing for zero terminals and refuses an unknown workspace', async () => {
     expect(await create().open(workspace.id, 0)).toEqual([]);
     await expect(create().open('nope', 1)).rejects.toMatchObject({ code: 'NOT_FOUND' });
