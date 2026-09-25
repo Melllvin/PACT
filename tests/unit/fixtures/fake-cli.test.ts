@@ -155,11 +155,14 @@ describe('fake CLI', () => {
     await fake.waitForHook('turn-finished');
   });
 
-  it('announces its own quota auto-resume', async () => {
+  it('resumes on its own after a rate limit, like quota_auto_resume_fired', async () => {
     const fake = await runFake('rate-limit-native-resume');
     await fake.waitForPrompt(1);
     fake.send('go');
-    await fake.waitForHook('native-resume');
+    await fake.waitForHook('failed');
+    await fake.waitForHook('prompt-submitted');
+    await fake.waitFor('Reprise');
+    await fake.waitForHook('turn-finished');
     expect(fake.output()).toContain('quota_auto_resume_fired');
   });
 

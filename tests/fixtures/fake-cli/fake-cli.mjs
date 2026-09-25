@@ -1,4 +1,4 @@
-/* global process, console, fetch */
+/* global process, console, fetch, setTimeout */
 // Fake agent CLI (research.md R13): replays the JSON scenario named by FAKE_CLI_SCENARIO so PTY,
 // hook and lifecycle behavior can be tested deterministically without a real agent or account.
 //
@@ -7,7 +7,9 @@
 //   burst: number                   extra lines printed as fast as possible
 //   permission: string              asks `? Exécuter : <cmd> (allow/deny)` and waits for the answer,
 //                                   unless the hook reply already allows it (ruleKey `Bash(<cmd>)`)
-//   rateLimit: { resetAt, exit }    prints a rate-limit message; exits (code 1) or waits for "continue"
+//   rateLimit: { resetAt, exit, nativeResume }
+//                                   prints a rate-limit message; exits (code 1), resumes on its own
+//                                   like Claude Code's quota_auto_resume_fired, or waits for "continue"
 //   hooks: object[]                 raw hook payloads posted after the output
 //   renameBranch: string            runs `git branch -m <name>` in the working directory
 //   signal: object                  final hook payload (default { type: 'turn-finished' })
@@ -74,11 +76,17 @@ async function runTurn(line) {
   }
 
   if (scenario.rateLimit) {
-    const { resetAt, exit } = scenario.rateLimit;
+    const { resetAt, exit, nativeResume } = scenario.rateLimit;
     console.log(`Rate limit reached. Resets at ${resetAt}`);
     await hook({ type: 'failed', kind: 'rate-limit', message: 'Rate limited', resetAt });
     if (exit) process.exit(1);
-    while ((await nextLine()) !== 'continue');
+    if (nativeResume) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      console.log('quota_auto_resume_fired');
+      await hook({ type: 'prompt-submitted' });
+    } else {
+      while ((await nextLine()) !== 'continue');
+    }
     console.log('Reprise');
   }
 
