@@ -149,6 +149,14 @@ describe('workspace channels', () => {
     expect(workspaces.list().map((w) => w.id)).toEqual([initialized.id]);
   });
 
+  it('tells whether a workspace has uncommitted changes', async () => {
+    const repo = await makeRepo('app');
+    const opened = await services['workspace:open']({ path: repo });
+    expect(await services['workspace:hasLocalChanges']({ id: opened.id })).toBe(false);
+    await writeFile(join(repo, 'draft.txt'), 'wip\n');
+    expect(await services['workspace:hasLocalChanges']({ id: opened.id })).toBe(true);
+  });
+
   it('starts clones in the background and returns their job id', async () => {
     const source = await makeRepo('source');
     const { jobId } = services['workspace:clone']({

@@ -144,15 +144,14 @@ export class AgentManager {
    * marked, to be resumed once it is back.
    */
   async suspend(workspaceId: string): Promise<void> {
-    const workspace = this.workspaces.get(workspaceId);
-    if (!workspace) return;
     await Promise.all(
       [...this.running]
         .filter(([, running]) => running.workspaceId === workspaceId)
         .map(([id]) => this.stop(id)),
     );
-    const current = this.workspaces.get(workspaceId);
-    if (current) await this.markStale(current, UNAVAILABLE_MESSAGE);
+    // Read after the stops, so the agents are marked from their last saved state.
+    const workspace = this.workspaces.get(workspaceId);
+    if (workspace) await this.markStale(workspace, UNAVAILABLE_MESSAGE);
   }
 
   /** The agents of the workspace, those without a process marked « à reprendre ». */
