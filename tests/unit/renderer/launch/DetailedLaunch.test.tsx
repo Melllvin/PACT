@@ -143,6 +143,15 @@ describe('DetailedLaunch', () => {
     expect(inherited('Permissions')).toBe(true);
   });
 
+  it('keeps a permission level chosen when it is pressed again', async () => {
+    const { user, draft } = setup();
+    const allAuto = within(field('Permissions')).getByRole('radio', { name: 'Tout auto' });
+    await user.click(allAuto);
+    await user.click(allAuto);
+    expect(draft()?.common.permissionLevel).toBe('always-allow');
+    expect(allAuto.getAttribute('aria-checked')).toBe('true');
+  });
+
   it('marks an override with ≠, counts it on the agent, and goes back to the common value (US6 scenario 3)', async () => {
     const { user, draft } = setup();
     await user.click(agent(2));

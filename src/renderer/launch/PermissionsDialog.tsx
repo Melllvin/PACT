@@ -82,20 +82,19 @@ export function PermissionsDialog({ agentCount, clis, onConfirm, onCancel }: Pro
           <DialogDescription className="font-mono text-[11px]">
             Demandé une seule fois, au premier lancement
           </DialogDescription>
-          <RadioGroup
-            aria-label="Que peuvent faire les agents ?"
-            value={level}
-            onValueChange={(value) => {
-              const chosen = LEVELS.find((option) => option.level === value);
-              if (chosen) setLevel(chosen.level);
-            }}
-          >
+          <RadioGroup aria-label="Que peuvent faire les agents ?" value={level}>
             {LEVELS.map((option) => (
               <label
                 key={option.level}
                 className="flex cursor-pointer gap-2.5 rounded-xl border border-white/8 px-3 py-2.5 transition-[background-color,border-color] duration-200 has-data-[state=checked]:border-primary/60 has-data-[state=checked]:bg-primary/6"
               >
-                <RadioGroupItem value={option.level} />
+                {/* Arrow keys click the radio they move to, so this also follows the keyboard. */}
+                <RadioGroupItem
+                  value={option.level}
+                  onClick={() => {
+                    setLevel(option.level);
+                  }}
+                />
                 <span className="flex flex-col gap-[3px]">
                   <span className="flex items-center gap-2 text-[13.5px] font-medium">
                     {option.name}

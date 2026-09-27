@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { PermissionsDialog } from '../../../../src/renderer/launch/PermissionsDialog';
@@ -103,6 +103,36 @@ describe('PermissionsDialog', () => {
       autoResume: false,
       scope: 'project',
     });
+  });
+
+  it('moves between the levels with the arrow keys', async () => {
+    const user = userEvent.setup();
+    const { onConfirm } = renderDialog([claude]);
+    // Radix moves the focus on an arrow key, then clicks the radio it lands on; jsdom does not
+    // move the focus itself.
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    act(() => {
+      radio('Demander pour les actions sensibles').focus();
+    });
+    expect(checked(radio('Demander pour les actions sensibles'))).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Lancer 3 agents' }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ level: 'ask-sensitive' }));
+  });
+
+  it('says « agent » for a single agent', () => {
+    render(
+      <PermissionsDialog agentCount={1} clis={[claude]} onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: 'Lancer 1 agent' })).toBeDefined();
+  });
+
+  it('keeps the chosen scope when it is pressed again', async () => {
+    const user = userEvent.setup();
+    const { onConfirm } = renderDialog();
+    await user.click(radio('Tous les projets'));
+    expect(checked(radio('Tous les projets'))).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Lancer 3 agents' }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ scope: 'global' }));
   });
 
   it('marks the default level and says Enter picks it (1m)', () => {

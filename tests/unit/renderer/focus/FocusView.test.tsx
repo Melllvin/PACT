@@ -91,6 +91,13 @@ describe('FocusView', () => {
     expect(props.onSelect).toHaveBeenCalledWith(agent(2).id);
   });
 
+  it('stays on the current agent when its pill is pressed again', async () => {
+    const user = userEvent.setup();
+    const { props } = setup();
+    await user.click(screen.getByRole('radio', { name: 'Claude Code 1' }));
+    expect(props.onSelect).not.toHaveBeenCalled();
+  });
+
   it('goes back to the tiles with « ‹ Tuiles » (US5 scenario 3)', async () => {
     const user = userEvent.setup();
     const { props } = setup();
