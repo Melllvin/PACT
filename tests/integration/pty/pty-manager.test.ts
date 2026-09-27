@@ -165,6 +165,27 @@ describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
     expect(exits.has('long')).toBe(true);
   });
 
+  // T146: node-pty's fallback killed the shell PID 5 s after the terminal was gone, when Windows
+  // may already have given it to another process.
+  it('kills no process late after stopping a CLI', { timeout: 20_000 }, async () => {
+    manager.start('late', { file: process.execPath, args: [FAKE_CLI], env: env(), cwd: dir });
+    await waitFor('late', '> ');
+    const late: unknown[] = [];
+    const kill = process.kill.bind(process);
+    const stoppedAt = Date.now();
+    process.kill = (pid: number, signal?: string | number) => {
+      if (Date.now() - stoppedAt > 2000) late.push(pid);
+      return kill(pid, signal);
+    };
+    try {
+      await manager.kill('late');
+      await new Promise((r) => setTimeout(r, 6500));
+    } finally {
+      process.kill = kill;
+    }
+    expect(late).toEqual([]);
+  });
+
   it.runIf(isWindows)('runs an npm .cmd shim through the cmd.exe wrapper', async () => {
     const shimDir = join(dir, 'Mes Projets', 'Développement');
     await mkdir(shimDir, { recursive: true });
