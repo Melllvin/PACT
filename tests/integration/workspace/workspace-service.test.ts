@@ -315,6 +315,21 @@ describe('WorkspaceService.update', () => {
     expect(restored?.permissionOverride).toEqual(permissionOverride);
   });
 
+  it('keeps the last valid workspace when a change cannot be saved (T146)', async () => {
+    const repo = await makeRepo('app');
+    const service = createService();
+    const { id } = await service.open(repo);
+    const saved = service.get(id)?.lastOpenedAt;
+    await expect(
+      service.update(id, (workspace) => ({ ...workspace, lastOpenedAt: 'not a date' })),
+    ).rejects.toThrow();
+    expect(service.get(id)?.lastOpenedAt).toBe(saved);
+    const permissionOverride = { level: 'always-ask', autoResume: true, scope: 'project' } as const;
+    await service.update(id, (workspace) => ({ ...workspace, permissionOverride }));
+    const [restored] = await createService().restore();
+    expect(restored).toMatchObject({ name: 'app', permissionOverride });
+  });
+
   it('refuses an unknown workspace (NOT_FOUND)', async () => {
     await expect(createService().update('abc', (w) => w)).rejects.toMatchObject({
       code: 'NOT_FOUND',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentSignal } from '../../../../src/main/agents/adapters/types';
 import { applyExit, applySignal } from '../../../../src/main/agents/agent-state';
-import type { Agent, AgentState } from '../../../../src/shared/model';
+import { agentSchema, type Agent, type AgentState } from '../../../../src/shared/model';
 
 // data-model.md « AgentState — transitions », research.md R6 and the T049 findings.
 
@@ -164,6 +164,16 @@ describe('applyExit', () => {
       state: 'error',
       lastError: { code: 1, kind: 'rate-limit', message: 'Limite atteinte' },
     });
+  });
+
+  it('saves a crash without an exit code as a valid agent (T146)', () => {
+    const exited = applyExit(agent({ state: 'working' }), null);
+    expect(exited.lastError).toEqual({
+      code: null,
+      kind: 'crash',
+      message: 'Le processus s’est arrêté.',
+    });
+    expect(agentSchema.safeParse(exited).success).toBe(true);
   });
 
   it('keeps a closed agent closed', () => {
