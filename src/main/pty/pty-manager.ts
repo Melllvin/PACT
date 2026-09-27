@@ -19,7 +19,8 @@ type Disposable = { dispose(): void };
 /** The part of node-pty's IPty that PACT relies on (injectable for tests). */
 export interface PtyProcess {
   onData(listener: (data: string) => void): Disposable;
-  onExit(listener: (event: { exitCode: number }) => void): Disposable;
+  /** ConPTY may report no code for a process it killed. */
+  onExit(listener: (event: { exitCode: number | undefined }) => void): Disposable;
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
@@ -55,7 +56,7 @@ export class PtyManager {
   private readonly sessions = new Map<string, Session>();
   private readonly histories = new Map<string, string>();
   private readonly dataListeners = new Set<(id: string, data: string) => void>();
-  private readonly exitListeners = new Set<(id: string, code: number) => void>();
+  private readonly exitListeners = new Set<(id: string, code: number | null) => void>();
   private readonly spawn: PtySpawn;
   private readonly platform: NodeJS.Platform;
 
@@ -93,7 +94,7 @@ export class PtyManager {
     pty.onExit(({ exitCode }) => {
       this.flush(id, session);
       this.sessions.delete(id);
-      for (const listener of this.exitListeners) listener(id, exitCode);
+      for (const listener of this.exitListeners) listener(id, exitCode ?? null);
       markExited();
     });
   }
@@ -142,7 +143,7 @@ export class PtyManager {
     return () => this.dataListeners.delete(listener);
   }
 
-  onExit(listener: (id: string, code: number) => void): () => void {
+  onExit(listener: (id: string, code: number | null) => void): () => void {
     this.exitListeners.add(listener);
     return () => this.exitListeners.delete(listener);
   }

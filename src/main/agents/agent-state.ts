@@ -51,7 +51,7 @@ export function applySignal(agent: Agent, signal: AgentSignal): Agent {
 }
 
 /** The process ended without PACT closing the agent: « à reprendre » (exit code 0 included). */
-export function applyExit(agent: Agent, code: number): Agent {
+export function applyExit(agent: Agent, code: number | null): Agent {
   if (agent.state === 'closed') return agent;
   const lastError =
     agent.lastError?.kind === 'rate-limit'
@@ -62,7 +62,9 @@ export function applyExit(agent: Agent, code: number): Agent {
           message:
             code === 0
               ? 'Le processus s’est terminé.'
-              : `Le processus s’est arrêté (code ${String(code)}).`,
+              : code === null
+                ? 'Le processus s’est arrêté.'
+                : `Le processus s’est arrêté (code ${String(code)}).`,
         };
   return { ...agent, state: 'error', lastError };
 }

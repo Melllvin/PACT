@@ -173,7 +173,7 @@ describe('PtyManager', () => {
   });
 
   it('kills a terminal and resolves once it has exited', async () => {
-    const exits: number[] = [];
+    const exits: (number | null)[] = [];
     manager.onExit((_id, code) => exits.push(code));
     manager.start('a1', spec);
     await manager.kill('a1');

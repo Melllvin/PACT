@@ -545,7 +545,7 @@ export class AgentManager {
     }, this.idleMs);
   }
 
-  private async exited(id: string, code: number) {
+  private async exited(id: string, code: number | null) {
     const running = this.running.get(id);
     if (!running) return;
     clearTimeout(running.idle);

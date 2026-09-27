@@ -16,7 +16,7 @@ const stripAnsi = (text: string) =>
 let manager: PtyManager;
 let dir: string;
 let output: Map<string, string>;
-let exits: Map<string, number>;
+let exits: Map<string, number | null>;
 let dataEvents: Map<string, number>;
 let startedAt: Map<string, number>;
 

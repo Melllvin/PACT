@@ -3,7 +3,12 @@ import { watch, type FSWatcher } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { IpcFailure } from '../../shared/ipc';
-import { MAX_RECENT_PROJECTS, type RecentProject, type Workspace } from '../../shared/model';
+import {
+  MAX_RECENT_PROJECTS,
+  workspaceSchema,
+  type RecentProject,
+  type Workspace,
+} from '../../shared/model';
 import type { GitService } from '../git/git-service';
 import type { AppState, Stores } from '../persistence/store';
 
@@ -69,7 +74,9 @@ export class WorkspaceService {
   async update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace> {
     const workspace = this.open_.get(id);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
-    const updated = change(workspace);
+    // Validated before it replaces the open workspace: a change that cannot be saved must not
+    // stay in memory, or every later save of this workspace would fail too (T146).
+    const updated = workspaceSchema.parse(change(workspace));
     this.open_.set(id, updated);
     await this.stores.workspace(id).write(updated);
     return updated;
