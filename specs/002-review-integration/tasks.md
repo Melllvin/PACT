@@ -30,14 +30,15 @@ story seule.
 
 **Purpose**: outillage commun aux stories.
 
-- [ ] T001 [P] Test puis ajout du composant shadcn `dropdown-menu` (rôle `menu`, ouverture au clavier, Échap ferme, focus rendu au déclencheur) dans `tests/unit/renderer/components/dropdown-menu.test.tsx` et `src/renderer/components/ui/dropdown-menu.tsx`, ajouté par le CLI shadcn comme en R16 de 001.
-- [ ] T002 [P] Tests puis nouvelles étapes du faux CLI (research R11), dans `tests/unit/fixtures/fake-cli.test.ts`, `tests/fixtures/fake-cli/fake-cli.mjs` et de nouveaux scénarios sous `tests/fixtures/fake-cli/scenarios/` :
+- [X] T001 [P] Test puis ajout du composant shadcn `dropdown-menu` (rôle `menu`, ouverture au clavier, Échap ferme, focus rendu au déclencheur) dans `tests/unit/renderer/components/dropdown-menu.test.tsx` et `src/renderer/components/ui/dropdown-menu.tsx`, ajouté par le CLI shadcn comme en R16 de 001.
+- [X] T002 [P] Tests puis nouvelles étapes du faux CLI (research R11), dans `tests/unit/fixtures/fake-cli.test.ts`, `tests/fixtures/fake-cli/fake-cli.mjs` et de nouveaux scénarios sous `tests/fixtures/fake-cli/scenarios/` :
   - `write` (chemin, contenu), `delete`, `rename` et `commit` (message), relatifs à son dossier courant ;
   - un écho de la saisie collée entre crochets (`ESC[200~ … ESC[201~`), pour vérifier les consignes multilignes.
-- [ ] T003 [P] Tests puis environnement git commun (research R2) dans `tests/unit/main/git/git-service.test.ts` et `src/main/git/git-service.ts` :
+- [X] T003 [P] Tests puis environnement git commun (research R2) dans `tests/unit/main/git/git-service.test.ts` et `src/main/git/git-service.ts` :
   - chaque appel tourne avec `LC_ALL=C` et `-c core.quotePath=false` ;
   - un chemin accentué revient en UTF-8 ;
   - un message d'erreur revient en anglais.
+  - Note : aucune méthode de 001 ne renvoie de chemin de fichier ; le chemin accentué en UTF-8 est vérifié par T008, sur le premier `diff`. Test d'environnement écrit dans `tests/integration/git/git-service.test.ts` (vrai git).
 
 ---
 
@@ -71,7 +72,8 @@ toutes les stories dépendent.
   - même arbre ⇒ même id ;
   - numstat et `--raw` donnent statut, lignes et blob ; binaire détecté ;
   - un fichier qui ne diffère que par CRLF reste listé avec `eolOnly` ;
-  - le diff d'un fichier ignore les CR de fin de ligne.
+  - le diff d'un fichier ignore les CR de fin de ligne ;
+  - un chemin accentué revient en UTF-8, sans guillemets (report de T003).
 - [ ] T009 Tests de la file de consignes de `AgentManager` (research R7) dans `tests/unit/main/agents/agent-manager.test.ts` :
   - écrite tout de suite quand l'agent est `awaiting-prompt` ou `done` ;
   - rien écrit en `awaiting-answer`, `working` ou `starting` ;
