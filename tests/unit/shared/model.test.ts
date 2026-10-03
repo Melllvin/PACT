@@ -7,6 +7,7 @@ import {
   freeTerminalSchema,
   permissionPreferenceSchema,
   recentProjectsSchema,
+  reviewCommentSchema,
   scheduledResumeSchema,
   workspaceSchema,
   type Agent,
@@ -35,6 +36,7 @@ const agent = (position: number, overrides: Partial<Agent> = {}): Agent => ({
   state: 'starting',
   lastError: null,
   scheduledResume: null,
+  review: { seen: {}, comments: [] },
   ...overrides,
 });
 
@@ -47,6 +49,7 @@ const workspace = (agents: Agent[]): Workspace => ({
   freeTerminals: [],
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
+  testCommand: null,
   lastOpenedAt: now,
   status: 'available',
 });
@@ -212,5 +215,60 @@ describe('ScheduledResume and FreeTerminal', () => {
   it('describes a free terminal', () => {
     const terminal = { id: uuid(9), workspaceId: 'w1', cwd: '/repo', shell: '/bin/zsh' };
     expect(freeTerminalSchema.safeParse(terminal).success).toBe(true);
+  });
+});
+
+// 002 — review state per agent and test command per workspace (data-model, research R9).
+describe('Agent.review (002)', () => {
+  const comment = {
+    id: uuid(9),
+    path: 'src/a.ts',
+    line: 3,
+    text: 'Renommer en total',
+    createdAt: now,
+  };
+
+  it('defaults to nothing seen and no comment, so a workspace file from 001 still loads', () => {
+    const { review: _, ...from001 } = agent(1);
+    const parsed = workspaceSchema.parse({ ...workspace([]), agents: [from001] });
+    expect(parsed.agents[0]?.review).toEqual({ seen: {}, comments: [] });
+  });
+
+  it('remembers the blob seen per path and the comments in order', () => {
+    const review = { seen: { 'src/a.ts': 'a'.repeat(40) }, comments: [comment] };
+    expect(agentSchema.parse(agent(1, { review })).review).toEqual({
+      ...review,
+      comments: [{ ...comment, treated: false }],
+    });
+  });
+
+  it.each([
+    ['an empty text', { text: '' }],
+    ['a text over 4000 characters', { text: 'x'.repeat(4001) }],
+    ['line 0', { line: 0 }],
+    ['a fractional line', { line: 1.5 }],
+  ])('rejects a comment with %s', (_, change) => {
+    expect(reviewCommentSchema.safeParse({ ...comment, ...change }).success).toBe(false);
+  });
+
+  it('accepts a 4000-character comment, treated or not', () => {
+    expect(
+      reviewCommentSchema.safeParse({ ...comment, text: 'x'.repeat(4000), treated: true }).success,
+    ).toBe(true);
+  });
+});
+
+describe('Workspace.testCommand (002)', () => {
+  it('is null by default: the command is detected from the repository', () => {
+    const { testCommand: _, ...from001 } = workspace([]);
+    expect(workspaceSchema.parse(from001).testCommand).toBeNull();
+  });
+
+  it('accepts a command and refuses an empty string', () => {
+    expect(workspaceSchema.parse({ ...workspace([]), testCommand: 'npm test' }).testCommand).toBe(
+      'npm test',
+    );
+    expect(workspaceSchema.safeParse({ ...workspace([]), testCommand: '' }).success).toBe(false);
+    expect(workspaceSchema.safeParse({ ...workspace([]), testCommand: '  ' }).success).toBe(false);
   });
 });

@@ -1,0 +1,4 @@
+{
+  "echo": true,
+  "permission": "rm fichier.txt"
+}

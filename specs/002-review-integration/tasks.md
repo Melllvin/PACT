@@ -80,6 +80,7 @@ toutes les stories dépendent.
   - N consignes écrites une par passage à l'état prêt, jamais toutes d'un coup ;
   - texte multiligne envoyé entre `ESC[200~` et `ESC[201~` puis `\r` ;
   - « Relancer » (retype de 001) marche toujours.
+  - Note : `AgentManager` n'a que des tests d'intégration (avec le faux CLI) ; ces tests vont dans `tests/integration/agents/agent-actions.test.ts`, à côté de ceux de « Relancer », avec le scénario `ask-then-echo`.
 
 ### Implementation (Green)
 
