@@ -108,6 +108,13 @@ describe('GitService.snapshot (R1)', () => {
     expect(git(repo, 'show', `${tree}:a.txt`)).toBe('UN\ndeux\ntrois');
   });
 
+  it('works in a worktree without an index yet', async () => {
+    await agentWorks();
+    await rm(indexPath());
+    const { tree } = await service.snapshot(worktree);
+    expect(git(repo, 'show', `${tree}:b.txt`)).toBe('b\nb2');
+  });
+
   it('gives the same tree id for the same content', async () => {
     await agentWorks();
     const first = await service.snapshot(worktree);
@@ -178,6 +185,22 @@ describe('GitService.changedFiles (R2)', () => {
     expect(file).toMatchObject({ path: 'big.txt', tooLarge: true, added: 5001 });
   });
 
+  it('flags files over 1 MB as too large, whatever their line count', async () => {
+    await write(join(worktree, 'dump.txt'), `${'x'.repeat(1024 * 1024)}\n`);
+    const { tree } = await service.snapshot(worktree);
+    const [file] = await service.changedFiles(worktree, git(repo, 'rev-parse', 'main'), tree);
+    expect(file).toMatchObject({ path: 'dump.txt', tooLarge: true, added: 1 });
+  });
+
+  it('lists a deleted file alone, without blob', async () => {
+    await rm(join(worktree, 'gone.txt'));
+    const { tree } = await service.snapshot(worktree);
+    const files = await service.changedFiles(worktree, git(repo, 'rev-parse', 'main'), tree);
+    expect(files).toEqual([
+      expect.objectContaining({ path: 'gone.txt', status: 'deleted', removed: 1, blob: null }),
+    ]);
+  });
+
   it('keeps a file that only differs by line endings, flagged eolOnly', async () => {
     await write(join(worktree, 'crlf.txt'), 'x\r\ny\r\n');
     const { tree } = await service.snapshot(worktree);
@@ -234,6 +257,45 @@ describe('GitService.fileDiff (R2)', () => {
       { kind: 'del', oldNo: 2, newNo: null, text: 'y' },
       { kind: 'add', oldNo: null, newNo: 2, text: 'Y' },
     ]);
+  });
+
+  it('gives the removed lines of a deleted file, sized from main', async () => {
+    await rm(join(worktree, 'gone.txt'));
+    const base = git(repo, 'rev-parse', 'main');
+    const { tree } = await service.snapshot(worktree);
+    expect(
+      await service.fileDiff(worktree, { base, tree, path: 'gone.txt', oldPath: null }),
+    ).toEqual({
+      path: 'gone.txt',
+      hunks: [
+        {
+          oldStart: 1,
+          newStart: 0,
+          lines: [{ kind: 'del', oldNo: 1, newNo: null, text: 'supprimé' }],
+        },
+      ],
+      size: 'supprimé\n'.length + 1,
+    });
+  });
+
+  it('gives no hunk for a file over 1 MB, only its size', async () => {
+    const dump = `${'x'.repeat(1024 * 1024)}\n`;
+    await write(join(worktree, 'dump.txt'), dump);
+    const base = git(repo, 'rev-parse', 'main');
+    const { tree } = await service.snapshot(worktree);
+    expect(
+      await service.fileDiff(worktree, { base, tree, path: 'dump.txt', oldPath: null }),
+    ).toEqual({ path: 'dump.txt', hunks: [], size: dump.length });
+  });
+
+  it('gives no hunk for a file left as it was on main', async () => {
+    const base = git(repo, 'rev-parse', 'main');
+    const { tree } = await service.snapshot(worktree);
+    expect(await service.fileDiff(worktree, { base, tree, path: 'b.txt', oldPath: null })).toEqual({
+      path: 'b.txt',
+      hunks: [],
+      size: 2,
+    });
   });
 
   it('gives no hunk for a binary or too large file, only its size', async () => {
