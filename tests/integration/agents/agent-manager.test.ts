@@ -33,6 +33,12 @@ const baseEnv: Record<string, string> = { ...gitEnv };
 
 /** Prints `? Exécuter : …`: shows the terminal fallback when a CLI has no hook for a dialog. */
 class TerminalDialogFake extends FakeAdapter {
+  // No hook reports the dialog: the terminal output alone must.
+  override mapHookEvent(payload: unknown): AgentSignal | null {
+    const signal = super.mapHookEvent(payload);
+    return signal?.type === 'awaiting-answer' ? null : signal;
+  }
+
   override mapOutput(chunk: string): AgentSignal | null {
     const match = /\? Exécuter : (.+) \(allow\/deny\)/.exec(chunk);
     return match?.[1] ? { type: 'awaiting-answer', summary: match[1] } : null;
