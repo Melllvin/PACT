@@ -31,6 +31,7 @@ const agent = (overrides: Partial<Agent> = {}): Agent => ({
   initialPrompt: null,
   lastError: { code: null, kind: 'rate-limit', message: 'Rate limited' },
   scheduledResume: null,
+  review: { seen: {}, comments: [] },
   alwaysAllowRules: [],
   ...overrides,
 });

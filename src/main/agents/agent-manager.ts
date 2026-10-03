@@ -64,6 +64,10 @@ type InstalledCli = { adapter: CliAdapter; executablePath: string };
 const isParentClaudeVariable = (name: string) =>
   name === 'CLAUDECODE' || name.startsWith('CLAUDE_CODE_');
 
+const PASTE_START = '\x1b[200~';
+const PASTE_END = '\x1b[201~';
+const isReady = (state: Agent['state']) => state === 'awaiting-prompt' || state === 'done';
+
 const RESTORED_MESSAGE = 'PACT a redémarré : agent à reprendre.';
 const UNAVAILABLE_MESSAGE = 'Dossier du workspace introuvable : agent arrêté.';
 
@@ -85,8 +89,13 @@ export class AgentManager {
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
-  /** Initial prompts « Relancer » types again once the new session shows its prompt. */
-  private readonly retype = new Map<string, string>();
+  /**
+   * Prompts waiting for the agent to be ready (002 R7): the initial prompt « Relancer » types
+   * again, review comments and shortcuts. One is typed per ready transition.
+   */
+  private readonly prompts = new Map<string, string[]>();
+  /** Agents a prompt was typed to, until they leave the ready state. */
+  private readonly promptTyped = new Set<string>();
   private readonly unsubscribe: (() => void)[];
   /** Launches run one at a time: each one reads the positions and ports the previous one took. */
   private queue: Promise<unknown> = Promise.resolve();
@@ -240,8 +249,21 @@ export class AgentManager {
     const { workspace, agent } = this.inError(id);
     this.resumes.forget(id);
     await this.stop(id);
-    if (agent.initialPrompt !== null) this.retype.set(id, agent.initialPrompt);
+    if (agent.initialPrompt !== null) {
+      this.prompts.set(id, [agent.initialPrompt, ...(this.prompts.get(id) ?? [])]);
+    }
     await this.startAgain(workspace, agent, null);
+  }
+
+  /**
+   * 002 R7 — a prompt typed once the agent awaits one or is done, never while it works or waits
+   * for an answer. Multi-line text goes as a bracketed paste, so it stays one prompt.
+   */
+  async sendPrompt(id: string, text: string): Promise<void> {
+    await Promise.resolve();
+    this.find(id);
+    this.prompts.set(id, [...(this.prompts.get(id) ?? []), text]);
+    this.flushPrompt(id);
   }
 
   /** « Journal »: the output kept for the agent, across its restarts. */
@@ -254,6 +276,7 @@ export class AgentManager {
   async close(id: string, { removeWorktree }: { removeWorktree: boolean }): Promise<void> {
     const { workspace, agent } = this.find(id);
     this.resumes.forget(id);
+    this.prompts.delete(id);
     await this.stop(id);
     if (removeWorktree) {
       // The agent may have renamed its branch since the last check.
@@ -304,7 +327,7 @@ export class AgentManager {
 
   /** Ends the process without it counting as a crash: PACT asked for it. */
   private async stop(id: string) {
-    this.retype.delete(id);
+    this.promptTyped.delete(id);
     this.pendingRule.delete(id);
     this.branches.unwatch(id);
     const running = this.running.get(id);
@@ -434,6 +457,7 @@ export class AgentManager {
         state: 'starting',
         lastError: null,
         scheduledResume: null,
+        review: { seen: {}, comments: [] },
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
@@ -552,7 +576,7 @@ export class AgentManager {
     this.running.delete(id);
     this.hooks.unregister(id);
     this.branches.unwatch(id);
-    this.retype.delete(id);
+    this.promptTyped.delete(id);
     this.pendingRule.delete(id);
     await this.change(running.workspaceId, id, (agent) => applyExit(agent, code));
   }
@@ -602,11 +626,19 @@ export class AgentManager {
     if (!changed) return;
     this.emit(changed);
     this.resumes.sync(changed);
-    const prompt = this.retype.get(id);
-    if (changed.state === 'awaiting-prompt' && prompt !== undefined && this.running.has(id)) {
-      this.retype.delete(id);
-      this.pty.write(id, `${prompt}\r`);
-    }
+    if (isReady(changed.state)) this.flushPrompt(id);
+    else this.promptTyped.delete(id);
+  }
+
+  private flushPrompt(id: string) {
+    const queue = this.prompts.get(id);
+    const state = this.find(id).agent.state;
+    if (!queue?.length || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
+      return;
+    const text = queue.shift() ?? '';
+    if (queue.length === 0) this.prompts.delete(id);
+    this.promptTyped.add(id);
+    this.pty.write(id, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}\r` : `${text}\r`);
   }
 
   private emit({ id, state, lastError, scheduledResume }: Agent) {

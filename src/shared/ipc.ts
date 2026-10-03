@@ -8,9 +8,20 @@ import {
   permissionLevelSchema,
   permissionPreferenceSchema,
   recentProjectsSchema,
+  repoPathSchema,
+  reviewCommentSchema,
   scheduledResumeSchema,
   workspaceSchema,
 } from './model';
+import {
+  conflictFileSchema,
+  fileDiffSchema,
+  integrationAfterSchema,
+  integrationModeSchema,
+  integrationSchema,
+  reviewSnapshotSchema,
+  testRunSchema,
+} from './review';
 
 // contracts/ipc.md — every channel is validated on both sides of the bridge.
 
@@ -24,6 +35,10 @@ export const IPC_ERROR_CODES = [
   'NOT_FOUND',
   'CLONE_FAILED',
   'INTERNAL',
+  // 002: local changes block an integration (FR-021), main moved twice, git's own error (FR-023).
+  'LOCAL_CHANGES',
+  'MAIN_MOVED',
+  'GIT_FAILED',
 ] as const;
 
 export const ipcErrorSchema = z.object({
@@ -31,6 +46,8 @@ export const ipcErrorSchema = z.object({
   message: z.string(),
   /** Existing workspace for ALREADY_OPEN, so the renderer can switch to its tab (FR-004). */
   workspaceId: z.string().optional(),
+  /** Files with local changes for LOCAL_CHANGES (FR-021). */
+  files: z.array(z.string()).optional(),
 });
 export type IpcError = z.infer<typeof ipcErrorSchema>;
 
@@ -40,6 +57,7 @@ export class IpcFailure extends Error {
     readonly code: IpcError['code'],
     message: string,
     readonly workspaceId?: string,
+    readonly files?: string[],
   ) {
     super(message);
     this.name = 'IpcFailure';
@@ -52,6 +70,7 @@ export function toIpcError(error: unknown): IpcError {
       code: error.code,
       message: error.message,
       ...(error.workspaceId === undefined ? {} : { workspaceId: error.workspaceId }),
+      ...(error.files === undefined ? {} : { files: error.files }),
     };
   }
   const parsed = ipcErrorSchema.safeParse(error);
@@ -64,6 +83,9 @@ const nonEmpty = z.string().trim().min(1);
 /** POSIX, drive-letter or UNC absolute path: paths from the renderer are never resolved relatively. */
 const absolutePath = z.string().regex(/^(\/|[A-Za-z]:[\\/]|\\\\)/, 'chemin absolu attendu');
 const agentRef = z.object({ agentId: z.uuid() });
+const fileRef = agentRef.extend({ path: repoPathSchema });
+const integrationRef = z.object({ integrationId: z.uuid() });
+const commentText = reviewCommentSchema.shape.text;
 const port = z.int().min(1).max(65535);
 const counters = z.object({ freeTerminal: z.int().nonnegative() }).catchall(z.int().nonnegative());
 
@@ -142,6 +164,52 @@ export const ipcRequests = {
     z.object({ termId: nonEmpty, cols: z.int().min(1).max(1000), rows: z.int().min(1).max(1000) }),
     none,
   ),
+  // 002 — review (screen 1h) and integration (screen 1q).
+  'review:open': request(agentRef, reviewSnapshotSchema),
+  'review:close': request(agentRef, none),
+  'review:fileDiff': request(fileRef, fileDiffSchema),
+  'review:setSeen': request(fileRef.extend({ seen: z.boolean() }), none),
+  'review:comment': request(
+    fileRef.extend({ line: z.int().min(1), text: commentText }),
+    reviewCommentSchema,
+  ),
+  'review:send': request(
+    z.union([
+      agentRef.extend({ kind: z.enum(['fix-comments', 'failing-tests', 'conflict']) }),
+      agentRef.extend({ kind: z.literal('request'), text: nonEmpty.max(4000) }),
+    ]),
+    none,
+  ),
+  'review:runTests': request(agentRef, testRunSchema),
+  'review:cancelTests': request(agentRef, none),
+  'workspace:setTestCommand': request(
+    z.object({ workspaceId: nonEmpty, command: nonEmpty.nullable() }),
+    none,
+  ),
+  'integration:start': request(
+    agentRef.extend({
+      mode: integrationModeSchema,
+      message: nonEmpty,
+      after: integrationAfterSchema,
+      confirmWorking: z.boolean().optional(),
+    }),
+    integrationSchema,
+  ),
+  'integration:resolve': request(
+    z.union([
+      integrationRef.extend({
+        path: repoPathSchema,
+        hunk: z.int().nonnegative(),
+        choice: z.enum(['main', 'agent', 'both']),
+      }),
+      integrationRef.extend({ path: repoPathSchema, content: z.string().max(16_000_000) }),
+    ]),
+    conflictFileSchema,
+  ),
+  'integration:openInEditor': request(integrationRef.extend({ path: repoPathSchema }), none),
+  'integration:askAgent': request(integrationRef, integrationSchema),
+  'integration:finish': request(integrationRef, integrationSchema),
+  'integration:cancel': request(integrationRef, none),
 } as const;
 
 export const ipcEvents = {
@@ -161,6 +229,11 @@ export const ipcEvents = {
     // Clone finished and the repository is open (US1 scenario 2).
     z.object({ jobId: z.string(), workspace: workspaceSchema }),
   ]),
+  'review:changed': reviewSnapshotSchema,
+  /** Agents to review, for the Revue badge and « Revue → » (FR-002, FR-003). */
+  'review:pending': z.object({ workspaceId: z.string(), agentIds: z.array(z.uuid()) }),
+  'review:tests': testRunSchema,
+  'integration:state': integrationSchema,
 } as const;
 
 export type IpcRequestChannel = keyof typeof ipcRequests;
