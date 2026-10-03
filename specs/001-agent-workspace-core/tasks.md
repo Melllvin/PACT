@@ -496,3 +496,7 @@ Revue, Réglages, Workflows, notifications ni raccourcis ; le nom reste PACT ; m
 - [X] T159 Tests d'abord puis primitives (`button`, `dialog`, `input`) et écrans restylés selon la maquette interactive : barre d'onglets, accueil, workspace vide, tuiles, Focus, À faire, menu rapide, autorisations, mode détaillé, dialogues, sans changer rôles, noms accessibles ni structure testée ; entrée échelonnée des éléments au changement de vue, coupée en `prefers-reduced-motion` (FR-042)
 - [X] T160 Tests d'abord puis effets d'ambiance de R17 dans `src/renderer/effects/` (remplace T156) : fonctions pures testées (déplacement des points par le curseur et les ondes, fibres, zone des tuiles), canvas de fond sous les tuiles (rien sur les terminaux, FR-020), vagues du menu rapide ; rien sous `prefers-reduced-motion` ni sans canvas, boucle arrêtée au repos
 
+
+## Phase 22: Convergence
+
+- [X] T161 Faire tourner `tests/integration/agents/free-terminals.test.ts` aussi sous Windows : retirer `describe.skipIf(isWindows)`, ouvrir le shell que `freeTerminalShell` choisit (pwsh / powershell.exe) au lieu de `/bin/sh` forcé, et vérifier ouverture, commande tapée, sortie du shell, réouverture et suspension avec ConPTY per FR-025, Constitution II (partial)

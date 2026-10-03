@@ -64,12 +64,14 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
-describe.skipIf(isWindows)('FreeTerminals', () => {
+// Windows runs the shell PACT picks there (pwsh, else powershell.exe) through ConPTY.
+describe('FreeTerminals', { timeout: 30_000 }, () => {
   it('opens shells at the root of the main repository and saves them', async () => {
+    const { file: shell } = await freeTerminalShell(env, process.platform);
     const opened = await create().open(workspace.id, 2);
     expect(opened).toHaveLength(2);
     for (const terminal of opened) {
-      expect(terminal).toMatchObject({ workspaceId: workspace.id, cwd: repo, shell: '/bin/sh' });
+      expect(terminal).toMatchObject({ workspaceId: workspace.id, cwd: repo, shell });
       expect(pty.has(terminal.id)).toBe(true);
     }
     expect((await stores.workspace(workspace.id).read())?.freeTerminals).toEqual(opened);
@@ -78,8 +80,10 @@ describe.skipIf(isWindows)('FreeTerminals', () => {
   it('runs what the user types there', async () => {
     const [terminal] = await create().open(workspace.id, 1);
     const id = terminal?.id ?? '';
-    pty.write(id, 'pwd\r');
-    await waitFor(() => pty.history(id).includes(repo), 'pwd output');
+    // PowerShell echoes the command: only its result joins the two halves of the marker.
+    pty.write(id, isWindows ? "Write-Output ('pact' + '-ran')\r" : 'pwd\r');
+    const shown = isWindows ? 'pact-ran' : repo;
+    await waitFor(() => pty.history(id).includes(shown), 'command output');
   });
 
   it('forgets a terminal whose shell was exited', async () => {
