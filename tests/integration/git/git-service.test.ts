@@ -112,6 +112,14 @@ describe('worktrees', () => {
     await expect(stat(join(repo, '.gitignore'))).rejects.toThrow();
   });
 
+  it('adds /.worktrees/ on its own line after an exclude file without a final newline', async () => {
+    await writeFile(join(repo, '.git', 'info', 'exclude'), '*.tmp');
+    await service.addWorktree(repo, { cli: 'codex', position: 1, base: 'main' });
+    expect(await readFile(join(repo, '.git', 'info', 'exclude'), 'utf8')).toBe(
+      '*.tmp\n/.worktrees/\n',
+    );
+  });
+
   it('adds a suffix instead of overwriting an existing branch', async () => {
     git(repo, 'branch', 'agent/codex-1');
     const created = await service.addWorktree(repo, { cli: 'codex', position: 1, base: 'main' });

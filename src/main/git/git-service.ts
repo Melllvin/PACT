@@ -4,9 +4,11 @@ import { realpathSync } from 'node:fs';
 import { appendFile, copyFile, mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import type { Writable } from 'node:stream';
 import { promisify } from 'node:util';
 import { parseUnifiedDiff } from '../../shared/diff';
 import type { ChangedFile, FileDiff } from '../../shared/review';
+import { parseNumstat, parseRaw } from './diff-output';
 
 // research.md R7 — the git CLI through execFile/spawn (never a shell), tested on real repositories.
 
@@ -24,7 +26,6 @@ export type Worktree = { path: string; branch: string };
 export type Snapshot = { commit: string; tree: string };
 export type DiffTarget = { base: string; tree: string; path: string; oldPath: string | null };
 type Env = Record<string, string | undefined>;
-type Counts = { added: number | null; removed: number | null };
 
 /** Git prints `/`-separated and sometimes 8.3 short paths on Windows: compare canonical paths. */
 const canonical = (path: string) => realpathSync.native(resolve(path));
@@ -42,13 +43,16 @@ export class GitService {
 
   /** English messages (parsed, R2) and raw UTF-8 paths, whatever the user's locale and config. */
   private async gitRaw(cwd: string, args: string[], env: Env = {}) {
-    const { stdout } = await execFileAsync('git', ['-c', 'core.quotePath=false', ...args], {
+    return (await this.run(cwd, args, env)).stdout;
+  }
+
+  private run(cwd: string, args: string[], env: Env = {}) {
+    return execFileAsync('git', ['-c', 'core.quotePath=false', ...args], {
       cwd,
       env: { ...(this.env ?? process.env), ...env, LC_ALL: 'C' },
       encoding: 'utf8',
       maxBuffer: MAX_OUTPUT,
     });
-    return stdout;
   }
 
   async isRepo(path: string): Promise<boolean> {
@@ -193,7 +197,7 @@ export class GitService {
     return this.git(cwd, ['merge-base', a, b]);
   }
 
-  /** 002 R2 — the files that differ between `base` and the snapshot `tree`, sorted by path. */
+  /** 002 R2 — the files that differ between `base` and the snapshot `tree`, in git's path order. */
   async changedFiles(cwd: string, base: string, tree: string): Promise<ChangedFile[]> {
     const range = ['-M', '--no-ext-diff', base, tree];
     const [raw, numstat, ignoringCr] = await Promise.all([
@@ -231,7 +235,7 @@ export class GitService {
     for (const file of files) {
       if (file.blob && (sizes.get(file.blob) ?? 0) > MAX_DIFF_BYTES) file.tooLarge = true;
     }
-    return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    return files;
   }
 
   /** 002 R2 — one file's diff, carriage returns at end of line ignored; no hunk when too big. */
@@ -271,22 +275,9 @@ export class GitService {
   private async blobSizes(cwd: string, blobs: string[]): Promise<Map<string, number>> {
     const sizes = new Map<string, number>();
     if (blobs.length === 0) return sizes;
-    const out = await new Promise<string>((resolvePromise, reject) => {
-      const child = spawn('git', ['cat-file', '--batch-check=%(objectname) %(objectsize)'], {
-        cwd,
-        env: { ...(this.env ?? process.env), LC_ALL: 'C' },
-        stdio: ['pipe', 'pipe', 'ignore'],
-      });
-      let stdout = '';
-      child.stdout.setEncoding('utf8');
-      child.stdout.on('data', (chunk: string) => (stdout += chunk));
-      child.once('error', reject);
-      child.once('close', (code) => {
-        if (code === 0) resolvePromise(stdout);
-        else reject(new Error(`git cat-file exited with code ${String(code)}`));
-      });
-      child.stdin.end(`${blobs.join('\n')}\n`);
-    });
+    const run = this.run(cwd, ['cat-file', '--batch-check=%(objectname) %(objectsize)']);
+    (run.child.stdin as Writable).end(`${blobs.join('\n')}\n`);
+    const out = (await run).stdout;
     for (const line of out.split('\n')) {
       const [id, size] = line.split(' ');
       if (id && size) sizes.set(id, Number(size));
@@ -316,52 +307,6 @@ export class GitService {
     await mkdir(dirname(file), { recursive: true });
     await appendFile(file, `${text && !text.endsWith('\n') ? '\n' : ''}${EXCLUDE_LINE}\n`);
   }
-}
-
-const STATUSES: Partial<Record<string, ChangedFile['status']>> = {
-  A: 'added',
-  M: 'modified',
-  T: 'modified',
-  D: 'deleted',
-  R: 'renamed',
-};
-type RawEntry = Pick<ChangedFile, 'status' | 'path' | 'oldPath' | 'blob'>;
-const NULL_ID = /^0+$/;
-
-/** `diff --raw -z`: `:mode mode old new X\0path\0`, with `old\0new\0` for a rename. */
-function parseRaw(text: string): RawEntry[] {
-  const parts = text.split('\0');
-  const entries: RawEntry[] = [];
-  for (let i = 0; i < parts.length - 1;) {
-    const meta = parts[i++]?.split(' ') ?? [];
-    const newId = meta[3] ?? '';
-    const letter = (meta[4] ?? '').charAt(0);
-    const first = parts[i++] ?? '';
-    const renamed = letter === 'R' || letter === 'C';
-    const second = renamed ? (parts[i++] ?? '') : first;
-    entries.push({
-      status: letter === 'C' ? 'added' : (STATUSES[letter] ?? 'modified'),
-      path: second,
-      oldPath: letter === 'R' ? first : null,
-      blob: NULL_ID.test(newId) ? null : newId,
-    });
-  }
-  return entries;
-}
-
-/** `diff --numstat -z`: `a\tr\tpath\0`, or `a\tr\t\0old\0new\0`; `-` for binary files. */
-function parseNumstat(text: string): Map<string, Counts> {
-  const parts = text.split('\0');
-  const counts = new Map<string, Counts>();
-  for (let i = 0; i < parts.length - 1;) {
-    const [added = '', removed = '', path = ''] = (parts[i++] ?? '').split('\t');
-    const target = path === '' ? (i++, parts[i++] ?? '') : path;
-    counts.set(target, {
-      added: added === '-' ? null : Number(added),
-      removed: removed === '-' ? null : Number(removed),
-    });
-  }
-  return counts;
 }
 
 async function exists(path: string) {
