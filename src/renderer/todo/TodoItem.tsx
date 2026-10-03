@@ -24,6 +24,7 @@ export function TodoItem({
   onRestart,
   onLog,
   onCancelAutoResume,
+  onReview,
 }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
@@ -85,6 +86,13 @@ export function TodoItem({
           onCancelAutoResume={() => {
             onCancelAutoResume(agent.id);
           }}
+          onReview={
+            todo.kind === 'review' && onReview
+              ? () => {
+                  onReview(agent.id);
+                }
+              : undefined
+          }
         />
       )}
     </li>

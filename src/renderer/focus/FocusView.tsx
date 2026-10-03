@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { Agent } from '../../shared/model';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TerminalView } from '../tiles/TerminalView';
@@ -6,8 +6,15 @@ import { TileActions } from '../tiles/TileActions';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import type { AgentActions } from '../workspace/WorkspaceView';
 import { AgentPills } from './AgentPills';
+import { cn } from '@/lib/utils';
+
+export type FocusTab = 'terminal' | 'changes';
 
 type Props = Omit<AgentActions, 'onClose'> & {
+  tab?: FocusTab;
+  onTab?: (tab: FocusTab) => void;
+  /** The Changements tab (002 US1), shown above the same terminal. */
+  changes?: ReactNode;
   /** Every agent of the workspace, in position order, for the pills. */
   agents: Agent[];
   agentId: string;
@@ -23,11 +30,14 @@ const TAB =
   'data-[state=active]:font-semibold data-[state=active]:shadow-none after:bg-(--agent-color)';
 
 /**
- * Focus (screen 1p): one agent large, opened by ⤢. Only the Terminal tab exists in this version;
- * Aperçu and Changements are shown disabled. « ‹ Tuiles » or Escape outside the terminal goes
- * back to the grid (US5).
+ * Focus (screen 1p): one agent large, opened by ⤢ or « Revue → ». Terminal and Changements
+ * (screen 1h) are active, Aperçu stays disabled (002 FR-001). « ‹ Tuiles » or Escape outside the
+ * terminal goes back to the grid (US5).
  */
 export function FocusView({
+  tab = 'terminal',
+  onTab,
+  changes,
   agents,
   agentId,
   name,
@@ -81,7 +91,12 @@ export function FocusView({
         </button>
         <AgentPills agents={agents} current={agent.id} name={name} onSelect={onSelect} />
         <span aria-hidden className="h-[18px] w-px bg-white/8" />
-        <Tabs value="terminal">
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            if (value === 'terminal' || value === 'changes') onTab?.(value);
+          }}
+        >
           <TabsList variant="line" className="h-auto gap-4 p-0">
             <TabsTrigger value="terminal" className={TAB}>
               Terminal
@@ -89,7 +104,7 @@ export function FocusView({
             <TabsTrigger value="preview" disabled className={TAB}>
               Aperçu
             </TabsTrigger>
-            <TabsTrigger value="changes" disabled className={TAB}>
+            <TabsTrigger value="changes" className={TAB}>
               Changements
             </TabsTrigger>
           </TabsList>
@@ -99,10 +114,20 @@ export function FocusView({
           ⎇ {agent.branch} · :{agent.port}
         </span>
       </header>
-      <div ref={terminalBox} className="flex min-h-0 flex-1 flex-col">
-        {terminals && (
-          <TerminalView termId={agent.id} registry={terminals} label={`Terminal de ${title}`} />
-        )}
+      <div className="flex min-h-0 flex-1 flex-col">
+        {tab === 'changes' && changes}
+        {/* Same place in the tree on both tabs: the terminal stays attached, its session kept. */}
+        <div
+          ref={terminalBox}
+          className={cn(
+            'flex min-h-0 flex-col',
+            tab === 'changes' ? 'h-[32%] flex-none border-t border-white/6' : 'flex-1',
+          )}
+        >
+          {terminals && (
+            <TerminalView termId={agent.id} registry={terminals} label={`Terminal de ${title}`} />
+          )}
+        </div>
       </div>
       <footer className="flex flex-none items-center justify-end gap-2 border-t border-white/6 px-3.5 py-2.5 text-[13px]">
         {failed && agent.lastError && (

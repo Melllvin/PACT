@@ -4,7 +4,7 @@ import type { ReviewService } from '../review/review-service';
 // 002 — review channels (contracts/ipc.md). T021: US1, reading the changes of an agent.
 
 type Dependencies = {
-  review: Pick<ReviewService, 'open' | 'close' | 'fileDiff' | 'setSeen'>;
+  review: Pick<ReviewService, 'open' | 'close' | 'fileDiff' | 'setSeen' | 'updatePending'>;
 };
 
 export function createReviewServices({ review }: Dependencies) {
@@ -13,6 +13,8 @@ export function createReviewServices({ review }: Dependencies) {
     'review:close': ({ agentId }: IpcInput<'review:close'>) => {
       review.close(agentId);
     },
+    'review:listPending': ({ workspaceId }: IpcInput<'review:listPending'>) =>
+      review.updatePending(workspaceId),
     'review:fileDiff': ({ agentId, path }: IpcInput<'review:fileDiff'>) =>
       review.fileDiff(agentId, path),
     'review:setSeen': ({ agentId, path, seen }: IpcInput<'review:setSeen'>) =>

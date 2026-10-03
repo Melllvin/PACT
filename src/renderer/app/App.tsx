@@ -6,6 +6,7 @@ import { PermissionsDialog } from '../launch/PermissionsDialog';
 import { LaunchPanel } from '../launch/LaunchPanel';
 import type { Agent } from '../../shared/model';
 import type { AppStore } from '../store/app-store';
+import { idleReviewStore, type ReviewStore } from '../store/review-store';
 import { CloseAgentDialog } from '../tiles/CloseAgentDialog';
 import { LogPanel } from '../tiles/LogPanel';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
@@ -20,10 +21,13 @@ type Props = {
   getPathForFile: (file: File) => string;
   /** Terminals of the agents and free terminals, created once outside React (main.tsx). */
   terminals?: TerminalRegistry | undefined;
+  /** The review of the Changements tab (002); without it, no review is offered. */
+  review?: ReviewStore | undefined;
 };
 
-export function App({ store, getPathForFile, terminals }: Props) {
+export function App({ store, getPathForFile, terminals, review }: Props) {
   const state = useStore(store);
+  const reviewState = useStore(review ?? idleReviewStore);
   const { status, error, workspaces, activeTab, launcher } = state;
   const [now] = useState(() => new Date());
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null);
@@ -33,6 +37,15 @@ export function App({ store, getPathForFile, terminals }: Props) {
     void store.getState().load();
     return disconnect;
   }, [store]);
+  useEffect(() => review?.getState().connect(), [review]);
+
+  // The review:pending events sent before this window existed are lost: ask once per workspace.
+  const workspaceIds = workspaces.map((w) => w.id).join(' ');
+  useEffect(() => {
+    for (const id of workspaceIds.split(' ').filter(Boolean)) {
+      void review?.getState().loadPending(id);
+    }
+  }, [workspaceIds, review]);
 
   // Frees the terminals whose agent or free terminal is gone (closed workspace, exited shell).
   const termIds = workspaces
@@ -98,6 +111,19 @@ export function App({ store, getPathForFile, terminals }: Props) {
                 onClose: state.requestCloseAgent,
               }}
               actionError={state.actionError}
+              review={
+                review && {
+                  pending: reviewState.pending[workspace.id] ?? [],
+                  snapshot: reviewState.snapshot,
+                  selected: reviewState.selected,
+                  diff: reviewState.diff,
+                  error: reviewState.error,
+                  open: (agentId) => void reviewState.open(agentId),
+                  close: reviewState.close,
+                  select: (path) => void reviewState.select(path),
+                  markSeen: (agentId, path, blob) => void state.markSeen(agentId, path, blob),
+                }
+              }
             />
           )}
           {closing && (

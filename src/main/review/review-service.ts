@@ -2,7 +2,7 @@ import { watch as fsWatch } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { IpcFailure, type IpcEvent } from '../../shared/ipc';
 import type { Agent, Workspace } from '../../shared/model';
-import type { FileDiff, ReviewSnapshot } from '../../shared/review';
+import { seenBlob, type FileDiff, type ReviewSnapshot } from '../../shared/review';
 import type { GitService } from '../git/git-service';
 
 // 002 US1 — an agent's changes against main, followed while the worktree changes
@@ -84,6 +84,10 @@ export class ReviewService {
   private readonly followed = new Map<string, Followed>();
   /** The last snapshot of each agent, as announced. */
   private readonly snapshots = new Map<string, ReviewSnapshot>();
+  /** Reviews asked for and not closed since, so a close during `open` wins. */
+  private readonly wanted = new Set<string>();
+  /** The latest `updatePending` of each workspace: an older one ending last says nothing. */
+  private readonly pendingRuns = new Map<string, number>();
 
   constructor(options: Options) {
     this.git = options.git;
@@ -98,9 +102,10 @@ export class ReviewService {
   /** Builds the review and follows the worktree until `close` (FR-001, FR-010). */
   async open(agentId: string): Promise<ReviewSnapshot> {
     const { agent } = this.find(agentId);
+    this.wanted.add(agentId);
     const snapshot = await this.compute(agentId);
     this.snapshots.set(agentId, snapshot);
-    if (!this.followed.has(agentId)) {
+    if (this.wanted.has(agentId) && !this.followed.has(agentId)) {
       const followed: Followed = {
         stop: this.watch(agent.worktreePath, () => {
           clearTimeout(followed.timer);
@@ -114,6 +119,7 @@ export class ReviewService {
   }
 
   close(agentId: string): void {
+    this.wanted.delete(agentId);
     const followed = this.followed.get(agentId);
     if (!followed) return;
     followed.stop();
@@ -139,7 +145,7 @@ export class ReviewService {
   async setSeen(agentId: string, path: string, seen: boolean): Promise<void> {
     const { workspace } = this.find(agentId);
     const snapshot = this.snapshots.get(agentId) ?? (await this.open(agentId));
-    const blob = snapshot.files.find((f) => f.path === path)?.blob ?? null;
+    const file = snapshot.files.find((f) => f.path === path);
     await this.workspaces.update(workspace.id, (ws) => ({
       ...ws,
       agents: ws.agents.map((a) => {
@@ -147,7 +153,7 @@ export class ReviewService {
         const next = Object.fromEntries(
           Object.entries(a.review.seen).filter(([seenPath]) => seenPath !== path),
         );
-        if (seen && blob) next[path] = blob;
+        if (seen && file) next[path] = seenBlob(file);
         return { ...a, review: { ...a.review, seen: next } };
       }),
     }));
@@ -159,6 +165,8 @@ export class ReviewService {
    * (FR-002, FR-003). Announced with `review:pending`.
    */
   async updatePending(workspaceId: string): Promise<string[]> {
+    const run = (this.pendingRuns.get(workspaceId) ?? 0) + 1;
+    this.pendingRuns.set(workspaceId, run);
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) return [];
     const agentIds: string[] = [];
@@ -167,13 +175,14 @@ export class ReviewService {
       const snapshot = await this.compute(agent.id).catch(() => undefined);
       if (snapshot && !snapshot.missing && snapshot.files.length > 0) agentIds.push(agent.id);
     }
-    this.onPending({ workspaceId, agentIds });
+    if (this.pendingRuns.get(workspaceId) === run) this.onPending({ workspaceId, agentIds });
     return agentIds;
   }
 
   dispose(): void {
     for (const agentId of [...this.followed.keys()]) this.close(agentId);
     this.snapshots.clear();
+    this.wanted.clear();
   }
 
   private async refresh(agentId: string, force = false) {
@@ -244,7 +253,7 @@ export class ReviewService {
     let any = false;
     for (const file of files) {
       const seen = agent.review.seen[file.path];
-      if (seen === undefined || seen === file.blob) continue;
+      if (seen === undefined || seen === seenBlob(file)) continue;
       any = true;
       if (file.blob === null) continue;
       const counts = await this.git.diffBlobs(cwd, seen, file.blob);
