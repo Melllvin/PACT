@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createAppServices } from '../../../../src/main/app-services';
 import { createAgentServices } from '../../../../src/main/ipc/agent-handlers';
+import { createReviewServices } from '../../../../src/main/ipc/review-handlers';
 import { ipcRequests } from '../../../../src/shared/ipc';
 
 // contracts/ipc.md — a channel the renderer may call is served by the main process.
@@ -8,10 +9,6 @@ import { ipcRequests } from '../../../../src/shared/ipc';
 /** Declared ahead of the story that serves it. */
 const pending = new Set<string>([
   // 002 — served by the review and integration stories (US1–US4).
-  'review:open',
-  'review:close',
-  'review:fileDiff',
-  'review:setSeen',
   'review:comment',
   'review:send',
   'review:runTests',
@@ -31,6 +28,7 @@ describe('IPC channels', () => {
     const served = new Set([
       ...Object.keys(createAppServices({} as never)),
       ...Object.keys(createAgentServices({} as never)),
+      ...Object.keys(createReviewServices({} as never)),
     ]);
     const channels = Object.keys(ipcRequests);
     expect(channels.filter((channel) => !served.has(channel) && !pending.has(channel))).toEqual([]);
