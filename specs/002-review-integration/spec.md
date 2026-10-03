@@ -43,6 +43,17 @@ conflit), renvoi à l'agent et abandon.
 Ce lot active ce que le socle laissait inactif : la vue Revue (FR-006 de 001) et l'onglet
 Changements du Focus (FR-033 de 001). L'onglet Aperçu reste inactif.
 
+## Clarifications
+
+### Session 2026-10-03
+
+- Q: Quand PACT doit-il lancer les tests du dépôt pour la colonne Décision ? → A: dans le worktree
+  de l'agent, à l'ouverture de la revue quand aucun résultat ne correspond à l'état actuel des
+  changements, et à la demande (FR-017).
+- Q: L'intégration propose-t-elle, en plus du squash, de garder les commits de l'agent ? → A: oui,
+  squash par défaut et « garder les commits » dans le menu ▾ ; les changements non commités forment
+  alors un dernier commit (FR-019).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Relire les changements d'un agent (Priority: P1)
