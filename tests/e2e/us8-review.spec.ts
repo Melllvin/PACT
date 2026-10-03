@@ -63,13 +63,13 @@ const typeIn = async (page: Page, tile: Locator, text: string) => {
   await page.keyboard.press('Enter');
 };
 
-/** The worktree of the only agent, from git itself. */
+/** The worktree of the only agent, from git itself (which writes `C:/…` on Windows). */
 const agentWorktree = () =>
   git(repo, 'worktree', 'list', '--porcelain')
     .split('\n')
     .filter((line) => line.startsWith('worktree '))
     .map((line) => line.slice('worktree '.length))
-    .find((path) => path !== repo) ?? '';
+    .find((path) => path.includes('/.worktrees/')) ?? '';
 
 test('reviews the changes of an agent and follows its worktree', async () => {
   test.setTimeout(120_000);

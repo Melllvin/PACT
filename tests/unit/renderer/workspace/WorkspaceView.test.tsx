@@ -207,6 +207,19 @@ describe('WorkspaceView', () => {
     expect(screen.getByRole('alert').textContent).toBe('Cet agent n’attend pas de réponse.');
   });
 
+  it('does nothing on a tile action when no handler is given', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: [agent(1, { state: 'error' })] })}
+        clis={clis}
+        terminals={registry()}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Relancer' }));
+    expect(screen.getByRole('region', { name: 'Tuiles' })).toBeDefined();
+  });
+
   it('opens the launcher from « + Agents » once agents exist', async () => {
     const user = userEvent.setup();
     const onAddAgents = vi.fn();
@@ -428,5 +441,37 @@ describe('Review (002 T018, US1)', () => {
     await user.click(screen.getByRole('tab', { name: 'Terminal' }));
     expect(review.close).toHaveBeenCalled();
     expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
+  });
+
+  it('selects a file of the list for its diff', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    const list = screen.getByRole('list', { name: 'Fichiers' });
+    await user.click(within(list).getByRole('button', { name: /src\/auth\.ts/ }));
+    expect(review.select).toHaveBeenCalledWith('src/auth.ts');
+  });
+
+  it('waits for the snapshot of the agent reviewed, not showing another one', async () => {
+    const user = userEvent.setup();
+    render(view(binding({ snapshot: snapshot({ agentId: agent(1).id }) })));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    expect(screen.getByText('Chargement des changements…')).toBeDefined();
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('unmarks a seen file, with no file selected yet', async () => {
+    const user = userEvent.setup();
+    const team = agents(2);
+    team[1] = {
+      ...(team[1] ?? agent(2)),
+      review: { seen: { 'src/auth.ts': files[0]?.blob ?? '' }, comments: [] },
+    };
+    const review = binding({ selected: null, diff: null });
+    render(view(review, team));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Vu : src/auth.ts' }));
+    expect(review.markSeen).toHaveBeenCalledWith(agent(2).id, 'src/auth.ts', null);
   });
 });
