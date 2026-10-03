@@ -1,8 +1,12 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { WorkspaceView } from '../../../../src/renderer/workspace/WorkspaceView';
+import {
+  WorkspaceView,
+  type ReviewBinding,
+} from '../../../../src/renderer/workspace/WorkspaceView';
 import type { Agent, CliDefinition, Workspace } from '../../../../src/shared/model';
+import { diff, snapshot } from '../review/fixtures';
 import { rateLimited, scheduledResume } from '../tiles/fixtures';
 
 // T068, T069, T079 — the tiles of the agents and free terminals, in the grid.
@@ -26,6 +30,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   state: 'awaiting-prompt',
   lastError: null,
   scheduledResume: null,
+  review: { seen: {}, comments: [] },
   ...overrides,
 });
 
@@ -38,6 +43,7 @@ const workspace = (overrides: Partial<Workspace> = {}): Workspace => ({
   freeTerminals: [],
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
+  testCommand: null,
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
   ...overrides,
@@ -201,6 +207,19 @@ describe('WorkspaceView', () => {
     expect(screen.getByRole('alert').textContent).toBe('Cet agent n’attend pas de réponse.');
   });
 
+  it('does nothing on a tile action when no handler is given', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: [agent(1, { state: 'error' })] })}
+        clis={clis}
+        terminals={registry()}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Relancer' }));
+    expect(screen.getByRole('region', { name: 'Tuiles' })).toBeDefined();
+  });
+
   it('opens the launcher from « + Agents » once agents exist', async () => {
     const user = userEvent.setup();
     const onAddAgents = vi.fn();
@@ -324,5 +343,135 @@ describe('Focus (T087, US5)', () => {
     await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[1] ?? document.body);
     rerender(view(1));
     expect(screen.getByRole('region', { name: 'Tuiles' })).toBeDefined();
+  });
+});
+
+describe('Review (002 T018, US1)', () => {
+  const files = snapshot().files;
+  const binding = (overrides: Partial<ReviewBinding> = {}): ReviewBinding => ({
+    pending: [agent(2).id],
+    snapshot: snapshot({ agentId: agent(2).id }),
+    selected: 'src/db.ts',
+    diff: diff('src/db.ts'),
+    error: null,
+    open: vi.fn(),
+    close: vi.fn(),
+    select: vi.fn(),
+    markSeen: vi.fn(),
+    ...overrides,
+  });
+  const view = (review: ReviewBinding, team = agents(2)) => (
+    <WorkspaceView
+      workspace={workspace({ agents: team })}
+      clis={clis}
+      terminals={registry()}
+      review={review}
+    />
+  );
+  const tile = (n: number) =>
+    screen
+      .getAllByRole('article')
+      .find((a) => a.getAttribute('aria-label')?.startsWith(`Claude Code ${String(n)},`)) ??
+    document.body;
+
+  it('offers « Revue → » on the tile of an agent to review only (FR-002)', () => {
+    render(view(binding()));
+    expect(within(tile(2)).getByRole('button', { name: 'Revue →' })).toBeDefined();
+    expect(within(tile(1)).queryByRole('button', { name: 'Revue →' })).toBeNull();
+  });
+
+  it('opens the Changements tab with the Décision column, then goes back to À faire', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    expect(screen.getByRole('region', { name: 'Focus : Claude Code 2' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Changements' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(review.open).toHaveBeenCalledWith(agent(2).id);
+    expect(screen.getByRole('complementary', { name: 'Décision' })).toBeDefined();
+    expect(screen.queryByRole('complementary', { name: 'À faire' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Changements · 3' })).toBeDefined();
+
+    await user.click(screen.getByRole('button', { name: '‹ Tuiles' }));
+    expect(review.close).toHaveBeenCalled();
+    expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
+    expect(screen.queryByRole('complementary', { name: 'Décision' })).toBeNull();
+  });
+
+  it('opens the review from the À faire column too', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    render(view(review));
+    const column = screen.getByRole('complementary', { name: 'À faire' });
+    await user.click(within(column).getByRole('button', { name: 'Revue →' }));
+    expect(review.open).toHaveBeenCalledWith(agent(2).id);
+  });
+
+  it('counts the files left to see in the Décision column', async () => {
+    const user = userEvent.setup();
+    const team = agents(2);
+    team[1] = {
+      ...(team[1] ?? agent(2)),
+      review: { seen: { 'src/auth.ts': files[0]?.blob ?? '' }, comments: [] },
+    };
+    render(view(binding(), team));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    const column = screen.getByRole('complementary', { name: 'Décision' });
+    expect(column.textContent).toContain('2 fichiers non vus');
+  });
+
+  it('marks a file seen with the content shown, for the agent reviewed', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Vu : src/db.ts' }));
+    expect(review.markSeen).toHaveBeenCalledWith(agent(2).id, 'src/db.ts', files[1]?.blob);
+  });
+
+  it('follows the agent picked from the pills, and leaves the Terminal tab without closing the Focus', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.click(screen.getByRole('radio', { name: 'Claude Code 1' }));
+    expect(review.open).toHaveBeenLastCalledWith(agent(1).id);
+    await user.click(screen.getByRole('tab', { name: 'Terminal' }));
+    expect(review.close).toHaveBeenCalled();
+    expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
+  });
+
+  it('selects a file of the list for its diff', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    const list = screen.getByRole('list', { name: 'Fichiers' });
+    await user.click(within(list).getByRole('button', { name: /src\/auth\.ts/ }));
+    expect(review.select).toHaveBeenCalledWith('src/auth.ts');
+  });
+
+  it('waits for the snapshot of the agent reviewed, not showing another one', async () => {
+    const user = userEvent.setup();
+    render(view(binding({ snapshot: snapshot({ agentId: agent(1).id }) })));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    expect(screen.getByText('Chargement des changements…')).toBeDefined();
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('unmarks a seen file, with no file selected yet', async () => {
+    const user = userEvent.setup();
+    const team = agents(2);
+    team[1] = {
+      ...(team[1] ?? agent(2)),
+      review: { seen: { 'src/auth.ts': files[0]?.blob ?? '' }, comments: [] },
+    };
+    const review = binding({ selected: null, diff: null });
+    render(view(review, team));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Vu : src/auth.ts' }));
+    expect(review.markSeen).toHaveBeenCalledWith(agent(2).id, 'src/auth.ts', null);
   });
 });

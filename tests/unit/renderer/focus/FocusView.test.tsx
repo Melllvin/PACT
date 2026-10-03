@@ -13,8 +13,13 @@ const team = (first: Partial<Agent> = {}) => [
   agent(3, { color: 'green', state: 'awaiting-answer' }),
 ];
 
-const setup = (agents = team(), agentId = agents[0]?.id ?? '') => {
+const setup = (
+  agents = team(),
+  agentId = agents[0]?.id ?? '',
+  tab: 'terminal' | 'changes' = 'terminal',
+) => {
   const props = {
+    onTab: vi.fn(),
     onSelect: vi.fn(),
     onBack: vi.fn(),
     onAnswer: vi.fn(),
@@ -32,6 +37,8 @@ const setup = (agents = team(), agentId = agents[0]?.id ?? '') => {
       agentId={agentId}
       name={(cliId) => names[cliId] ?? cliId}
       terminals={terminals}
+      tab={tab}
+      changes={<p>Liste des changements</p>}
       {...props}
     />,
   );
@@ -53,15 +60,34 @@ describe('FocusView', () => {
     expect(within(focus()).getByText('agent/pg-sessions · :3001', { exact: false })).toBeDefined();
   });
 
-  it('has the Terminal tab active; Aperçu and Changements are shown but disabled', () => {
-    setup();
+  it('has the Terminal tab active, Changements enabled and Aperçu still disabled (FR-001)', async () => {
+    const user = userEvent.setup();
+    const { props } = setup();
     const terminal = screen.getByRole('tab', { name: 'Terminal' });
     expect(terminal.getAttribute('aria-selected')).toBe('true');
-    for (const name of ['Aperçu', 'Changements']) {
-      const tab = screen.getByRole('tab', { name });
-      expect(tab.getAttribute('aria-selected')).toBe('false');
-      expect((tab as HTMLButtonElement).disabled).toBe(true);
-    }
+    const preview = screen.getByRole('tab', { name: 'Aperçu' });
+    expect((preview as HTMLButtonElement).disabled).toBe(true);
+    const changes = screen.getByRole('tab', { name: 'Changements' });
+    expect((changes as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText('Liste des changements')).toBeNull();
+    await user.click(changes);
+    expect(props.onTab).toHaveBeenCalledWith('changes');
+  });
+
+  it('shows the changes above the same terminal on the Changements tab (screen 1h)', () => {
+    const { terminals } = setup(team(), agent(1).id, 'changes');
+    expect(screen.getByRole('tab', { name: 'Changements' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByText('Liste des changements')).toBeDefined();
+    expect(screen.getByLabelText('Terminal de Claude Code 1')).toBeDefined();
+    expect(terminals.attach).toHaveBeenCalledWith(agent(1).id, expect.any(HTMLElement));
+  });
+
+  it('goes back to the tiles with Escape from the changes', () => {
+    const { props } = setup(team(), agent(1).id, 'changes');
+    fireEvent.keyDown(screen.getByText('Liste des changements'), { key: 'Escape' });
+    expect(props.onBack).toHaveBeenCalledTimes(1);
   });
 
   it('offers one pill per agent in its color, the current one checked', () => {

@@ -50,7 +50,9 @@ export function Tile({ agent, name, terminals, onClose, onExpand, ...actions }: 
   const title = `${name} ${String(agent.position)}`;
   const failed = agent.state === 'error';
   // The buttons of the state sit over the bottom of the terminal, which leaves them room (1f).
-  const acting = agent.state === 'awaiting-answer' || failed;
+  const reviewing =
+    actions.onReview !== undefined && (agent.state === 'done' || agent.state === 'awaiting-prompt');
+  const acting = agent.state === 'awaiting-answer' || failed || reviewing;
   return (
     <article
       data-fx-shield

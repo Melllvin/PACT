@@ -19,6 +19,10 @@ const draft = {
   startCommand: null,
 };
 
+const integrationId = '00000000-0000-4000-8000-000000000002';
+// Paths the renderer names inside a repository (contracts/ipc.md, 002).
+const badPaths = ['../secret.txt', 'src/../../x', '/etc/passwd', ''];
+
 const absolute =
   process.platform === 'win32'
     ? 'C:\\Users\\me\\Développement\\repo'
@@ -103,6 +107,74 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       { termId: 't1', cols: 80.5, rows: 24 },
     ],
   },
+  // 002 — review and integration.
+  'review:open': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
+  'review:close': { valid: { agentId }, invalid: [{}] },
+  'review:listPending': { valid: { workspaceId: 'w1' }, invalid: [{}, { workspaceId: '' }] },
+  'review:fileDiff': {
+    valid: { agentId, path: 'src/Développement é/a b.ts' },
+    invalid: badPaths.map((path) => ({ agentId, path })),
+  },
+  'review:setSeen': {
+    valid: { agentId, path: 'a.ts', seen: true },
+    invalid: [
+      { agentId, path: 'a.ts' },
+      ...badPaths.map((path) => ({ agentId, path, seen: true })),
+    ],
+  },
+  'review:comment': {
+    valid: { agentId, path: 'a.ts', line: 3, text: 'Renommer' },
+    invalid: [
+      { agentId, path: 'a.ts', line: 0, text: 'x' },
+      { agentId, path: 'a.ts', line: 3, text: '' },
+      { agentId, path: 'a.ts', line: 3, text: 'x'.repeat(4001) },
+      { agentId, path: '../a.ts', line: 3, text: 'x' },
+    ],
+  },
+  'review:send': {
+    valid: { agentId, kind: 'request', text: 'Ajoute un test' },
+    invalid: [
+      { agentId, kind: 'request' },
+      { agentId, kind: 'request', text: ' ' },
+      { agentId, kind: 'anything' },
+    ],
+  },
+  'review:runTests': { valid: { agentId }, invalid: [{}] },
+  'review:cancelTests': { valid: { agentId }, invalid: [{ agentId: 1 }] },
+  'workspace:setTestCommand': {
+    valid: { workspaceId: 'w1', command: 'pnpm test' },
+    invalid: [{ workspaceId: 'w1', command: '' }, { workspaceId: 'w1' }, { command: null }],
+  },
+  'integration:start': {
+    valid: {
+      agentId,
+      mode: 'keep-commits',
+      message: 'Ajoute le total',
+      after: { closeTile: false, removeWorktree: true },
+      confirmWorking: true,
+    },
+    invalid: [
+      { agentId, mode: 'rebase', message: 'x', after: { closeTile: true, removeWorktree: true } },
+      { agentId, mode: 'squash', message: '', after: { closeTile: true, removeWorktree: true } },
+      { agentId, mode: 'squash', message: 'x' },
+    ],
+  },
+  'integration:resolve': {
+    valid: { integrationId, path: 'a.ts', hunk: 0, choice: 'both' },
+    invalid: [
+      { integrationId, path: 'a.ts', hunk: 0, choice: 'theirs' },
+      { integrationId, path: 'a.ts', hunk: -1, choice: 'main' },
+      { integrationId, path: '/a.ts', content: 'x' },
+      { integrationId, path: 'a.ts' },
+    ],
+  },
+  'integration:openInEditor': {
+    valid: { integrationId, path: 'a.ts' },
+    invalid: [{ integrationId, path: '../a.ts' }],
+  },
+  'integration:askAgent': { valid: { integrationId }, invalid: [{}] },
+  'integration:finish': { valid: { integrationId }, invalid: [{ integrationId: 'x' }] },
+  'integration:cancel': { valid: { integrationId }, invalid: [{}] },
 };
 
 describe('IPC request schemas', () => {
@@ -117,6 +189,23 @@ describe('IPC request schemas', () => {
       for (const bad of invalid) expect(input.safeParse(bad).success).toBe(false);
     });
   }
+
+  it('accepts the other review:send kinds without text, and a whole resolved content', () => {
+    for (const kind of ['fix-comments', 'failing-tests', 'conflict']) {
+      expect(ipcRequests['review:send'].input.safeParse({ agentId, kind }).success).toBe(true);
+    }
+    expect(
+      ipcRequests['integration:resolve'].input.safeParse({
+        integrationId,
+        path: 'a.ts',
+        content: 'merged\n',
+      }).success,
+    ).toBe(true);
+    expect(
+      ipcRequests['workspace:setTestCommand'].input.safeParse({ workspaceId: 'w1', command: null })
+        .success,
+    ).toBe(true);
+  });
 
   it('rejects oversized terminal writes', () => {
     const { input } = ipcRequests['term:write'];
@@ -138,10 +227,20 @@ describe('IPC event schemas', () => {
       'agent:branch',
       'agent:state',
       'clone:progress',
+      'integration:state',
+      'review:changed',
+      'review:pending',
+      'review:tests',
       'term:data',
       'term:exit',
       'workspace:status',
     ]);
+  });
+
+  it('announce the agents to review per workspace (FR-002)', () => {
+    const schema = ipcEvents['review:pending'];
+    expect(schema.safeParse({ workspaceId: 'w1', agentIds: [agentId] }).success).toBe(true);
+    expect(schema.safeParse({ workspaceId: 'w1', agentIds: ['x'] }).success).toBe(false);
   });
 
   it('accept progress and failure clone events', () => {
@@ -192,8 +291,17 @@ describe('IPC errors', () => {
         'LIMIT',
         'BRANCH_CONFLICT',
         'PORT_CONFLICT',
+        'LOCAL_CHANGES',
+        'MAIN_MOVED',
+        'GIT_FAILED',
       ]),
     );
+  });
+
+  it('list the local changes that block an integration (FR-021)', () => {
+    expect(
+      ipcErrorSchema.safeParse({ code: 'LOCAL_CHANGES', message: 'x', files: ['a.ts'] }).success,
+    ).toBe(true);
   });
 
   it('carry the existing workspace id for ALREADY_OPEN (FR-004)', () => {
@@ -226,5 +334,8 @@ describe('IpcFailure', () => {
       code: 'LIMIT',
       message: '6 agents au plus',
     });
+    expect(
+      toIpcError(new IpcFailure('LOCAL_CHANGES', 'Changements locaux', undefined, ['a.ts'])),
+    ).toEqual({ code: 'LOCAL_CHANGES', message: 'Changements locaux', files: ['a.ts'] });
   });
 });

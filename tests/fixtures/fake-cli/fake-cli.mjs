@@ -12,10 +12,18 @@
 //                                   like Claude Code's quota_auto_resume_fired, or waits for "continue"
 //   hooks: object[]                 raw hook payloads posted after the output
 //   renameBranch: string            runs `git branch -m <name>` in the working directory
+//   files: object[]                 edits the working directory in order (002 R11):
+//                                   { write, content } | { delete } | { rename: [from, to] }
+//                                   | { commit: message } (stages everything first)
+//   echo: boolean                   prints `Reçu : <prompt>`, to check what PACT typed
 //   signal: object                  final hook payload (default { type: 'turn-finished' })
 //   exitCode: number                exits with this code after the turn
+//
+// A bracketed paste (ESC[200~ … ESC[201~) is one prompt, its line breaks included, as in the
+// real CLIs (002 R7).
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const argValue = (name) => {
@@ -55,10 +63,46 @@ const nextLine = async () => {
   if (done) process.exit(0);
   return value.trim();
 };
+const PASTE_START = '\x1b[200~';
+const PASTE_END = '\x1b[201~';
+/** Reads one prompt: a single line, or every line of a bracketed paste. */
+const nextPrompt = async () => {
+  let line = await nextLine();
+  if (!line.startsWith(PASTE_START)) return line;
+  const parts = [line.slice(PASTE_START.length)];
+  while (!line.includes(PASTE_END)) parts.push((line = await nextLine()));
+  return parts.join('\n').replace(PASTE_END, '').trim();
+};
 const prompt = () => process.stdout.write('> ');
+
+function editFiles(steps) {
+  const git = (...args) => execFileSync('git', args, { stdio: 'ignore' });
+  for (const step of steps) {
+    if (step.write !== undefined) {
+      mkdirSync(dirname(step.write), { recursive: true });
+      writeFileSync(step.write, step.content ?? '');
+    } else if (step.delete !== undefined) {
+      rmSync(step.delete);
+    } else if (step.rename) {
+      renameSync(step.rename[0], step.rename[1]);
+    } else if (step.commit !== undefined) {
+      git('add', '-A');
+      git(
+        '-c',
+        'user.name=Fake CLI',
+        '-c',
+        'user.email=fake@pact.test',
+        'commit',
+        '-m',
+        step.commit,
+      );
+    }
+  }
+}
 
 async function runTurn(line) {
   await hook({ type: 'prompt-submitted', prompt: line });
+  if (scenario.echo) console.log(`Reçu : ${line}`);
   for (const text of scenario.output ?? []) console.log(text);
   for (let i = 1; i <= (scenario.burst ?? 0); i++) console.log(`burst ${String(i)}`);
 
@@ -91,6 +135,7 @@ async function runTurn(line) {
   }
 
   for (const payload of scenario.hooks ?? []) await hook(payload);
+  editFiles(scenario.files ?? []);
   if (scenario.renameBranch) {
     execFileSync('git', ['branch', '-m', scenario.renameBranch], { stdio: 'ignore' });
   }
@@ -103,6 +148,6 @@ console.log(resumed ? `Session reprise ${resumed}` : `Session ${sessionId}`);
 await hook({ type: 'session-started', sessionId });
 for (;;) {
   prompt();
-  const line = await nextLine();
+  const line = await nextPrompt();
   if (line) await runTurn(line);
 }

@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { createAppStore } from './store/app-store';
+import { createReviewStore } from './store/review-store';
 import { terminalFontReady } from './theme/fonts';
 import { createTerminalRegistry } from './tiles/terminal-registry';
 import { createXterm } from './tiles/xterm-factory';
@@ -22,6 +23,7 @@ void terminalFontReady().then(() => {
         store={createAppStore(window.pact)}
         getPathForFile={(file) => window.pact.pathForFile(file)}
         terminals={terminals}
+        review={createReviewStore(window.pact)}
       />
     </StrictMode>,
   );

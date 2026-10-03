@@ -23,6 +23,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   state: 'working',
   lastError: null,
   scheduledResume: null,
+  review: { seen: {}, comments: [] },
   ...overrides,
 });
 
@@ -130,5 +131,31 @@ describe('deriveTodos', () => {
       }),
     );
     expect(deriveTodos(workspace(agents), names)).toEqual([]);
+  });
+
+  it('offers « Revue → » for an agent done with changes to review, before prompts (FR-002)', () => {
+    const todos = deriveTodos(
+      workspace([
+        agent(1, { state: 'awaiting-prompt' }),
+        agent(2, { state: 'done', cliId: 'codex' }),
+        agent(3, { state: 'awaiting-prompt' }),
+        agent(4, { state: 'awaiting-answer' }),
+      ]),
+      names,
+      ['a2', 'a3'],
+    );
+    expect(todos.map((t) => t.id)).toEqual(['a4:answer', 'a2:review', 'a3:review', 'a1:prompt']);
+    expect(todos[1]).toEqual({
+      id: 'a2:review',
+      agentId: 'a2',
+      kind: 'review',
+      title: 'Changements à relire · Codex',
+      actions: ['review'],
+    });
+  });
+
+  it('keeps answers and rate limits first, even for an agent to review', () => {
+    const todos = deriveTodos(workspace([agent(1, { state: 'awaiting-answer' })]), names, ['a1']);
+    expect(todos.map((t) => t.id)).toEqual(['a1:answer']);
   });
 });

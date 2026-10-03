@@ -311,3 +311,88 @@ describe('AgentManager.close (FR-037)', { timeout: 30_000 }, () => {
     expect(current(agent.id)).toBeUndefined();
   });
 });
+
+// 002 R7 — review prompts wait for the agent to be ready, one per ready transition.
+describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
+  /** Each write to the agent, with its state and the output so far at that moment. */
+  const spyWrites = () => {
+    const writes: { data: string; state: AgentState | undefined; before: string }[] = [];
+    const write = pty.write.bind(pty);
+    vi.spyOn(pty, 'write').mockImplementation((id, data) => {
+      writes.push({ data, state: current(id)?.state, before: pty.history(id) });
+      write(id, data);
+    });
+    return writes;
+  };
+
+  it('types the prompt right away when the agent awaits a prompt, then when it is done', async () => {
+    scenario = 'echo-prompt';
+    const agent = await launchOne();
+    await manager.sendPrompt(agent.id, 'Corrige a.ts');
+    await waitForOutput(agent.id, 'Reçu : Corrige a.ts');
+    await waitForState(agent.id, 'done');
+    await manager.sendPrompt(agent.id, 'Ajoute un test');
+    await waitForOutput(agent.id, 'Reçu : Ajoute un test');
+  });
+
+  it('types one prompt per ready transition, never all at once', async () => {
+    scenario = 'echo-prompt';
+    const agent = await launchOne();
+    const writes = spyWrites();
+    await manager.sendPrompt(agent.id, 'premier');
+    await manager.sendPrompt(agent.id, 'second');
+    await waitForOutput(agent.id, 'Reçu : second');
+    expect(writes.map((w) => w.data)).toEqual(['premier\r', 'second\r']);
+    expect(writes[1]?.before).toContain('Reçu : premier');
+    for (const { state } of writes) expect(['awaiting-prompt', 'done']).toContain(state);
+  });
+
+  it('types nothing while the agent waits for an answer', async () => {
+    scenario = 'ask-then-echo';
+    const agent = await launchOne();
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    await manager.sendPrompt(agent.id, 'Commentaire');
+    await new Promise((r) => setTimeout(r, 300));
+    expect(pty.history(agent.id)).not.toContain('Commentaire');
+    await manager.answer(agent.id, 'allow');
+    await waitForOutput(agent.id, 'Reçu : Commentaire');
+  });
+
+  it('waits for the prompt of a starting agent', async () => {
+    scenario = 'echo-prompt';
+    const [agent] = await manager.launch({
+      workspaceId: workspace.id,
+      agents: [
+        {
+          cliId: 'fake',
+          model: null,
+          permissionLevel: 'always-allow',
+          baseBranch: null,
+          branch: null,
+          port: null,
+          startCommand: null,
+        },
+      ],
+      counters: { freeTerminal: 0 },
+    });
+    if (!agent) throw new Error('no agent launched');
+    const writes = spyWrites();
+    await manager.sendPrompt(agent.id, 'Dès que prêt');
+    await waitForOutput(agent.id, 'Reçu : Dès que prêt');
+    expect(writes[0]?.state).toBe('awaiting-prompt');
+  });
+
+  it('sends a multi-line prompt as a bracketed paste', async () => {
+    scenario = 'echo-prompt';
+    const agent = await launchOne();
+    const writes = spyWrites();
+    await manager.sendPrompt(agent.id, 'Commentaire sur a.ts:3 — un\ndeux');
+    await waitForOutput(agent.id, 'Reçu : Commentaire sur a.ts:3 — un');
+    expect(writes[0]?.data).toBe('\x1b[200~Commentaire sur a.ts:3 — un\ndeux\x1b[201~\r');
+  });
+
+  it('refuses an unknown agent', async () => {
+    await expect(manager.sendPrompt('unknown', 'x')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});

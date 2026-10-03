@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../../../../src/renderer/app/App';
 import { createAppStore } from '../../../../src/renderer/store/app-store';
+import { createReviewStore } from '../../../../src/renderer/store/review-store';
 import type { PactApi } from '../../../../src/shared/ipc';
 import type { CliDefinition, Workspace } from '../../../../src/shared/model';
+import { diff, snapshot } from '../review/fixtures';
 import { agent } from '../tiles/fixtures';
 
 const workspace = (id: string, name: string): Workspace => ({
@@ -16,6 +18,7 @@ const workspace = (id: string, name: string): Workspace => ({
   freeTerminals: [],
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
+  testCommand: null,
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 });
@@ -414,5 +417,50 @@ describe('App tile actions (US3)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Annuler' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(invoke).not.toHaveBeenCalledWith('agent:close', expect.anything());
+  });
+});
+
+describe('App review (002 T018)', () => {
+  it('reviews an agent to review: opens it, selects a file and marks it seen', async () => {
+    const user = userEvent.setup();
+    const done = agent(1, { state: 'done' });
+    const shown = snapshot({ agentId: done.id });
+    const invoke = vi.fn<(channel: string, input?: unknown) => Promise<unknown>>((channel) => {
+      switch (channel) {
+        case 'app:getState':
+          return Promise.resolve({
+            workspaces: [{ ...workspace('w1', 'w1'), agents: [done] }],
+            recents: [],
+            clis: [],
+            permission: null,
+          });
+        case 'review:listPending':
+          return Promise.resolve([done.id]);
+        case 'review:open':
+          return Promise.resolve(shown);
+        case 'review:fileDiff':
+          return Promise.resolve(diff());
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    const api = { invoke, on: () => () => undefined } as unknown as PactApi;
+    render(
+      <App store={createAppStore(api)} review={createReviewStore(api)} getPathForFile={() => ''} />,
+    );
+    const [onTile] = await screen.findAllByRole('button', { name: 'Revue →' });
+    await user.click(onTile ?? document.body);
+    expect(invoke).toHaveBeenCalledWith('review:open', { agentId: done.id });
+
+    const list = await screen.findByRole('list', { name: 'Fichiers' });
+    await user.click(within(list).getByRole('button', { name: /src\/db\.ts/ }));
+    expect(invoke).toHaveBeenCalledWith('review:fileDiff', { agentId: done.id, path: 'src/db.ts' });
+
+    await user.click(screen.getByRole('checkbox', { name: 'Vu : src/db.ts' }));
+    expect(invoke).toHaveBeenCalledWith('review:setSeen', {
+      agentId: done.id,
+      path: 'src/db.ts',
+      seen: true,
+    });
   });
 });

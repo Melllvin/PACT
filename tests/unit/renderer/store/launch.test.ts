@@ -32,6 +32,7 @@ const workspace = (overrides: Partial<Workspace> = {}): Workspace => ({
   freeTerminals: [],
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
+  testCommand: null,
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
   ...overrides,

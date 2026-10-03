@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar } from '../app/Toolbar';
-import { FocusView } from '../focus/FocusView';
+import { FocusView, type FocusTab } from '../focus/FocusView';
+import { ChangesTab } from '../review/ChangesTab';
+import { DecisionColumn } from '../review/DecisionColumn';
+import { seenBlob, type FileDiff, type ReviewSnapshot } from '../../shared/review';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
@@ -21,6 +24,22 @@ export type AgentActions = {
   /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
   onCancelAutoResume: (agentId: string) => void;
   onClose: (agentId: string) => void;
+  /** « Revue → »: opens the Changements tab of the agent (002 FR-002). */
+  onReview?: (agentId: string) => void;
+};
+
+/** The review of the app (review-store and « vu » of app-store), for this workspace. */
+export type ReviewBinding = {
+  /** The agents of this workspace with changes to review. */
+  pending: readonly string[];
+  snapshot: ReviewSnapshot | null;
+  selected: string | null;
+  diff: FileDiff | null;
+  error: string | null;
+  open: (agentId: string) => void;
+  close: () => void;
+  select: (path: string) => void;
+  markSeen: (agentId: string, path: string, blob: string | null) => void;
 };
 
 const none = () => undefined;
@@ -44,6 +63,8 @@ type Props = {
   actionError?: string | null;
   /** The place the tab bar keeps for the views (1b); without it they sit above the tiles. */
   toolbarSlot?: HTMLElement | null;
+  /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
+  review?: ReviewBinding | undefined;
 };
 
 const ALERT =
@@ -57,6 +78,7 @@ export function WorkspaceView({
   actions = NO_ACTIONS,
   actionError = null,
   toolbarSlot = null,
+  review,
 }: Props) {
   const available = workspace.status === 'available';
   const launch = available ? onAddAgents : undefined;
@@ -66,10 +88,34 @@ export function WorkspaceView({
   const cliName = (id: string) => clis.find((cli) => cli.id === id)?.name ?? id;
   const canAdd = agents.length < MAX_AGENTS;
   const [todoOpen, setTodoOpen] = useState(true);
-  const todos = deriveTodos(workspace, cliName);
+  const pending = review?.pending ?? [];
+  const todos = deriveTodos(workspace, cliName, pending);
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
   const focused = agents.some((agent) => agent.id === focusedId) ? focusedId : null;
+  const reviewed = focused !== null && focusTab === 'changes' ? focused : null;
+  const reviewedAgent = agents.find((agent) => agent.id === reviewed);
+
+  // The main process follows the worktree of the agent reviewed, and only while it is (R3).
+  const binding = useRef(review);
+  useLayoutEffect(() => {
+    binding.current = review;
+  });
+  useEffect(() => {
+    if (reviewed === null) return;
+    binding.current?.open(reviewed);
+    return () => {
+      binding.current?.close();
+    };
+  }, [reviewed]);
+
+  const openReview = (agentId: string) => {
+    setFocusedId(agentId);
+    setFocusTab('changes');
+  };
+  const reviewActions: AgentActions = { ...actions, onReview: openReview };
+  const snapshot = review?.snapshot?.agentId === reviewed ? review.snapshot : null;
 
   // The À faire column and its button appear with the first agent (FR-006).
   const toolbar = (
@@ -113,7 +159,25 @@ export function WorkspaceView({
               onSelect={setFocusedId}
               onBack={() => {
                 setFocusedId(null);
+                setFocusTab('terminal');
               }}
+              tab={focusTab}
+              onTab={setFocusTab}
+              changes={
+                reviewedAgent && (
+                  <ChangesTab
+                    snapshot={snapshot}
+                    seen={reviewedAgent.review.seen}
+                    selected={snapshot ? (review?.selected ?? null) : null}
+                    diff={snapshot ? (review?.diff ?? null) : null}
+                    error={review?.error ?? null}
+                    onSelect={(path) => review?.select(path)}
+                    onSeen={(file, seen) =>
+                      review?.markSeen(reviewedAgent.id, file.path, seen ? seenBlob(file) : null)
+                    }
+                  />
+                )
+              }
               {...actions}
             />
           )}
@@ -146,6 +210,13 @@ export function WorkspaceView({
                   onExpand={() => {
                     setFocusedId(agent.id);
                   }}
+                  onReview={
+                    review && pending.includes(agent.id)
+                      ? () => {
+                          openReview(agent.id);
+                        }
+                      : undefined
+                  }
                 />
               ))}
               {workspace.freeTerminals.map((terminal) => (
@@ -154,7 +225,12 @@ export function WorkspaceView({
             </TileGrid>
           )}
         </section>
-        {hasAgents && todoOpen && <TodoColumn todos={todos} agents={agents} {...actions} />}
+        {/* Décision takes the place of À faire while a review is open (FR-004). */}
+        {reviewedAgent ? (
+          <DecisionColumn agent={reviewedAgent} snapshot={snapshot} />
+        ) : (
+          hasAgents && todoOpen && <TodoColumn todos={todos} agents={agents} {...reviewActions} />
+        )}
       </div>
     </>
   );
