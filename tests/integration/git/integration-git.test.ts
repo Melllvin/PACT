@@ -237,3 +237,13 @@ describe('GitService.moveWorktree (R5, US2/AC4)', () => {
     expect(status(worktree)).toBe(' M b.txt\n?? nouveau.txt\n');
   });
 });
+
+describe('gitErrorOutput (FR-023)', () => {
+  it('gives what git wrote on its error output, else on its output, else the message', () => {
+    expect(gitErrorOutput({ stderr: ' refusé \n', stdout: 'x', message: 'm' })).toBe('refusé');
+    expect(gitErrorOutput({ stderr: '', stdout: 'rien à valider\n', message: 'm' })).toBe(
+      'rien à valider',
+    );
+    expect(gitErrorOutput(new Error('perdu'))).toBe('perdu');
+  });
+});

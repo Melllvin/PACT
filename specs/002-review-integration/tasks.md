@@ -167,7 +167,7 @@ modifier.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T026 [P] [US2] Tests d'intégration de la vérification de conflits (research R4) dans `tests/integration/git/merge-tree.test.ts` :
+- [X] T026 [P] [US2] Tests d'intégration de la vérification de conflits (research R4) dans `tests/integration/git/merge-tree.test.ts` :
   - propre ou en conflit, avec les chemins en conflit ;
   - aucune modification de la branche principale, de son dossier ni du worktree, comparés octet par octet ;
   - commit de la branche principale qui a introduit le conflit (`%h`, sujet).
@@ -204,7 +204,7 @@ modifier.
 
 ### Implementation for User Story 2
 
-- [ ] T031 [US2] Ajouter dans `src/main/git/git-service.ts` :
+- [X] T031 [US2] Ajouter dans `src/main/git/git-service.ts` :
   - `mergeTree(main, commit)` : arbre, conflits avec étapes, `-z` ;
   - `lastMainCommit(base, main, path)` ;
   - `commitInTempWorktree` (`worktree add --detach`, `read-tree -m -u`, `commit -F`, suppression garantie) ;
@@ -212,6 +212,13 @@ modifier.
   - `fastForward` (`merge --ff-only`, lecture des fichiers refusés) ;
   - `updateRef(ref, new, old)` ;
   - `worktreeOf(branch)`.
+
+  > Note : `commitInTempWorktree` et `mergeNoFfInTempWorktree` ne font qu'une méthode,
+  > `commitWithHooks`. Pour un commit de fusion, `merge --no-ff --no-commit -s ours` pose le second
+  > parent, puis l'arbre donné (instantané, arbre de merge-tree ou résolu en R6) est committé avec
+  > les crochets. `moveWorktree(worktree, commit, arbre)` sert à « Conserver le worktree ».
+  > `merge-tree` sort en 1 aussi sur une mauvaise référence : sans arbre affiché, c'est une erreur.
+  > Tests des étapes dans `tests/integration/git/integration-git.test.ts`.
 - [ ] T032 [US2] Implémenter `TestRunner` dans `src/main/review/test-runner.ts` : détection, shell de connexion, `PORT` de l'agent, sortie capturée, délai, annulation, une exécution à la fois par agent.
 - [ ] T033 [US2] Implémenter `IntegrationService` dans `src/main/review/integration-service.ts` : états de data-model.md, file par workspace, squash ou garder les commits, déplacement de la branche principale, sort de l'agent après coup.
 - [ ] T034 [US2] Étendre `ReviewService` avec l'état des conflits (vérifié à l'ouverture, à chaque instantané et quand la branche principale bouge), et brancher `review:runTests`, `review:cancelTests`, `workspace:setTestCommand`, `integration:start`, `review:tests` et `integration:state`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.

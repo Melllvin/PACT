@@ -52,14 +52,17 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-/** Every file under `dir`, `.git` included, byte for byte, with the refs and the status. */
+/** Every file under `dir`, `.git` but its objects included, byte for byte, refs and status too. */
 const fingerprint = async (dir: string) => {
   const files: Record<string, string> = {};
   const walk = async (path: string) => {
     for (const entry of await readdir(path, { withFileTypes: true })) {
       const full = join(path, entry.name);
       if (entry.isDirectory()) {
-        if (full !== join(repo, '.worktrees')) await walk(full);
+        // merge-tree writes objects, and only objects (R4).
+        if (full !== join(repo, '.worktrees') && full !== join(repo, '.git', 'objects')) {
+          await walk(full);
+        }
       } else {
         files[full] = (await readFile(full)).toString('base64');
       }
@@ -69,7 +72,8 @@ const fingerprint = async (dir: string) => {
   return {
     files,
     refs: git(repo, 'for-each-ref', '--format=%(refname) %(objectname)'),
-    status: git(dir, 'status', '--porcelain', '--untracked-files=all'),
+    // Without the optional lock, `status` does not refresh the index it reads.
+    status: git(dir, '--no-optional-locks', 'status', '--porcelain', '--untracked-files=all'),
   };
 };
 

@@ -7,7 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import type { Writable } from 'node:stream';
 import { promisify } from 'node:util';
 import { parseUnifiedDiff } from '../../shared/diff';
-import type { ChangedFile, FileDiff } from '../../shared/review';
+import type { ChangedFile, ConflictFile, FileDiff } from '../../shared/review';
 import { parseNumstat, parseRaw } from './diff-output';
 
 // research.md R7 — the git CLI through execFile/spawn (never a shell), tested on real repositories.
@@ -25,7 +25,33 @@ export type CloneProgress = { percent: number; phase: string };
 export type Worktree = { path: string; branch: string };
 export type Snapshot = { commit: string; tree: string };
 export type DiffTarget = { base: string; tree: string; path: string; oldPath: string | null };
+export type MergeConflict = { path: string; kind: ConflictFile['kind'] };
+export type MergeResult = { tree: string; conflicts: MergeConflict[] };
+export type CommitPlan = {
+  /** The temporary worktree, removed whatever happens. */
+  dir: string;
+  onto: string;
+  tree: string;
+  /** Made a merge commit of `onto` and this commit. */
+  merge?: string;
+  message: string;
+};
 type Env = Record<string, string | undefined>;
+
+/** 002 FR-021 — git refused to move the branch over local changes to these files. */
+export class LocalChangesError extends Error {
+  constructor(readonly files: string[]) {
+    super(`Local changes would be overwritten: ${files.join(', ')}`);
+  }
+}
+
+/** What git said when it failed, as it said it (FR-023). */
+export function gitErrorOutput(error: unknown): string {
+  const failure = error as { stderr?: string; stdout?: string; message: string };
+  return failure.stderr?.trim() || failure.stdout?.trim() || failure.message;
+}
+
+const exitCode = (error: unknown) => (error as { code?: unknown }).code;
 
 /** Git prints `/`-separated and sometimes 8.3 short paths on Windows: compare canonical paths. */
 const canonical = (path: string) => realpathSync.native(resolve(path));
@@ -283,6 +309,124 @@ export class GitService {
       ...range,
     ]);
     return { path, hunks: parseUnifiedDiff(text), size };
+  }
+
+  /**
+   * 002 R4 — `ours` and `theirs` merged in objects only: the result tree, conflict markers
+   * included, and the conflicting paths. `base` replaces the merge base git would find.
+   */
+  async mergeTree(cwd: string, ours: string, theirs: string, base?: string): Promise<MergeResult> {
+    const args = ['merge-tree', '--write-tree', '-z', '--no-messages'];
+    if (base !== undefined) args.push('--merge-base', base);
+    const out = await this.gitRaw(cwd, [...args, ours, theirs]).catch((error: unknown) => {
+      // Exit 1 with a tree printed is a merge with conflicts; without, a bad argument.
+      const { stdout } = error as { stdout: string };
+      if (exitCode(error) === 1 && stdout !== '') return stdout;
+      throw error;
+    });
+    // `<tree>\0`, then `<mode> <oid> <stage>\t<path>\0` per conflicting entry.
+    const stages = new Map<string, string>();
+    for (const entry of out.split('\0').slice(1)) {
+      const tab = entry.indexOf('\t');
+      if (tab < 0) continue;
+      const path = entry.slice(tab + 1);
+      stages.set(path, (stages.get(path) ?? '') + entry.charAt(tab - 1));
+    }
+    return {
+      tree: out.slice(0, out.indexOf('\0')),
+      conflicts: [...stages].map(([path, found]) => ({
+        path,
+        kind: !found.includes('1') ? 'add-add' : found.length === 3 ? 'content' : 'delete-modify',
+      })),
+    };
+  }
+
+  /** 002 R4 — the last commit of `main` since `base` that touched `path`. */
+  async lastMainCommit(
+    cwd: string,
+    base: string,
+    main: string,
+    path: string,
+  ): Promise<{ short: string; subject: string } | null> {
+    const out = await this.git(cwd, [
+      '--literal-pathspecs',
+      'log',
+      '-1',
+      '--format=%h%x00%s',
+      `${base}..${main}`,
+      '--',
+      path,
+    ]);
+    if (out === '') return null;
+    const cut = out.indexOf('\0');
+    return { short: out.slice(0, cut), subject: out.slice(cut + 1) };
+  }
+
+  /**
+   * 002 R5 — `tree` committed on top of `onto` by a real `git commit`, so the repository's
+   * hooks run, in a temporary detached worktree. No branch moves. Returns the new commit.
+   */
+  async commitWithHooks(repo: string, { dir, onto, tree, merge, message }: CommitPlan) {
+    await mkdir(dirname(dir), { recursive: true });
+    await this.git(repo, ['worktree', 'add', '--detach', dir, onto]);
+    try {
+      // `-s ours` only records the second parent: the tree is the one given.
+      if (merge !== undefined) {
+        await this.git(dir, ['merge', '--no-ff', '--no-commit', '-s', 'ours', merge]);
+      }
+      await this.git(dir, ['read-tree', '-m', '-u', 'HEAD', tree]);
+      const commit = this.run(dir, ['commit', '-q', '-F', '-']);
+      (commit.child.stdin as Writable).end(message);
+      await commit;
+      return await this.git(dir, ['rev-parse', 'HEAD']);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      await this.git(repo, ['worktree', 'prune']);
+    }
+  }
+
+  /**
+   * 002 R5 — the branch checked out in `cwd` fast-forwarded to `commit`, its files with it. Git
+   * refuses before writing anything when local changes would be lost (FR-021).
+   */
+  async fastForward(cwd: string, commit: string): Promise<void> {
+    try {
+      await this.git(cwd, ['merge', '--ff-only', '-q', commit]);
+    } catch (error) {
+      // Git lists the files in the way one per line, indented by a tab.
+      const files = gitErrorOutput(error)
+        .split('\n')
+        .filter((line) => line.startsWith('\t'))
+        .map((line) => line.trim());
+      if (files.length > 0) throw new LocalChangesError(files);
+      throw error;
+    }
+  }
+
+  /** 002 R5 — `branch` moved to `next` only if it is still at `expected` (FR-022). */
+  async updateRef(cwd: string, branch: string, next: string, expected: string): Promise<void> {
+    await this.git(cwd, ['update-ref', `refs/heads/${branch}`, next, expected]);
+  }
+
+  /** The folder where `branch` is checked out, if any, as a native path. */
+  async worktreeOf(repo: string, branch: string): Promise<string | null> {
+    const out = await this.gitRaw(repo, ['worktree', 'list', '--porcelain', '-z']);
+    for (const record of out.split('\0\0')) {
+      if (record.split('\0').includes(`branch refs/heads/${branch}`)) {
+        return resolve(record.slice('worktree '.length, record.indexOf('\0')));
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 002 R5 — the worktree put on `commit`, its files then set to `tree` and left as changes to
+   * commit (« Conserver le worktree »). Pass `commit` as `tree` to carry nothing over.
+   */
+  async moveWorktree(worktree: string, commit: string, tree: string): Promise<void> {
+    await this.git(worktree, ['reset', '-q', '--hard', commit]);
+    await this.git(worktree, ['read-tree', '-u', '--reset', tree]);
+    await this.git(worktree, ['reset', '-q']);
   }
 
   private async objectExists(cwd: string, object: string) {
