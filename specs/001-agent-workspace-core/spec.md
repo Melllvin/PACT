@@ -47,6 +47,14 @@ les onglets inactifs, reprise après limite de débit.
 - Bouton « Copier la consigne ⤵ » visible sur l'écran 1e.
 - Plus de 6 agents par workspace.
 
+## Clarifications
+
+### Session 2026-10-03
+
+- Q: Quand le CLI ne donne pas l'heure de levée de sa limite, en combien de temps PACT doit-il
+  garantir la reprise automatique ? → A: 5 minutes après la levée quand le CLI donne l'heure ;
+  sinon 15 minutes, le plafond des intervalles croissants de FR-036.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Ouvrir un dépôt comme workspace (Priority: P1)
@@ -495,7 +503,8 @@ actions manuelles restent.
   savoir qui l'attend : 90 % des réponses aux agents sont données via À faire ou via un indicateur
   (◆, pulse) plutôt qu'en inspectant chaque terminal.
 - **SC-008**: Avec la reprise automatique activée, un agent bloqué par une limite de débit reprend
-  sans intervention, utilisateur absent, dans les 5 minutes suivant la levée de la limite.
+  sans intervention, utilisateur absent, dans les 5 minutes suivant la levée de la limite quand le
+  CLI en donne l'heure, et dans les 15 minutes sinon (plafond des intervalles de FR-036).
 
 ## Assumptions
 
