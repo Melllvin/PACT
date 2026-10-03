@@ -130,7 +130,7 @@ puis remis à zéro quand le fichier change.
   - la colonne s'intitule « Décision » pendant la revue et redevient « À faire » au retour ;
   - « Revue → » apparaît pour un agent en attente de revue et ouvre Changements ;
   - « ‹ Tuiles » et Échap hors du terminal ramènent aux tuiles.
-- [ ] T019 [US1] Test e2e : le faux CLI écrit, supprime et renomme, puis « Revue → » ; vérifier liste, totaux, diff, « vu », puis une nouvelle écriture et « Nouveaux changements », dans `tests/e2e/us8-review.spec.ts`.
+- [X] T019 [US1] Test e2e : le faux CLI écrit, supprime et renomme, puis « Revue → » ; vérifier liste, totaux, diff, « vu », puis une nouvelle écriture et « Nouveaux changements », dans `tests/e2e/us8-review.spec.ts`.
 
 ### Implementation for User Story 1
 
