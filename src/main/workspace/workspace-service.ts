@@ -76,7 +76,8 @@ export class WorkspaceService {
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
     // Validated before it replaces the open workspace: a change that cannot be saved must not
     // stay in memory, or every later save of this workspace would fail too (T146).
-    const updated = workspaceSchema.parse(change(workspace));
+    const updated = change(workspace);
+    workspaceSchema.parse(updated);
     this.open_.set(id, updated);
     await this.stores.workspace(id).write(updated);
     return updated;

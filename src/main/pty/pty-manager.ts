@@ -1,4 +1,5 @@
 import * as nodePty from 'node-pty';
+import { installConptyKillFix } from './conpty-kill';
 
 // research.md R2 — one pseudo-terminal per agent or free terminal, in the main process.
 
@@ -48,6 +49,8 @@ type Session = {
   timer: ReturnType<typeof setTimeout> | undefined;
   exited: Promise<void>;
 };
+
+installConptyKillFix();
 
 const defaultSpawn: PtySpawn = (file, args, options) =>
   nodePty.spawn(file, args, { name: 'xterm-256color', ...options });
