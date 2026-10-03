@@ -38,9 +38,14 @@ other git steps are standard commands, to be pinned by the integration tests.
   - **Binary files**: `-\t-` in numstat; shown with a type and a size (`git cat-file -s`), no diff.
   - **Large files**: a file over 1 MB or 5 000 diff lines is shown the same way, without a diff
     (FR-008).
-  - **Line endings**: `--ignore-cr-at-eol` on both the list and the diff, so CRLF/LF differences
-    between macOS and Windows do not mark a whole file as changed (FR-033). The content that gets
-    integrated is unchanged.
+  - **Line endings**:
+    - the diff uses `--ignore-cr-at-eol`, so CRLF/LF differences between macOS and Windows do not
+      show a whole file as changed (FR-033);
+    - the list does not use it: a file that differs only by its line endings stays listed, with
+      0 lines added and removed and the note « fins de ligne seulement ». The review hides nothing
+      that integration would carry into `main`;
+    - an integration test checks a CRLF-only change.
+    The content that gets integrated is the snapshot, byte for byte.
   - **Encoding**: every git call runs with `LC_ALL=C` and `core.quotePath=false`, so messages are
     not translated (the probe showed French ones) and accented paths come back as UTF-8.
 - **Rationale**: git already computes renames, binaries and stats. Parsing the unified diff is the
@@ -79,38 +84,54 @@ other git steps are standard commands, to be pinned by the integration tests.
 
 ## R5. Integration
 
-- **Decision**: build the final commit from objects, then move the branch once.
-  - **Squash** (default): `git commit-tree <merged tree> -p <main> -m <message>`.
-  - **Keep commits**: commit the snapshot on top of the agent's `HEAD` (`commit-tree <snapshot> -p
-    HEAD`, only if the agent has uncommitted changes). When `main` is an ancestor of that commit,
-    `main` fast-forwards to it. Otherwise a merge commit is created with parents `main` and that
-    commit, over the merged tree. The agent's commits keep their messages (FR-019).
+- **Decision**: compute the result from objects, make the final commit with a real `git commit`
+  so the repository's hooks run (user decision of 2026-10-03), and move the branch once.
+  - **Result tree**: the merge-tree tree of R4 (or the resolved tree of R6). When `main` has not
+    moved since the agent's base, this is simply the snapshot tree.
+  - **Commit with hooks**: in a temporary detached worktree on `main`
+    (`git worktree add --detach <userData>/integrations/<id> <main>`), run `git read-tree -m -u
+    <result tree>`, then `git commit -F <message file>`. `pre-commit` and `commit-msg` run as
+    usual, so a hook that refuses (or rewrites the message) is honoured. The temporary worktree is
+    removed whatever happens.
+  - **Squash** (default): the commit above has the single parent `main`.
+  - **Keep commits**: if the agent has uncommitted changes, they become a commit on top of its
+    `HEAD` first, made the same way in a temporary worktree so hooks run. Then:
+    - when `main` is an ancestor of the result, `main` fast-forwards to it;
+    - otherwise the temporary worktree runs `git merge --no-ff <that commit>` (hooks run here
+      too), using the resolutions of R6 when there were conflicts.
+
+    The agent's existing commits keep their messages and are not re-checked by the hooks (FR-019).
   - **Moving `main`**: depends on whether it is checked out (`git worktree list --porcelain`).
     - **Checked out somewhere**: `git merge --ff-only <commit>` runs in that folder. Git updates
       the files and refuses, before writing anything, if local changes would be overwritten. That
       refusal is FR-021; the file list comes from the error, read with `LC_ALL=C`.
     - **Not checked out**: `git update-ref refs/heads/<main> <new> <old>`, an atomic compare: if
       `main` moved in between, nothing is written and the check is redone (FR-022).
-  - **Failure**: hooks or a full disk fail before the branch moves. Nothing is rolled back,
-    because nothing was written to the branch (FR-023).
+  - **Failure**: a refusing hook, a full disk or a git error all happen before the branch moves.
+    Nothing is rolled back because nothing was written to `main`; the temporary worktree is
+    removed and git's output is shown (FR-023).
   - **Queue**: one per workspace, the same promise chain as `AgentManager.queue` (FR-026).
+  - **Agent closed after integration** (both boxes ticked): `GitService.removeWorktree` is called
+    with `force: true`. Its uncommitted changes are already in `main`, and without `force` git
+    refuses (FR-024).
   - **Agent kept** (« Conserver le worktree », US2/AC4): the worktree moves onto the new `main`
-    with `git reset --hard <new>` when its tree is unchanged since the snapshot (nothing lost:
-    the snapshot is inside the new commit; `--keep` would refuse the very files just integrated). If the agent wrote
-    since then, its later edits are carried over with a three-way merge (base snapshot, ours new
-    `main`, theirs current tree, via `merge-tree --merge-base`) applied with `read-tree -m -u`. If
-    that merge conflicts, the worktree is left as it is and the review says so.
-  - **Hooks**: `commit-tree` runs no hooks, but the user's `pre-commit` might expect to. This is
-    accepted and noted in the quickstart. Integration does not run the repository's hooks; that
-    matches the « local, sans push » scope.
+    with `git reset --hard <new>`, when its tree is unchanged since the snapshot. Nothing is lost:
+    the snapshot is inside the new commit, and `--keep` would refuse the very files just
+    integrated.
+    - If the agent wrote since then, its later edits are carried over with a three-way merge
+      (base snapshot, ours new `main`, theirs current tree, via `merge-tree --merge-base`),
+      applied with `read-tree -m -u`.
+    - If that merge conflicts, the worktree is left as it is and the review says so.
 - **Rationale**:
   - SC-003 (100 % of failed or cancelled integrations leave `main` and its folder as they were):
     no step before the last one touches a ref or a file.
   - Git's own `--ff-only` refusal provides the « changements locaux » check exactly, instead of
     re-implementing it.
-- **Alternatives**: `git merge --squash` in the main repository (touches the user's index and
-  files before the result is known); a temporary worktree plus cherry-pick (slower, and the
-  conflicts happen commit by commit).
+- **Alternatives**:
+  - `git merge --squash` in the main repository: touches the user's index and files before the
+    result is known.
+  - `commit-tree` alone: faster, but skips `pre-commit` / `commit-msg`, which the user rejected.
+  - Cherry-picking commit by commit: conflicts would happen commit by commit.
 
 ## R6. Resolving conflicts in PACT
 
@@ -136,10 +157,17 @@ other git steps are standard commands, to be pinned by the integration tests.
 
 - **Decision**:
   - **When**: comments, shortcuts, « Renvoyer à l'agent » and « Demander à l'agent » reuse the
-    `retype` mechanism of `AgentManager`. Text is written when the agent is in `awaiting-prompt`,
-    and held until then otherwise. It is never written during `awaiting-answer`, so it cannot
-    answer a question (FR-014).
+    `retype` mechanism of `AgentManager`. The agent is « prêt » in `awaiting-prompt` or `done`.
+    A finished turn (`turn-finished`) leads to `done`, and reviews happen precisely then.
+    - Text is written at once when the agent is ready.
+    - Otherwise it waits for the next transition to a ready state.
+    - It is never written during `awaiting-answer`, `working` or `starting`, so it cannot answer a
+      question (FR-014).
   - **Queue**: becomes a per-agent FIFO, replacing the single entry of « Relancer ».
+    - One item is written per ready transition. The next item waits for the agent to be ready
+      again after the turn that one started.
+    - The first red tests cover: immediate write when already ready, nothing written during
+      `awaiting-answer`, and N items written one per turn, never all at once.
   - **How**: multi-line text is sent as a bracketed paste (`ESC[200~ … ESC[201~`) followed by
     `\r`. Claude Code and Codex accept it; the fake CLI gets a scenario to check it.
   - **Formats**, built by a pure function in `src/shared/review-prompts.ts`:

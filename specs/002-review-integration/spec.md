@@ -53,6 +53,9 @@ Changements du Focus (FR-033 de 001). L'onglet Aperçu reste inactif.
 - Q: L'intégration propose-t-elle, en plus du squash, de garder les commits de l'agent ? → A: oui,
   squash par défaut et « garder les commits » dans le menu ▾ ; les changements non commités forment
   alors un dernier commit (FR-019).
+- Q: Le commit d'intégration doit-il passer par les crochets Git du dépôt (pre-commit,
+  commit-msg) ? → A: oui ; un crochet qui refuse fait échouer l'intégration sans toucher la branche
+  principale (FR-023).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -267,7 +270,8 @@ inchangée.
 - Des fichiers ignorés par Git (`node_modules`, sorties de build) n'apparaissent pas dans la revue et
   ne sont jamais intégrés.
 - Des fins de ligne différentes entre macOS et Windows ne doivent pas faire apparaître un fichier
-  entier comme modifié.
+  entier comme modifié dans le diff. Un fichier qui ne diffère que par ses fins de ligne reste dans
+  la liste, marqué « fins de ligne seulement », puisqu'il serait intégré.
 - Chemins avec espaces et accents, sur macOS et Windows, dans la liste, le diff et l'intégration.
 - Une intégration échoue en cours de route (crochet Git qui refuse le commit, disque plein) : la
   branche principale revient à son état d'avant et l'erreur est affichée telle que Git la donne.
@@ -348,8 +352,9 @@ inchangée.
 - **FR-022**: Si la branche principale est extraite dans le dépôt principal, son dossier de travail
   MUST refléter l'intégration ; sinon, seule la branche MUST changer, sans changer la branche
   extraite.
-- **FR-023**: Une intégration qui échoue MUST laisser la branche principale et son dossier de travail
-  dans leur état d'avant et afficher l'erreur.
+- **FR-023**: Le commit d'intégration MUST passer par les crochets Git du dépôt (`pre-commit`,
+  `commit-msg`). Une intégration qui échoue, y compris sur le refus d'un crochet, MUST laisser la
+  branche principale et son dossier de travail dans leur état d'avant et afficher l'erreur.
 - **FR-024**: Les cases « Fermer la tuile » et « Supprimer worktree et branche », cochées par défaut,
   MUST régler le sort de l'agent après une intégration réussie ; « Conserver le worktree » MUST
   garder l'agent ouvert, prêt pour une nouvelle tâche.

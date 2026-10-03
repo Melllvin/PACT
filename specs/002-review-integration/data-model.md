@@ -64,6 +64,7 @@ The current state of an agent's changes, rebuilt on every change in the worktree
 | `added`, `removed` | `int \| null` | `null` for binary files |
 | `binary` | boolean | |
 | `tooLarge` | boolean | over 1 MB or 5 000 diff lines (R2) |
+| `eolOnly` | boolean | differs only by line endings: « fins de ligne seulement » (R2) |
 | `blob` | blob id \| null | the agent's side, `null` when deleted. Compared with `review.seen[path]` |
 
 ### FileDiff

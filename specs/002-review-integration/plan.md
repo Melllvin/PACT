@@ -17,7 +17,8 @@ dans le CLI qu'en `awaiting-prompt`.
 
 L'intégration se calcule entièrement en objets git :
 - `merge-tree --write-tree` sert à vérifier les conflits et à fusionner ;
-- `commit-tree` crée le commit ;
+- un vrai `git commit`, fait dans un worktree temporaire détaché sur la branche principale, crée le
+  commit et fait passer les crochets du dépôt (clarification du 2026-10-03) ;
 - la branche principale ne bouge qu'à la toute fin : `merge --ff-only` là où elle est extraite,
   `update-ref` atomique sinon.
 

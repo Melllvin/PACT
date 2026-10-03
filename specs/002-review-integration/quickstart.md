@@ -53,5 +53,6 @@ The e2e tests follow the user stories with the fake CLI, which writes and commit
    « Intégrer » again: one commit on `main`.
 5. Repeat with Codex on Windows, in a repository whose path has spaces and accents.
 
-Known limit (R5): the integration commit does not run the repository's git hooks (`pre-commit`,
-`commit-msg`).
+The integration commit runs the repository's `pre-commit` and `commit-msg` hooks (R5). To check
+it, add a `pre-commit` hook that exits 1 and click « Intégrer »: the integration fails with the
+hook's output, and `main` does not move.
