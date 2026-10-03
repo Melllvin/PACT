@@ -24,10 +24,11 @@ export class GitService {
     this.env = env;
   }
 
+  /** English messages (parsed, R2) and raw UTF-8 paths, whatever the user's locale and config. */
   private async git(cwd: string, args: string[]) {
-    const { stdout } = await execFileAsync('git', args, {
+    const { stdout } = await execFileAsync('git', ['-c', 'core.quotePath=false', ...args], {
       cwd,
-      env: this.env,
+      env: { ...(this.env ?? process.env), LC_ALL: 'C' },
       encoding: 'utf8',
       maxBuffer: MAX_OUTPUT,
     });

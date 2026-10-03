@@ -40,6 +40,17 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+describe('git environment (002 R2)', () => {
+  it('reads git in English whatever the user locale, so errors can be parsed', async () => {
+    const french = new GitService({
+      env: { ...gitEnv, LANG: 'fr_FR.UTF-8', LC_ALL: 'fr_FR.UTF-8' },
+    });
+    await expect(
+      french.removeWorktree(repo, { path: join(root, 'absent'), branch: 'absent' }),
+    ).rejects.toThrow(/is not a working tree/);
+  });
+});
+
 describe('repository queries', () => {
   it('recognizes a repository and rejects a plain or missing folder', async () => {
     expect(await service.isRepo(repo)).toBe(true);

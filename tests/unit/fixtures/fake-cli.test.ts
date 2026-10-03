@@ -1,6 +1,6 @@
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -177,6 +177,41 @@ describe('fake CLI', () => {
     fake.send('go');
     await fake.waitForHook('turn-finished');
     expect(git('branch', '--show-current').trim()).toBe('feature/login');
+  });
+
+  it('writes, renames, deletes and commits files in its folder (002 R11)', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'pact-fake-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: tmp, encoding: 'utf8' });
+    git('init', '-b', 'agent/fake-1');
+    await writeFile(join(tmp, 'old.txt'), 'old\n');
+    await writeFile(join(tmp, 'gone.txt'), 'gone\n');
+    git('add', '.');
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-m', 'init');
+
+    const fake = await runFake('edit-files', { cwd: tmp });
+    await fake.waitForPrompt(1);
+    fake.send('go');
+    await fake.waitForHook('turn-finished');
+    expect(await readFile(join(tmp, 'src', 'Développement é.ts'), 'utf8')).toBe(
+      'export const a = 1;\n',
+    );
+    expect(await readFile(join(tmp, 'new.txt'), 'utf8')).toBe('old\n');
+    await expect(readFile(join(tmp, 'gone.txt'), 'utf8')).rejects.toThrow();
+    expect(git('log', '-1', '--format=%s').trim()).toBe('Ajoute a');
+    expect(git('status', '--porcelain', '--untracked-files=all').trim()).toBe('?? notes.md');
+  });
+
+  it('takes a bracketed paste as one prompt, line breaks included', async () => {
+    const fake = await runFake('echo-prompt');
+    await fake.waitForPrompt(1);
+    fake.send('\x1b[200~Commentaire sur a.ts:3 — un');
+    fake.send('deux\x1b[201~');
+    await fake.waitForHook('turn-finished');
+    expect(fake.output()).toContain('Reçu : Commentaire sur a.ts:3 — un\ndeux\n');
+    expect(fake.hooks[1]?.body).toEqual({
+      type: 'prompt-submitted',
+      prompt: 'Commentaire sur a.ts:3 — un\ndeux',
+    });
   });
 
   it('bursts output quickly', async () => {
