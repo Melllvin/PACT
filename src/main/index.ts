@@ -12,8 +12,10 @@ import { resolveShellEnv } from './env/shell-env';
 import { GitService } from './git/git-service';
 import { createAgentServices, forwardTerminalEvents } from './ipc/agent-handlers';
 import { createEventEmitter, registerHandlers } from './ipc/handlers';
+import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
+import { ReviewService } from './review/review-service';
 import { applyTestMode, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
 import { CloneJobs } from './workspace/clone-job';
@@ -81,6 +83,11 @@ void app.whenReady().then(async () => {
     resolveEnv: resolveShellEnv,
     onState: (event) => {
       emit('agent:state', event);
+      // 002 US1 — « Revue → » follows the agents that are done with changes (FR-002).
+      const workspace = workspaces
+        .list()
+        .find((ws) => ws.agents.some((a) => a.id === event.agentId));
+      if (workspace) void review.updatePending(workspace.id);
     },
     onBranch: (event) => {
       emit('agent:branch', event);
@@ -89,6 +96,17 @@ void app.whenReady().then(async () => {
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
     ...(clock ? { clock } : {}),
+  });
+  // 002 US1 — the review of each agent's changes.
+  const review = new ReviewService({
+    git,
+    workspaces,
+    onChanged: (snapshot) => {
+      emit('review:changed', snapshot);
+    },
+    onPending: (event) => {
+      emit('review:pending', event);
+    },
   });
   const freeTerminals = new FreeTerminals({
     workspaces,
@@ -99,6 +117,7 @@ void app.whenReady().then(async () => {
   const prepareWorkspace = async (id: string) => {
     await agents.restore(id);
     await freeTerminals.restore(id);
+    void review.updatePending(id);
   };
 
   for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
@@ -145,6 +164,7 @@ void app.whenReady().then(async () => {
         freeTerminals,
         pty,
       }),
+      ...createReviewServices({ review }),
     },
     {
       isTrustedSender: trustedSenderCheck({
@@ -172,6 +192,7 @@ void app.whenReady().then(async () => {
     // Agent states stay saved as they are; the processes end with the app (FR-038).
     shutdown: async () => {
       workspaces.dispose();
+      review.dispose();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
       await hooks.stop();

@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { appendFile, copyFile, mkdir, readFile, rm, stat } from 'node:fs/promises';
+import { appendFile, copyFile, mkdir, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -170,7 +170,13 @@ export class GitService {
     const index = resolve(worktree, await this.git(worktree, ['rev-parse', '--git-path', 'index']));
     const temporary = join(tmpdir(), `pact-index-${randomUUID()}`);
     try {
-      if (await exists(index)) await copyFile(index, temporary);
+      if (await exists(index)) {
+        await copyFile(index, temporary);
+        // Git rereads a file whose stat matches its entry only when that entry is as recent as
+        // the index itself (« racy git »): the copy keeps the index's mtime for that check.
+        const { atime, mtime } = await stat(index);
+        await utimes(temporary, atime, mtime);
+      }
       const env = { GIT_INDEX_FILE: temporary };
       await this.git(worktree, ['add', '-A'], env);
       const tree = await this.git(worktree, ['write-tree'], env);
@@ -187,6 +193,22 @@ export class GitService {
     } finally {
       await rm(temporary, { force: true });
     }
+  }
+
+  async revParse(cwd: string, ref: string): Promise<string> {
+    return this.git(cwd, ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]);
+  }
+
+  /** Lines added and removed between two contents of a file (« Nouveaux changements », R9). */
+  async diffBlobs(
+    cwd: string,
+    from: string,
+    to: string,
+  ): Promise<{ added: number; removed: number }> {
+    const [counts] = parseNumstat(
+      await this.gitRaw(cwd, ['diff', '--numstat', '-z', '--no-ext-diff', from, to]),
+    ).values();
+    return { added: counts?.added ?? 0, removed: counts?.removed ?? 0 };
   }
 
   async mergeBase(cwd: string, a: string, b: string): Promise<string> {

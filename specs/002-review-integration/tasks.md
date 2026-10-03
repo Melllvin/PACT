@@ -74,6 +74,7 @@ toutes les stories dépendent.
   - un fichier qui ne diffère que par CRLF reste listé avec `eolOnly` ;
   - le diff d'un fichier ignore les CR de fin de ligne ;
   - un chemin accentué revient en UTF-8, sans guillemets (report de T003).
+  - ajouté en Phase 3 : une modification de même taille faite dans la seconde du checkout est vue (l'index copié garde le mtime de l'original, « racy git »).
 - [X] T009 Tests de la file de consignes de `AgentManager` (research R7) dans `tests/unit/main/agents/agent-manager.test.ts` :
   - écrite tout de suite quand l'agent est `awaiting-prompt` ou `done` ;
   - rien écrit en `awaiting-answer`, `working` ou `starting` ;
@@ -106,7 +107,7 @@ puis remis à zéro quand le fichier change.
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T016 [P] [US1] Tests d'intégration de `ReviewService` sur dépôts temporaires, dans `tests/integration/review/review-service.test.ts` :
+- [X] T016 [P] [US1] Tests d'intégration de `ReviewService` sur dépôts temporaires, dans `tests/integration/review/review-service.test.ts` :
   - `open` renvoie `ReviewSnapshot` (base, tree, branche, fichiers triés, totaux) ;
   - une écriture dans le worktree émet `review:changed` en moins de 3 s (SC-006) ;
   - le filet de 5 s rattrape un événement manqué ;
@@ -133,12 +134,13 @@ puis remis à zéro quand le fichier change.
 
 ### Implementation for User Story 1
 
-- [ ] T020 [US1] Implémenter `ReviewService` dans `src/main/review/review-service.ts` :
+- [X] T020 [US1] Implémenter `ReviewService` dans `src/main/review/review-service.ts` :
   - instantané, `fs.watch` récursif sans `.git/`, rafales regroupées sur 300 ms, filet de 5 s ;
   - vus et `newSinceSeen` ;
   - `missing` ;
   - calcul de `review:pending`, avec les agents suivis tant qu'ils travaillent.
-- [ ] T021 [US1] Brancher `review:open`, `review:close`, `review:fileDiff`, `review:setSeen` et les événements `review:changed` / `review:pending` dans `src/main/ipc/review-handlers.ts` et `src/main/app-services.ts`.
+- [X] T021 [US1] Brancher `review:open`, `review:close`, `review:fileDiff`, `review:setSeen` et les événements `review:changed` / `review:pending` dans `src/main/ipc/review-handlers.ts` et `src/main/app-services.ts`.
+  - Note : le service est construit et branché dans `src/main/index.ts` (comme les services agents), pas dans `app-services.ts`. `review:pending` est recalculé à chaque `agent:state` et à l'ouverture d'un espace ; une revue suivie se ferme seule quand l'agent n'existe plus.
 - [ ] T022 [P] [US1] Créer l'état de revue (instantané, fichier choisi, diff) dans `src/renderer/review/review-store.ts`.
 - [ ] T023 [P] [US1] Implémenter `FileList.tsx` et `DiffView.tsx` (virtualisée, hauteur de ligne fixe) dans `src/renderer/review/`.
 - [ ] T024 [US1] Implémenter `ChangesTab.tsx` dans `src/renderer/review/` : liste + diff + terminal de l'agent réutilisé via `terminal-registry`, colonne « Décision » à la place de `TodoColumn`.
