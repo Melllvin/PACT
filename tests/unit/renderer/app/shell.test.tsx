@@ -76,23 +76,28 @@ describe('TabBar', () => {
 describe('Toolbar', () => {
   it('offers Tuiles, Comparer, Revue, À faire and + Agents', () => {
     render(<Toolbar todoCount={0} onAddAgents={vi.fn()} />);
-    for (const name of [/Tuiles/, /Comparer/, /Revue/, /À faire/, /\+ Agents/]) {
+    const views = screen.getByRole('radiogroup', { name: 'Vue' });
+    expect(
+      within(views)
+        .getAllByRole('radio')
+        .map((view) => view.textContent),
+    ).toEqual(['Tuiles', 'Comparer', 'Revue']);
+    for (const name of [/À faire/, /\+ Agents/]) {
       expect(screen.getByRole('button', { name })).toBeDefined();
     }
   });
 
   it('keeps Comparer and Revue visible but inactive (FR-006)', () => {
     render(<Toolbar todoCount={0} onAddAgents={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /Comparer/ }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: /Revue/ }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: /Tuiles/ }).getAttribute('aria-pressed')).toBe(
-      'true',
-    );
+    expect(screen.getByRole('radio', { name: 'Comparer' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Revue' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Tuiles' }).getAttribute('aria-checked')).toBe('true');
   });
 
   it('shows the number of pending items on À faire', () => {
     render(<Toolbar todoCount={3} onAddAgents={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toContain('3');
+    const count = within(screen.getByRole('button', { name: /À faire/ })).getByText('3');
+    expect(count.dataset.slot).toBe('badge');
   });
 
   it('asks to add agents', async () => {

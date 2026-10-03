@@ -29,9 +29,6 @@ export default defineConfig({
           name: 'integration',
           environment: 'node',
           include: ['tests/integration/**/*.test.ts'],
-          // Real processes, git and file watching are flaky on the Windows runners: retried there
-          // until T146 finds the causes.
-          retry: process.platform === 'win32' ? 2 : 0,
         },
       },
       {

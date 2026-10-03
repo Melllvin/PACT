@@ -86,6 +86,13 @@ export class FreeTerminals {
     }
   }
 
+  /** The folder of the workspace is gone (T121): its shells stop, kept to reopen on its return. */
+  async suspend(workspaceId: string): Promise<void> {
+    const ids = [...this.running].filter(([, ws]) => ws === workspaceId).map(([id]) => id);
+    for (const id of ids) this.running.delete(id);
+    await Promise.all(ids.map((id) => this.pty.kill(id)));
+  }
+
   async dispose(): Promise<void> {
     this.unsubscribe();
     const ids = [...this.running.keys()];

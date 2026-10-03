@@ -47,6 +47,20 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Ouvrir un workspace' })).toBeDefined();
   });
 
+  it('shows the views of the workspace in the tab bar (1b)', async () => {
+    const store = storeWith([workspace('w1', 'atelier-web')]);
+    render(<App store={store} getPathForFile={() => ''} />);
+    await screen.findByRole('tab', { name: 'atelier-web' });
+    expect(within(screen.getByRole('banner')).getByRole('toolbar', { name: 'Vues' })).toBeDefined();
+  });
+
+  it('lists the detected agents and the legend beside « Autre dépôt » on the home tab (1a)', async () => {
+    render(<App store={storeWith([])} getPathForFile={() => ''} />);
+    const column = await screen.findByRole('complementary');
+    expect(within(column).getByRole('region', { name: 'Agents détectés' })).toBeDefined();
+    expect(within(column).getByRole('note', { name: 'Légende' })).toBeDefined();
+  });
+
   it('hides the workspace toolbar on the home tab', async () => {
     const store = storeWith([workspace('w1', 'atelier-web')]);
     render(<App store={store} getPathForFile={() => ''} />);

@@ -1,27 +1,22 @@
-/* Direction 1c — dark theme tokens (spec « Références UI », research.md R10, FR-040).
-   Fonts are embedded (SIL Open Font License, see fonts/OFL-*.txt): no network request. */
+/* Maquette interactive — dark theme tokens (spec « Références UI », research.md R17, FR-040).
+   Fonts are embedded (SIL Open Font License, see fonts/OFL-*.txt): no network request. Geist and
+   Geist Mono draw the interface; the terminals keep JetBrains Mono, which has the braille of the
+   CLI spinners and ◆ ✓ ✕ ⎇. */
 
 @font-face {
-  font-family: 'Instrument Sans';
+  font-family: 'Geist';
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 100 900;
   font-display: block;
-  src: url('./fonts/InstrumentSans-latin.woff2') format('woff2');
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  src: url('./fonts/Geist-Variable.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Instrument Sans';
+  font-family: 'Geist Mono';
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 100 900;
   font-display: block;
-  src: url('./fonts/InstrumentSans-latin-ext.woff2') format('woff2');
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
-    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
+  src: url('./fonts/GeistMono-Variable.woff2') format('woff2');
 }
 
 @font-face {
@@ -51,69 +46,80 @@
   color-scheme: dark;
 
   /* Surfaces and text */
-  --bg: #0d1117;
-  --surface: #131820;
-  --text: #dfe4eb;
-  --text-muted: #8b94a4;
-  --border: #27303c;
+  --bg: #09090b;
+  --surface: #0c0c0f;
+  --raised: #111114;
+  --text: #ededef;
+  --text-muted: #8b8b93;
+  --text-dim: #6b6b73;
+  --border: #232327;
 
-  /* Agents, in the order they are assigned (AGENT_COLORS, FR-016) */
-  --agent-purple: #a07fdc;
-  --agent-cyan: #6cc5e0;
-  --agent-green: #45c664;
-  --agent-magenta: #d466a8;
-  --agent-yellow: #c9c85a;
-  --agent-slate: #5a6890;
+  /* Agents, in the order they are assigned (AGENT_COLORS, FR-016). The mockup's 6th is orange:
+     it stays blue-grey here, orange being kept for « attend » (R17). */
+  --agent-purple: #a58be0;
+  --agent-cyan: #72c3e3;
+  --agent-green: #5fc98a;
+  --agent-magenta: #dc79b0;
+  --agent-yellow: #cfc86a;
+  --agent-slate: #7d89b0;
 
   /* States and actions: orange is reserved for « attend », red for errors (FR-016, FR-040) */
-  --waiting: #d6934f;
-  --danger: #c94646;
-  --accept: #45c664;
-  --action: #6cc5e0;
+  --waiting: #e0a458;
+  --danger: #e06464;
+  --accept: #4fcf7d;
+  --action: #7cc8e8;
 
-  /* Shape and type (scale taken from the 1c mockups) */
-  --radius: 6px;
-  --font-ui: 'Instrument Sans', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --text-xs: 10.5px;
-  --text-sm: 11.5px;
+  /* Shape and type (scale taken from the interactive mockup) */
+  --radius: 10px;
+  --font-ui: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+  --font-terminal: 'JetBrains Mono', ui-monospace, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
   --text-md: 12.5px;
   --text-base: 13px;
   --text-lg: 14px;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+/* In the base layer, after Tailwind's preflight: Tailwind utilities still override these. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
-  /* Tailwind's preflight sets 1.5; the 1c screens were drawn with the browser default. */
-  line-height: normal;
-  -webkit-font-smoothing: antialiased;
-}
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: var(--text-base);
+    /* Tailwind's preflight sets 1.5; the mockups were drawn with the browser default. */
+    line-height: normal;
+    -webkit-font-smoothing: antialiased;
+  }
 
-/* Tailwind's preflight makes headings inherit their weight; the 1c titles are bold. */
-h1,
-h2,
-h3,
-h4 {
-  font-weight: 600;
-}
+  /* Tailwind's preflight makes headings inherit their weight; the mockup titles are medium. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 500;
+  }
 
-button {
-  font: inherit;
-  color: inherit;
+  ::selection {
+    background: rgb(124 200 232 / 25%);
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+  }
 }

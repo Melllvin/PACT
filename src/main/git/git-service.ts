@@ -103,7 +103,17 @@ export class GitService {
   /** `git clone --progress`, streaming progress parsed from stderr. */
   clone(url: string, destination: string, onProgress: (p: CloneProgress) => void): Promise<void> {
     return new Promise((resolvePromise, reject) => {
-      const child = spawn('git', ['clone', '--progress', '--', url, destination], {
+      // T114: `ext::` runs any command; refused even when the user's git config allows it.
+      const args = [
+        '-c',
+        'protocol.ext.allow=never',
+        'clone',
+        '--progress',
+        '--',
+        url,
+        destination,
+      ];
+      const child = spawn('git', args, {
         env: this.env,
         stdio: ['ignore', 'ignore', 'pipe'],
       });

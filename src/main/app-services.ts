@@ -45,6 +45,7 @@ export function createAppServices({
     'workspace:initRepo': async ({ path }: { path: string }) =>
       opened(await workspaces.initRepo(path)),
     'workspace:close': ({ id }: { id: string }) => workspaces.close(id),
+    'workspace:hasLocalChanges': ({ id }: { id: string }) => workspaces.hasLocalChanges(id),
     'workspace:clone': ({ url, destination }: { url: string; destination: string }) =>
       clones.start({ url, destination }),
     'dialog:pickFolder': ({ purpose }: { purpose: FolderPurpose }) => pickFolder(purpose),

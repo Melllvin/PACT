@@ -70,7 +70,7 @@ export function createAgentServices({
 
 type TerminalSource = {
   onData(listener: (id: string, data: string) => void): () => void;
-  onExit(listener: (id: string, code: number) => void): () => void;
+  onExit(listener: (id: string, code: number | null) => void): () => void;
 };
 type Emit = <C extends IpcEventChannel>(channel: C, payload: IpcEvent<C>) => void;
 

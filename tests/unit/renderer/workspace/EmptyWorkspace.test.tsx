@@ -45,8 +45,8 @@ describe('empty workspace (1b)', () => {
 
   it('keeps Comparer and Revue visible but greyed out (FR-006)', () => {
     render(<WorkspaceView workspace={workspace()} onAddAgents={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Comparer' }).hasAttribute('disabled')).toBe(true);
-    expect(screen.getByRole('button', { name: 'Revue' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Comparer' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('radio', { name: 'Revue' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('disables the actions until the launcher exists', () => {

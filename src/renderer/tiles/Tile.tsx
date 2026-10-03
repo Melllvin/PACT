@@ -4,7 +4,8 @@ import { BranchTooltip } from './BranchTooltip';
 import { TerminalView } from './TerminalView';
 import { TileActions, type TileActionHandlers } from './TileActions';
 import type { TerminalRegistry } from './terminal-registry';
-import styles from './tiles.module.css';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 /** FR-041: the state in words, for assistive technologies only (FR-020 shows none). */
 const STATE_LABELS: Record<AgentState, string> = {
@@ -15,6 +16,13 @@ const STATE_LABELS: Record<AgentState, string> = {
   done: 'terminé',
   error: 'erreur',
   closed: 'fermé',
+};
+
+/** The pulse takes the color of the state it announces, the agent's own otherwise (R17). */
+const PULSE_COLORS: Partial<Record<AgentState, string>> = {
+  'awaiting-answer': 'var(--waiting)',
+  done: 'var(--accept)',
+  error: 'var(--danger)',
 };
 
 type Props = TileActionHandlers & {
@@ -41,34 +49,67 @@ export function Tile({ agent, name, terminals, onClose, onExpand, ...actions }: 
 
   const title = `${name} ${String(agent.position)}`;
   const failed = agent.state === 'error';
+  // The buttons of the state sit over the bottom of the terminal, which leaves them room (1f).
+  const acting = agent.state === 'awaiting-answer' || failed;
   return (
     <article
+      data-fx-shield
       aria-label={`${title}, ${STATE_LABELS[agent.state]}`}
       data-state={agent.state}
       data-pulse={pulses}
-      className={[styles.tile, failed && styles.halo].filter(Boolean).join(' ')}
-      style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}
-    >
-      {pulses > 0 && <span key={pulses} className={styles.pulse} aria-hidden />}
-      {terminals && (
-        <TerminalView termId={agent.id} registry={terminals} label={`Terminal de ${title}`} />
+      className={cn(
+        'relative flex min-h-0 min-w-0 animate-tile-enter flex-col rounded-[14px] border border-[color-mix(in_srgb,var(--agent-color)_55%,transparent)] bg-surface transition-[border-color,box-shadow] duration-500 ease-out-soft motion-reduce:animate-none',
+        failed &&
+          'halo border-destructive shadow-[0_0_0_1px_color-mix(in_srgb,var(--danger)_60%,transparent),0_0_40px_color-mix(in_srgb,var(--danger)_18%,transparent)]',
       )}
-      <footer className={styles.bar}>
+      style={
+        {
+          '--agent-color': `var(--agent-${agent.color})`,
+          '--pulse-color': PULSE_COLORS[agent.state] ?? 'var(--agent-color)',
+          '--enter-index': String(agent.position - 1),
+        } as CSSProperties
+      }
+    >
+      {pulses > 0 && (
+        <span
+          key={pulses}
+          aria-hidden
+          className="pointer-events-none absolute -inset-px animate-tile-pulse rounded-[14px] motion-reduce:[animation-duration:1ms]"
+        />
+      )}
+      {terminals && (
+        <TerminalView
+          termId={agent.id}
+          registry={terminals}
+          label={`Terminal de ${title}`}
+          className={cn('px-4 pt-10', acting ? 'pb-14' : 'pb-3.5')}
+        />
+      )}
+      <div
+        role="toolbar"
+        aria-label="Outils"
+        className="absolute top-2 right-2 flex gap-0.5 rounded-lg bg-surface/80"
+      >
         <BranchTooltip branch={agent.branch} port={agent.port} />
         {onExpand && (
-          <button className={styles.icon} aria-label="Agrandir" onClick={onExpand}>
+          <Button variant="ghost" size="icon" aria-label="Agrandir" onClick={onExpand}>
             ⤢
-          </button>
+          </Button>
         )}
-        <button className={styles.icon} aria-label="Fermer l’agent" onClick={onClose}>
+        <Button variant="ghost" size="icon" aria-label="Fermer l’agent" onClick={onClose}>
           ×
-        </button>
-        <span className={styles.spacer} />
-        {failed && agent.lastError && (
-          <span className={styles.failure}>{agent.lastError.message}</span>
-        )}
-        <TileActions state={agent.state} scheduledResume={agent.scheduledResume} {...actions} />
-      </footer>
+        </Button>
+      </div>
+      {acting && (
+        <div className="absolute right-3 bottom-3 left-4 flex items-center justify-end gap-2">
+          {failed && agent.lastError && (
+            <span className="min-w-0 truncate font-mono text-[12px] text-[#f2a0a0]">
+              {agent.lastError.message}
+            </span>
+          )}
+          <TileActions state={agent.state} scheduledResume={agent.scheduledResume} {...actions} />
+        </div>
+      )}
     </article>
   );
 }

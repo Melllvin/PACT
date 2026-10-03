@@ -1,5 +1,5 @@
 import type { AgentState, ScheduledResume } from '../../shared/model';
-import styles from './tiles.module.css';
+import { Button } from '@/components/ui/button';
 
 export type TileActionHandlers = {
   onAnswer: (answer: 'allow' | 'deny') => void;
@@ -12,7 +12,12 @@ export type TileActionHandlers = {
   onAlways?: (() => void) | undefined;
 };
 
-/** Bottom right of a tile, by state (FR-024): answer a question, or recover from an error. */
+const GROUP = 'flex flex-none flex-wrap items-center justify-end gap-1.5';
+
+/**
+ * Bottom right of a tile, by state (FR-024): answer a question, or recover from an error. Solid
+ * green and red to answer, cyan to resume (1f, 1n).
+ */
 export function TileActions({
   state,
   onAnswer,
@@ -25,41 +30,45 @@ export function TileActions({
 }: TileActionHandlers & { state: AgentState; scheduledResume?: ScheduledResume | null }) {
   if (state === 'awaiting-answer') {
     return (
-      <span className={styles.actions}>
-        {onAlways && <button onClick={onAlways}>Toujours pour ce worktree</button>}
-        <button
-          className={styles.deny}
+      <span className={GROUP}>
+        {onAlways && <Button onClick={onAlways}>Toujours pour ce worktree</Button>}
+        <Button
+          variant="danger"
           onClick={() => {
             onAnswer('deny');
           }}
         >
           ✕ Refuser
-        </button>
-        <button
-          className={styles.allow}
+        </Button>
+        <Button
+          variant="accept"
           onClick={() => {
             onAnswer('allow');
           }}
         >
           ✓ Autoriser
-        </button>
+        </Button>
       </span>
     );
   }
   if (state === 'error') {
     return (
-      <span className={styles.actions}>
+      <span className={GROUP}>
         {scheduledResume && (
           <>
-            <span className={styles.scheduled}>reprise auto à {resumeTime(scheduledResume)}</span>
-            <button onClick={onCancelAutoResume}>Annuler</button>
+            <span className="font-mono text-[11px] whitespace-nowrap text-muted-foreground">
+              reprise auto à {resumeTime(scheduledResume)}
+            </span>
+            <Button variant="link" onClick={onCancelAutoResume}>
+              Annuler
+            </Button>
           </>
         )}
-        <button onClick={onLog}>Journal</button>
-        <button onClick={onRestart}>Relancer</button>
-        <button className={styles.allow} onClick={onResume}>
+        <Button onClick={onLog}>Journal</Button>
+        <Button onClick={onRestart}>Relancer</Button>
+        <Button variant="primary" onClick={onResume}>
           Reprendre
-        </button>
+        </Button>
       </span>
     );
   }

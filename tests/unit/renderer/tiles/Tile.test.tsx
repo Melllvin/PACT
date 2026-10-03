@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Tile } from '../../../../src/renderer/tiles/Tile';
@@ -39,6 +39,23 @@ describe('Tile', () => {
     expect(terminals.attach).toHaveBeenCalledWith(agent(1).id, expect.any(HTMLElement));
   });
 
+  it('groups ⎇, ⤢ and the close button as the tools of the tile (1f)', () => {
+    const { tile } = setup({}, { onExpand: vi.fn() });
+    const tools = within(tile()).getByRole('toolbar', { name: 'Outils' });
+    expect(
+      within(tools)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Branche et port', 'Agrandir', 'Fermer l’agent']);
+  });
+
+  it('comes in after the tiles before it when the view changes, unless motion is reduced (FR-042)', () => {
+    const { tile } = setup({ position: 3 });
+    expect(tile().className).toMatch(/animate-tile-enter/);
+    expect(tile().className).toMatch(/motion-reduce:animate-none/);
+    expect(tile().style.getPropertyValue('--enter-index')).toBe('2');
+  });
+
   it('shows neither number, title nor state label (FR-020)', () => {
     const { tile } = setup({ state: 'working' });
     expect(tile().textContent).not.toMatch(/Claude Code|1|en cours|▶/);
@@ -51,6 +68,7 @@ describe('Tile', () => {
     expect(screen.queryByRole('tooltip')).toBeNull();
     await user.hover(screen.getByRole('button', { name: 'Branche et port' }));
     expect(screen.getByRole('tooltip').textContent).toBe('agent/claude-code-1 · :3001');
+    expect(document.querySelector('[data-slot="tooltip-content"]')).not.toBeNull();
     rerender({ branch: 'feature/login' });
     expect(screen.getByRole('tooltip').textContent).toBe('feature/login · :3001');
     await user.unhover(screen.getByRole('button', { name: 'Branche et port' }));

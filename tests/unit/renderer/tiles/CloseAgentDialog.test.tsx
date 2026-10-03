@@ -23,7 +23,9 @@ describe('CloseAgentDialog', () => {
   it('keeps the worktree and branch by default', async () => {
     const { onConfirm } = setup();
     expect(screen.getByRole('dialog', { name: 'Fermer Claude Code 1' })).toBeDefined();
-    expect(screen.getByRole('radio', { name: /Conserver/ })).toHaveProperty('checked', true);
+    expect(screen.getByRole('radio', { name: /Conserver/ }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Fermer l’agent' }));
     expect(onConfirm).toHaveBeenCalledWith(false);
   });
@@ -44,5 +46,22 @@ describe('CloseAgentDialog', () => {
     await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('button', { name: 'Annuler' }));
     expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves Enter on « Annuler » to the button: cancels without closing the agent', async () => {
+    const { onConfirm, onCancel } = setup();
+    screen.getByRole('button', { name: 'Annuler' }).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('keeps the focus inside the dialog (modal dialog)', async () => {
+    setup();
+    const dialog = screen.getByRole('dialog', { name: 'Fermer Claude Code 1' });
+    for (let step = 0; step < 6; step++) {
+      await userEvent.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
   });
 });

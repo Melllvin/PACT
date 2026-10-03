@@ -8,41 +8,49 @@ const themeDir = join(dirname(fileURLToPath(import.meta.url)), '../../../src/ren
 const css = readFileSync(join(themeDir, 'tokens.css'), 'utf8');
 const token = (name: string) => new RegExp(`--${name}:\\s*([^;]+);`).exec(css)?.[1]?.trim();
 
-// Direction 1c (spec « Références UI », research.md R10, FR-040).
+// Maquette interactive (spec « Références UI », research.md R17, FR-040).
 describe('theme tokens', () => {
   it.each([
-    ['bg', '#0d1117'],
-    ['surface', '#131820'],
-    ['text', '#dfe4eb'],
-    ['text-muted', '#8b94a4'],
-    ['border', '#27303c'],
-    ['waiting', '#d6934f'],
-    ['danger', '#c94646'],
-    ['accept', '#45c664'],
-    ['action', '#6cc5e0'],
-    ['radius', '6px'],
+    ['bg', '#09090b'],
+    ['surface', '#0c0c0f'],
+    ['text', '#ededef'],
+    ['text-muted', '#8b8b93'],
+    ['border', '#232327'],
+    ['waiting', '#e0a458'],
+    ['danger', '#e06464'],
+    ['accept', '#4fcf7d'],
+    ['action', '#7cc8e8'],
+    ['radius', '10px'],
   ])('defines --%s as %s', (name, value) => {
     expect(token(name)?.toLowerCase()).toBe(value);
   });
 
   it('defines one color per agent, in the order agents receive them', () => {
-    const expected = ['#a07fdc', '#6cc5e0', '#45c664', '#d466a8', '#c9c85a', '#5a6890'];
+    // The 6th stays blue-grey: orange is kept for ◆ attend (FR-016, FR-040, R17).
+    const expected = ['#a58be0', '#72c3e3', '#5fc98a', '#dc79b0', '#cfc86a', '#7d89b0'];
     expect(AGENT_COLORS.map((color) => token(`agent-${color}`)?.toLowerCase())).toEqual(expected);
   });
 
-  it('embeds Instrument Sans and JetBrains Mono without any network request', () => {
+  it('embeds Geist, Geist Mono and, for the terminals, JetBrains Mono without any network request', () => {
     const sources = [...css.matchAll(/url\(['"]?([^'")]+)['"]?\)/g)].map((m) => m[1] ?? '');
     expect(sources.length).toBeGreaterThanOrEqual(2);
     for (const source of sources) {
       expect(source).not.toMatch(/^(https?:)?\/\//);
       expect(existsSync(join(themeDir, source))).toBe(true);
     }
-    expect(css).toMatch(/font-family:\s*['"]Instrument Sans['"]/);
+    expect(css).toMatch(/font-family:\s*['"]Geist['"]/);
+    expect(css).toMatch(/font-family:\s*['"]Geist Mono['"]/);
     expect(css).toMatch(/font-family:\s*['"]JetBrains Mono['"]/);
   });
 
+  it('uses Geist for the interface and JetBrains Mono for the terminals (R17)', () => {
+    expect(token('font-ui')).toMatch(/^'Geist',/);
+    expect(token('font-mono')).toMatch(/^'Geist Mono',/);
+    expect(token('font-terminal')).toMatch(/^'JetBrains Mono',/);
+  });
+
   it('ships the fonts with their SIL Open Font License', () => {
-    expect(readFileSync(join(themeDir, 'fonts', 'OFL-InstrumentSans.txt'), 'utf8')).toContain(
+    expect(readFileSync(join(themeDir, 'fonts', 'OFL-Geist.txt'), 'utf8')).toContain(
       'SIL OPEN FONT LICENSE',
     );
     expect(readFileSync(join(themeDir, 'fonts', 'OFL-JetBrainsMono.txt'), 'utf8')).toContain(
@@ -56,6 +64,14 @@ describe('Tailwind theme', () => {
   const globals = readFileSync(join(themeDir, 'globals.css'), 'utf8');
   const variable = (name: string) =>
     new RegExp(`--${name}:\\s*([^;]+);`).exec(globals)?.[1]?.trim();
+
+  // T111 / FR-042: after the particles, the tiles come in, then their borders light up.
+  it('brings a tile in, then lights its border in the agent color', () => {
+    const tileEnter = variable('animate-tile-enter') ?? '';
+    expect(tileEnter).toMatch(/view-enter/);
+    expect(tileEnter).toMatch(/border-in/);
+    expect(globals).toMatch(/@keyframes border-in/);
+  });
 
   it('loads Tailwind, its animations and the 1c tokens, without any network request', () => {
     expect(globals).toMatch(/@import ['"]tailwindcss['"]/);
@@ -78,6 +94,11 @@ describe('Tailwind theme', () => {
     ['primary', 'var(--action)'],
     ['primary-foreground', 'var(--bg)'],
     ['destructive', 'var(--danger)'],
+    ['surface', 'var(--surface)'],
+    ['raised', 'var(--raised)'],
+    ['dim', 'var(--text-dim)'],
+    ['waiting', 'var(--waiting)'],
+    ['accept', 'var(--accept)'],
   ])('gives the Tailwind color %s the 1c token %s', (name, value) => {
     expect(variable(`color-${name}`)).toBe(value);
   });

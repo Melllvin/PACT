@@ -1,6 +1,11 @@
-import dialogs from '../launch/launch.module.css';
-import { useDialogKeys } from '../launch/use-dialog-keys';
-import styles from './tiles.module.css';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 type Props = { name: string; text: string; onClose: () => void };
 
@@ -18,20 +23,26 @@ const plain = (text: string) =>
 
 /** « Journal »: everything the agent printed, kept by the main process across restarts. */
 export function LogPanel({ name, text, onClose }: Props) {
-  useDialogKeys({ onEscape: onClose });
   const output = plain(text);
   return (
-    <div role="dialog" aria-label={`Journal de ${name}`} className={dialogs.dialog}>
-      <h2>Journal de {name}</h2>
-      {output ? (
-        <pre className={styles.log}>{output}</pre>
-      ) : (
-        <p className={dialogs.detail}>Aucune sortie pour l’instant.</p>
-      )}
-      <div className={dialogs.actions}>
-        <span className={dialogs.spacer} />
-        <button onClick={onClose}>Fermer</button>
-      </div>
-    </div>
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent aria-describedby={undefined} className="w-[min(760px,calc(100vw-32px))]">
+        <DialogBody>
+          <DialogTitle>Journal de {name}</DialogTitle>
+          {output ? (
+            <pre className="m-0 max-h-[60vh] overflow-auto rounded-[10px] border border-white/6 bg-surface p-2.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap">
+              {output}
+            </pre>
+          ) : (
+            <p className="m-0 text-[12.5px] text-muted-foreground">Aucune sortie pour l’instant.</p>
+          )}
+        </DialogBody>
+        <DialogFooter className="justify-end">
+          <Button size="md" onClick={onClose}>
+            Fermer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

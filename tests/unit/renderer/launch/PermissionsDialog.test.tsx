@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { PermissionsDialog } from '../../../../src/renderer/launch/PermissionsDialog';
@@ -20,13 +20,15 @@ const renderDialog = (clis: Cli[] = [claude, codex]) => {
 };
 
 const radio = (name: string) => screen.getByRole('radio', { name: new RegExp(name) });
+/** Radix radios and checkboxes are buttons: their state is in aria-checked. */
+const checked = (element: HTMLElement) => element.getAttribute('aria-checked') === 'true';
 
 describe('PermissionsDialog', () => {
   it('offers the three levels, « Toujours autoriser » preselected', () => {
     renderDialog();
-    expect((radio('Toujours autoriser') as HTMLInputElement).checked).toBe(true);
-    expect((radio('Demander pour les actions sensibles') as HTMLInputElement).checked).toBe(false);
-    expect((radio('Toujours demander') as HTMLInputElement).checked).toBe(false);
+    expect(checked(radio('Toujours autoriser'))).toBe(true);
+    expect(checked(radio('Demander pour les actions sensibles'))).toBe(false);
+    expect(checked(radio('Toujours demander'))).toBe(false);
   });
 
   it('describes what each level really allows, without promising confinement', () => {
@@ -64,8 +66,8 @@ describe('PermissionsDialog', () => {
 
   it('offers the « Ce projet » and « Tous les projets » scopes', () => {
     renderDialog();
-    expect((radio('Tous les projets') as HTMLInputElement).checked).toBe(true);
-    expect((radio('Ce projet') as HTMLInputElement).checked).toBe(false);
+    expect(checked(radio('Tous les projets'))).toBe(true);
+    expect(checked(radio('Ce projet'))).toBe(false);
   });
 
   it('resumes automatically after a rate limit by default (FR-035)', () => {
@@ -73,7 +75,7 @@ describe('PermissionsDialog', () => {
     const option = screen.getByRole('checkbox', {
       name: 'Reprendre automatiquement après une limite de débit',
     });
-    expect((option as HTMLInputElement).checked).toBe(true);
+    expect(checked(option)).toBe(true);
   });
 
   it('launches the default choices with Enter', async () => {
@@ -101,6 +103,66 @@ describe('PermissionsDialog', () => {
       autoResume: false,
       scope: 'project',
     });
+  });
+
+  it('moves between the levels with the arrow keys', async () => {
+    const user = userEvent.setup();
+    const { onConfirm } = renderDialog([claude]);
+    // Radix moves the focus on an arrow key, then clicks the radio it lands on; jsdom does not
+    // move the focus itself.
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    act(() => {
+      radio('Demander pour les actions sensibles').focus();
+    });
+    expect(checked(radio('Demander pour les actions sensibles'))).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Lancer 3 agents' }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ level: 'ask-sensitive' }));
+  });
+
+  it('says « agent » for a single agent', () => {
+    render(
+      <PermissionsDialog agentCount={1} clis={[claude]} onConfirm={vi.fn()} onCancel={vi.fn()} />,
+    );
+    expect(screen.getByRole('button', { name: 'Lancer 1 agent' })).toBeDefined();
+  });
+
+  it('keeps the chosen scope when it is pressed again', async () => {
+    const user = userEvent.setup();
+    const { onConfirm } = renderDialog();
+    await user.click(radio('Tous les projets'));
+    expect(checked(radio('Tous les projets'))).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Lancer 3 agents' }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ scope: 'global' }));
+  });
+
+  it('marks the default level and says Enter picks it (1m)', () => {
+    renderDialog();
+    const allowAll = radio('Toujours autoriser').closest('label');
+    expect(allowAll && within(allowAll).getByText('défaut')).toBeTruthy();
+    expect(screen.getByText('Entrée = choix par défaut')).toBeDefined();
+    expect(screen.getByRole('radiogroup', { name: 'S’applique à' })).toBeDefined();
+  });
+
+  it('launches the choices made with Enter too', async () => {
+    const user = userEvent.setup();
+    const { onConfirm } = renderDialog();
+    await user.click(radio('Toujours demander'));
+    await user.keyboard('{Enter}');
+    expect(onConfirm).toHaveBeenCalledWith({
+      level: 'always-ask',
+      autoResume: true,
+      scope: 'global',
+    });
+  });
+
+  it('keeps the focus inside the dialog (modal dialog)', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    const dialog = screen.getByRole('dialog', { name: 'Autorisations des agents' });
+    for (let step = 0; step < 10; step++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
   });
 
   it('can be dismissed with Escape', async () => {

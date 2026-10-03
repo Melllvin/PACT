@@ -50,20 +50,34 @@ test('serves a Content-Security-Policy strict on scripts in the built app', asyn
   expect(csp).toContain("style-src 'self' 'unsafe-inline'");
 });
 
-test('loads the embedded 1c fonts', async () => {
+test('loads the embedded fonts: Geist for the interface, JetBrains Mono for the terminals', async () => {
   const page = await launched.app.firstWindow();
   const loaded = await page.evaluate(async () => {
-    await document.fonts.load('13px "Instrument Sans"');
-    await document.fonts.load('13px "JetBrains Mono"');
-    return [
-      document.fonts.check('13px "Instrument Sans"'),
-      document.fonts.check('13px "JetBrains Mono"'),
-    ];
+    const fonts = ['13px "Geist"', '13px "Geist Mono"', '13px "JetBrains Mono"'];
+    await Promise.all(fonts.map((font) => document.fonts.load(font)));
+    return fonts.map((font) => document.fonts.check(font));
   });
-  expect(loaded).toEqual([true, true]);
+  expect(loaded).toEqual([true, true, true]);
 });
 
 test('keeps app data in an isolated directory in test mode', async () => {
   const userData = await launched.app.evaluate(({ app }) => app.getPath('userData'));
   expect(userData).toContain('pact-e2e-');
+});
+
+test('paints the ambient canvas behind the home tab, not over its content (R17)', async () => {
+  const page = await launched.app.firstWindow();
+  // Pinned: Windows runners may turn animations off, which the effects honour.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const canvas = page.locator('canvas[aria-hidden="true"]');
+  await expect(canvas).toHaveCount(1);
+  // Clicks go through to the page: the canvas is out of the pointer's way.
+  expect(await canvas.evaluate((element) => getComputedStyle(element).pointerEvents)).toBe('none');
+  await expect(page.getByRole('button', { name: 'Choisir un dépôt Git…' })).toBeVisible();
+});
+
+// T125: the CI replays this file and us2 on the app packaged by `electron-builder --dir`.
+test('runs the packaged app when PACT_E2E_PACKAGED=1, the built sources otherwise', async () => {
+  const packaged = await launched.app.evaluate(({ app }) => app.isPackaged);
+  expect(packaged).toBe(process.env.PACT_E2E_PACKAGED === '1');
 });

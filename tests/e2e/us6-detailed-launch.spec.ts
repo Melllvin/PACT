@@ -29,8 +29,16 @@ let repo: string;
 let launched: LaunchedApp | undefined;
 
 const branchAndPort = async (tile: Locator) => {
-  await tile.getByRole('button', { name: 'Branche et port' }).hover();
-  const text = await tile.getByRole('tooltip').textContent();
+  const button = tile.getByRole('button', { name: 'Branche et port' });
+  await button.hover();
+  // Radix renders the tooltip in a portal, out of the tile, and describes the button with it;
+  // the tooltip of the previous tile may still be fading out.
+  await expect(button).toHaveAttribute('aria-describedby', /.+/);
+  const id = await button.getAttribute('aria-describedby');
+  const text = await tile
+    .page()
+    .locator(`[id="${String(id)}"]`)
+    .textContent();
   await tile.page().mouse.move(0, 0);
   return text;
 };

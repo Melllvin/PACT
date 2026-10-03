@@ -17,7 +17,9 @@ type AgentListProps = {
   onAdd: () => void;
 };
 
-const ITEM = 'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left';
+const ITEM = 'flex w-full min-w-0 cursor-pointer items-center gap-2 text-left';
+const LABEL =
+  'font-mono text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase';
 
 /**
  * Left of 1d: « ⚑ Commun à tous », then the agents in the color of their future tile. Their order
@@ -52,22 +54,27 @@ export function AgentList({
   };
 
   return (
-    <nav className="flex min-h-0 flex-col gap-2 border-r border-border pr-3">
+    <nav className="flex min-h-0 flex-col gap-1 border-r border-white/8 p-2.5">
       <button
-        className={cn(ITEM, 'border border-border', selected === 'common' && 'bg-accent')}
+        className={cn(
+          ITEM,
+          'rounded-lg border border-white/8 px-[9px] py-2',
+          selected === 'common' && 'border-primary bg-white/5',
+        )}
         aria-current={selected === 'common'}
         onClick={() => {
           onSelect('common');
         }}
       >
         <span aria-hidden>⚑</span>
-        <span className="flex-1 font-semibold">Commun à tous</span>
-        <span className="text-xs text-muted-foreground">4 réglages</span>
+        <span className="flex-1 text-[12.5px] font-semibold">Commun à tous</span>
+        <span className="font-mono text-[10px] text-muted-foreground">4 réglages</span>
       </button>
-      <p className="mt-2 text-xs tracking-wide text-muted-foreground uppercase">
-        {`Agents · ${String(draft.agents.length)}`}
-      </p>
-      <ol aria-label="Agents" className="flex min-h-0 flex-col gap-1 overflow-auto">
+      <p className={cn(LABEL, 'mt-2 mb-0.5')}>{`Agents · ${String(draft.agents.length)}`}</p>
+      <ol
+        aria-label="Agents"
+        className="m-0 flex min-h-0 list-none flex-col gap-1 overflow-auto p-0"
+      >
         {draft.agents.map((agent, index) => {
           const color = places[index]?.color;
           const changed = differences(draft, index).length;
@@ -81,8 +88,8 @@ export function AgentList({
                 } as CSSProperties
               }
               className={cn(
-                'flex items-center gap-1 rounded-sm border-l-4 border-(--agent-color)',
-                selected === agent.key && 'bg-accent',
+                'flex items-center gap-2 rounded-lg border border-transparent px-[9px] py-2',
+                selected === agent.key && 'border-(--agent-color) bg-white/5',
               )}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -101,7 +108,7 @@ export function AgentList({
                 }}
                 aria-label={`Déplacer ${name}`}
                 draggable
-                className="cursor-grab px-1 text-muted-foreground"
+                className="cursor-grab text-[11px] text-dim hover:text-muted-foreground"
                 onDragStart={(event) => {
                   dragged.current = index;
                   event.dataTransfer.effectAllowed = 'move';
@@ -118,24 +125,30 @@ export function AgentList({
                   onSelect(agent.key);
                 }}
               >
-                <span className="flex flex-1 flex-col">
-                  <span>{name}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
+                <span aria-hidden className="size-2.5 flex-none rounded-full bg-(--agent-color)" />
+                <span className="flex min-w-0 flex-1 flex-col gap-px">
+                  <span className="text-[12.5px] font-semibold">{name}</span>
+                  <span className="truncate font-mono text-[10px] text-muted-foreground">
                     {`${agent.branch ?? 'branche auto'} · ${agent.port ? `:${String(agent.port)}` : 'port auto'}`}
                   </span>
                 </span>
                 {changed > 0 && (
-                  <span className="rounded-sm border border-border px-1 text-xs">{`≠ ${String(changed)}`}</span>
+                  <span className="font-mono text-[10.5px] text-primary">{`≠ ${String(changed)}`}</span>
                 )}
               </button>
             </li>
           );
         })}
       </ol>
-      <button className={cn(ITEM, 'text-muted-foreground')} disabled={!canAdd} onClick={onAdd}>
+      <button
+        className="cursor-pointer self-start px-[9px] py-1 text-[12.5px] text-primary underline underline-offset-3 disabled:cursor-default disabled:opacity-45"
+        disabled={!canAdd}
+        onClick={onAdd}
+      >
         + Ajouter un agent
       </button>
-      <p className="text-xs text-muted-foreground">Glisser = ordre des tuiles.</p>
+      <span className="flex-1" />
+      <p className="m-0 font-mono text-[10px] text-dim">Glisser = ordre des tuiles.</p>
     </nav>
   );
 }

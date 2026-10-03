@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { _electron as electron, type ElectronApplication } from '@playwright/test';
 
 export type LaunchedApp = {
@@ -10,14 +10,26 @@ export type LaunchedApp = {
   close(options?: { keepData?: boolean }): Promise<void>;
 };
 
+/**
+ * With PACT_E2E_PACKAGED=1, the app packaged by `electron-builder --dir` (T125): node-pty must load
+ * from outside the asar, as it will for users.
+ */
+export const packagedExecutable = (platform = process.platform, arch = process.arch) =>
+  platform === 'darwin'
+    ? resolve(`dist/mac${arch === 'arm64' ? '-arm64' : ''}/PACT.app/Contents/MacOS/PACT`)
+    : platform === 'win32'
+      ? resolve(`dist/win${arch === 'arm64' ? '-arm64' : ''}-unpacked/PACT.exe`)
+      : resolve('dist/linux-unpacked/pact');
+
 /** Launches the built app in test mode with an isolated userData directory. */
 export async function launchApp({
   userDataDir,
   env = {},
 }: { userDataDir?: string; env?: Record<string, string> } = {}): Promise<LaunchedApp> {
   const dir = userDataDir ?? (await mkdtemp(join(tmpdir(), 'pact-e2e-')));
+  const packaged = process.env.PACT_E2E_PACKAGED === '1';
   const app = await electron.launch({
-    args: ['.'],
+    ...(packaged ? { executablePath: packagedExecutable(), args: [] } : { args: ['.'] }),
     env: { ...process.env, ...env, PACT_TEST_MODE: '1', PACT_USER_DATA_DIR: dir },
   });
   return {

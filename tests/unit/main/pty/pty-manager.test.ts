@@ -11,7 +11,7 @@ class FakePty implements PtyProcess {
   size = { cols: 0, rows: 0 };
   killed = false;
   private dataListeners: ((data: string) => void)[] = [];
-  private exitListeners: ((e: { exitCode: number }) => void)[] = [];
+  private exitListeners: ((e: { exitCode: number | undefined }) => void)[] = [];
   constructor(
     readonly file: string,
     readonly args: string[] | string,
@@ -23,7 +23,7 @@ class FakePty implements PtyProcess {
     this.dataListeners.push(listener);
     return { dispose: () => undefined };
   }
-  onExit(listener: (e: { exitCode: number }) => void) {
+  onExit(listener: (e: { exitCode: number | undefined }) => void) {
     this.exitListeners.push(listener);
     return { dispose: () => undefined };
   }
@@ -40,7 +40,7 @@ class FakePty implements PtyProcess {
   emit(data: string) {
     for (const listener of this.dataListeners) listener(data);
   }
-  exit(exitCode: number) {
+  exit(exitCode: number | undefined) {
     for (const listener of this.exitListeners) listener({ exitCode });
   }
 }
@@ -118,6 +118,14 @@ describe('PtyManager', () => {
     );
   });
 
+  it('reports an exit without a code as null (ConPTY after a kill, T146)', () => {
+    const exits: (number | null)[] = [];
+    manager.onExit((_id, code) => exits.push(code));
+    manager.start('a1', spec);
+    pty().exit(undefined);
+    expect(exits).toEqual([null]);
+  });
+
   it('flushes pending output before reporting the exit', () => {
     const events: string[] = [];
     manager.onData((_id, data) => events.push(`data:${data}`));
@@ -165,7 +173,7 @@ describe('PtyManager', () => {
   });
 
   it('kills a terminal and resolves once it has exited', async () => {
-    const exits: number[] = [];
+    const exits: (number | null)[] = [];
     manager.onExit((_id, code) => exits.push(code));
     manager.start('a1', spec);
     await manager.kill('a1');

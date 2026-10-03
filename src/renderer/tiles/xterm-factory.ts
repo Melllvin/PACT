@@ -14,10 +14,11 @@ export function createXterm({ webgl = false } = {}): TerminalLike {
   const terminal = new Terminal({
     allowProposedApi: true,
     cursorBlink: true,
+    // --font-terminal and --surface of tokens.css (research.md R17).
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
     fontSize: 12,
     scrollback: 5000,
-    theme: { background: '#0d1117', foreground: '#dfe4eb' },
+    theme: { background: '#0c0c0f', foreground: '#ededef' },
   });
   const fit = new FitAddon();
   terminal.loadAddon(fit);

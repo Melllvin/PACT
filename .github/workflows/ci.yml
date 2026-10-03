@@ -89,6 +89,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:e2e
+      # T125 (plan R12, R14): the same smoke on the packaged app, node-pty loaded from outside asar.
+      - name: Package the app (unpacked)
+        run: npx electron-builder --dir --${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }} --publish never
+      - name: e2e smoke on the packaged app
+        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/us2-quick-launch.spec.ts
+        env:
+          PACT_E2E_PACKAGED: '1'
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
@@ -96,3 +103,10 @@ jobs:
           path: |
             test-results/
             playwright-report/
+      # Layout captures at 1024 px and on a large screen, kept for review (T157).
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: layout-${{ matrix.os }}
+          path: test-results/layout/
+          if-no-files-found: ignore

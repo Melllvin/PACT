@@ -142,6 +142,31 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
+// Spec edge case « dossier supprimé »: the agents of an unavailable workspace stop cleanly (T121).
+describe('AgentManager.suspend', { timeout: 30_000 }, () => {
+  it('stops the agents of a workspace whose folder is gone, marked to resume', async () => {
+    const agent = await launchOne();
+    await manager.suspend(workspace.id);
+    expect(pty.has(agent.id)).toBe(false);
+    expect(manager.activeCount()).toBe(0);
+    await waitForState(agent.id, 'error');
+    expect(current(agent.id)?.lastError).toEqual({
+      code: null,
+      kind: 'crash',
+      message: 'Dossier du workspace introuvable : agent arrêté.',
+    });
+    const saved = await stores.workspace(workspace.id).read();
+    expect(saved?.agents.find((a) => a.id === agent.id)?.state).toBe('error');
+  });
+
+  it('leaves the agents of other workspaces and unknown workspaces alone', async () => {
+    const agent = await launchOne();
+    await manager.suspend('another');
+    expect(pty.has(agent.id)).toBe(true);
+    expect(current(agent.id)?.state).toBe('awaiting-prompt');
+  });
+});
+
 describe('AgentManager.answer', { timeout: 30_000 }, () => {
   it('types the answer keys and the turn goes on', async () => {
     scenario = 'ask-permission';

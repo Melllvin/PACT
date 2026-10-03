@@ -44,6 +44,7 @@ function setup({
   ws = workspace(),
   launch = () => Promise.resolve([launchedAgent]),
   setPermission = () => Promise.resolve(undefined),
+  localChanges = () => Promise.resolve(false),
   addCli = (input: unknown) =>
     Promise.resolve({
       ...cli('codex'),
@@ -58,6 +59,7 @@ function setup({
   launch?: () => Promise<unknown>;
   setPermission?: () => Promise<unknown>;
   addCli?: (input: unknown) => Promise<unknown>;
+  localChanges?: () => Promise<boolean>;
 } = {}) {
   let snapshot: IpcOutput<'app:getState'> = {
     workspaces: [ws],
@@ -75,6 +77,8 @@ function setup({
         return setPermission();
       case 'cli:add':
         return addCli(input);
+      case 'workspace:hasLocalChanges':
+        return localChanges();
       case 'cli:redetect':
         return Promise.resolve([cli('codex')]);
       default:
@@ -99,6 +103,37 @@ describe('launch flow', () => {
     expect(store.getState().launcher).toEqual({ workspaceId: 'w1', step: 'counts' });
     store.getState().closeLauncher();
     expect(store.getState().launcher).toBeNull();
+  });
+
+  it('warns in the launcher when the repository has uncommitted changes (T122)', async () => {
+    const { store, invoke } = setup({ localChanges: () => Promise.resolve(true) });
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    expect(invoke).toHaveBeenCalledWith('workspace:hasLocalChanges', { id: 'w1' });
+    await vi.waitFor(() => {
+      expect(store.getState().launcher).toEqual({
+        workspaceId: 'w1',
+        step: 'counts',
+        localChanges: true,
+      });
+    });
+  });
+
+  it('opens the launcher all the same when the check fails or comes too late', async () => {
+    const { store } = setup({ localChanges: () => Promise.reject(new Error('git')) });
+    await store.getState().load();
+    store.getState().openLauncher('w1');
+    await Promise.resolve();
+    expect(store.getState().launcher).toEqual({ workspaceId: 'w1', step: 'counts' });
+
+    let answer: (value: boolean) => void = () => undefined;
+    const late = setup({ localChanges: () => new Promise((resolve) => (answer = resolve)) });
+    await late.store.getState().load();
+    late.store.getState().openLauncher('w1');
+    late.store.getState().closeLauncher();
+    answer(true);
+    await Promise.resolve();
+    expect(late.store.getState().launcher).toBeNull();
   });
 
   it('asks for the permission level on the very first launch (1m)', async () => {

@@ -102,6 +102,8 @@ export const ipcRequests = {
     z.object({ jobId: z.string() }),
   ),
   'workspace:close': request(z.object({ id: nonEmpty }), none),
+  /** Uncommitted changes stay out of the agents' worktrees: the launcher says so (T122). */
+  'workspace:hasLocalChanges': request(z.object({ id: nonEmpty }), z.boolean()),
   /** Native folder picker; the main process chooses the dialog, the renderer never passes paths. */
   'dialog:pickFolder': request(
     z.object({ purpose: z.enum(['open-repository', 'clone-destination']) }),

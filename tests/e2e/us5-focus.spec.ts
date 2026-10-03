@@ -105,7 +105,7 @@ test('works with one agent in Focus, then comes back to the grid', async () => {
   await expect(focus).toBeVisible();
 
   // A pill shows another agent, with its whole history (scenario 2).
-  await page.getByRole('button', { name: 'Faux CLI 2, attend votre réponse' }).click();
+  await page.getByRole('radio', { name: 'Faux CLI 2, attend votre réponse' }).click();
   const other = page.getByRole('region', { name: 'Focus : Faux CLI 2' });
   await expect(other).toContainText('Analyse du dépôt');
   await expect(other).toContainText('? Exécuter : rm fichier.txt');

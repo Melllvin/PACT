@@ -308,7 +308,7 @@ describe('Focus (T087, US5)', () => {
     await user.click(second);
     expect(screen.queryByRole('region', { name: 'Tuiles' })).toBeNull();
     expect(screen.getByRole('region', { name: 'Focus : Claude Code 2' })).toBeDefined();
-    await user.click(screen.getByRole('button', { name: 'Claude Code 1' }));
+    await user.click(screen.getByRole('radio', { name: 'Claude Code 1' }));
     expect(screen.getByRole('region', { name: 'Focus : Claude Code 1' })).toBeDefined();
     await user.click(screen.getByRole('button', { name: '‹ Tuiles' }));
     expect(screen.getAllByRole('article')).toHaveLength(2);

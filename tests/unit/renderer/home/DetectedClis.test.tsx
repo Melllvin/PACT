@@ -74,6 +74,30 @@ describe('DetectedClis', () => {
     expect(within(item('Codex')).getByText(/Trust all/)).toBeDefined();
   });
 
+  it('explains how to install or add a CLI when none is installed (T123)', () => {
+    const missing = { status: 'missing' as const, resolvedPath: null, version: null };
+    render(
+      <DetectedClis
+        clis={[
+          cli(missing),
+          cli({ ...missing, id: 'codex', name: 'Codex', adapter: 'codex', command: 'codex' }),
+        ]}
+        onRedetect={vi.fn()}
+        onAdd={vi.fn()}
+      />,
+    );
+    const help = screen.getByRole('note');
+    expect(help.textContent).toMatch(/Aucun CLI d’agent détecté/);
+    expect(help.textContent).toContain('npm i -g @anthropic-ai/claude-code');
+    expect(help.textContent).toContain('npm i -g @openai/codex');
+    expect(help.textContent).toMatch(/« Autre CLI — ajouter »/);
+  });
+
+  it('says nothing of installing once a CLI is installed', () => {
+    render(<DetectedClis clis={[cli({})]} onRedetect={vi.fn()} onAdd={vi.fn()} />);
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
   it('detects again on request', async () => {
     const user = userEvent.setup();
     const onRedetect = vi.fn();
