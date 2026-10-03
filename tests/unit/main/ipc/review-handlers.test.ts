@@ -12,6 +12,7 @@ describe('review handlers', () => {
       close: vi.fn(),
       fileDiff: vi.fn(() => Promise.resolve('diff')),
       setSeen: vi.fn(() => Promise.resolve()),
+      updatePending: vi.fn(() => Promise.resolve([agentId])),
     };
     const services = createReviewServices({ review: review as never });
     expect(await services['review:open']({ agentId })).toBe('snapshot');
@@ -21,5 +22,8 @@ describe('review handlers', () => {
     expect(review.fileDiff).toHaveBeenCalledWith(agentId, 'a.ts');
     await services['review:setSeen']({ agentId, path: 'a.ts', seen: true });
     expect(review.setSeen).toHaveBeenCalledWith(agentId, 'a.ts', true);
+    // Asked by the renderer once loaded: the events sent before its window existed are lost.
+    expect(await services['review:listPending']({ workspaceId: 'w1' })).toEqual([agentId]);
+    expect(review.updatePending).toHaveBeenCalledWith('w1');
   });
 });

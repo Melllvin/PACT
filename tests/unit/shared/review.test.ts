@@ -5,6 +5,7 @@ import {
   fileDiffSchema,
   integrationSchema,
   reviewSnapshotSchema,
+  seenBlob,
   testRunSchema,
 } from '../../../src/shared/review';
 
@@ -60,6 +61,13 @@ const integration = {
   conflicts: [],
   error: null,
 };
+
+describe('seenBlob', () => {
+  it('is the blob of the file, or the null id for a deleted one (« vu », FR-009)', () => {
+    expect(seenBlob({ blob: sha('b') })).toBe(sha('b'));
+    expect(seenBlob({ blob: null })).toBe(sha('0'));
+  });
+});
 
 describe('ChangedFile', () => {
   it.each(['added', 'modified', 'deleted', 'renamed'])('accepts status %s', (status) => {

@@ -172,6 +172,17 @@ describe('ReviewService following the worktree (R3)', () => {
     expect(changed.some((s) => paths(s)?.includes('tard.ts'))).toBe(false);
   });
 
+  it('does not follow a review closed while it was opening', async () => {
+    service.dispose();
+    service = createService({ safetyMs: 200 });
+    const opening = service.open(AGENT_ID);
+    service.close(AGENT_ID);
+    await opening;
+    await writeFile(join(worktree, 'trop-tard.ts'), 'export {};\n');
+    await new Promise((r) => setTimeout(r, 800));
+    expect(changed).toEqual([]);
+  });
+
   it('gives the diff of one file of the current snapshot', async () => {
     await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
     await service.open(AGENT_ID);
@@ -200,6 +211,16 @@ describe('ReviewService « vu » (FR-009, FR-011)', () => {
     expect(workspaces.get(workspace.id)?.agents[0]?.review.seen).toEqual({});
   });
 
+  it('marks a deleted file seen too, with the null id since it has no content', async () => {
+    await rm(join(worktree, 'a.txt'));
+    await service.open(AGENT_ID);
+    await service.setSeen(AGENT_ID, 'a.txt', true);
+    expect(workspaces.get(workspace.id)?.agents[0]?.review.seen).toEqual({
+      'a.txt': '0'.repeat(40),
+    });
+    expect((await service.open(AGENT_ID)).newSinceSeen).toBeNull();
+  });
+
   it('keeps what was seen after a restart', async () => {
     await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
     await service.open(AGENT_ID);
@@ -218,6 +239,25 @@ describe('ReviewService pending reviews (FR-002, FR-003)', () => {
     expect(await service.updatePending(workspace.id)).toEqual([AGENT_ID]);
     await setState('working');
     expect(await service.updatePending(workspace.id)).toEqual([]);
+    expect(pending.at(-1)).toEqual({ workspaceId: workspace.id, agentIds: [] });
+  });
+
+  it('announces only the latest pending list when an older computation ends last', async () => {
+    await writeFile(join(worktree, 'b.txt'), 'b\n');
+    let calls = 0;
+    // The first snapshot is slow: the agent starts working again before it ends.
+    const slowGit = Object.create(gitService) as GitService;
+    slowGit.snapshot = async (cwd) => {
+      calls += 1;
+      if (calls === 1) await new Promise((r) => setTimeout(r, 300));
+      return gitService.snapshot(cwd);
+    };
+    service.dispose();
+    service = createService({ git: slowGit });
+    const older = service.updatePending(workspace.id);
+    await setState('working');
+    await service.updatePending(workspace.id);
+    await older;
     expect(pending.at(-1)).toEqual({ workspaceId: workspace.id, agentIds: [] });
   });
 });

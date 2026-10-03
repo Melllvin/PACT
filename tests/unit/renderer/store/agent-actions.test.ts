@@ -148,3 +148,34 @@ describe('closing an agent (FR-037)', () => {
     expect(store.getState().workspaces[1]).toEqual(other);
   });
 });
+
+describe('« vu » in the review (002 T022, FR-009, FR-011)', () => {
+  const blob = 'b'.repeat(40);
+  const seen = (store: Awaited<ReturnType<typeof setup>>['store']) =>
+    store.getState().workspaces[0]?.agents[0]?.review.seen;
+
+  it('marks the content shown as seen, then forgets it', async () => {
+    const { store, invoke } = await setup();
+    await store.getState().markSeen(id, 'src/a.ts', blob);
+    expect(invoke).toHaveBeenCalledWith('review:setSeen', {
+      agentId: id,
+      path: 'src/a.ts',
+      seen: true,
+    });
+    expect(seen(store)).toEqual({ 'src/a.ts': blob });
+    await store.getState().markSeen(id, 'src/a.ts', null);
+    expect(invoke).toHaveBeenLastCalledWith('review:setSeen', {
+      agentId: id,
+      path: 'src/a.ts',
+      seen: false,
+    });
+    expect(seen(store)).toEqual({});
+  });
+
+  it('leaves « vu » as it was when the main process refuses', async () => {
+    const { store } = await setup('review:setSeen');
+    await store.getState().markSeen(id, 'src/a.ts', blob);
+    expect(seen(store)).toEqual({});
+    expect(store.getState().actionError).toBe('Refusé');
+  });
+});

@@ -110,6 +110,7 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
   // 002 — review and integration.
   'review:open': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
   'review:close': { valid: { agentId }, invalid: [{}] },
+  'review:listPending': { valid: { workspaceId: 'w1' }, invalid: [{}, { workspaceId: '' }] },
   'review:fileDiff': {
     valid: { agentId, path: 'src/Développement é/a b.ts' },
     invalid: badPaths.map((path) => ({ agentId, path })),
