@@ -229,14 +229,15 @@ describe('Agent.review (002)', () => {
   };
 
   it('defaults to nothing seen and no comment, so a workspace file from 001 still loads', () => {
-    const { review: _, ...from001 } = agent(1);
+    const from001: Partial<Agent> = agent(1);
+    delete from001.review;
     const parsed = workspaceSchema.parse({ ...workspace([]), agents: [from001] });
     expect(parsed.agents[0]?.review).toEqual({ seen: {}, comments: [] });
   });
 
   it('remembers the blob seen per path and the comments in order', () => {
     const review = { seen: { 'src/a.ts': 'a'.repeat(40) }, comments: [comment] };
-    expect(agentSchema.parse(agent(1, { review })).review).toEqual({
+    expect(agentSchema.parse({ ...agent(1), review }).review).toEqual({
       ...review,
       comments: [{ ...comment, treated: false }],
     });
@@ -260,7 +261,8 @@ describe('Agent.review (002)', () => {
 
 describe('Workspace.testCommand (002)', () => {
   it('is null by default: the command is detected from the repository', () => {
-    const { testCommand: _, ...from001 } = workspace([]);
+    const from001: Partial<Workspace> = workspace([]);
+    delete from001.testCommand;
     expect(workspaceSchema.parse(from001).testCommand).toBeNull();
   });
 

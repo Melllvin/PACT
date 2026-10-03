@@ -21,6 +21,7 @@ export const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   state: 'awaiting-prompt',
   lastError: null,
   scheduledResume: null,
+  review: { seen: {}, comments: [] },
   ...overrides,
 });
 

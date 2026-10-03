@@ -6,7 +6,24 @@ import { ipcRequests } from '../../../../src/shared/ipc';
 // contracts/ipc.md — a channel the renderer may call is served by the main process.
 
 /** Declared ahead of the story that serves it. */
-const pending = new Set<string>();
+const pending = new Set<string>([
+  // 002 — served by the review and integration stories (US1–US4).
+  'review:open',
+  'review:close',
+  'review:fileDiff',
+  'review:setSeen',
+  'review:comment',
+  'review:send',
+  'review:runTests',
+  'review:cancelTests',
+  'workspace:setTestCommand',
+  'integration:start',
+  'integration:resolve',
+  'integration:openInEditor',
+  'integration:askAgent',
+  'integration:finish',
+  'integration:cancel',
+]);
 
 describe('IPC channels', () => {
   it('serves every request channel of the contract', () => {

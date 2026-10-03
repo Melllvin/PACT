@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GitService } from '../../../src/main/git/git-service';
 
@@ -63,7 +63,7 @@ const agentWorks = async () => {
   await write(join(worktree, 'debug.log'), 'ignored\n');
 };
 
-const indexPath = () => join(worktree, git(worktree, 'rev-parse', '--git-path', 'index'));
+const indexPath = () => resolve(worktree, git(worktree, 'rev-parse', '--git-path', 'index'));
 
 describe('GitService.snapshot (R1)', () => {
   it('puts committed, uncommitted, untracked and renamed files in the tree, not ignored ones', async () => {

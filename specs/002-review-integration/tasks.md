@@ -51,22 +51,22 @@ toutes les stories dépendent.
 
 ### Tests (Red)
 
-- [ ] T004 [P] Tests des schémas dans `tests/unit/shared/model.test.ts` :
+- [X] T004 [P] Tests des schémas dans `tests/unit/shared/model.test.ts` :
   - `Agent.review` vaut `{ seen: {}, comments: [] }` par défaut, et un fichier de workspace de 001 sans ces champs se charge sans migration ;
   - `ReviewComment.text` : « string, 1–4000 characters » ; `line` : « int ≥ 1 » ; `treated` vaut `false` par défaut ;
   - `Workspace.testCommand` : « `null` means detect it from the repository » ; « An empty string is refused ».
-- [ ] T005 [P] Tests des schémas de `src/shared/review.ts` (`ReviewSnapshot`, `ChangedFile` avec `status` ∈ `'added' | 'modified' | 'deleted' | 'renamed'`, `FileDiff`, `TestRun`, `Integration`, `ConflictFile`) dans `tests/unit/shared/review.test.ts`.
-- [ ] T006 [P] Tests du contrat IPC dans `tests/unit/shared/ipc.test.ts` :
+- [X] T005 [P] Tests des schémas de `src/shared/review.ts` (`ReviewSnapshot`, `ChangedFile` avec `status` ∈ `'added' | 'modified' | 'deleted' | 'renamed'`, `FileDiff`, `TestRun`, `Integration`, `ConflictFile`) dans `tests/unit/shared/review.test.ts`.
+- [X] T006 [P] Tests du contrat IPC dans `tests/unit/shared/ipc.test.ts` :
   - chaque canal et chaque événement de `contracts/ipc.md` existe ;
   - les codes `LOCAL_CHANGES` (avec `files`), `MAIN_MOVED` et `GIT_FAILED` existent ;
   - un chemin de fichier contenant `..` ou commençant par `/` est refusé ;
   - `review:send` exige `text` pour `request`.
-- [ ] T007 [P] Tests de `parseUnifiedDiff` dans `tests/unit/shared/diff.test.ts` :
+- [X] T007 [P] Tests de `parseUnifiedDiff` dans `tests/unit/shared/diff.test.ts` :
   - plusieurs zones, numéros de ligne des deux côtés ;
   - « \ No newline at end of file » ;
   - fichier ajouté, supprimé, renommé ;
   - lignes avec CR, chemins avec espaces et accents.
-- [ ] T008 Tests d'intégration de l'instantané git (research R1, R2) sur dépôts temporaires, dans `tests/integration/git/review-git.test.ts` :
+- [X] T008 Tests d'intégration de l'instantané git (research R1, R2) sur dépôts temporaires, dans `tests/integration/git/review-git.test.ts` :
   - commits, non commité, non suivi et renommé sont dans l'arbre ; les fichiers ignorés n'y sont pas ;
   - `git status` et l'index du worktree restent identiques ;
   - même arbre ⇒ même id ;
@@ -74,7 +74,7 @@ toutes les stories dépendent.
   - un fichier qui ne diffère que par CRLF reste listé avec `eolOnly` ;
   - le diff d'un fichier ignore les CR de fin de ligne ;
   - un chemin accentué revient en UTF-8, sans guillemets (report de T003).
-- [ ] T009 Tests de la file de consignes de `AgentManager` (research R7) dans `tests/unit/main/agents/agent-manager.test.ts` :
+- [X] T009 Tests de la file de consignes de `AgentManager` (research R7) dans `tests/unit/main/agents/agent-manager.test.ts` :
   - écrite tout de suite quand l'agent est `awaiting-prompt` ou `done` ;
   - rien écrit en `awaiting-answer`, `working` ou `starting` ;
   - N consignes écrites une par passage à l'état prêt, jamais toutes d'un coup ;
@@ -84,12 +84,12 @@ toutes les stories dépendent.
 
 ### Implementation (Green)
 
-- [ ] T010 [P] Ajouter `agentReviewSchema`, `reviewCommentSchema`, `Agent.review` et `Workspace.testCommand` avec leurs valeurs par défaut dans `src/shared/model.ts`.
-- [ ] T011 [P] Créer les schémas zod de data-model.md dans `src/shared/review.ts`.
-- [ ] T012 [P] Ajouter les canaux, les événements et les codes d'erreur de `contracts/ipc.md`, plus le schéma de chemin relatif, dans `src/shared/ipc.ts` et `src/preload/api.ts`.
-- [ ] T013 [P] Implémenter `parseUnifiedDiff` (pur) dans `src/shared/diff.ts`.
-- [ ] T014 Implémenter dans `GitService` `snapshot(worktree)` (index temporaire copié, `add -A`, `write-tree`, `commit-tree`), `mergeBase`, `changedFiles(base, tree)` (numstat, name-status, raw, `-M`, détection `eolOnly`) et `fileDiff(base, tree, path)` (`--ignore-cr-at-eol`, seuils 1 MB / 5 000 lignes), dans `src/main/git/git-service.ts`.
-- [ ] T015 Remplacer `retype` par une file FIFO de consignes par agent : états prêts `awaiting-prompt` et `done`, une consigne par passage, collage entre crochets pour le multiligne. Exposer `AgentManager.sendPrompt(agentId, text)` dans `src/main/agents/agent-manager.ts`.
+- [X] T010 [P] Ajouter `agentReviewSchema`, `reviewCommentSchema`, `Agent.review` et `Workspace.testCommand` avec leurs valeurs par défaut dans `src/shared/model.ts`.
+- [X] T011 [P] Créer les schémas zod de data-model.md dans `src/shared/review.ts`.
+- [X] T012 [P] Ajouter les canaux, les événements et les codes d'erreur de `contracts/ipc.md`, plus le schéma de chemin relatif, dans `src/shared/ipc.ts` et `src/preload/api.ts`.
+- [X] T013 [P] Implémenter `parseUnifiedDiff` (pur) dans `src/shared/diff.ts`.
+- [X] T014 Implémenter dans `GitService` `snapshot(worktree)` (index temporaire copié, `add -A`, `write-tree`, `commit-tree`), `mergeBase`, `changedFiles(base, tree)` (numstat, name-status, raw, `-M`, détection `eolOnly`) et `fileDiff(base, tree, path)` (`--ignore-cr-at-eol`, seuils 1 MB / 5 000 lignes), dans `src/main/git/git-service.ts`.
+- [X] T015 Remplacer `retype` par une file FIFO de consignes par agent : états prêts `awaiting-prompt` et `done`, une consigne par passage, collage entre crochets pour le multiligne. Exposer `AgentManager.sendPrompt(agentId, text)` dans `src/main/agents/agent-manager.ts`.
 
 **Checkpoint**: fondations prêtes ; `npm run check` vert.
 

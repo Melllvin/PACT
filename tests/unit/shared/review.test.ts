@@ -182,7 +182,9 @@ describe('Integration', () => {
   });
 
   it('defaults to squash, closing the tile and removing the worktree (FR-019, FR-024)', () => {
-    const { mode: _, after: __, ...rest } = integration;
+    const rest: Partial<typeof integration> = { ...integration };
+    delete rest.mode;
+    delete rest.after;
     expect(integrationSchema.parse(rest)).toMatchObject({
       mode: 'squash',
       after: { closeTile: true, removeWorktree: true },
