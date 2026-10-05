@@ -57,6 +57,12 @@ describe('review handlers', () => {
     expect(tests.ensure).toHaveBeenCalledWith(target, 'npm test', 'shown');
   });
 
+  it('opens the review even when the tests cannot start', async () => {
+    const { services, tests } = setup();
+    tests.ensure.mockRejectedValue(new Error('env'));
+    expect(await services['review:open']({ agentId })).toEqual({ tree: 'shown', missing: false });
+  });
+
   it('runs nothing on opening without a command, nor for a missing worktree', async () => {
     const none = setup(null);
     await none.services['review:open']({ agentId });

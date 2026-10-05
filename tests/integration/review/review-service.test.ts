@@ -127,6 +127,7 @@ describe('ReviewService.open', () => {
       removed: 1,
       newSinceSeen: null,
       missing: false,
+      testCommand: null,
     });
     expect(paths(snapshot)).toEqual(['a.txt', 'b.txt']);
     expect(snapshot.tree).toMatch(/^[0-9a-f]{40}$/);
@@ -140,7 +141,11 @@ describe('ReviewService.open', () => {
 
   it('says the worktree is missing, so only « Abandonner » is left', async () => {
     await rm(worktree, { recursive: true, force: true });
-    expect(await service.open(AGENT_ID)).toMatchObject({ missing: true, files: [] });
+    expect(await service.open(AGENT_ID)).toMatchObject({
+      missing: true,
+      files: [],
+      testCommand: null,
+    });
   });
 });
 
@@ -299,6 +304,8 @@ describe('ReviewService tests to run (FR-017, R8)', () => {
     expect(await service.testPlan(AGENT_ID)).toMatchObject({ command: 'npm test' });
     await workspaces.update(workspace.id, (ws) => ({ ...ws, testCommand: 'make check' }));
     expect(await service.testPlan(AGENT_ID)).toMatchObject({ command: 'make check' });
+    // The review says it too, so « non configurés » shows without asking (FR-016).
+    expect(await service.open(AGENT_ID)).toMatchObject({ testCommand: 'make check' });
   });
 });
 

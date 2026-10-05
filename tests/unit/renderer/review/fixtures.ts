@@ -32,6 +32,7 @@ export const snapshot = (overrides: Partial<ReviewSnapshot> = {}): ReviewSnapsho
   mainHead: blob(1),
   newSinceSeen: null,
   missing: false,
+  testCommand: 'npm test',
   ...overrides,
 });
 

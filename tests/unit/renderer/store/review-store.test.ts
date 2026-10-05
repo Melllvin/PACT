@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createReviewStore } from '../../../../src/renderer/store/review-store';
 import type { IpcEvent, IpcEventChannel, PactApi } from '../../../../src/shared/ipc';
-import type { FileDiff, ReviewSnapshot } from '../../../../src/shared/review';
+import type { FileDiff, Integration, ReviewSnapshot, TestRun } from '../../../../src/shared/review';
 import { diff, file, snapshot } from '../review/fixtures';
 import { uuid } from '../tiles/fixtures';
 
@@ -159,5 +159,159 @@ describe('review store', () => {
     const { disconnect, listeners } = setup();
     disconnect();
     expect(listeners.size).toBe(0);
+  });
+});
+
+// 002 T035 — the Décision column: tests, integration and the « ✓ Intégré » notice.
+
+const testRun = (overrides: Partial<TestRun> = {}): TestRun => ({
+  agentId: uuid(1),
+  command: 'npm test',
+  tree: snapshot().tree,
+  status: 'running',
+  passedCount: null,
+  outputTail: '',
+  ...overrides,
+});
+
+const integration = (overrides: Partial<Integration> = {}): Integration => ({
+  id: uuid(50),
+  agentId: uuid(1),
+  mode: 'squash',
+  message: 'Ajoute les sessions',
+  after: { closeTile: true, removeWorktree: true },
+  snapshot: snapshot().tree,
+  mainAtStart: snapshot().base,
+  state: 'integrated',
+  conflicts: [],
+  error: null,
+  ...overrides,
+});
+
+const request = {
+  mode: 'squash' as const,
+  message: 'Ajoute les sessions',
+  after: { closeTile: true, removeWorktree: true },
+};
+const label = { workspaceId: 'w1', branch: 'agent/pg-sessions', mainBranch: 'main' };
+
+describe('review store, Décision column', () => {
+  it('keeps the last test run of each agent, from requests and review:tests', async () => {
+    const { store, invoke, emit } = setup({ 'review:runTests': () => testRun() });
+    await store.getState().runTests(uuid(1));
+    expect(invoke).toHaveBeenCalledWith('review:runTests', { agentId: uuid(1) });
+    expect(store.getState().tests[uuid(1)]).toEqual(testRun());
+    emit('review:tests', testRun({ agentId: uuid(2), status: 'passed', passedCount: 3 }));
+    expect(store.getState().tests[uuid(2)]).toMatchObject({ status: 'passed', passedCount: 3 });
+  });
+
+  it('shows why the tests could not run', async () => {
+    const { store } = setup({
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      'review:runTests': () => Promise.reject({ code: 'INVALID_INPUT', message: 'Non configurés' }),
+    });
+    await store.getState().runTests(uuid(1));
+    expect(store.getState().decisions[uuid(1)]).toEqual({
+      busy: false,
+      error: { message: 'Non configurés', files: [] },
+    });
+  });
+
+  it('cancels the tests, whatever the answer', async () => {
+    const { store, invoke } = setup({
+      'review:cancelTests': () => Promise.reject(new Error('gone')),
+    });
+    await store.getState().cancelTests(uuid(1));
+    expect(invoke).toHaveBeenCalledWith('review:cancelTests', { agentId: uuid(1) });
+  });
+
+  it('saves the test command of the workspace, shows it in the review and runs the tests', async () => {
+    const { store, invoke } = setup({
+      'review:runTests': () => testRun({ command: 'make check' }),
+    });
+    await store.getState().open(uuid(1));
+    await store.getState().setTestCommand('w1', uuid(1), 'make check');
+    expect(invoke).toHaveBeenCalledWith('workspace:setTestCommand', {
+      workspaceId: 'w1',
+      command: 'make check',
+    });
+    expect(store.getState().snapshot?.testCommand).toBe('make check');
+    expect(store.getState().tests[uuid(1)]).toMatchObject({ command: 'make check' });
+  });
+
+  it('saves the test command of an agent no longer shown without touching the review', async () => {
+    const { store } = setup({ 'review:runTests': () => testRun({ agentId: uuid(2) }) });
+    await store.getState().open(uuid(1));
+    await store.getState().setTestCommand('w1', uuid(2), 'make check');
+    expect(store.getState().snapshot?.testCommand).toBe('npm test');
+  });
+
+  it('shows why the test command could not be saved', async () => {
+    const { store, invoke } = setup({
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      'workspace:setTestCommand': () => Promise.reject({ code: 'NOT_FOUND', message: 'Inconnu' }),
+    });
+    await store.getState().setTestCommand('w1', uuid(1), 'make check');
+    expect(store.getState().decisions[uuid(1)]?.error?.message).toBe('Inconnu');
+    expect(invoke).not.toHaveBeenCalledWith('review:runTests', expect.anything());
+  });
+
+  it('integrates, busy meanwhile, then gives the notice of the workspace (US2/AC6)', async () => {
+    let done: (value: Integration) => void = () => undefined;
+    const { store, invoke } = setup({
+      'integration:start': () =>
+        new Promise<Integration>((resolve) => {
+          done = resolve;
+        }),
+    });
+    const running = store.getState().integrate(uuid(1), request, label);
+    expect(store.getState().decisions[uuid(1)]).toEqual({ busy: true, error: null });
+    expect(store.getState().decisions[uuid(2)]).toBeUndefined();
+    done(integration());
+    await running;
+    expect(invoke).toHaveBeenCalledWith('integration:start', { agentId: uuid(1), ...request });
+    expect(store.getState().decisions[uuid(1)]).toEqual({ busy: false, error: null });
+    expect(store.getState().notice).toEqual({
+      workspaceId: 'w1',
+      text: '✓ Intégré · agent/pg-sessions → main',
+    });
+    store.getState().dismissNotice();
+    expect(store.getState().notice).toBeNull();
+  });
+
+  it('lists the files of a refused integration (FR-021)', async () => {
+    const { store } = setup({
+      'integration:start': () =>
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        Promise.reject({ code: 'LOCAL_CHANGES', message: 'Bloquée', files: ['src/db.ts'] }),
+    });
+    await store.getState().integrate(uuid(1), request, label);
+    expect(store.getState().decisions[uuid(1)]).toEqual({
+      busy: false,
+      error: { message: 'Bloquée', files: ['src/db.ts'] },
+    });
+    expect(store.getState().notice).toBeNull();
+  });
+
+  it('says which files conflict, main left as it was (FR-027)', async () => {
+    const conflicts = ['src/db.ts', 'src/auth.ts'].map((path) => ({
+      path,
+      kind: 'content' as const,
+      mainCommit: { short: 'abc1234', subject: 'Corrige' },
+      hunks: [],
+      edited: null,
+      resolved: false,
+    }));
+    const { store } = setup({
+      'integration:start': () => integration({ state: 'conflicted', conflicts }),
+    });
+    await store.getState().integrate(uuid(1), request, label);
+    expect(store.getState().decisions[uuid(1)]).toEqual({
+      busy: false,
+      error: {
+        message: 'Conflit avec main : rien n’a été intégré.',
+        files: ['src/db.ts', 'src/auth.ts'],
+      },
+    });
   });
 });
