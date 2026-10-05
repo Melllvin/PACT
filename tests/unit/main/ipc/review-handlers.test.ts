@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createReviewServices } from '../../../../src/main/ipc/review-handlers';
 
-// 002 T021, T034 — the review channels, served by ReviewService, TestRunner and
+// 002 T021, T034, T041 — the review channels, served by ReviewService, TestRunner and
 // IntegrationService (contracts/ipc.md).
 
 const agentId = '00000000-0000-4000-8000-000000000001';
@@ -15,6 +15,8 @@ const setup = (command: string | null = 'npm test') => {
     setSeen: vi.fn(() => Promise.resolve()),
     updatePending: vi.fn(() => Promise.resolve([agentId])),
     testPlan: vi.fn(() => Promise.resolve({ target, command, tree: 'current' })),
+    comment: vi.fn(() => Promise.resolve('comment')),
+    send: vi.fn(() => Promise.resolve()),
   };
   const tests = {
     run: vi.fn(() => Promise.resolve('running')),
@@ -109,5 +111,15 @@ describe('review handlers', () => {
     };
     expect(await services['integration:start'](request)).toBe('integration');
     expect(integration.start).toHaveBeenCalledWith(request);
+  });
+
+  it('comments a line and sends instructions to the agent (FR-012, FR-013)', async () => {
+    const { services, review } = setup();
+    expect(
+      await services['review:comment']({ agentId, path: 'a.ts', line: 3, text: 'Renommer.' }),
+    ).toBe('comment');
+    expect(review.comment).toHaveBeenCalledWith(agentId, 'a.ts', 3, 'Renommer.');
+    await services['review:send']({ agentId, kind: 'request', text: 'Ajoute un test.' });
+    expect(review.send).toHaveBeenCalledWith({ agentId, kind: 'request', text: 'Ajoute un test.' });
   });
 });
