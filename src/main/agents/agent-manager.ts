@@ -631,12 +631,12 @@ export class AgentManager {
   }
 
   private flushPrompt(id: string) {
-    const queue = this.prompts.get(id);
+    const [text, ...rest] = this.prompts.get(id) ?? [];
     const state = this.find(id).agent.state;
-    if (!queue?.length || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
+    if (text === undefined || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
       return;
-    const text = queue.shift() ?? '';
-    if (queue.length === 0) this.prompts.delete(id);
+    if (rest.length === 0) this.prompts.delete(id);
+    else this.prompts.set(id, rest);
     this.promptTyped.add(id);
     this.pty.write(id, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}\r` : `${text}\r`);
   }

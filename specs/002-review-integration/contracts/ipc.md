@@ -23,6 +23,7 @@ Les types (`ReviewSnapshot`, `FileDiff`, `TestRun`, `Integration`…) sont décr
 |-------|--------|--------|-----------|
 | `review:open` | `{ agentId }` | `ReviewSnapshot` ; commence le suivi du worktree (R3) et lance les tests si besoin (R8) | FR-001, FR-002, FR-017 |
 | `review:close` | `{ agentId }` | — ; arrête le suivi | FR-004 |
+| `review:listPending` | `{ workspaceId }` | `string[]` : les agents à relire, demandés une fois l'état chargé (les `review:pending` envoyés avant l'ouverture de la fenêtre sont perdus) | FR-002, FR-003 |
 | `review:fileDiff` | `{ agentId, path }` | `FileDiff` | FR-008 |
 | `review:setSeen` | `{ agentId, path, seen: boolean }` | — ; mémorise ou oublie le blob actuel | FR-007, FR-009, FR-011 |
 | `review:comment` | `{ agentId, path, line, text }` | `ReviewComment` ; consigne mise en file (R7) | FR-012, FR-014 |

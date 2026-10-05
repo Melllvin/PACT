@@ -74,6 +74,7 @@ toutes les stories dépendent.
   - un fichier qui ne diffère que par CRLF reste listé avec `eolOnly` ;
   - le diff d'un fichier ignore les CR de fin de ligne ;
   - un chemin accentué revient en UTF-8, sans guillemets (report de T003).
+  - ajouté en Phase 3 : une modification de même taille faite dans la seconde du checkout est vue (l'index copié garde le mtime de l'original, « racy git »).
 - [X] T009 Tests de la file de consignes de `AgentManager` (research R7) dans `tests/unit/main/agents/agent-manager.test.ts` :
   - écrite tout de suite quand l'agent est `awaiting-prompt` ou `done` ;
   - rien écrit en `awaiting-answer`, `working` ou `starting` ;
@@ -106,7 +107,7 @@ puis remis à zéro quand le fichier change.
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T016 [P] [US1] Tests d'intégration de `ReviewService` sur dépôts temporaires, dans `tests/integration/review/review-service.test.ts` :
+- [X] T016 [P] [US1] Tests d'intégration de `ReviewService` sur dépôts temporaires, dans `tests/integration/review/review-service.test.ts` :
   - `open` renvoie `ReviewSnapshot` (base, tree, branche, fichiers triés, totaux) ;
   - une écriture dans le worktree émet `review:changed` en moins de 3 s (SC-006) ;
   - le filet de 5 s rattrape un événement manqué ;
@@ -115,7 +116,7 @@ puis remis à zéro quand le fichier change.
   - `seen` persiste après rechargement des stores (FR-011) ;
   - worktree supprimé ⇒ `missing: true` ;
   - `review:pending` liste les agents `done` ou `awaiting-prompt` qui ont au moins un fichier.
-- [ ] T017 [P] [US1] Tests des composants dans `tests/unit/renderer/review/` (`ChangesTab.test.tsx`, `FileList.test.tsx`, `DiffView.test.tsx`) :
+- [X] T017 [P] [US1] Tests des composants dans `tests/unit/renderer/review/` (`ChangesTab.test.tsx`, `FileList.test.tsx`, `DiffView.test.tsx`) :
   - en-tête « Changements · N », branche, « +A −R · V / N vus » ;
   - liste avec type, lignes et case « vu » accessible ;
   - diff avec lignes ajoutées, retirées et numéros ;
@@ -124,25 +125,28 @@ puis remis à zéro quand le fichier change.
   - « Nouveaux changements : +N −M · revoir » ;
   - état vide « rien à relire » ;
   - virtualisation : un diff de 5 000 lignes n'affiche que les lignes visibles.
-- [ ] T018 [P] [US1] Tests de `FocusView`, `TileActions` et `TodoItem` dans `tests/unit/renderer/focus/FocusView.test.tsx`, `tests/unit/renderer/tiles/TileActions.test.tsx` et `tests/unit/renderer/todo/TodoItem.test.tsx` :
+- [X] T018 [P] [US1] Tests de `FocusView`, `TileActions` et `TodoItem` dans `tests/unit/renderer/focus/FocusView.test.tsx`, `tests/unit/renderer/tiles/TileActions.test.tsx` et `tests/unit/renderer/todo/TodoItem.test.tsx` :
   - l'onglet Changements est actif, Aperçu reste inactif ;
   - la colonne s'intitule « Décision » pendant la revue et redevient « À faire » au retour ;
   - « Revue → » apparaît pour un agent en attente de revue et ouvre Changements ;
   - « ‹ Tuiles » et Échap hors du terminal ramènent aux tuiles.
-- [ ] T019 [US1] Test e2e : le faux CLI écrit, supprime et renomme, puis « Revue → » ; vérifier liste, totaux, diff, « vu », puis une nouvelle écriture et « Nouveaux changements », dans `tests/e2e/us8-review.spec.ts`.
+- [X] T019 [US1] Test e2e : le faux CLI écrit, supprime et renomme, puis « Revue → » ; vérifier liste, totaux, diff, « vu », puis une nouvelle écriture et « Nouveaux changements », dans `tests/e2e/us8-review.spec.ts`.
 
 ### Implementation for User Story 1
 
-- [ ] T020 [US1] Implémenter `ReviewService` dans `src/main/review/review-service.ts` :
+- [X] T020 [US1] Implémenter `ReviewService` dans `src/main/review/review-service.ts` :
   - instantané, `fs.watch` récursif sans `.git/`, rafales regroupées sur 300 ms, filet de 5 s ;
   - vus et `newSinceSeen` ;
   - `missing` ;
   - calcul de `review:pending`, avec les agents suivis tant qu'ils travaillent.
-- [ ] T021 [US1] Brancher `review:open`, `review:close`, `review:fileDiff`, `review:setSeen` et les événements `review:changed` / `review:pending` dans `src/main/ipc/review-handlers.ts` et `src/main/app-services.ts`.
-- [ ] T022 [P] [US1] Créer l'état de revue (instantané, fichier choisi, diff) dans `src/renderer/review/review-store.ts`.
-- [ ] T023 [P] [US1] Implémenter `FileList.tsx` et `DiffView.tsx` (virtualisée, hauteur de ligne fixe) dans `src/renderer/review/`.
-- [ ] T024 [US1] Implémenter `ChangesTab.tsx` dans `src/renderer/review/` : liste + diff + terminal de l'agent réutilisé via `terminal-registry`, colonne « Décision » à la place de `TodoColumn`.
-- [ ] T025 [US1] Activer l'onglet Changements dans `src/renderer/focus/FocusView.tsx`, ajouter « Revue → » dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/todo/TodoItem.tsx`, et dériver l'état « à relire » dans `src/shared/todo.ts`.
+- [X] T021 [US1] Brancher `review:open`, `review:close`, `review:fileDiff`, `review:setSeen` et les événements `review:changed` / `review:pending` dans `src/main/ipc/review-handlers.ts` et `src/main/app-services.ts`.
+  - Note : le service est construit et branché dans `src/main/index.ts` (comme les services agents), pas dans `app-services.ts`. `review:pending` est recalculé à chaque `agent:state` et à l'ouverture d'un espace ; une revue suivie se ferme seule quand l'agent n'existe plus.
+- [X] T022 [P] [US1] Créer l'état de revue (instantané, fichier choisi, diff) dans `src/renderer/review/review-store.ts`.
+- [X] T023 [P] [US1] Implémenter `FileList.tsx` et `DiffView.tsx` (virtualisée, hauteur de ligne fixe) dans `src/renderer/review/`.
+- [X] T024 [US1] Implémenter `ChangesTab.tsx` dans `src/renderer/review/` : liste + diff + terminal de l'agent réutilisé via `terminal-registry`, colonne « Décision » à la place de `TodoColumn`.
+- [X] T025 [US1] Activer l'onglet Changements dans `src/renderer/focus/FocusView.tsx`, ajouter « Revue → » dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/todo/TodoItem.tsx`, et dériver l'état « à relire » dans `src/shared/todo.ts`.
+  - Note : le renderer demande `review:listPending` (canal ajouté au contrat) une fois l'état chargé, car les `review:pending` émis à la restauration partent avant que la fenêtre existe. « vu » vit dans `agent.review.seen` de l'app-store (une seule source) ; un fichier supprimé se marque vu avec l'id nul (`seenBlob`). La colonne « Décision » de US1 dit ce qui reste à voir et l'état de l'agent ; tests, intégration et renvoi viennent avec US2–US4.
+  - Corrigé côté main au passage : une revue fermée pendant son ouverture n'est plus suivie, et un `updatePending` plus ancien qui finit en dernier n'annonce rien.
 
 **Checkpoint**: US1 fonctionnelle et testée seule (MVP).
 

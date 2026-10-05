@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -94,6 +94,18 @@ describe('GitService.snapshot (R1)', () => {
     expect(await readFile(indexPath())).toEqual(index);
     expect(git(worktree, 'rev-parse', 'HEAD')).toBe(head);
     expect(git(repo, 'branch', '--list')).not.toContain('pact');
+  });
+
+  it('sees a same-size edit made in the second of the checkout (racy git)', async () => {
+    // Same size, same mtime and ctime seconds as in the index: only the racy check of git,
+    // which compares the index file's own mtime, makes it read the content again.
+    const file = join(worktree, 'a.txt');
+    const checkedOut = await stat(file);
+    await writeFile(file, 'UN\ndeux\ntrois\n');
+    await utimes(file, checkedOut.atime, checkedOut.mtime);
+    await new Promise((r) => setTimeout(r, 1100));
+    const { tree } = await service.snapshot(worktree);
+    expect(git(repo, 'show', `${tree}:a.txt`)).toBe('UN\ndeux\ntrois');
   });
 
   it('works in a worktree without an index yet', async () => {

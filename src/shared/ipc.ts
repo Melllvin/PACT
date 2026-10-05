@@ -167,6 +167,8 @@ export const ipcRequests = {
   // 002 — review (screen 1h) and integration (screen 1q).
   'review:open': request(agentRef, reviewSnapshotSchema),
   'review:close': request(agentRef, none),
+  /** The agents to review, asked once loaded: `review:pending` events sent earlier are lost. */
+  'review:listPending': request(z.object({ workspaceId: nonEmpty }), z.array(z.uuid())),
   'review:fileDiff': request(fileRef, fileDiffSchema),
   'review:setSeen': request(fileRef.extend({ seen: z.boolean() }), none),
   'review:comment': request(

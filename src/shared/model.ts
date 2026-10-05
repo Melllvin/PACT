@@ -160,7 +160,15 @@ export type AdapterId = z.infer<typeof adapterIdSchema>;
 
 /** Actions offered by a tile and by the matching À faire item (FR-024, FR-028). */
 export type TileAction =
-  'allow' | 'deny' | 'always-allow' | 'log' | 'restart' | 'resume' | 'cancel-resume';
+  | 'allow'
+  | 'deny'
+  | 'always-allow'
+  | 'log'
+  | 'restart'
+  | 'resume'
+  | 'cancel-resume'
+  /** « Revue → »: opens the Changements tab (002 FR-002). */
+  | 'review';
 
 /** Derived from agent state, never persisted (data-model TodoItem). */
 export type TodoItem = {
@@ -170,4 +178,4 @@ export type TodoItem = {
   title: string;
   actions: TileAction[];
 };
-export type TodoKind = 'answer' | 'rate-limit' | 'prompt' | 'info';
+export type TodoKind = 'answer' | 'rate-limit' | 'review' | 'prompt' | 'info';

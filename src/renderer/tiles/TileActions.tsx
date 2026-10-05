@@ -10,6 +10,8 @@ export type TileActionHandlers = {
   onCancelAutoResume: () => void;
   /** « Toujours pour ce worktree », offered in the Focus only (FR-034). */
   onAlways?: (() => void) | undefined;
+  /** « Revue → », given only for an agent with changes to review (002 FR-002). */
+  onReview?: (() => void) | undefined;
 };
 
 const GROUP = 'flex flex-none flex-wrap items-center justify-end gap-1.5';
@@ -26,6 +28,7 @@ export function TileActions({
   onLog,
   onCancelAutoResume,
   onAlways,
+  onReview,
   scheduledResume = null,
 }: TileActionHandlers & { state: AgentState; scheduledResume?: ScheduledResume | null }) {
   if (state === 'awaiting-answer') {
@@ -68,6 +71,15 @@ export function TileActions({
         <Button onClick={onRestart}>Relancer</Button>
         <Button variant="primary" onClick={onResume}>
           Reprendre
+        </Button>
+      </span>
+    );
+  }
+  if (onReview && (state === 'done' || state === 'awaiting-prompt')) {
+    return (
+      <span className={GROUP}>
+        <Button variant="primary" onClick={onReview}>
+          Revue →
         </Button>
       </span>
     );

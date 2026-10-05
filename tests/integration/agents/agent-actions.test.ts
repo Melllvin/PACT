@@ -359,7 +359,7 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     await waitForOutput(agent.id, 'Reçu : Commentaire');
   });
 
-  it('waits for the prompt of a starting agent', async () => {
+  it('waits for the prompt of a starting agent, then types the queued prompts in turn', async () => {
     scenario = 'echo-prompt';
     const [agent] = await manager.launch({
       workspaceId: workspace.id,
@@ -379,8 +379,11 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     if (!agent) throw new Error('no agent launched');
     const writes = spyWrites();
     await manager.sendPrompt(agent.id, 'Dès que prêt');
-    await waitForOutput(agent.id, 'Reçu : Dès que prêt');
+    await manager.sendPrompt(agent.id, 'Puis celui-ci');
+    await waitForOutput(agent.id, 'Reçu : Puis celui-ci');
+    expect(writes.map((w) => w.data)).toEqual(['Dès que prêt\r', 'Puis celui-ci\r']);
     expect(writes[0]?.state).toBe('awaiting-prompt');
+    expect(writes[1]?.before).toContain('Reçu : Dès que prêt');
   });
 
   it('sends a multi-line prompt as a bracketed paste', async () => {

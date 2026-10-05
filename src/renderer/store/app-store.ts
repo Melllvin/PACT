@@ -86,6 +86,8 @@ export type AppState = {
   cancelCloseAgent: () => void;
   /** Closes the agent asked for, keeping or removing its worktree and branch. */
   closeAgent: (removeWorktree: boolean) => Promise<void>;
+  /** « vu » of a file in the review: the content seen, or `null` to forget it (002 FR-009). */
+  markSeen: (agentId: string, path: string, blob: string | null) => Promise<void>;
 };
 
 export type CloneStatus =
@@ -448,6 +450,20 @@ export function createAppStore(api: PactApi) {
           set({ workspaces: withoutAgent(get().workspaces, agentId) });
         });
       },
+
+      markSeen: (agentId, path, blob) =>
+        act(async () => {
+          await api.invoke('review:setSeen', { agentId, path, seen: blob !== null });
+          set({
+            workspaces: updateAgent(get().workspaces, agentId, (agent) => {
+              const seen = Object.fromEntries(
+                Object.entries(agent.review.seen).filter(([seenPath]) => seenPath !== path),
+              );
+              if (blob !== null) seen[path] = blob;
+              return { ...agent, review: { ...agent.review, seen } };
+            }),
+          });
+        }),
     };
   });
 }
