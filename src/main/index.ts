@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { createAdapters } from './agents/adapters';
@@ -15,7 +16,9 @@ import { createEventEmitter, registerHandlers } from './ipc/handlers';
 import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
+import { IntegrationService } from './review/integration-service';
 import { ReviewService } from './review/review-service';
+import { TestRunner } from './review/test-runner';
 import { applyTestMode, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
 import { CloneJobs } from './workspace/clone-job';
@@ -108,6 +111,28 @@ void app.whenReady().then(async () => {
       emit('review:pending', event);
     },
   });
+  // 002 US2 — the tests of the Décision column and the integration into main.
+  const tests = new TestRunner({
+    env: resolveShellEnv,
+    onUpdate: (run) => {
+      emit('review:tests', run);
+    },
+  });
+  const integration = new IntegrationService({
+    git,
+    workspaces,
+    agents,
+    integrationsDir: join(app.getPath('userData'), 'integrations'),
+    onState: (state) => {
+      emit('integration:state', state);
+      if (state.state !== 'integrated') return;
+      // main moved: what is left to review changes with it.
+      const workspace = workspaces
+        .list()
+        .find((ws) => ws.agents.some((a) => a.id === state.agentId));
+      if (workspace) void review.updatePending(workspace.id);
+    },
+  });
   const freeTerminals = new FreeTerminals({
     workspaces,
     pty,
@@ -164,7 +189,7 @@ void app.whenReady().then(async () => {
         freeTerminals,
         pty,
       }),
-      ...createReviewServices({ review }),
+      ...createReviewServices({ review, tests, integration, workspaces }),
     },
     {
       isTrustedSender: trustedSenderCheck({
@@ -193,6 +218,7 @@ void app.whenReady().then(async () => {
     shutdown: async () => {
       workspaces.dispose();
       review.dispose();
+      tests.dispose();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
       await hooks.stop();

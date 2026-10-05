@@ -17,6 +17,13 @@ export const agentStateSchema = z.enum([
   'closed',
 ]);
 
+/** An agent still at work: integrating it asks for a confirmation first (002 FR-025). */
+export const WORKING_STATES: readonly z.infer<typeof agentStateSchema>[] = [
+  'starting',
+  'working',
+  'awaiting-answer',
+];
+
 export const permissionLevelSchema = z.enum(['always-allow', 'ask-sensitive', 'always-ask']);
 
 const isoDate = z.iso.datetime();

@@ -167,11 +167,11 @@ modifier.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T026 [P] [US2] Tests d'intégration de la vérification de conflits (research R4) dans `tests/integration/git/merge-tree.test.ts` :
+- [X] T026 [P] [US2] Tests d'intégration de la vérification de conflits (research R4) dans `tests/integration/git/merge-tree.test.ts` :
   - propre ou en conflit, avec les chemins en conflit ;
   - aucune modification de la branche principale, de son dossier ni du worktree, comparés octet par octet ;
   - commit de la branche principale qui a introduit le conflit (`%h`, sujet).
-- [ ] T027 [P] [US2] Tests d'intégration de `IntegrationService` (research R5) dans `tests/integration/review/integration-service.test.ts` :
+- [X] T027 [P] [US2] Tests d'intégration de `IntegrationService` (research R5) dans `tests/integration/review/integration-service.test.ts` :
   - squash : un commit, parent = branche principale, contenu = instantané, message validé ;
   - garder les commits : avance rapide quand c'est possible, sinon commit de fusion ; les commits de l'agent gardent leurs messages ; le non commité forme un dernier commit ;
   - crochets : `pre-commit` qui sort en 1 ⇒ `GIT_FAILED` avec sa sortie, branche principale inchangée ; `commit-msg` qui réécrit le message est respecté ;
@@ -182,7 +182,7 @@ modifier.
   - cases cochées : `removeWorktree` appelé avec `force: true` ;
   - « Conserver le worktree » : `reset --hard` quand rien n'a changé ; report des écritures postérieures par fusion à trois ; conflit ⇒ worktree laissé tel quel ;
   - chemins avec espaces et accents.
-- [ ] T028 [P] [US2] Tests de `TestRunner` (research R8) dans `tests/unit/main/review/test-runner.test.ts` et `tests/integration/review/test-runner.test.ts` :
+- [X] T028 [P] [US2] Tests de `TestRunner` (research R8) dans `tests/unit/main/review/test-runner.test.ts` et `tests/integration/review/test-runner.test.ts` :
   - détection `npm test` / `pnpm test` / `yarn test` selon le fichier de verrouillage, script de remplacement de npm ignoré ;
   - réussi ou en échec selon le code de sortie ;
   - nombre de tests lu dans les résumés Vitest/Jest, pytest et cargo ;
@@ -191,7 +191,11 @@ modifier.
   - annulation ;
   - lancé à `review:open` quand aucun résultat ne correspond à `tree` ;
   - un nouvel instantané rend le résultat ancien.
-- [ ] T029 [P] [US2] Tests de `DecisionColumn` dans `tests/unit/renderer/review/DecisionColumn.test.tsx` :
+
+  > Côté `TestRunner` : `ensure(target, command, tree)` ne relance pas quand le dernier résultat, ou
+  > l'exécution en cours, porte sur `tree`. L'appel à `review:open` et le résultat « ancien » (son
+  > `tree` diffère de l'instantané) relèvent de T034 et T035.
+- [X] T029 [P] [US2] Tests de `DecisionColumn` dans `tests/unit/renderer/review/DecisionColumn.test.tsx` :
   - lignes Tests (« non configurés » avec saisie de la commande, « non lancés », « en cours », « N réussis », « en échec ») ;
   - conflits (« ✓ Aucun conflit avec main » / « ✕ N conflits ») ;
   - « ○ N fichiers non vus » et état de l'agent ;
@@ -200,11 +204,14 @@ modifier.
   - cases « Fermer la tuile » et « Supprimer worktree et branche » cochées par défaut, « Conserver le worktree » ;
   - confirmation quand l'agent travaille ;
   - erreurs `LOCAL_CHANGES` (liste) et `GIT_FAILED` affichées.
-- [ ] T030 [US2] Test e2e : intégration en squash, un commit sur la branche principale, tuile fermée, worktree supprimé, notification « ✓ Intégré » ; puis un crochet `pre-commit` qui refuse ⇒ erreur et branche principale inchangée, dans `tests/e2e/us9-integrate.spec.ts`.
+  > Le store (`review-store.ts`) garde le dernier `TestRun` et l'état d'intégration par agent, et la
+  > notification avec son workspace ; ses tests sont dans `tests/unit/renderer/store/review-store.test.ts`.
+- [X] T030 [US2] Test e2e : intégration en squash, un commit sur la branche principale, tuile fermée, worktree supprimé, notification « ✓ Intégré » ; puis un crochet `pre-commit` qui refuse ⇒ erreur et branche principale inchangée, dans `tests/e2e/us9-integrate.spec.ts`.
+  > Le crochet du second test est posé une fois l’agent fini : le `commit` du faux CLI dans son worktree passerait sinon par lui aussi. `ls-tree` lu avec `core.quotePath=false` pour le nom accentué.
 
 ### Implementation for User Story 2
 
-- [ ] T031 [US2] Ajouter dans `src/main/git/git-service.ts` :
+- [X] T031 [US2] Ajouter dans `src/main/git/git-service.ts` :
   - `mergeTree(main, commit)` : arbre, conflits avec étapes, `-z` ;
   - `lastMainCommit(base, main, path)` ;
   - `commitInTempWorktree` (`worktree add --detach`, `read-tree -m -u`, `commit -F`, suppression garantie) ;
@@ -212,10 +219,36 @@ modifier.
   - `fastForward` (`merge --ff-only`, lecture des fichiers refusés) ;
   - `updateRef(ref, new, old)` ;
   - `worktreeOf(branch)`.
-- [ ] T032 [US2] Implémenter `TestRunner` dans `src/main/review/test-runner.ts` : détection, shell de connexion, `PORT` de l'agent, sortie capturée, délai, annulation, une exécution à la fois par agent.
-- [ ] T033 [US2] Implémenter `IntegrationService` dans `src/main/review/integration-service.ts` : états de data-model.md, file par workspace, squash ou garder les commits, déplacement de la branche principale, sort de l'agent après coup.
-- [ ] T034 [US2] Étendre `ReviewService` avec l'état des conflits (vérifié à l'ouverture, à chaque instantané et quand la branche principale bouge), et brancher `review:runTests`, `review:cancelTests`, `workspace:setTestCommand`, `integration:start`, `review:tests` et `integration:state`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
-- [ ] T035 [US2] Implémenter `DecisionColumn.tsx` dans `src/renderer/review/`, et la notification « ✓ Intégré · branche → main » dans `src/renderer/workspace/WorkspaceView.tsx`.
+
+  > Note : `commitInTempWorktree` et `mergeNoFfInTempWorktree` ne font qu'une méthode,
+  > `commitWithHooks`. Pour un commit de fusion, `merge --no-ff --no-commit -s ours` pose le second
+  > parent, puis l'arbre donné (instantané, arbre de merge-tree ou résolu en R6) est committé avec
+  > les crochets. `moveWorktree(worktree, commit, arbre)` sert à « Conserver le worktree ».
+  > `merge-tree` sort en 1 aussi sur une mauvaise référence : sans arbre affiché, c'est une erreur.
+  > Tests des étapes dans `tests/integration/git/integration-git.test.ts`.
+- [X] T032 [US2] Implémenter `TestRunner` dans `src/main/review/test-runner.ts` : détection, shell de connexion, `PORT` de l'agent, sortie capturée, délai, annulation, une exécution à la fois par agent.
+  > Groupe de processus à lui (`detached`) pour que l'annulation tue aussi ce que la commande a
+  > lancé ; `taskkill /T /F` sous Windows. `detectTestCommandIn(cwd)` lit package.json et le
+  > fichier de verrouillage du worktree.
+- [X] T033 [US2] Implémenter `IntegrationService` dans `src/main/review/integration-service.ts` : états de data-model.md, file par workspace, squash ou garder les commits, déplacement de la branche principale, sort de l'agent après coup.
+  > L'instantané est pris au clic, la branche principale relue dans la file. Un conflit rend
+  > `conflicted` avec `mainCommit`, `hunks: []` et `resolved: false` : les blocs et leur
+  > résolution relèvent de la Phase 6 (R6). Après le déplacement de la branche principale, rien ne
+  > fait plus échouer l'intégration. `GitService.treeOf` ajouté pour savoir si l'agent a du non
+  > commité ou a écrit depuis l'instantané.
+- [X] T034 [US2] Étendre `ReviewService` avec l'état des conflits (vérifié à l'ouverture, à chaque instantané et quand la branche principale bouge), et brancher `review:runTests`, `review:cancelTests`, `workspace:setTestCommand`, `integration:start`, `review:tests` et `integration:state`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
+  > Conflits : `git merge-tree` entre `mainHead` et le commit de l'instantané à chaque calcul ;
+  > la branche principale qui bouge change `mainHead`, donc le filet de sécurité renvoie la revue.
+  > `ReviewService.testPlan` donne worktree, port, commande (`workspace.testCommand`, sinon
+  > détectée) et arbre affiché ; `review:open` lance les tests via `ensure`, qui réannonce le
+  > dernier résultat s'il porte sur cet arbre ; `review:runTests` sans commande ⇒ `INVALID_INPUT`.
+  > Une intégration `integrated` recalcule les revues en attente du workspace.
+- [X] T035 [US2] Implémenter `DecisionColumn.tsx` dans `src/renderer/review/`, et la notification « ✓ Intégré · branche → main » dans `src/renderer/workspace/WorkspaceView.tsx`.
+  > `ReviewSnapshot.testCommand` dit « non configurés » dès l'ouverture, sans dépendre de l'ordre
+  > des messages IPC. La confirmation FR-025 reprend `WORKING_STATES` (`shared/model.ts`), la même
+  > liste que le main. Un résultat `conflicted` s'affiche en erreur avec ses fichiers en attendant
+  > l'écran de conflit (US4). « Conserver le worktree » intègre en gardant tuile et worktree.
+  > Après « ✓ Intégré », retour aux tuiles et notification pendant 4 s.
 
 **Checkpoint**: US1 + US2, la boucle relire → intégrer.
 

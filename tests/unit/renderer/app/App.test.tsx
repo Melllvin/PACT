@@ -463,4 +463,98 @@ describe('App review (002 T018)', () => {
       seen: true,
     });
   });
+
+  it('sets up the tests, runs them and integrates the agent reviewed (002 T035)', async () => {
+    const user = userEvent.setup();
+    const done = agent(1, { state: 'done' });
+    const shown = snapshot({ agentId: done.id, testCommand: null });
+    const invoke = vi.fn<(channel: string, input?: unknown) => Promise<unknown>>((channel) => {
+      switch (channel) {
+        case 'app:getState':
+          return Promise.resolve({
+            workspaces: [{ ...workspace('w1', 'w1'), agents: [done] }],
+            recents: [],
+            clis: [],
+            permission: null,
+          });
+        case 'review:listPending':
+          return Promise.resolve([done.id]);
+        case 'review:open':
+          return Promise.resolve(shown);
+        case 'review:fileDiff':
+          return Promise.resolve(diff());
+        case 'review:runTests':
+          return Promise.resolve({
+            agentId: done.id,
+            command: 'make check',
+            tree: shown.tree,
+            status: 'running',
+            passedCount: null,
+            outputTail: '',
+          });
+        case 'integration:start':
+          return Promise.resolve({
+            id: '00000000-0000-4000-8000-000000000050',
+            agentId: done.id,
+            mode: 'squash',
+            message: 'Intègre agent/pg-sessions',
+            after: { closeTile: true, removeWorktree: true },
+            snapshot: shown.tree,
+            mainAtStart: shown.base,
+            state: 'integrated',
+            conflicts: [],
+            error: null,
+          });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    const listeners = new Map<string, (payload: unknown) => void>();
+    const api = {
+      invoke,
+      on: (channel: string, listener: (payload: unknown) => void) => {
+        listeners.set(channel, listener);
+        return () => listeners.delete(channel);
+      },
+    } as unknown as PactApi;
+    render(
+      <App store={createAppStore(api)} review={createReviewStore(api)} getPathForFile={() => ''} />,
+    );
+    const [onTile] = await screen.findAllByRole('button', { name: 'Revue →' });
+    await user.click(onTile ?? document.body);
+    const column = await screen.findByRole('complementary', { name: 'Décision' });
+
+    await user.type(
+      await within(column).findByRole('textbox', { name: 'Commande de test' }),
+      'make check',
+    );
+    await user.click(within(column).getByRole('button', { name: 'Enregistrer' }));
+    expect(invoke).toHaveBeenCalledWith('workspace:setTestCommand', {
+      workspaceId: 'w1',
+      command: 'make check',
+    });
+    await user.click(await within(column).findByRole('button', { name: 'Annuler les tests' }));
+    expect(invoke).toHaveBeenCalledWith('review:cancelTests', { agentId: done.id });
+    act(() => {
+      listeners.get('review:tests')?.({
+        agentId: done.id,
+        command: 'make check',
+        tree: shown.tree,
+        status: 'cancelled',
+        passedCount: null,
+        outputTail: '',
+      });
+    });
+    await user.click(within(column).getByRole('button', { name: 'Relancer' }));
+    expect(invoke.mock.calls.filter(([channel]) => channel === 'review:runTests')).toHaveLength(2);
+
+    await user.click(within(column).getByRole('button', { name: '✓ Intégrer' }));
+    expect(invoke).toHaveBeenCalledWith(
+      'integration:start',
+      expect.objectContaining({ agentId: done.id, mode: 'squash' }),
+    );
+    expect((await screen.findByRole('status')).textContent).toBe(
+      `✓ Intégré · ${done.branch} → main`,
+    );
+  });
 });

@@ -11,10 +11,6 @@ const pending = new Set<string>([
   // 002 — served by the review and integration stories (US1–US4).
   'review:comment',
   'review:send',
-  'review:runTests',
-  'review:cancelTests',
-  'workspace:setTestCommand',
-  'integration:start',
   'integration:resolve',
   'integration:openInEditor',
   'integration:askAgent',

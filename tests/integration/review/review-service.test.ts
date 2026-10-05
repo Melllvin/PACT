@@ -127,6 +127,7 @@ describe('ReviewService.open', () => {
       removed: 1,
       newSinceSeen: null,
       missing: false,
+      testCommand: null,
     });
     expect(paths(snapshot)).toEqual(['a.txt', 'b.txt']);
     expect(snapshot.tree).toMatch(/^[0-9a-f]{40}$/);
@@ -140,7 +141,11 @@ describe('ReviewService.open', () => {
 
   it('says the worktree is missing, so only « Abandonner » is left', async () => {
     await rm(worktree, { recursive: true, force: true });
-    expect(await service.open(AGENT_ID)).toMatchObject({ missing: true, files: [] });
+    expect(await service.open(AGENT_ID)).toMatchObject({
+      missing: true,
+      files: [],
+      testCommand: null,
+    });
   });
 });
 
@@ -259,6 +264,48 @@ describe('ReviewService pending reviews (FR-002, FR-003)', () => {
     await service.updatePending(workspace.id);
     await older;
     expect(pending.at(-1)).toEqual({ workspaceId: workspace.id, agentIds: [] });
+  });
+});
+
+describe('ReviewService conflicts with main (FR-018)', () => {
+  it('says which files conflict, checked again when main moves', async () => {
+    service.dispose();
+    service = createService({ watch: () => () => undefined, safetyMs: 200 });
+    await writeFile(join(worktree, 'a.txt'), 'un\nAGENT\n');
+    expect(await service.open(AGENT_ID)).toMatchObject({ conflicts: 'none' });
+    await writeFile(join(repo, 'a.txt'), 'un\nMAIN\n');
+    git(repo, 'commit', '-am', 'main change');
+    await waitFor(
+      () => Array.isArray(changed.at(-1)?.conflicts),
+      'no review:changed once main moved',
+    );
+    expect(changed.at(-1)).toMatchObject({
+      conflicts: ['a.txt'],
+      mainHead: git(repo, 'rev-parse', 'main'),
+    });
+  });
+});
+
+describe('ReviewService tests to run (FR-017, R8)', () => {
+  it('runs them in the worktree with its port, on the tree shown', async () => {
+    const snapshot = await service.open(AGENT_ID);
+    expect(await service.testPlan(AGENT_ID)).toEqual({
+      target: { agentId: AGENT_ID, cwd: worktree, port: 3001 },
+      command: null,
+      tree: snapshot.tree,
+    });
+  });
+
+  it('detects the command, unless the workspace sets one', async () => {
+    await writeFile(
+      join(worktree, 'package.json'),
+      JSON.stringify({ scripts: { test: 'vitest run' } }),
+    );
+    expect(await service.testPlan(AGENT_ID)).toMatchObject({ command: 'npm test' });
+    await workspaces.update(workspace.id, (ws) => ({ ...ws, testCommand: 'make check' }));
+    expect(await service.testPlan(AGENT_ID)).toMatchObject({ command: 'make check' });
+    // The review says it too, so « non configurés » shows without asking (FR-016).
+    expect(await service.open(AGENT_ID)).toMatchObject({ testCommand: 'make check' });
   });
 });
 

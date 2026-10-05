@@ -358,6 +358,14 @@ describe('Review (002 T018, US1)', () => {
     close: vi.fn(),
     select: vi.fn(),
     markSeen: vi.fn(),
+    tests: {},
+    decisions: {},
+    notice: null,
+    runTests: vi.fn(),
+    cancelTests: vi.fn(),
+    setTestCommand: vi.fn(),
+    integrate: vi.fn(),
+    dismissNotice: vi.fn(),
     ...overrides,
   });
   const view = (review: ReviewBinding, team = agents(2)) => (
@@ -473,5 +481,76 @@ describe('Review (002 T018, US1)', () => {
     await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
     await user.click(screen.getByRole('checkbox', { name: 'Vu : src/auth.ts' }));
     expect(review.markSeen).toHaveBeenCalledWith(agent(2).id, 'src/auth.ts', null);
+  });
+
+  // 002 T035 — the Décision column drives the tests and the integration of the agent reviewed.
+  it('runs, cancels and sets up the tests of the agent reviewed', async () => {
+    const user = userEvent.setup();
+    const run = {
+      agentId: agent(2).id,
+      command: 'npm test',
+      tree: snapshot().tree,
+      status: 'running' as const,
+      passedCount: null,
+      outputTail: '',
+    };
+    const review = binding({ tests: { [agent(2).id]: run } });
+    const { rerender } = render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    const column = screen.getByRole('complementary', { name: 'Décision' });
+    await user.click(within(column).getByRole('button', { name: 'Annuler les tests' }));
+    expect(review.cancelTests).toHaveBeenCalledWith(agent(2).id);
+
+    rerender(view({ ...review, tests: {} }));
+    await user.click(within(column).getByRole('button', { name: 'Lancer' }));
+    expect(review.runTests).toHaveBeenCalledWith(agent(2).id);
+
+    rerender(
+      view({
+        ...review,
+        tests: {},
+        snapshot: snapshot({ agentId: agent(2).id, testCommand: null }),
+      }),
+    );
+    await user.type(within(column).getByRole('textbox', { name: 'Commande de test' }), 'make');
+    await user.click(within(column).getByRole('button', { name: 'Enregistrer' }));
+    expect(review.setTestCommand).toHaveBeenCalledWith(agent(2).id, 'make');
+  });
+
+  it('integrates the agent reviewed into the main branch of the workspace', async () => {
+    const user = userEvent.setup();
+    const review = binding({
+      decisions: { [agent(2).id]: { busy: false, error: { message: 'Bloquée', files: [] } } },
+    });
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    const column = screen.getByRole('complementary', { name: 'Décision' });
+    expect(within(column).getByRole('alert').textContent).toBe('Bloquée');
+    await user.click(within(column).getByRole('button', { name: '✓ Intégrer' }));
+    expect(review.integrate).toHaveBeenCalledWith(
+      agent(2).id,
+      expect.objectContaining({ mode: 'squash', message: 'Intègre agent/pg-sessions' }),
+      { branch: agent(2).branch, mainBranch: 'main' },
+    );
+  });
+
+  it('goes back to the tiles once integrated, with a short notice (US2/AC6)', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    const { rerender } = render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    vi.useFakeTimers();
+    try {
+      rerender(view({ ...review, notice: '✓ Intégré · agent/claude-code-2 → main' }));
+      expect(screen.getByRole('status').textContent).toBe('✓ Intégré · agent/claude-code-2 → main');
+      expect(screen.getByRole('region', { name: 'Tuiles' })).toBeDefined();
+      expect(review.dismissNotice).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(4000);
+      expect(review.dismissNotice).toHaveBeenCalledOnce();
+      rerender(view(review));
+      expect(screen.queryByRole('status')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

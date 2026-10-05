@@ -4,6 +4,7 @@ import { IpcFailure, type IpcEvent } from '../../shared/ipc';
 import type { Agent, Workspace } from '../../shared/model';
 import { seenBlob, type FileDiff, type ReviewSnapshot } from '../../shared/review';
 import type { GitService } from '../git/git-service';
+import { detectTestCommandIn, type TestTarget } from './test-runner';
 
 // 002 US1 — an agent's changes against main, followed while the worktree changes
 // (research R1–R3), with the files marked « vu » kept per agent (R9, FR-009, FR-011).
@@ -27,6 +28,7 @@ type Options = {
     | 'revParse'
     | 'currentBranch'
     | 'diffBlobs'
+    | 'mergeTree'
   >;
   workspaces: WorkspaceAccess;
   onChanged?: (snapshot: ReviewSnapshot) => void;
@@ -179,6 +181,19 @@ export class ReviewService {
     return agentIds;
   }
 
+  /** What the tests of an agent run: its worktree and port, the command, the tree shown (R8). */
+  async testPlan(
+    agentId: string,
+  ): Promise<{ target: TestTarget; command: string | null; tree: string }> {
+    const { workspace, agent } = this.find(agentId);
+    const cwd = agent.worktreePath;
+    return {
+      target: { agentId, cwd, port: agent.port },
+      command: await testCommand(workspace, cwd),
+      tree: this.snapshots.get(agentId)?.tree ?? (await this.git.snapshot(cwd)).tree,
+    };
+  }
+
   dispose(): void {
     for (const agentId of [...this.followed.keys()]) this.close(agentId);
     this.snapshots.clear();
@@ -215,13 +230,17 @@ export class ReviewService {
       return missing(agent);
     }
     try {
-      const [mainHead, base, { tree }, branch] = await Promise.all([
+      const [mainHead, base, { commit, tree }, branch] = await Promise.all([
         this.git.revParse(cwd, workspace.mainBranch),
         this.git.mergeBase(cwd, workspace.mainBranch, 'HEAD'),
         this.git.snapshot(cwd),
         this.git.currentBranch(cwd),
       ]);
-      const files = await this.git.changedFiles(cwd, base, tree);
+      const [files, merged] = await Promise.all([
+        this.git.changedFiles(cwd, base, tree),
+        // Checked on each snapshot: main moving changes `mainHead`, so the review is sent again.
+        this.git.mergeTree(cwd, mainHead, commit),
+      ]);
       let added = 0;
       let removed = 0;
       for (const file of files) {
@@ -236,10 +255,11 @@ export class ReviewService {
         files,
         added,
         removed,
-        conflicts: 'none',
+        conflicts: merged.conflicts.length > 0 ? merged.conflicts.map((c) => c.path) : 'none',
         mainHead,
         newSinceSeen: await this.newSinceSeen(cwd, agent, files),
         missing: false,
+        testCommand: await testCommand(workspace, cwd),
       };
     } catch (error) {
       throw new IpcFailure('GIT_FAILED', error instanceof Error ? error.message : String(error));
@@ -285,5 +305,11 @@ function missing(agent: Agent): ReviewSnapshot {
     mainHead: NO_COMMIT,
     newSinceSeen: null,
     missing: true,
+    testCommand: null,
   };
+}
+
+/** The command set for the workspace, else the one detected in the worktree (R8). */
+async function testCommand(workspace: Workspace, cwd: string) {
+  return workspace.testCommand ?? (await detectTestCommandIn(cwd));
 }

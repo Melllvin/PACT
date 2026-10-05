@@ -38,6 +38,7 @@ const snapshot = {
   mainHead: sha('3'),
   newSinceSeen: null,
   missing: false,
+  testCommand: 'npm test',
 };
 
 const conflict = {
@@ -104,6 +105,11 @@ describe('ReviewSnapshot', () => {
 
   it.each([['none'], ['checking'], [['src/a.ts']]])('accepts conflicts %j', (conflicts) => {
     expect(reviewSnapshotSchema.safeParse({ ...snapshot, conflicts }).success).toBe(true);
+  });
+
+  it('carries the test command, null when none is set up or detected (FR-017)', () => {
+    expect(reviewSnapshotSchema.safeParse({ ...snapshot, testCommand: null }).success).toBe(true);
+    expect(reviewSnapshotSchema.safeParse({ ...snapshot, testCommand: '' }).success).toBe(false);
   });
 
   it('carries the new changes since seen, or null', () => {

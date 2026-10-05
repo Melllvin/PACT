@@ -122,6 +122,22 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
                   close: reviewState.close,
                   select: (path) => void reviewState.select(path),
                   markSeen: (agentId, path, blob) => void state.markSeen(agentId, path, blob),
+                  tests: reviewState.tests,
+                  decisions: reviewState.decisions,
+                  notice:
+                    reviewState.notice?.workspaceId === workspace.id
+                      ? reviewState.notice.text
+                      : null,
+                  runTests: (agentId) => void reviewState.runTests(agentId),
+                  cancelTests: (agentId) => void reviewState.cancelTests(agentId),
+                  setTestCommand: (agentId, command) =>
+                    void reviewState.setTestCommand(workspace.id, agentId, command),
+                  integrate: (agentId, request, label) =>
+                    void reviewState.integrate(agentId, request, {
+                      ...label,
+                      workspaceId: workspace.id,
+                    }),
+                  dismissNotice: reviewState.dismissNotice,
                 }
               }
             />
