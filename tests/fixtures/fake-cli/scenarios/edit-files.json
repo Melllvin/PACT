@@ -1,0 +1,10 @@
+{
+  "output": ["Modification des fichiers"],
+  "files": [
+    { "write": "src/Développement é.ts", "content": "export const a = 1;\n" },
+    { "rename": ["old.txt", "new.txt"] },
+    { "delete": "gone.txt" },
+    { "commit": "Ajoute a" },
+    { "write": "notes.md", "content": "à relire\n" }
+  ]
+}
