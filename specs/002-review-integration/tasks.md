@@ -206,7 +206,8 @@ modifier.
   - erreurs `LOCAL_CHANGES` (liste) et `GIT_FAILED` affichées.
   > Le store (`review-store.ts`) garde le dernier `TestRun` et l'état d'intégration par agent, et la
   > notification avec son workspace ; ses tests sont dans `tests/unit/renderer/store/review-store.test.ts`.
-- [ ] T030 [US2] Test e2e : intégration en squash, un commit sur la branche principale, tuile fermée, worktree supprimé, notification « ✓ Intégré » ; puis un crochet `pre-commit` qui refuse ⇒ erreur et branche principale inchangée, dans `tests/e2e/us9-integrate.spec.ts`.
+- [X] T030 [US2] Test e2e : intégration en squash, un commit sur la branche principale, tuile fermée, worktree supprimé, notification « ✓ Intégré » ; puis un crochet `pre-commit` qui refuse ⇒ erreur et branche principale inchangée, dans `tests/e2e/us9-integrate.spec.ts`.
+  > Le crochet du second test est posé une fois l’agent fini : le `commit` du faux CLI dans son worktree passerait sinon par lui aussi. `ls-tree` lu avec `core.quotePath=false` pour le nom accentué.
 
 ### Implementation for User Story 2
 
