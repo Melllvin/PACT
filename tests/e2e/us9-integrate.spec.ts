@@ -35,6 +35,9 @@ test.beforeEach(async () => {
   repo = join(root, 'Mes Projets', 'Développement');
   await mkdir(repo, { recursive: true });
   git(repo, 'init', '-b', 'main');
+  // PACT commits as the user: the identity comes from the repository, not from the test's env.
+  git(repo, 'config', 'user.name', 'PACT Test');
+  git(repo, 'config', 'user.email', 'test@pact.dev');
   await writeFile(join(repo, 'README.md'), '# test\n');
   await writeFile(join(repo, 'old.txt'), 'à déplacer\nsur plusieurs\nlignes\n');
   await writeFile(join(repo, 'gone.txt'), 'supprimé\n');
