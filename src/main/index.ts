@@ -100,10 +100,19 @@ void app.whenReady().then(async () => {
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
     ...(clock ? { clock } : {}),
   });
-  // 002 US1 — the review of each agent's changes.
+  // 002 US2 — the tests of the Décision column.
+  const tests = new TestRunner({
+    env: resolveShellEnv,
+    onUpdate: (run) => {
+      emit('review:tests', run);
+    },
+  });
+  // 002 US1 — the review of each agent's changes; US3 — what it sends to the agent.
   const review = new ReviewService({
     git,
     workspaces,
+    agents,
+    tests,
     onChanged: (snapshot) => {
       emit('review:changed', snapshot);
     },
@@ -111,13 +120,7 @@ void app.whenReady().then(async () => {
       emit('review:pending', event);
     },
   });
-  // 002 US2 — the tests of the Décision column and the integration into main.
-  const tests = new TestRunner({
-    env: resolveShellEnv,
-    onUpdate: (run) => {
-      emit('review:tests', run);
-    },
-  });
+  // 002 US2 — the integration into main.
   const integration = new IntegrationService({
     git,
     workspaces,

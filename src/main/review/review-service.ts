@@ -1,13 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { watch as fsWatch } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { IpcFailure, type IpcEvent } from '../../shared/ipc';
-import type { Agent, Workspace } from '../../shared/model';
-import { seenBlob, type FileDiff, type ReviewSnapshot } from '../../shared/review';
+import { IpcFailure, type IpcEvent, type IpcInput } from '../../shared/ipc';
+import type { Agent, AgentReview, ReviewComment, Workspace } from '../../shared/model';
+import { seenBlob, type FileDiff, type ReviewSnapshot, type TestRun } from '../../shared/review';
+import { reviewPrompt, type ReviewPrompt } from '../../shared/review-prompts';
 import type { GitService } from '../git/git-service';
 import { detectTestCommandIn, type TestTarget } from './test-runner';
 
 // 002 US1 — an agent's changes against main, followed while the worktree changes
 // (research R1–R3), with the files marked « vu » kept per agent (R9, FR-009, FR-011).
+// US3 — comments and instructions typed into the agent's prompt (R7, FR-012…FR-015).
 
 type WorkspaceAccess = {
   get(id: string): Workspace | undefined;
@@ -31,6 +34,9 @@ type Options = {
     | 'mergeTree'
   >;
   workspaces: WorkspaceAccess;
+  /** Types a prompt once the agent is ready for one (R7, FR-014). */
+  agents: { sendPrompt(id: string, text: string): Promise<void> };
+  tests: { latest(agentId: string): TestRun | null };
   onChanged?: (snapshot: ReviewSnapshot) => void;
   onPending?: (event: IpcEvent<'review:pending'>) => void;
   watch?: Watch;
@@ -78,6 +84,8 @@ const isDirectory = async (path: string) => {
 export class ReviewService {
   private readonly git: Options['git'];
   private readonly workspaces: WorkspaceAccess;
+  private readonly agents: Options['agents'];
+  private readonly tests: Options['tests'];
   private readonly onChanged: NonNullable<Options['onChanged']>;
   private readonly onPending: NonNullable<Options['onPending']>;
   private readonly watch: Watch;
@@ -94,6 +102,8 @@ export class ReviewService {
   constructor(options: Options) {
     this.git = options.git;
     this.workspaces = options.workspaces;
+    this.agents = options.agents;
+    this.tests = options.tests;
     this.onChanged = options.onChanged ?? (() => undefined);
     this.onPending = options.onPending ?? (() => undefined);
     this.watch = options.watch ?? watchRecursive;
@@ -148,18 +158,73 @@ export class ReviewService {
     const { workspace } = this.find(agentId);
     const snapshot = this.snapshots.get(agentId) ?? (await this.open(agentId));
     const file = snapshot.files.find((f) => f.path === path);
-    await this.workspaces.update(workspace.id, (ws) => ({
-      ...ws,
-      agents: ws.agents.map((a) => {
-        if (a.id !== agentId) return a;
-        const next = Object.fromEntries(
-          Object.entries(a.review.seen).filter(([seenPath]) => seenPath !== path),
-        );
-        if (seen && file) next[path] = seenBlob(file);
-        return { ...a, review: { ...a.review, seen: next } };
-      }),
-    }));
+    await this.updateReview(workspace.id, agentId, (review) => {
+      const next = Object.fromEntries(
+        Object.entries(review.seen).filter(([seenPath]) => seenPath !== path),
+      );
+      if (seen && file) next[path] = seenBlob(file);
+      return { ...review, seen: next };
+    });
     if (this.followed.has(agentId)) await this.refresh(agentId, true);
+  }
+
+  /** Keeps the comment under its line and types it for the agent (FR-012). */
+  async comment(agentId: string, path: string, line: number, text: string): Promise<ReviewComment> {
+    const { workspace } = this.find(agentId);
+    const comment: ReviewComment = {
+      id: randomUUID(),
+      path,
+      line,
+      text,
+      createdAt: new Date().toISOString(),
+      treated: false,
+    };
+    await this.updateReview(workspace.id, agentId, (review) => ({
+      ...review,
+      comments: [...review.comments, comment],
+    }));
+    await this.agents.sendPrompt(agentId, reviewPrompt({ kind: 'comment', path, line, text }));
+    return comment;
+  }
+
+  /** The shortcuts above the terminal and « Renvoyer à l'agent » (FR-013, FR-015). */
+  async send(request: IpcInput<'review:send'>): Promise<void> {
+    const { agentId } = request;
+    const { workspace, agent } = this.find(agentId);
+    const refuse = (message: string) => new IpcFailure('INVALID_INPUT', message);
+    let prompt: ReviewPrompt;
+    switch (request.kind) {
+      case 'fix-comments': {
+        const comments = agent.review.comments.filter((c) => !c.treated);
+        if (comments.length === 0) throw refuse('Aucun commentaire à corriger.');
+        await this.agents.sendPrompt(agentId, reviewPrompt({ kind: 'fix-comments', comments }));
+        const sent = new Set(comments.map((c) => c.id));
+        await this.updateReview(workspace.id, agentId, (review) => ({
+          ...review,
+          comments: review.comments.map((c) => (sent.has(c.id) ? { ...c, treated: true } : c)),
+        }));
+        return;
+      }
+      case 'failing-tests': {
+        const run = this.tests.latest(agentId);
+        if (run?.status !== 'failed') throw refuse('Aucun test en échec.');
+        prompt = { kind: 'failing-tests', command: run.command, output: run.outputTail };
+        break;
+      }
+      case 'conflict': {
+        // Checked now: main may have moved since the review was shown.
+        const { conflicts } = await this.compute(agentId);
+        if (!Array.isArray(conflicts) || conflicts.length === 0) {
+          throw refuse(`Aucun conflit avec ${workspace.mainBranch}.`);
+        }
+        prompt = { kind: 'conflict', mainBranch: workspace.mainBranch, files: conflicts };
+        break;
+      }
+      case 'request':
+        if (request.text.trim() === '') throw refuse('La demande est vide.');
+        prompt = { kind: 'request', text: request.text };
+    }
+    await this.agents.sendPrompt(agentId, reviewPrompt(prompt));
   }
 
   /**
@@ -198,6 +263,17 @@ export class ReviewService {
     for (const agentId of [...this.followed.keys()]) this.close(agentId);
     this.snapshots.clear();
     this.wanted.clear();
+  }
+
+  private async updateReview(
+    workspaceId: string,
+    agentId: string,
+    change: (review: AgentReview) => AgentReview,
+  ) {
+    await this.workspaces.update(workspaceId, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === agentId ? { ...a, review: change(a.review) } : a)),
+    }));
   }
 
   private async refresh(agentId: string, force = false) {

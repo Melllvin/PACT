@@ -6,11 +6,12 @@ import type { TestRunner } from '../review/test-runner';
 
 // 002 — review channels (contracts/ipc.md). T021: US1, reading the changes of an agent.
 // T034: US2, the tests of the Décision column and the integration into main.
+// T041: US3, comments and instructions sent to the agent.
 
 type Dependencies = {
   review: Pick<
     ReviewService,
-    'open' | 'close' | 'fileDiff' | 'setSeen' | 'updatePending' | 'testPlan'
+    'open' | 'close' | 'fileDiff' | 'setSeen' | 'updatePending' | 'testPlan' | 'comment' | 'send'
   >;
   tests: Pick<TestRunner, 'run' | 'ensure' | 'cancel'>;
   integration: Pick<IntegrationService, 'start'>;
@@ -41,6 +42,9 @@ export function createReviewServices({ review, tests, integration, workspaces }:
       review.fileDiff(agentId, path),
     'review:setSeen': ({ agentId, path, seen }: IpcInput<'review:setSeen'>) =>
       review.setSeen(agentId, path, seen),
+    'review:comment': ({ agentId, path, line, text }: IpcInput<'review:comment'>) =>
+      review.comment(agentId, path, line, text),
+    'review:send': (request: IpcInput<'review:send'>) => review.send(request),
     'review:runTests': async ({ agentId }: IpcInput<'review:runTests'>) => {
       const { target, command, tree } = await review.testPlan(agentId);
       // The column offers « Configurer » instead (FR-017).
