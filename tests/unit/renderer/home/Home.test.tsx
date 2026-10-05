@@ -26,6 +26,7 @@ const agent = (n: number, state: Agent['state'], color: Agent['color']): Agent =
   state,
   lastError: null,
   scheduledResume: null,
+  review: { seen: {}, comments: [] },
 });
 
 const atelier: Workspace = {
@@ -37,6 +38,7 @@ const atelier: Workspace = {
   freeTerminals: [],
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
+  testCommand: null,
   lastOpenedAt: now.toISOString(),
   status: 'available',
 };

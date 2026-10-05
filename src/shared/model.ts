@@ -39,6 +39,31 @@ export const agentErrorSchema = z.object({
   message: z.string(),
 });
 
+/** A path inside the repository, `/`-separated, never absolute nor escaping it (002). */
+export const repoPathSchema = z
+  .string()
+  .min(1)
+  .refine((path) => !path.startsWith('/') && !/(^|\/)\.\.(\/|$)/.test(path), {
+    message: 'chemin relatif au dépôt attendu',
+  });
+
+export const gitIdSchema = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/);
+
+export const reviewCommentSchema = z.object({
+  id: z.uuid(),
+  path: repoPathSchema,
+  line: z.int().min(1),
+  text: z.string().min(1).max(4000),
+  createdAt: isoDate,
+  treated: z.boolean().default(false),
+});
+
+/** `seen`: path → blob id of the content marked « vu » (FR-009, FR-011). */
+export const agentReviewSchema = z.object({
+  seen: z.record(z.string(), gitIdSchema),
+  comments: z.array(reviewCommentSchema),
+});
+
 export const agentSchema = z.object({
   id: z.uuid(),
   workspaceId: z.string(),
@@ -58,6 +83,8 @@ export const agentSchema = z.object({
   state: agentStateSchema,
   lastError: agentErrorSchema.nullable(),
   scheduledResume: scheduledResumeSchema.nullable(),
+  /** 002 — defaulted so that workspace files from 001 load without a migration (R9). */
+  review: agentReviewSchema.default(() => ({ seen: {}, comments: [] })),
 });
 
 export const freeTerminalSchema = z.object({
@@ -81,6 +108,8 @@ export const workspaceSchema = z
     freeTerminals: z.array(freeTerminalSchema),
     quickLaunchCounters: z.object({ freeTerminal: counter }).catchall(counter),
     permissionOverride: permissionPreferenceSchema.nullable(),
+    /** `null`: detected from the repository (002 R8). */
+    testCommand: z.string().trim().min(1).nullable().default(null),
     lastOpenedAt: isoDate,
     status: z.enum(['available', 'unavailable']),
   })
@@ -121,6 +150,8 @@ export type PermissionLevel = z.infer<typeof permissionLevelSchema>;
 export type PermissionPreference = z.infer<typeof permissionPreferenceSchema>;
 export type ScheduledResume = z.infer<typeof scheduledResumeSchema>;
 export type Agent = z.infer<typeof agentSchema>;
+export type AgentReview = z.infer<typeof agentReviewSchema>;
+export type ReviewComment = z.infer<typeof reviewCommentSchema>;
 export type FreeTerminal = z.infer<typeof freeTerminalSchema>;
 export type Workspace = z.infer<typeof workspaceSchema>;
 export type RecentProject = z.infer<typeof recentProjectSchema>;
