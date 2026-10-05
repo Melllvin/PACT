@@ -233,7 +233,13 @@ modifier.
   > résolution relèvent de la Phase 6 (R6). Après le déplacement de la branche principale, rien ne
   > fait plus échouer l'intégration. `GitService.treeOf` ajouté pour savoir si l'agent a du non
   > commité ou a écrit depuis l'instantané.
-- [ ] T034 [US2] Étendre `ReviewService` avec l'état des conflits (vérifié à l'ouverture, à chaque instantané et quand la branche principale bouge), et brancher `review:runTests`, `review:cancelTests`, `workspace:setTestCommand`, `integration:start`, `review:tests` et `integration:state`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
+- [X] T034 [US2] Étendre `ReviewService` avec l'état des conflits (vérifié à l'ouverture, à chaque instantané et quand la branche principale bouge), et brancher `review:runTests`, `review:cancelTests`, `workspace:setTestCommand`, `integration:start`, `review:tests` et `integration:state`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
+  > Conflits : `git merge-tree` entre `mainHead` et le commit de l'instantané à chaque calcul ;
+  > la branche principale qui bouge change `mainHead`, donc le filet de sécurité renvoie la revue.
+  > `ReviewService.testPlan` donne worktree, port, commande (`workspace.testCommand`, sinon
+  > détectée) et arbre affiché ; `review:open` lance les tests via `ensure`, qui réannonce le
+  > dernier résultat s'il porte sur cet arbre ; `review:runTests` sans commande ⇒ `INVALID_INPUT`.
+  > Une intégration `integrated` recalcule les revues en attente du workspace.
 - [ ] T035 [US2] Implémenter `DecisionColumn.tsx` dans `src/renderer/review/`, et la notification « ✓ Intégré · branche → main » dans `src/renderer/workspace/WorkspaceView.tsx`.
 
 **Checkpoint**: US1 + US2, la boucle relire → intégrer.

@@ -41,7 +41,7 @@ export type IntegrationRequest = {
   mode: IntegrationMode;
   message: string;
   after: Integration['after'];
-  confirmWorking?: boolean;
+  confirmWorking?: boolean | undefined;
 };
 
 const WORKING: Agent['state'][] = ['starting', 'working', 'awaiting-answer'];
@@ -66,9 +66,11 @@ export class IntegrationService {
     if (WORKING.includes(agent.state) && request.confirmWorking !== true) {
       throw new IpcFailure('INVALID_INPUT', 'L’agent travaille encore : confirmer l’intégration.');
     }
-    // What the user reviewed is what goes in, whatever the agent writes while it waits.
-    const snapshot = await this.git.snapshot(agent.worktreePath);
-    return this.enqueue(workspace.id, () => this.integrate(request, snapshot));
+    // What the user reviewed is what goes in, whatever the agent writes while it waits; the
+    // place in the queue is taken at the click too, not once the snapshot is read.
+    const snapshot = this.git.snapshot(agent.worktreePath);
+    snapshot.catch(() => undefined);
+    return this.enqueue(workspace.id, async () => this.integrate(request, await snapshot));
   }
 
   private enqueue<T>(workspaceId: string, task: () => Promise<T>): Promise<T> {

@@ -117,10 +117,13 @@ export class TestRunner {
     return { ...run };
   }
 
-  /** Runs the tests unless a result, or a run, is for the tree shown (review:open). */
+  /** Runs the tests unless a result, or a run, is for the tree shown, then announced again. */
   async ensure(target: TestTarget, command: string, tree: string): Promise<TestRun | undefined> {
-    if (this.latest(target.agentId)?.tree === tree) return undefined;
-    return this.run(target, command, tree);
+    const latest = this.latest(target.agentId);
+    if (latest?.tree !== tree) return this.run(target, command, tree);
+    // A window opened since may have missed it.
+    this.options.onUpdate(latest);
+    return undefined;
   }
 
   cancel(agentId: string): void {
