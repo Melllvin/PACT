@@ -204,6 +204,12 @@ describe('GitService.updateRef (R5, FR-022)', () => {
   });
 });
 
+describe('GitService.treeOf', () => {
+  it('gives the tree of a commit', async () => {
+    expect(await service.treeOf(repo, 'main')).toBe(git(repo, 'rev-parse', 'main^{tree}'));
+  });
+});
+
 describe('GitService.worktreeOf', () => {
   it('finds the folder where a branch is checked out, as a native path', async () => {
     expect(await service.worktreeOf(repo, 'main')).toBe(repo);
