@@ -189,7 +189,7 @@ export class ReviewService {
     const cwd = agent.worktreePath;
     return {
       target: { agentId, cwd, port: agent.port },
-      command: workspace.testCommand ?? (await detectTestCommandIn(cwd)),
+      command: await testCommand(workspace, cwd),
       tree: this.snapshots.get(agentId)?.tree ?? (await this.git.snapshot(cwd)).tree,
     };
   }
@@ -259,6 +259,7 @@ export class ReviewService {
         mainHead,
         newSinceSeen: await this.newSinceSeen(cwd, agent, files),
         missing: false,
+        testCommand: await testCommand(workspace, cwd),
       };
     } catch (error) {
       throw new IpcFailure('GIT_FAILED', error instanceof Error ? error.message : String(error));
@@ -304,5 +305,11 @@ function missing(agent: Agent): ReviewSnapshot {
     mainHead: NO_COMMIT,
     newSinceSeen: null,
     missing: true,
+    testCommand: null,
   };
+}
+
+/** The command set for the workspace, else the one detected in the worktree (R8). */
+async function testCommand(workspace: Workspace, cwd: string) {
+  return workspace.testCommand ?? (await detectTestCommandIn(cwd));
 }

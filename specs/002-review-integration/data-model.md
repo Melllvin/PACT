@@ -53,6 +53,7 @@ The current state of an agent's changes, rebuilt on every change in the worktree
 | `mainHead` | commit id | the `main` the conflict check ran against |
 | `newSinceSeen` | `{ added, removed } \| null` | changes to files that were seen, for « Nouveaux changements : +N −M » |
 | `missing` | boolean | the worktree or branch is gone: the review only offers « Abandonner » |
+| `testCommand` | `string \| null` | the workspace's command, else the one detected in the worktree; `null` shows « Tests : non configurés » without a request (FR-016) |
 
 ### ChangedFile
 

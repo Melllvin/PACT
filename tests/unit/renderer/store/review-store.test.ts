@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createReviewStore } from '../../../../src/renderer/store/review-store';
+import { createReviewStore, idleReviewStore } from '../../../../src/renderer/store/review-store';
 import type { IpcEvent, IpcEventChannel, PactApi } from '../../../../src/shared/ipc';
 import type { FileDiff, Integration, ReviewSnapshot, TestRun } from '../../../../src/shared/review';
 import { diff, file, snapshot } from '../review/fixtures';
@@ -313,5 +313,22 @@ describe('review store, Décision column', () => {
         files: ['src/db.ts', 'src/auth.ts'],
       },
     });
+  });
+});
+
+describe('idle review store', () => {
+  it('opens nothing and runs nothing, for an app built without a review', async () => {
+    const state = idleReviewStore.getState();
+    state.connect()();
+    await state.loadPending('w1');
+    await state.open(uuid(1));
+    state.close();
+    await state.select('a.ts');
+    await state.runTests(uuid(1));
+    await state.cancelTests(uuid(1));
+    await state.setTestCommand('w1', uuid(1), 'make');
+    await state.integrate(uuid(1), request, label);
+    state.dismissNotice();
+    expect(idleReviewStore.getState()).toMatchObject({ agentId: null, tests: {}, notice: null });
   });
 });

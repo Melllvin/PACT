@@ -6,7 +6,8 @@ import { Toolbar } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
 import { ChangesTab } from '../review/ChangesTab';
 import { DecisionColumn } from '../review/DecisionColumn';
-import { seenBlob, type FileDiff, type ReviewSnapshot } from '../../shared/review';
+import { seenBlob, type FileDiff, type ReviewSnapshot, type TestRun } from '../../shared/review';
+import type { Decision, IntegrateRequest } from '../store/review-store';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
@@ -40,7 +41,24 @@ export type ReviewBinding = {
   close: () => void;
   select: (path: string) => void;
   markSeen: (agentId: string, path: string, blob: string | null) => void;
+  /** The Décision column (002 US2): tests and integration, per agent. */
+  tests: Readonly<Record<string, TestRun>>;
+  decisions: Readonly<Record<string, Decision>>;
+  /** « ✓ Intégré · branche → main » for this workspace, until dismissed. */
+  notice: string | null;
+  runTests: (agentId: string) => void;
+  cancelTests: (agentId: string) => void;
+  setTestCommand: (agentId: string, command: string) => void;
+  integrate: (
+    agentId: string,
+    request: IntegrateRequest,
+    label: { branch: string; mainBranch: string },
+  ) => void;
+  dismissNotice: () => void;
 };
+
+/** How long « ✓ Intégré » stays (US2/AC6). */
+const NOTICE_MS = 4000;
 
 const none = () => undefined;
 const NO_ACTIONS: AgentActions = {
@@ -110,6 +128,24 @@ export function WorkspaceView({
     };
   }, [reviewed]);
 
+  // Once integrated, back to the tiles, where the notice shows for a while (US2/AC6).
+  const notice = review?.notice ?? null;
+  const [noticed, setNoticed] = useState(notice);
+  if (notice !== noticed) {
+    setNoticed(notice);
+    if (notice !== null) {
+      setFocusedId(null);
+      setFocusTab('terminal');
+    }
+  }
+  useEffect(() => {
+    if (notice === null) return;
+    const timer = setTimeout(() => binding.current?.dismissNotice(), NOTICE_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [notice]);
+
   const openReview = (agentId: string) => {
     setFocusedId(agentId);
     setFocusTab('changes');
@@ -142,6 +178,14 @@ export function WorkspaceView({
             <p role="alert" className={ALERT}>
               Dossier introuvable : {workspace.path}. Le workspace reviendra dès que le dossier sera
               de retour.
+            </p>
+          )}
+          {notice !== null && (
+            <p
+              role="status"
+              className="m-0 self-center rounded-full border border-accept/30 bg-accept/10 px-3.5 py-1.5 text-[12.5px] text-accept"
+            >
+              {notice}
             </p>
           )}
           {actionError && (
@@ -226,8 +270,30 @@ export function WorkspaceView({
           )}
         </section>
         {/* Décision takes the place of À faire while a review is open (FR-004). */}
-        {reviewedAgent ? (
-          <DecisionColumn agent={reviewedAgent} snapshot={snapshot} />
+        {reviewedAgent && review ? (
+          <DecisionColumn
+            agent={reviewedAgent}
+            snapshot={snapshot}
+            mainBranch={workspace.mainBranch}
+            tests={review.tests[reviewedAgent.id] ?? null}
+            busy={review.decisions[reviewedAgent.id]?.busy ?? false}
+            error={review.decisions[reviewedAgent.id]?.error ?? null}
+            onRunTests={() => {
+              review.runTests(reviewedAgent.id);
+            }}
+            onCancelTests={() => {
+              review.cancelTests(reviewedAgent.id);
+            }}
+            onSetTestCommand={(command) => {
+              review.setTestCommand(reviewedAgent.id, command);
+            }}
+            onIntegrate={(request) => {
+              review.integrate(reviewedAgent.id, request, {
+                branch: reviewedAgent.branch,
+                mainBranch: workspace.mainBranch,
+              });
+            }}
+          />
         ) : (
           hasAgents && todoOpen && <TodoColumn todos={todos} agents={agents} {...reviewActions} />
         )}

@@ -35,6 +35,8 @@ export const reviewSnapshotSchema = z.object({
   newSinceSeen: z.object({ added: count, removed: count }).nullable(),
   /** The worktree or branch is gone: the review only offers « Abandonner ». */
   missing: z.boolean(),
+  /** The command the tests run with; null when none is set up or detected (FR-016, FR-017). */
+  testCommand: z.string().min(1).nullable(),
 });
 
 const lineNo = count.nullable();

@@ -26,7 +26,9 @@ export function createReviewServices({ review, tests, integration, workspaces }:
       if (!snapshot.missing) {
         // FR-016: the tests run on opening, unless a result is already for the tree shown.
         const { target, command } = await review.testPlan(agentId);
-        if (command !== null) await tests.ensure(target, command, snapshot.tree);
+        // Started, not awaited: the review opens whatever happens to the tests.
+        if (command !== null)
+          void tests.ensure(target, command, snapshot.tree).catch(() => undefined);
       }
       return snapshot;
     },

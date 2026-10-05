@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { IpcFailure } from '../../shared/ipc';
-import type { Agent, Workspace } from '../../shared/model';
+import { WORKING_STATES, type Agent, type Workspace } from '../../shared/model';
 import type { ConflictFile, Integration, IntegrationMode } from '../../shared/review';
 import {
   LocalChangesError,
@@ -44,7 +44,6 @@ export type IntegrationRequest = {
   confirmWorking?: boolean | undefined;
 };
 
-const WORKING: Agent['state'][] = ['starting', 'working', 'awaiting-answer'];
 /** main is checked again once when it moved during the integration (FR-022). */
 const ATTEMPTS = 2;
 
@@ -63,7 +62,7 @@ export class IntegrationService {
 
   async start(request: IntegrationRequest): Promise<Integration> {
     const { workspace, agent } = this.find(request.agentId);
-    if (WORKING.includes(agent.state) && request.confirmWorking !== true) {
+    if (WORKING_STATES.includes(agent.state) && request.confirmWorking !== true) {
       throw new IpcFailure('INVALID_INPUT', 'L’agent travaille encore : confirmer l’intégration.');
     }
     // What the user reviewed is what goes in, whatever the agent writes while it waits; the

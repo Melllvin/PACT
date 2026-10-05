@@ -509,7 +509,14 @@ describe('App review (002 T018)', () => {
           return Promise.resolve(undefined);
       }
     });
-    const api = { invoke, on: () => () => undefined } as unknown as PactApi;
+    const listeners = new Map<string, (payload: unknown) => void>();
+    const api = {
+      invoke,
+      on: (channel: string, listener: (payload: unknown) => void) => {
+        listeners.set(channel, listener);
+        return () => listeners.delete(channel);
+      },
+    } as unknown as PactApi;
     render(
       <App store={createAppStore(api)} review={createReviewStore(api)} getPathForFile={() => ''} />,
     );
@@ -528,6 +535,18 @@ describe('App review (002 T018)', () => {
     });
     await user.click(await within(column).findByRole('button', { name: 'Annuler les tests' }));
     expect(invoke).toHaveBeenCalledWith('review:cancelTests', { agentId: done.id });
+    act(() => {
+      listeners.get('review:tests')?.({
+        agentId: done.id,
+        command: 'make check',
+        tree: shown.tree,
+        status: 'cancelled',
+        passedCount: null,
+        outputTail: '',
+      });
+    });
+    await user.click(within(column).getByRole('button', { name: 'Relancer' }));
+    expect(invoke.mock.calls.filter(([channel]) => channel === 'review:runTests')).toHaveLength(2);
 
     await user.click(within(column).getByRole('button', { name: '✓ Intégrer' }));
     expect(invoke).toHaveBeenCalledWith(

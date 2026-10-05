@@ -547,6 +547,8 @@ describe('Review (002 T018, US1)', () => {
       expect(review.dismissNotice).not.toHaveBeenCalled();
       vi.advanceTimersByTime(4000);
       expect(review.dismissNotice).toHaveBeenCalledOnce();
+      rerender(view(review));
+      expect(screen.queryByRole('status')).toBeNull();
     } finally {
       vi.useRealTimers();
     }

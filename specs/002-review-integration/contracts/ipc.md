@@ -21,7 +21,7 @@ Les types (`ReviewSnapshot`, `FileDiff`, `TestRun`, `Integration`…) sont décr
 
 | Canal | Entrée | Sortie | Exigences |
 |-------|--------|--------|-----------|
-| `review:open` | `{ agentId }` | `ReviewSnapshot` ; commence le suivi du worktree (R3) et lance les tests si besoin (R8) | FR-001, FR-002, FR-017 |
+| `review:open` | `{ agentId }` | `ReviewSnapshot` ; commence le suivi du worktree (R3) et lance les tests si besoin, sans attendre ni échouer avec eux (R8) | FR-001, FR-002, FR-017 |
 | `review:close` | `{ agentId }` | — ; arrête le suivi | FR-004 |
 | `review:listPending` | `{ workspaceId }` | `string[]` : les agents à relire, demandés une fois l'état chargé (les `review:pending` envoyés avant l'ouverture de la fenêtre sont perdus) | FR-002, FR-003 |
 | `review:fileDiff` | `{ agentId, path }` | `FileDiff` | FR-008 |

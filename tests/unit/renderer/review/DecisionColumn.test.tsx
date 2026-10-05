@@ -194,10 +194,11 @@ describe('DecisionColumn, integrating (FR-019, FR-024, FR-025)', () => {
       'value',
       'Ajoute les sessions',
     );
-    expect(within(column).getByRole('checkbox', { name: /Fermer la tuile/ })).toHaveProperty(
-      'ariaChecked',
-      'true',
-    );
+    expect(
+      within(column)
+        .getByRole('checkbox', { name: /Fermer la tuile/ })
+        .getAttribute('aria-checked'),
+    ).toBe('true');
     await user.click(within(column).getByRole('button', { name: '✓ Intégrer' }));
     expect(actions.onIntegrate).toHaveBeenCalledWith({
       mode: 'squash',

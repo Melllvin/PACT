@@ -195,7 +195,7 @@ modifier.
   > Côté `TestRunner` : `ensure(target, command, tree)` ne relance pas quand le dernier résultat, ou
   > l'exécution en cours, porte sur `tree`. L'appel à `review:open` et le résultat « ancien » (son
   > `tree` diffère de l'instantané) relèvent de T034 et T035.
-- [ ] T029 [P] [US2] Tests de `DecisionColumn` dans `tests/unit/renderer/review/DecisionColumn.test.tsx` :
+- [X] T029 [P] [US2] Tests de `DecisionColumn` dans `tests/unit/renderer/review/DecisionColumn.test.tsx` :
   - lignes Tests (« non configurés » avec saisie de la commande, « non lancés », « en cours », « N réussis », « en échec ») ;
   - conflits (« ✓ Aucun conflit avec main » / « ✕ N conflits ») ;
   - « ○ N fichiers non vus » et état de l'agent ;
@@ -204,6 +204,8 @@ modifier.
   - cases « Fermer la tuile » et « Supprimer worktree et branche » cochées par défaut, « Conserver le worktree » ;
   - confirmation quand l'agent travaille ;
   - erreurs `LOCAL_CHANGES` (liste) et `GIT_FAILED` affichées.
+  > Le store (`review-store.ts`) garde le dernier `TestRun` et l'état d'intégration par agent, et la
+  > notification avec son workspace ; ses tests sont dans `tests/unit/renderer/store/review-store.test.ts`.
 - [ ] T030 [US2] Test e2e : intégration en squash, un commit sur la branche principale, tuile fermée, worktree supprimé, notification « ✓ Intégré » ; puis un crochet `pre-commit` qui refuse ⇒ erreur et branche principale inchangée, dans `tests/e2e/us9-integrate.spec.ts`.
 
 ### Implementation for User Story 2
@@ -240,7 +242,12 @@ modifier.
   > détectée) et arbre affiché ; `review:open` lance les tests via `ensure`, qui réannonce le
   > dernier résultat s'il porte sur cet arbre ; `review:runTests` sans commande ⇒ `INVALID_INPUT`.
   > Une intégration `integrated` recalcule les revues en attente du workspace.
-- [ ] T035 [US2] Implémenter `DecisionColumn.tsx` dans `src/renderer/review/`, et la notification « ✓ Intégré · branche → main » dans `src/renderer/workspace/WorkspaceView.tsx`.
+- [X] T035 [US2] Implémenter `DecisionColumn.tsx` dans `src/renderer/review/`, et la notification « ✓ Intégré · branche → main » dans `src/renderer/workspace/WorkspaceView.tsx`.
+  > `ReviewSnapshot.testCommand` dit « non configurés » dès l'ouverture, sans dépendre de l'ordre
+  > des messages IPC. La confirmation FR-025 reprend `WORKING_STATES` (`shared/model.ts`), la même
+  > liste que le main. Un résultat `conflicted` s'affiche en erreur avec ses fichiers en attendant
+  > l'écran de conflit (US4). « Conserver le worktree » intègre en gardant tuile et worktree.
+  > Après « ✓ Intégré », retour aux tuiles et notification pendant 4 s.
 
 **Checkpoint**: US1 + US2, la boucle relire → intégrer.
 
