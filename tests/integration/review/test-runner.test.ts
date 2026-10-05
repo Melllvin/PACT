@@ -20,6 +20,7 @@ let target: TestTarget;
 let updates: TestRun[];
 let runner: TestRunner;
 
+const shellEnv = () => Promise.resolve({ ...process.env } as Record<string, string>);
 const node = (script: string) => `node -e "${script}"`;
 
 const finished = async (agentId = AGENT_ID) => {
@@ -56,7 +57,7 @@ beforeEach(async () => {
   target = { agentId: AGENT_ID, cwd, port: 3007 };
   updates = [];
   runner = new TestRunner({
-    env: () => Promise.resolve({ ...process.env }),
+    env: shellEnv,
     onUpdate: (run) => updates.push(run),
   });
 });
@@ -111,7 +112,7 @@ describe('TestRunner (R8)', () => {
   it('stops after the delay and says so', async () => {
     runner.dispose();
     runner = new TestRunner({
-      env: () => Promise.resolve({ ...process.env }),
+      env: shellEnv,
       onUpdate: (run) => updates.push(run),
       timeoutMs: 300,
     });
@@ -133,6 +134,20 @@ describe('TestRunner (R8)', () => {
     await waitFor(() => !alive(pid), 'the test process survived');
     runner.cancel(AGENT_ID);
     expect(updates.filter((u) => u.status === 'cancelled')).toHaveLength(1);
+  });
+
+  it('stops what runs when PACT quits, with no result to show', async () => {
+    const pidFile = join(target.cwd, 'pid');
+    await runner.run(
+      target,
+      node("require('fs').writeFileSync('pid', String(process.pid)); setTimeout(() => {}, 60000)"),
+      TREE,
+    );
+    await waitFor(async () => (await readFile(pidFile, 'utf8').catch(() => '')) !== '', 'no pid');
+    const pid = Number(await readFile(pidFile, 'utf8'));
+    runner.dispose();
+    await waitFor(() => !alive(pid), 'the test process survived');
+    expect(updates.map((u) => u.status)).toEqual(['running']);
   });
 
   it('runs again only when no result is for the tree shown', async () => {

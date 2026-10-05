@@ -182,7 +182,7 @@ modifier.
   - cases cochées : `removeWorktree` appelé avec `force: true` ;
   - « Conserver le worktree » : `reset --hard` quand rien n'a changé ; report des écritures postérieures par fusion à trois ; conflit ⇒ worktree laissé tel quel ;
   - chemins avec espaces et accents.
-- [ ] T028 [P] [US2] Tests de `TestRunner` (research R8) dans `tests/unit/main/review/test-runner.test.ts` et `tests/integration/review/test-runner.test.ts` :
+- [X] T028 [P] [US2] Tests de `TestRunner` (research R8) dans `tests/unit/main/review/test-runner.test.ts` et `tests/integration/review/test-runner.test.ts` :
   - détection `npm test` / `pnpm test` / `yarn test` selon le fichier de verrouillage, script de remplacement de npm ignoré ;
   - réussi ou en échec selon le code de sortie ;
   - nombre de tests lu dans les résumés Vitest/Jest, pytest et cargo ;
@@ -191,6 +191,10 @@ modifier.
   - annulation ;
   - lancé à `review:open` quand aucun résultat ne correspond à `tree` ;
   - un nouvel instantané rend le résultat ancien.
+
+  > Côté `TestRunner` : `ensure(target, command, tree)` ne relance pas quand le dernier résultat, ou
+  > l'exécution en cours, porte sur `tree`. L'appel à `review:open` et le résultat « ancien » (son
+  > `tree` diffère de l'instantané) relèvent de T034 et T035.
 - [ ] T029 [P] [US2] Tests de `DecisionColumn` dans `tests/unit/renderer/review/DecisionColumn.test.tsx` :
   - lignes Tests (« non configurés » avec saisie de la commande, « non lancés », « en cours », « N réussis », « en échec ») ;
   - conflits (« ✓ Aucun conflit avec main » / « ✕ N conflits ») ;
@@ -219,7 +223,10 @@ modifier.
   > les crochets. `moveWorktree(worktree, commit, arbre)` sert à « Conserver le worktree ».
   > `merge-tree` sort en 1 aussi sur une mauvaise référence : sans arbre affiché, c'est une erreur.
   > Tests des étapes dans `tests/integration/git/integration-git.test.ts`.
-- [ ] T032 [US2] Implémenter `TestRunner` dans `src/main/review/test-runner.ts` : détection, shell de connexion, `PORT` de l'agent, sortie capturée, délai, annulation, une exécution à la fois par agent.
+- [X] T032 [US2] Implémenter `TestRunner` dans `src/main/review/test-runner.ts` : détection, shell de connexion, `PORT` de l'agent, sortie capturée, délai, annulation, une exécution à la fois par agent.
+  > Groupe de processus à lui (`detached`) pour que l'annulation tue aussi ce que la commande a
+  > lancé ; `taskkill /T /F` sous Windows. `detectTestCommandIn(cwd)` lit package.json et le
+  > fichier de verrouillage du worktree.
 - [ ] T033 [US2] Implémenter `IntegrationService` dans `src/main/review/integration-service.ts` : états de data-model.md, file par workspace, squash ou garder les commits, déplacement de la branche principale, sort de l'agent après coup.
 - [ ] T034 [US2] Étendre `ReviewService` avec l'état des conflits (vérifié à l'ouverture, à chaque instantané et quand la branche principale bouge), et brancher `review:runTests`, `review:cancelTests`, `workspace:setTestCommand`, `integration:start`, `review:tests` et `integration:state`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
 - [ ] T035 [US2] Implémenter `DecisionColumn.tsx` dans `src/renderer/review/`, et la notification « ✓ Intégré · branche → main » dans `src/renderer/workspace/WorkspaceView.tsx`.
