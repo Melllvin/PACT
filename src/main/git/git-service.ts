@@ -229,6 +229,10 @@ export class GitService {
     return this.git(cwd, ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]);
   }
 
+  async treeOf(cwd: string, ref: string): Promise<string> {
+    return this.git(cwd, ['rev-parse', '--verify', '--end-of-options', `${ref}^{tree}`]);
+  }
+
   /** Lines added and removed between two contents of a file (« Nouveaux changements », R9). */
   async diffBlobs(
     cwd: string,

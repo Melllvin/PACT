@@ -171,7 +171,7 @@ modifier.
   - propre ou en conflit, avec les chemins en conflit ;
   - aucune modification de la branche principale, de son dossier ni du worktree, comparés octet par octet ;
   - commit de la branche principale qui a introduit le conflit (`%h`, sujet).
-- [ ] T027 [P] [US2] Tests d'intégration de `IntegrationService` (research R5) dans `tests/integration/review/integration-service.test.ts` :
+- [X] T027 [P] [US2] Tests d'intégration de `IntegrationService` (research R5) dans `tests/integration/review/integration-service.test.ts` :
   - squash : un commit, parent = branche principale, contenu = instantané, message validé ;
   - garder les commits : avance rapide quand c'est possible, sinon commit de fusion ; les commits de l'agent gardent leurs messages ; le non commité forme un dernier commit ;
   - crochets : `pre-commit` qui sort en 1 ⇒ `GIT_FAILED` avec sa sortie, branche principale inchangée ; `commit-msg` qui réécrit le message est respecté ;
@@ -227,7 +227,12 @@ modifier.
   > Groupe de processus à lui (`detached`) pour que l'annulation tue aussi ce que la commande a
   > lancé ; `taskkill /T /F` sous Windows. `detectTestCommandIn(cwd)` lit package.json et le
   > fichier de verrouillage du worktree.
-- [ ] T033 [US2] Implémenter `IntegrationService` dans `src/main/review/integration-service.ts` : états de data-model.md, file par workspace, squash ou garder les commits, déplacement de la branche principale, sort de l'agent après coup.
+- [X] T033 [US2] Implémenter `IntegrationService` dans `src/main/review/integration-service.ts` : états de data-model.md, file par workspace, squash ou garder les commits, déplacement de la branche principale, sort de l'agent après coup.
+  > L'instantané est pris au clic, la branche principale relue dans la file. Un conflit rend
+  > `conflicted` avec `mainCommit`, `hunks: []` et `resolved: false` : les blocs et leur
+  > résolution relèvent de la Phase 6 (R6). Après le déplacement de la branche principale, rien ne
+  > fait plus échouer l'intégration. `GitService.treeOf` ajouté pour savoir si l'agent a du non
+  > commité ou a écrit depuis l'instantané.
 - [ ] T034 [US2] Étendre `ReviewService` avec l'état des conflits (vérifié à l'ouverture, à chaque instantané et quand la branche principale bouge), et brancher `review:runTests`, `review:cancelTests`, `workspace:setTestCommand`, `integration:start`, `review:tests` et `integration:state`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
 - [ ] T035 [US2] Implémenter `DecisionColumn.tsx` dans `src/renderer/review/`, et la notification « ✓ Intégré · branche → main » dans `src/renderer/workspace/WorkspaceView.tsx`.
 

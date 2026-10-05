@@ -123,6 +123,8 @@ beforeEach(async () => {
   await mkdir(repo, { recursive: true });
   git(repo, 'init', '-b', 'main');
   git(repo, 'config', 'core.autocrlf', 'false');
+  // As PACT does for its workspaces: the agents' worktrees are never part of main.
+  await write(join(repo, '.git', 'info', 'exclude'), '/.worktrees/\n');
   await write(join(repo, 'a.txt'), 'un\ndeux\ntrois\n');
   await write(join(repo, 'b.txt'), 'b\n');
   commitAll(repo, 'initial');
@@ -354,6 +356,25 @@ describe('IntegrationService, moving main (FR-021, FR-022)', () => {
     expect(error.code).toBe('MAIN_MOVED');
     expect(git(repo, 'rev-parse', 'main')).toBe(git(repo, 'rev-parse', 'travail'));
     expect(closed).toEqual([]);
+  });
+
+  it('fails with git’s message when main cannot move though it did not move', async () => {
+    const before = git(repo, 'rev-parse', 'main');
+    await write(join(worktree, 'a.txt'), 'un\nDEUX\ntrois\n');
+    const service = createService({
+      fastForward: () => Promise.reject(new Error('fatal: impossible de verrouiller la référence')),
+    });
+    const error = await failure(start(service));
+    expect(error).toMatchObject({
+      code: 'GIT_FAILED',
+      message: 'fatal: impossible de verrouiller la référence',
+    });
+    expect(states.at(-1)?.state).toBe('failed');
+    expect(git(repo, 'rev-parse', 'main')).toBe(before);
+  });
+
+  it('refuses an unknown agent', async () => {
+    expect((await failure(start(createService(), { agentId: SECOND_ID }))).code).toBe('NOT_FOUND');
   });
 
   it('runs the integrations of a workspace one after the other (FR-026)', async () => {
