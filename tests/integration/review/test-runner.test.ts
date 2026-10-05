@@ -150,12 +150,13 @@ describe('TestRunner (R8)', () => {
     expect(updates.map((u) => u.status)).toEqual(['running']);
   });
 
-  it('runs again only when no result is for the tree shown', async () => {
+  it('runs again only when no result is for the tree shown, else announces that result', async () => {
     await runner.ensure(target, node("console.log('Tests  1 passed (1)')"), TREE);
-    await finished();
+    const result = await finished();
     const count = updates.length;
     expect(await runner.ensure(target, node("console.log('x')"), TREE)).toBeUndefined();
-    expect(updates).toHaveLength(count);
+    // The window may have missed it: announced again, not run again.
+    expect(updates.slice(count)).toEqual([result]);
     const next = await runner.ensure(target, node("console.log('x')"), 'b'.repeat(40));
     expect(next).toMatchObject({ status: 'running', tree: 'b'.repeat(40) });
     await finished();

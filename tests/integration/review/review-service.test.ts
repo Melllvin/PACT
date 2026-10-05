@@ -262,6 +262,46 @@ describe('ReviewService pending reviews (FR-002, FR-003)', () => {
   });
 });
 
+describe('ReviewService conflicts with main (FR-018)', () => {
+  it('says which files conflict, checked again when main moves', async () => {
+    service.dispose();
+    service = createService({ watch: () => () => undefined, safetyMs: 200 });
+    await writeFile(join(worktree, 'a.txt'), 'un\nAGENT\n');
+    expect(await service.open(AGENT_ID)).toMatchObject({ conflicts: 'none' });
+    await writeFile(join(repo, 'a.txt'), 'un\nMAIN\n');
+    git(repo, 'commit', '-am', 'main change');
+    await waitFor(
+      () => Array.isArray(changed.at(-1)?.conflicts),
+      'no review:changed once main moved',
+    );
+    expect(changed.at(-1)).toMatchObject({
+      conflicts: ['a.txt'],
+      mainHead: git(repo, 'rev-parse', 'main'),
+    });
+  });
+});
+
+describe('ReviewService tests to run (FR-017, R8)', () => {
+  it('runs them in the worktree with its port, on the tree shown', async () => {
+    const snapshot = await service.open(AGENT_ID);
+    expect(await service.testPlan(AGENT_ID)).toEqual({
+      target: { agentId: AGENT_ID, cwd: worktree, port: 3001 },
+      command: null,
+      tree: snapshot.tree,
+    });
+  });
+
+  it('detects the command, unless the workspace sets one', async () => {
+    await writeFile(
+      join(worktree, 'package.json'),
+      JSON.stringify({ scripts: { test: 'vitest run' } }),
+    );
+    expect(await service.testPlan(AGENT_ID)).toMatchObject({ command: 'npm test' });
+    await workspaces.update(workspace.id, (ws) => ({ ...ws, testCommand: 'make check' }));
+    expect(await service.testPlan(AGENT_ID)).toMatchObject({ command: 'make check' });
+  });
+});
+
 describe('ReviewService when git fails', () => {
   it('reports the error instead of calling the work missing', async () => {
     service.dispose();
