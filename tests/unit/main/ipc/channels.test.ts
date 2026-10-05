@@ -9,8 +9,6 @@ import { ipcRequests } from '../../../../src/shared/ipc';
 /** Declared ahead of the story that serves it. */
 const pending = new Set<string>([
   // 002 — served by the review and integration stories (US1–US4).
-  'review:comment',
-  'review:send',
   'integration:resolve',
   'integration:openInEditor',
   'integration:askAgent',
