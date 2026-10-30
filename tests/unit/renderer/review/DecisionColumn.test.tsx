@@ -39,6 +39,7 @@ const setup = (
     onSetTestCommand: vi.fn(),
     onIntegrate: vi.fn(),
     onSendBack: vi.fn(),
+    onAbandon: vi.fn(),
   };
   render(
     <DecisionColumn
@@ -345,5 +346,29 @@ describe('DecisionColumn, « Renvoyer à l’agent » (002 T038, FR-015)', () =>
   it('sends nothing back for a missing worktree', () => {
     setup({ snapshot: snapshot({ missing: true }) });
     expect(screen.queryByRole('button', { name: 'Renvoyer à l’agent' })).toBeNull();
+  });
+});
+
+describe('DecisionColumn, « ✕ Abandonner » (002 T052, FR-032)', () => {
+  it('asks first, then hands over to the closing of the agent; nothing is integrated', async () => {
+    const { actions, column, user } = setup();
+    await user.click(within(column).getByRole('button', { name: '✕ Abandonner' }));
+    const question = within(column).getByRole('alertdialog', { name: 'Abandonner ce travail ?' });
+    expect(actions.onAbandon).not.toHaveBeenCalled();
+    await user.click(within(question).getByRole('button', { name: 'Annuler' }));
+    expect(within(column).queryByRole('alertdialog')).toBeNull();
+    await user.click(within(column).getByRole('button', { name: '✕ Abandonner' }));
+    await user.click(
+      within(within(column).getByRole('alertdialog')).getByRole('button', { name: 'Abandonner' }),
+    );
+    expect(actions.onAbandon).toHaveBeenCalled();
+    expect(actions.onIntegrate).not.toHaveBeenCalled();
+  });
+
+  it('is all that is left when the worktree is gone', () => {
+    const { column } = setup({ snapshot: snapshot({ missing: true, files: [] }) });
+    expect(within(column).getByRole('button', { name: '✕ Abandonner' })).toBeDefined();
+    expect(within(column).queryByRole('button', { name: '✓ Intégrer' })).toBeNull();
+    expect(column.textContent).toContain('Worktree introuvable');
   });
 });

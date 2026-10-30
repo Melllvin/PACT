@@ -646,4 +646,55 @@ describe('Review (002 T018, US1)', () => {
       mainBranch: 'main',
     });
   });
+
+  // 002 T054, T055 — the Revue view and « ✕ Abandonner ».
+  it('opens the Revue view on the first agent to review, its pills limited to those agents', async () => {
+    const user = userEvent.setup();
+    const team = agents(3);
+    const review = binding({ pending: [agent(3).id, agent(2).id] });
+    render(view(review, team));
+    const revue = screen.getByRole('radio', { name: /Revue/ });
+    expect(within(revue).getByText('2')).toBeDefined();
+    await user.click(revue);
+    expect(screen.getByRole('region', { name: 'Focus : Claude Code 2' })).toBeDefined();
+    expect(review.open).toHaveBeenLastCalledWith(agent(2).id);
+    const pills = within(screen.getByRole('radiogroup', { name: 'Agents' })).getAllByRole('radio');
+    expect(pills.map((pill) => pill.getAttribute('aria-label'))).toEqual([
+      'Claude Code 2',
+      'Claude Code 3',
+    ]);
+    await user.click(screen.getByRole('radio', { name: 'Claude Code 3' }));
+    expect(review.open).toHaveBeenLastCalledWith(agent(3).id);
+    await user.click(screen.getByRole('radio', { name: 'Tuiles' }));
+    expect(screen.getByRole('region', { name: 'Tuiles' })).toBeDefined();
+  });
+
+  it('abandons the work of the agent reviewed through the closing of the agent', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const review = binding();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: agents(2) })}
+        clis={clis}
+        terminals={registry()}
+        review={review}
+        actions={{
+          onAnswer: vi.fn(),
+          onResume: vi.fn(),
+          onRestart: vi.fn(),
+          onLog: vi.fn(),
+          onCancelAutoResume: vi.fn(),
+          onClose,
+        }}
+      />,
+    );
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.click(screen.getByRole('button', { name: '✕ Abandonner' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Abandonner' }),
+    );
+    expect(onClose).toHaveBeenCalledWith(agent(2).id);
+    expect(review.integrate).not.toHaveBeenCalled();
+  });
 });
