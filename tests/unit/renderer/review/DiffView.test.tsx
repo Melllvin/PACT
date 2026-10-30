@@ -198,4 +198,28 @@ describe('DiffView comments (002 T038, FR-012)', () => {
     render(<DiffView file={file('src/db.ts')} diff={diff()} viewportHeight={400} />);
     expect(screen.queryByRole('button', { name: /Commenter/ })).toBeNull();
   });
+
+  it('dims a comment already sent in « Corriger les commentaires »', () => {
+    render(
+      <DiffView
+        file={file('src/db.ts')}
+        diff={diff()}
+        viewportHeight={400}
+        comments={[comment({ treated: true })]}
+        onComment={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('note').className).toContain('opacity-60');
+  });
+
+  it('names a binary file before its size is known', () => {
+    render(
+      <DiffView
+        file={file('logo.png', { binary: true, added: null, removed: null })}
+        diff={null}
+        viewportHeight={400}
+      />,
+    );
+    expect(screen.getByText('Fichier binaire modifié')).toBeDefined();
+  });
 });

@@ -84,7 +84,8 @@ function rowAt(tops: number[], y: number) {
   let high = tops.length - 1;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
-    if ((tops[middle] ?? 0) <= y) low = middle;
+    // `middle` stays within `tops`, which has one entry per row.
+    if ((tops[middle] as number) <= y) low = middle;
     else high = middle - 1;
   }
   return low;

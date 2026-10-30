@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { FocusView } from '../../../../src/renderer/focus/FocusView';
 import { agent } from '../tiles/fixtures';
@@ -29,5 +30,51 @@ describe('FocusView pills in the Revue view', () => {
       'Claude Code 1',
       'Claude Code 3',
     ]);
+  });
+});
+
+describe('FocusView Conflits tab (002 T050)', () => {
+  it('offers « Conflits · N » while an integration is stopped, and shows it above the terminal', async () => {
+    const onTab = vi.fn();
+    const props = {
+      agents: [agent(1)],
+      agentId: agent(1).id,
+      name: () => 'Claude Code',
+      terminals: undefined,
+      onSelect: vi.fn(),
+      onBack: vi.fn(),
+      onAnswer: vi.fn(),
+      onResume: vi.fn(),
+      onRestart: vi.fn(),
+      onLog: vi.fn(),
+      onCancelAutoResume: vi.fn(),
+      onTab,
+      conflicts: { count: 2, content: <p>Écran 1q</p> },
+    };
+    const { rerender } = render(<FocusView {...props} tab="changes" />);
+    expect(screen.queryByText('Écran 1q')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'Conflits · 2' }));
+    expect(onTab).toHaveBeenCalledWith('conflicts');
+    rerender(<FocusView {...props} tab="conflicts" />);
+    expect(screen.getByText('Écran 1q')).toBeDefined();
+  });
+
+  it('shows nothing for an agent that is gone', () => {
+    const { container } = render(
+      <FocusView
+        agents={[agent(1)]}
+        agentId={agent(2).id}
+        name={() => 'Claude Code'}
+        terminals={undefined}
+        onSelect={vi.fn()}
+        onBack={vi.fn()}
+        onAnswer={vi.fn()}
+        onResume={vi.fn()}
+        onRestart={vi.fn()}
+        onLog={vi.fn()}
+        onCancelAutoResume={vi.fn()}
+      />,
+    );
+    expect(container.innerHTML).toBe('');
   });
 });

@@ -30,4 +30,11 @@ describe('Toolbar, Revue view', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Tuiles' }));
     expect(onView).toHaveBeenCalledWith('tiles');
   });
+
+  it('stays on the view in use when it is pressed again', async () => {
+    const onView = vi.fn();
+    render(<Toolbar todoCount={0} reviewCount={1} view="tiles" onView={onView} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'Tuiles' }));
+    expect(onView).not.toHaveBeenCalled();
+  });
 });

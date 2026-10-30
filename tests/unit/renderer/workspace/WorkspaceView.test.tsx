@@ -703,4 +703,76 @@ describe('Review (002 T018, US1)', () => {
     expect(onClose).toHaveBeenCalledWith(agent(2).id);
     expect(review.integrate).not.toHaveBeenCalled();
   });
+
+  it('goes to the conflicts once « Intégrer » meets one, and back once they are gone', async () => {
+    const user = userEvent.setup();
+    const stopped = conflicted({ agentId: agent(2).id });
+    const { rerender } = render(view(binding()));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    rerender(view(binding({ integrations: { [agent(2).id]: stopped } })));
+    expect(screen.getByRole('tab', { name: 'Conflits · 2' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    // Integrated after the agent resolved: the review is shown again.
+    rerender(view(binding()));
+    expect(screen.getByRole('tab', { name: 'Changements' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('complementary', { name: 'Décision' })).toBeDefined();
+  });
+
+  it('edits a file in conflict, opens it in the editor, and drives the tests from Intégration', async () => {
+    const user = userEvent.setup();
+    const stopped = conflicted({ agentId: agent(2).id });
+    const review = binding({ snapshot: null, integrations: { [agent(2).id]: stopped } });
+    const { rerender } = render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    expect(screen.queryByText(/sans conflit/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Ouvrir dans l’éditeur' }));
+    expect(review.openInEditor).toHaveBeenCalledWith(agent(2).id, 'src/db.ts');
+    const hunk = screen.getByRole('group', { name: /conflit 1 \/ 2/ });
+    await user.click(within(hunk).getByRole('button', { name: 'Modifier…' }));
+    const field = screen.getByRole('textbox', { name: 'Contenu de src/db.ts' });
+    await user.clear(field);
+    await user.type(field, 'fini');
+    await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+    expect(review.resolveConflict).toHaveBeenCalledWith(agent(2).id, 'src/db.ts', {
+      content: 'fini',
+    });
+
+    const withTests = binding({
+      snapshot: snapshot({ agentId: agent(2).id, testCommand: null }),
+      integrations: { [agent(2).id]: stopped },
+    });
+    rerender(view(withTests));
+    const column = screen.getByRole('complementary', { name: 'Intégration' });
+    await user.type(within(column).getByRole('textbox', { name: 'Commande de test' }), 'make');
+    await user.click(within(column).getByRole('button', { name: 'Enregistrer' }));
+    expect(withTests.setTestCommand).toHaveBeenCalledWith(agent(2).id, 'make');
+
+    const run = {
+      agentId: agent(2).id,
+      command: 'npm test',
+      tree: snapshot().tree,
+      status: 'failed' as const,
+      passedCount: null,
+      outputTail: 'FAIL',
+    };
+    const running = binding({
+      snapshot: snapshot({ agentId: agent(2).id }),
+      integrations: { [agent(2).id]: stopped },
+      tests: { [agent(2).id]: run },
+    });
+    rerender(view(running));
+    await user.click(screen.getByRole('button', { name: 'Relancer' }));
+    expect(running.runTests).toHaveBeenCalledWith(agent(2).id);
+    const busy = binding({
+      snapshot: snapshot({ agentId: agent(2).id }),
+      integrations: { [agent(2).id]: stopped },
+      tests: { [agent(2).id]: { ...run, status: 'running' } },
+    });
+    rerender(view(busy));
+    await user.click(screen.getByRole('button', { name: 'Annuler les tests' }));
+    expect(busy.cancelTests).toHaveBeenCalledWith(agent(2).id);
+  });
 });

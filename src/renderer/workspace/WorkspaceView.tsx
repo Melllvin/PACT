@@ -198,10 +198,11 @@ export function WorkspaceView({
       backToTiles();
       return;
     }
-    const first = agents.find((agent) => pending.includes(agent.id));
-    if (!first) return;
-    setReviewView(true);
-    openReview(first.id);
+    // Revue is only enabled with an agent to review: the view opens on the first one.
+    for (const first of agents.filter((agent) => pending.includes(agent.id)).slice(0, 1)) {
+      setReviewView(true);
+      openReview(first.id);
+    }
   };
   const inReview = reviewView && focused !== null;
   const pills = inReview

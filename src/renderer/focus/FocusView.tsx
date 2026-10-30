@@ -99,10 +99,8 @@ export function FocusView({
         <span aria-hidden className="h-[18px] w-px bg-white/8" />
         <Tabs
           value={tab}
-          onValueChange={(value) => {
-            if (value === 'terminal' || value === 'changes' || value === 'conflicts')
-              onTab?.(value);
-          }}
+          // Only the tabs below can be chosen, Aperçu being disabled.
+          onValueChange={(value) => onTab?.(value as FocusTab)}
         >
           <TabsList variant="line" className="h-auto gap-4 p-0">
             <TabsTrigger value="terminal" className={TAB}>

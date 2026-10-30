@@ -103,12 +103,27 @@ const linesOf = (text: string | null) =>
 /** git's own rule: a NUL byte makes a file binary. */
 const isBinary = (text: string | null) => text?.includes('\0') === true;
 
-/** The error an integration ends with, and the state it says (FR-021, FR-023). */
-function failureOf(error: unknown): { failure: IpcFailure; state: Integration['state'] } {
-  if (error instanceof IpcFailure) return { failure: error, state: 'failed' };
+/**
+ * The error an integration ends with, the state it says and the detail kept with it: git's
+ * output as it came (FR-021, FR-023), or main moved twice (FR-022).
+ */
+function failureOf(error: unknown): {
+  failure: IpcFailure;
+  state: Integration['state'];
+  detail: string;
+} {
+  if (error instanceof MainMoved) {
+    return {
+      failure: new IpcFailure('MAIN_MOVED', MAIN_MOVED),
+      state: 'failed',
+      detail: MAIN_MOVED,
+    };
+  }
+  const detail = gitErrorOutput(error);
   if (error instanceof LocalChangesError) {
     return {
       state: 'blocked',
+      detail,
       failure: new IpcFailure(
         'LOCAL_CHANGES',
         'Des changements locaux sur la branche principale bloquent l’intégration.',
@@ -117,7 +132,7 @@ function failureOf(error: unknown): { failure: IpcFailure; state: Integration['s
       ),
     };
   }
-  return { state: 'failed', failure: new IpcFailure('GIT_FAILED', gitErrorOutput(error)) };
+  return { state: 'failed', detail, failure: new IpcFailure('GIT_FAILED', detail) };
 }
 
 export class IntegrationService {
@@ -214,20 +229,13 @@ export class IntegrationService {
           });
           break;
         } catch (error) {
-          if (!(error instanceof MainMoved)) throw error;
-          if (attempt === ATTEMPTS) {
-            set({ state: 'failed', error: 'La branche principale a encore bougé.' });
-            throw new IpcFailure('MAIN_MOVED', MAIN_MOVED);
-          }
+          // main moved meanwhile: checked once more, then given up (FR-022).
+          if (!(error instanceof MainMoved) || attempt === ATTEMPTS) throw error;
         }
       }
     } catch (error) {
-      if (error instanceof IpcFailure) throw error;
-      const { failure, state } = failureOf(error);
-      set({
-        state,
-        error: failure.code === 'GIT_FAILED' ? failure.message : gitErrorOutput(error),
-      });
+      const { failure, state, detail } = failureOf(error);
+      set({ state, error: detail });
       throw failure;
     }
     set({ state: 'integrated' });
@@ -323,11 +331,9 @@ export class IntegrationService {
       else if (state === 'closed') void this.cancel(integration.id);
       else if (READY.includes(state) && pending.sawWorking) {
         const { worktreePath } = this.find(agentId).agent;
-        const snapshot = this.git.snapshot(worktreePath);
-        snapshot.catch(() => undefined);
         this.drop(pending);
         void this.enqueue(pending.workspaceId, async () =>
-          this.integrate(pending.request, await snapshot, integration.id),
+          this.integrate(pending.request, await this.git.snapshot(worktreePath), integration.id),
         ).catch(() => undefined);
       }
     }
@@ -365,7 +371,7 @@ export class IntegrationService {
     try {
       // The resolutions were made against this main: it must not have moved since.
       const main = await this.git.revParse(repo, workspace.mainBranch);
-      if (main !== pending.main) throw new IpcFailure('MAIN_MOVED', MAIN_MOVED);
+      if (main !== pending.main) throw new MainMoved();
       const changes = await Promise.all(
         integration.conflicts.map(async (file) => ({
           path: file.path,
@@ -379,8 +385,6 @@ export class IntegrationService {
         tip: pending.tip,
         tree,
         request,
-      }).catch((error: unknown) => {
-        throw error instanceof MainMoved ? new IpcFailure('MAIN_MOVED', MAIN_MOVED) : error;
       });
     } catch (error) {
       // The resolutions stay: the user fixes what failed and finishes again.
