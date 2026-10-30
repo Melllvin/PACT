@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { DiffView } from '../../../../src/renderer/review/DiffView';
+import type { ReviewComment } from '../../../../src/shared/model';
 import type { DiffLine } from '../../../../src/shared/review';
 import { diff, file } from './fixtures';
 
@@ -95,5 +97,102 @@ describe('DiffView', () => {
     expect(screen.getByText('ligne 4000')).toBeDefined();
     expect(screen.queryByText('ligne 1')).toBeNull();
     expect(rows().length).toBeLessThan(60);
+  });
+});
+
+const comment = (overrides: Partial<ReviewComment> = {}): ReviewComment => ({
+  id: '00000000-0000-4000-8000-0000000000c1',
+  path: 'src/db.ts',
+  line: 2,
+  text: 'Le délai devrait venir de la config.',
+  createdAt: '2026-10-30T10:00:00.000Z',
+  treated: false,
+  ...overrides,
+});
+
+describe('DiffView comments (002 T038, FR-012)', () => {
+  it('opens a comment field on a line; Enter sends it with the line on the agent side', async () => {
+    const user = userEvent.setup();
+    const onComment = vi.fn();
+    render(
+      <DiffView
+        file={file('src/db.ts')}
+        diff={diff()}
+        viewportHeight={400}
+        comments={[]}
+        onComment={onComment}
+      />,
+    );
+    // A removed line has no line on the agent's side: nothing to comment there.
+    expect(screen.queryByRole('button', { name: /Commenter.*ligne 2 retirée/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Commenter la ligne 2' }));
+    const field = screen.getByRole('textbox', { name: 'Commentaire sur la ligne 2' });
+    await user.type(field, 'Pourquoi 30 ?{Enter}');
+    expect(onComment).toHaveBeenCalledWith(2, 'Pourquoi 30 ?');
+    expect(screen.queryByRole('textbox', { name: 'Commentaire sur la ligne 2' })).toBeNull();
+  });
+
+  it('cancels the comment with Escape, without sending anything', async () => {
+    const user = userEvent.setup();
+    const onComment = vi.fn();
+    const onKeyDown = vi.fn();
+    document.addEventListener('keydown', onKeyDown);
+    render(
+      <DiffView
+        file={file('src/db.ts')}
+        diff={diff()}
+        viewportHeight={400}
+        comments={[]}
+        onComment={onComment}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Commenter la ligne 1' }));
+    await user.type(screen.getByRole('textbox', { name: 'Commentaire sur la ligne 1' }), 'abc');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(onComment).not.toHaveBeenCalled();
+    // Escape stays with the field: the Focus does not go back to the tiles.
+    expect(onKeyDown).not.toHaveBeenCalled();
+    document.removeEventListener('keydown', onKeyDown);
+  });
+
+  it('does not send an empty comment', async () => {
+    const user = userEvent.setup();
+    const onComment = vi.fn();
+    render(
+      <DiffView
+        file={file('src/db.ts')}
+        diff={diff()}
+        viewportHeight={400}
+        comments={[]}
+        onComment={onComment}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Commenter la ligne 2' }));
+    await user.type(screen.getByRole('textbox'), '   {Enter}');
+    expect(onComment).not.toHaveBeenCalled();
+  });
+
+  it('shows each comment under its line, sent to the agent', () => {
+    render(
+      <DiffView
+        file={file('src/db.ts')}
+        diff={diff()}
+        viewportHeight={400}
+        comments={[comment()]}
+        onComment={vi.fn()}
+      />,
+    );
+    const shown = screen.getByRole('note', { name: 'Commentaire sur la ligne 2' });
+    expect(shown.textContent).toContain('Le délai devrait venir de la config.');
+    expect(shown.textContent).toContain('→ envoyé à l’agent ↓');
+    const all = rows();
+    const addRow = all.findIndex((row) => row.getAttribute('data-kind') === 'add');
+    expect(all[addRow + 1]?.contains(shown)).toBe(true);
+  });
+
+  it('offers no comment without a handler', () => {
+    render(<DiffView file={file('src/db.ts')} diff={diff()} viewportHeight={400} />);
+    expect(screen.queryByRole('button', { name: /Commenter/ })).toBeNull();
   });
 });

@@ -30,6 +30,7 @@ const setup = (
     tests?: TestRun | null;
     busy?: boolean;
     error?: { message: string; files: string[] } | null;
+    sent?: boolean;
   } = {},
 ) => {
   const actions = {
@@ -37,6 +38,7 @@ const setup = (
     onCancelTests: vi.fn(),
     onSetTestCommand: vi.fn(),
     onIntegrate: vi.fn(),
+    onSendBack: vi.fn(),
   };
   render(
     <DecisionColumn
@@ -48,6 +50,7 @@ const setup = (
       tests={props.tests ?? null}
       busy={props.busy ?? false}
       error={props.error ?? null}
+      sent={props.sent ?? false}
       {...actions}
     />,
   );
@@ -317,5 +320,30 @@ describe('DecisionColumn, integrating (FR-019, FR-024, FR-025)', () => {
     const alert = within(column).getByRole('alert');
     expect(alert.textContent).toBe('pre-commit: lint en échec');
     expect(within(alert).queryByRole('list')).toBeNull();
+  });
+});
+
+describe('DecisionColumn, « Renvoyer à l’agent » (002 T038, FR-015)', () => {
+  it('sends the request written, once there is one', async () => {
+    const { actions, column, user } = setup();
+    const send = within(column).getByRole('button', { name: 'Renvoyer à l’agent' });
+    expect(send.hasAttribute('disabled')).toBe(true);
+    await user.type(
+      within(column).getByRole('textbox', { name: 'Demande à l’agent' }),
+      'Ajoute un test pour le cas vide.',
+    );
+    await user.click(send);
+    expect(actions.onSendBack).toHaveBeenCalledWith('Ajoute un test pour le cas vide.');
+  });
+
+  it('follows the correction the review asked for (US3 scenario 6)', () => {
+    expect(
+      setup({ agent: reviewed({ state: 'working' }), sent: true }).column.textContent,
+    ).toContain('Agent : correction en cours');
+  });
+
+  it('sends nothing back for a missing worktree', () => {
+    setup({ snapshot: snapshot({ missing: true }) });
+    expect(screen.queryByRole('button', { name: 'Renvoyer à l’agent' })).toBeNull();
   });
 });

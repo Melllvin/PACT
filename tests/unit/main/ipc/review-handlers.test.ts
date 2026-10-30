@@ -15,6 +15,8 @@ const setup = (command: string | null = 'npm test') => {
     setSeen: vi.fn(() => Promise.resolve()),
     updatePending: vi.fn(() => Promise.resolve([agentId])),
     testPlan: vi.fn(() => Promise.resolve({ target, command, tree: 'current' })),
+    comment: vi.fn(() => Promise.resolve('comment')),
+    send: vi.fn(() => Promise.resolve()),
   };
   const tests = {
     run: vi.fn(() => Promise.resolve('running')),
@@ -109,5 +111,24 @@ describe('review handlers', () => {
     };
     expect(await services['integration:start'](request)).toBe('integration');
     expect(integration.start).toHaveBeenCalledWith(request);
+  });
+
+  it('comments a line and sends the shortcuts (FR-012, FR-013, FR-015)', async () => {
+    const { services, review } = setup();
+    expect(
+      await services['review:comment']({ agentId, path: 'a.ts', line: 3, text: 'Renommer.' }),
+    ).toBe('comment');
+    expect(review.comment).toHaveBeenCalledWith(agentId, {
+      path: 'a.ts',
+      line: 3,
+      text: 'Renommer.',
+    });
+    await services['review:send']({ agentId, kind: 'fix-comments' });
+    expect(review.send).toHaveBeenLastCalledWith(agentId, { kind: 'fix-comments' });
+    await services['review:send']({ agentId, kind: 'request', text: 'Ajoute un test.' });
+    expect(review.send).toHaveBeenLastCalledWith(agentId, {
+      kind: 'request',
+      text: 'Ajoute un test.',
+    });
   });
 });
