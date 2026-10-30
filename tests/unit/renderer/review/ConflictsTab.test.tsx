@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictsTab } from '../../../../src/renderer/review/ConflictsTab';
@@ -97,6 +97,9 @@ describe('ConflictsTab', () => {
     tab(conflicted({}, { resolved: true, edited: 'ok\n' }));
     const files = within(screen.getByRole('list', { name: 'Fichiers en conflit' }));
     expect(files.getAllByRole('listitem')[0]?.textContent).toBe('✓ src/db.ts');
+    // The first file left to resolve is shown first.
+    expect(screen.getByRole('group', { name: 'src/auth.ts · fichier entier' })).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '✓ src/db.ts' }));
     expect(screen.getByText('Modifié à la main')).toBeDefined();
   });
 });

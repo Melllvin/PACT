@@ -8,13 +8,15 @@ import type { AgentActions } from '../workspace/WorkspaceView';
 import { AgentPills } from './AgentPills';
 import { cn } from '@/lib/utils';
 
-export type FocusTab = 'terminal' | 'changes';
+export type FocusTab = 'terminal' | 'changes' | 'conflicts';
 
 type Props = Omit<AgentActions, 'onClose'> & {
   tab?: FocusTab;
   onTab?: (tab: FocusTab) => void;
   /** The Changements tab (002 US1), shown above the same terminal. */
   changes?: ReactNode;
+  /** The Conflits tab of screen 1q, while an integration is stopped on a conflict (002 US4). */
+  conflicts?: { count: number; content: ReactNode } | undefined;
   /** Every agent of the workspace, in position order, for the pills. */
   agents: Agent[];
   agentId: string;
@@ -38,6 +40,7 @@ export function FocusView({
   tab = 'terminal',
   onTab,
   changes,
+  conflicts,
   agents,
   agentId,
   name,
@@ -94,7 +97,8 @@ export function FocusView({
         <Tabs
           value={tab}
           onValueChange={(value) => {
-            if (value === 'terminal' || value === 'changes') onTab?.(value);
+            if (value === 'terminal' || value === 'changes' || value === 'conflicts')
+              onTab?.(value);
           }}
         >
           <TabsList variant="line" className="h-auto gap-4 p-0">
@@ -107,6 +111,11 @@ export function FocusView({
             <TabsTrigger value="changes" className={TAB}>
               Changements
             </TabsTrigger>
+            {conflicts && (
+              <TabsTrigger value="conflicts" className={TAB}>
+                Conflits · {conflicts.count}
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
         <span className="flex-1" />
@@ -116,12 +125,13 @@ export function FocusView({
       </header>
       <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'changes' && changes}
+        {tab === 'conflicts' && conflicts?.content}
         {/* Same place in the tree on both tabs: the terminal stays attached, its session kept. */}
         <div
           ref={terminalBox}
           className={cn(
             'flex min-h-0 flex-col',
-            tab === 'changes' ? 'h-[32%] flex-none border-t border-white/6' : 'flex-1',
+            tab === 'terminal' ? 'flex-1' : 'h-[32%] flex-none border-t border-white/6',
           )}
         >
           {terminals && (

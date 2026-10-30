@@ -41,17 +41,25 @@ const STATE: Partial<Record<Agent['state'], string>> = {
   error: 'est en erreur',
 };
 
-const MODES: Record<IntegrationMode, string> = {
+export const MODES: Record<IntegrationMode, string> = {
   squash: 'Squash en 1 commit',
   'keep-commits': 'Garder les commits',
 };
 
-const OK = 'text-accept';
-const KO = 'text-destructive';
-const DIM = 'text-dim';
+export const OK = 'text-accept';
+export const KO = 'text-destructive';
+export const DIM = 'text-dim';
 const ROW = 'm-0 flex items-center gap-2 text-[12px]';
 
-function Row({ mark, tone, children }: { mark: string; tone: string; children: React.ReactNode }) {
+export function Row({
+  mark,
+  tone,
+  children,
+}: {
+  mark: string;
+  tone: string;
+  children: React.ReactNode;
+}) {
   return (
     <p className={ROW}>
       <span aria-hidden className={`w-3 flex-none text-center ${tone}`}>
@@ -62,8 +70,8 @@ function Row({ mark, tone, children }: { mark: string; tone: string; children: R
   );
 }
 
-/** The Tests line of screen 1h, with what can be done from it (FR-016, FR-017). */
-function TestsLine({
+/** The Tests line of screens 1h and 1q, with what can be done from it (FR-016, FR-017). */
+export function TestsLine({
   run,
   snapshot,
   onRunTests,

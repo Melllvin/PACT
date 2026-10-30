@@ -308,12 +308,12 @@ rien modifier ; les deux voies de résolution doivent donner le commit attendu.
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T043 [P] [US4] Tests de `conflicts.ts` dans `tests/unit/shared/conflicts.test.ts` :
+- [X] T043 [P] [US4] Tests de `conflicts.ts` dans `tests/unit/shared/conflicts.test.ts` :
   - découpe des marqueurs en zones (`main`, `agent`, ligne) ;
   - choix `main`, `agent`, `both` ;
   - fichier résolu seulement sans `<<<<<<<` ni `>>>>>>>` ;
   - `delete-modify` et `add-add` limités à « Garder main » / « Garder cette version ».
-- [ ] T044 [P] [US4] Tests d'intégration de la résolution (research R6) dans `tests/integration/review/integration-conflicts.test.ts` :
+- [X] T044 [P] [US4] Tests d'intégration de la résolution (research R6) dans `tests/integration/review/integration-conflicts.test.ts` :
   - `integration:start` en conflit ⇒ `conflicted`, branche principale, dossier et worktree inchangés ;
   - chaque choix donne le contenu attendu dans le commit final ;
   - `content` libre ;
@@ -322,7 +322,7 @@ rien modifier ; les deux voies de résolution doivent donner le commit attendu.
   - `cancel` supprime les copies et ne change rien ;
   - `askAgent` met en file la consigne « Conflit avec main », passe en `waiting-agent` puis revérifie à la fin du tour de l'agent ;
   - crochets respectés au commit final.
-- [ ] T045 [P] [US4] Tests de `ConflictsTab` dans `tests/unit/renderer/review/ConflictsTab.test.tsx` :
+- [X] T045 [P] [US4] Tests de `ConflictsTab` dans `tests/unit/renderer/review/ConflictsTab.test.tsx` :
   - onglet « Conflits · N » ;
   - fichiers « ⚠ » et « ✓ N sans conflit » ;
   - zone « conflit i / n · ligne L » avec « main · « sujet » hash » et « cette version » ;
@@ -331,14 +331,14 @@ rien modifier ; les deux voies de résolution doivent donner le commit attendu.
   - « Terminer l'intégration » inactif tant que tout n'est pas résolu ;
   - « Demander à l'agent » marqué « Recommandé » ;
   - « Annuler l'intégration · main n'est pas modifié ».
-- [ ] T046 [US4] Test e2e : conflit ⇒ écran 1q ; résolution à la main puis « Terminer » ⇒ commit attendu ; un second conflit puis « Annuler » ⇒ branche principale inchangée ; « Demander à l'agent » ⇒ consigne reçue par le faux CLI, dans `tests/e2e/us11-conflicts.spec.ts`.
+- [X] T046 [US4] Test e2e : conflit ⇒ écran 1q ; résolution à la main puis « Terminer » ⇒ commit attendu ; un second conflit puis « Annuler » ⇒ branche principale inchangée ; « Demander à l'agent » ⇒ consigne reçue par le faux CLI, dans `tests/e2e/us11-conflicts.spec.ts`.
 
 ### Implementation for User Story 4
 
-- [ ] T047 [P] [US4] Implémenter le découpage en zones et l'application des choix (purs) dans `src/shared/conflicts.ts`.
-- [ ] T048 [US4] Ajouter à `IntegrationService` les états `conflicted` et `waiting-agent`, `resolve`, `openInEditor` (copie, `shell.openPath` ou `core.editor`, suivi du fichier), `askAgent`, `finish` (`hash-object -w`, index temporaire, `write-tree`, puis le dernier pas de R5) et `cancel`, dans `src/main/review/integration-service.ts`.
-- [ ] T049 [US4] Brancher `integration:resolve`, `integration:openInEditor`, `integration:askAgent`, `integration:finish` et `integration:cancel` dans `src/main/ipc/review-handlers.ts`.
-- [ ] T050 [US4] Implémenter `ConflictsTab.tsx` et la colonne « Intégration » (zone de texte à chasse fixe pour « Modifier… ») dans `src/renderer/review/`, ouverts par `FocusView` quand une intégration est `conflicted`.
+- [X] T047 [P] [US4] Implémenter le découpage en zones et l'application des choix (purs) dans `src/shared/conflicts.ts`.
+- [X] T048 [US4] Ajouter à `IntegrationService` les états `conflicted` et `waiting-agent`, `resolve`, `openInEditor` (copie, `shell.openPath` ou `core.editor`, suivi du fichier), `askAgent`, `finish` (`hash-object -w`, index temporaire, `write-tree`, puis le dernier pas de R5) et `cancel`, dans `src/main/review/integration-service.ts`.
+- [X] T049 [US4] Brancher `integration:resolve`, `integration:openInEditor`, `integration:askAgent`, `integration:finish` et `integration:cancel` dans `src/main/ipc/review-handlers.ts`.
+- [X] T050 [US4] Implémenter `ConflictsTab.tsx` et la colonne « Intégration » (zone de texte à chasse fixe pour « Modifier… ») dans `src/renderer/review/`, ouverts par `FocusView` quand une intégration est `conflicted`.
 
 **Checkpoint**: US1–US4 testées séparément.
 

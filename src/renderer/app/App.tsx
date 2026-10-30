@@ -142,6 +142,17 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
                     void state.commentLine(agentId, path, line, text),
                   send: (agentId, kind, text) => void state.sendToAgent(agentId, kind, text),
                   correcting: state.correcting,
+                  integrations: reviewState.integrations,
+                  resolveConflict: (agentId, path, answer) =>
+                    void reviewState.resolveConflict(agentId, path, answer),
+                  openInEditor: (agentId, path) => void reviewState.openInEditor(agentId, path),
+                  askAgent: (agentId) => void reviewState.askAgent(agentId),
+                  finishIntegration: (agentId, label) =>
+                    void reviewState.finishIntegration(agentId, {
+                      ...label,
+                      workspaceId: workspace.id,
+                    }),
+                  cancelIntegration: (agentId) => void reviewState.cancelIntegration(agentId),
                 }
               }
             />

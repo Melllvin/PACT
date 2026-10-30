@@ -1,6 +1,8 @@
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { IpcFailure } from '../shared/ipc';
 import { createAdapters } from './agents/adapters';
 import { AgentManager } from './agents/agent-manager';
 import { CliRegistry } from './agents/cli-registry';
@@ -91,6 +93,8 @@ void app.whenReady().then(async () => {
         .list()
         .find((ws) => ws.agents.some((a) => a.id === event.agentId));
       if (workspace) void review.updatePending(workspace.id);
+      // US4 — an agent asked to resolve a conflict is checked again once its turn ends.
+      integration.agentState(event.agentId, event.state);
     },
     onBranch: (event) => {
       emit('agent:branch', event);
@@ -125,6 +129,12 @@ void app.whenReady().then(async () => {
     workspaces,
     agents,
     integrationsDir: join(app.getPath('userData'), 'integrations'),
+    conflictsDir: join(app.getPath('userData'), 'conflicts'),
+    prompts: agents,
+    openPath: async (path) => {
+      const failure = await shell.openPath(path);
+      if (failure !== '') throw new IpcFailure('INTERNAL', failure);
+    },
     onState: (state) => {
       emit('integration:state', state);
       if (state.state !== 'integrated') return;
@@ -135,6 +145,8 @@ void app.whenReady().then(async () => {
       if (workspace) void review.updatePending(workspace.id);
     },
   });
+  // Integrations in progress do not outlive the app (R9): neither do their editor copies.
+  await rm(join(app.getPath('userData'), 'conflicts'), { recursive: true, force: true });
   const freeTerminals = new FreeTerminals({
     workspaces,
     pty,
@@ -221,6 +233,7 @@ void app.whenReady().then(async () => {
       workspaces.dispose();
       review.dispose();
       tests.dispose();
+      integration.dispose();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
       await hooks.stop();

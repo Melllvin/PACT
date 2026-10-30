@@ -5,9 +5,17 @@ import { deriveTodos } from '../../shared/todo';
 import { Toolbar } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
 import { ChangesTab } from '../review/ChangesTab';
+import { ConflictsTab } from '../review/ConflictsTab';
 import { DecisionColumn } from '../review/DecisionColumn';
-import { seenBlob, type FileDiff, type ReviewSnapshot, type TestRun } from '../../shared/review';
-import type { Decision, IntegrateRequest } from '../store/review-store';
+import { IntegrationColumn } from '../review/IntegrationColumn';
+import {
+  seenBlob,
+  type FileDiff,
+  type Integration,
+  type ReviewSnapshot,
+  type TestRun,
+} from '../../shared/review';
+import type { ConflictAnswer, Decision, IntegrateRequest } from '../store/review-store';
 import type { ReviewSendKind } from '../store/app-store';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
@@ -62,6 +70,13 @@ export type ReviewBinding = {
   send: (agentId: string, kind: ReviewSendKind, text?: string) => void;
   /** The agents still on what the review sent them (« Agent : correction en cours »). */
   correcting: Readonly<Record<string, 'queued' | 'working'>>;
+  /** The integrations stopped on a conflict, per agent (screen 1q, 002 US4). */
+  integrations: Readonly<Record<string, Integration>>;
+  resolveConflict: (agentId: string, path: string, answer: ConflictAnswer) => void;
+  openInEditor: (agentId: string, path: string) => void;
+  askAgent: (agentId: string) => void;
+  finishIntegration: (agentId: string, label: { branch: string; mainBranch: string }) => void;
+  cancelIntegration: (agentId: string) => void;
 };
 
 /** How long « ✓ Intégré » stays (US2/AC6). */
@@ -119,8 +134,19 @@ export function WorkspaceView({
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
   const focused = agents.some((agent) => agent.id === focusedId) ? focusedId : null;
-  const reviewed = focused !== null && focusTab === 'changes' ? focused : null;
+  // Screen 1q of the agent in Focus, while its integration is stopped on a conflict (FR-027).
+  const integration = (focused !== null && review?.integrations[focused]) || null;
+  const tab = focusTab === 'conflicts' && !integration ? 'changes' : focusTab;
+  const reviewed = focused !== null && tab !== 'terminal' ? focused : null;
   const reviewedAgent = agents.find((agent) => agent.id === reviewed);
+
+  // The conflict screen opens by itself once « Intégrer » meets a conflict.
+  const conflictId = integration?.state === 'conflicted' ? integration.id : null;
+  const [shownConflict, setShownConflict] = useState<string | null>(null);
+  if (conflictId !== shownConflict) {
+    setShownConflict(conflictId);
+    if (conflictId !== null && focusTab === 'changes') setFocusTab('conflicts');
+  }
 
   // The main process follows the worktree of the agent reviewed, and only while it is (R3).
   const binding = useRef(review);
@@ -155,7 +181,7 @@ export function WorkspaceView({
 
   const openReview = (agentId: string) => {
     setFocusedId(agentId);
-    setFocusTab('changes');
+    setFocusTab(review?.integrations[agentId] ? 'conflicts' : 'changes');
   };
   const reviewActions: AgentActions = { ...actions, onReview: openReview };
   const snapshot = review?.snapshot?.agentId === reviewed ? review.snapshot : null;
@@ -212,8 +238,34 @@ export function WorkspaceView({
                 setFocusedId(null);
                 setFocusTab('terminal');
               }}
-              tab={focusTab}
+              tab={tab}
               onTab={setFocusTab}
+              conflicts={
+                integration && review
+                  ? {
+                      count: integration.conflicts.length,
+                      content: (
+                        <ConflictsTab
+                          integration={integration}
+                          mainBranch={workspace.mainBranch}
+                          clean={Math.max(
+                            0,
+                            (snapshot?.files.length ?? 0) - integration.conflicts.length,
+                          )}
+                          onResolve={(path, hunk, choice) => {
+                            review.resolveConflict(integration.agentId, path, { hunk, choice });
+                          }}
+                          onEdit={(path, content) => {
+                            review.resolveConflict(integration.agentId, path, { content });
+                          }}
+                          onOpenInEditor={(path) => {
+                            review.openInEditor(integration.agentId, path);
+                          }}
+                        />
+                      ),
+                    }
+                  : undefined
+              }
               changes={
                 reviewedAgent && (
                   <ChangesTab
@@ -287,8 +339,42 @@ export function WorkspaceView({
             </TileGrid>
           )}
         </section>
-        {/* Décision takes the place of À faire while a review is open (FR-004). */}
-        {reviewedAgent && review ? (
+        {/* Décision takes the place of À faire while a review is open (FR-004), and Intégration
+            the place of Décision while its integration is stopped on a conflict (1q). */}
+        {reviewedAgent && review && integration ? (
+          <IntegrationColumn
+            integration={integration}
+            agent={reviewedAgent}
+            agentName={cliName(reviewedAgent.cliId)}
+            snapshot={snapshot}
+            tests={review.tests[reviewedAgent.id] ?? null}
+            mainBranch={workspace.mainBranch}
+            busy={review.decisions[reviewedAgent.id]?.busy ?? false}
+            error={review.decisions[reviewedAgent.id]?.error ?? null}
+            onAskAgent={() => {
+              review.askAgent(reviewedAgent.id);
+            }}
+            onFinish={() => {
+              review.finishIntegration(reviewedAgent.id, {
+                branch: reviewedAgent.branch,
+                mainBranch: workspace.mainBranch,
+              });
+            }}
+            onCancel={() => {
+              review.cancelIntegration(reviewedAgent.id);
+              setFocusTab('changes');
+            }}
+            onRunTests={() => {
+              review.runTests(reviewedAgent.id);
+            }}
+            onCancelTests={() => {
+              review.cancelTests(reviewedAgent.id);
+            }}
+            onSetTestCommand={(command) => {
+              review.setTestCommand(reviewedAgent.id, command);
+            }}
+          />
+        ) : reviewedAgent && review ? (
           <DecisionColumn
             agent={reviewedAgent}
             snapshot={snapshot}

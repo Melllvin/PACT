@@ -366,6 +366,37 @@ describe('review store, conflict screen (002 T050)', () => {
     expect(store.getState().notice?.text).toBe('✓ Intégré · agent/pg-sessions → main');
   });
 
+  it('ignores the states of a clean integration, and of an agent not on screen 1q', () => {
+    const { store, emit } = setup();
+    emit('integration:state', { ...stopped, state: 'checking' });
+    emit('integration:state', { ...stopped, state: 'integrated' });
+    expect(store.getState().integrations).toEqual({});
+    expect(store.getState().notice).toBeNull();
+  });
+
+  it('says why an integration checked again after the agent failed', async () => {
+    const { store, emit } = await started();
+    emit('integration:state', { ...stopped, state: 'checking' });
+    expect(store.getState().integrations[uuid(1)]?.state).toBe('checking');
+    emit('integration:state', { ...stopped, state: 'failed', error: 'disque plein' });
+    expect(store.getState().integrations[uuid(1)]).toBeUndefined();
+    expect(store.getState().decisions[uuid(1)]?.error?.message).toBe('disque plein');
+  });
+
+  it('gives the notice when the integration checked again after the agent lands', async () => {
+    const { store, emit } = await started();
+    emit('integration:state', { ...stopped, state: 'integrated' });
+    expect(store.getState().notice?.text).toBe('✓ Intégré · agent/pg-sessions → main');
+  });
+
+  it('does nothing about an agent without an integration on screen 1q', async () => {
+    const { store, invoke } = setup();
+    await store.getState().askAgent(uuid(1));
+    await store.getState().cancelIntegration(uuid(1));
+    expect(invoke).not.toHaveBeenCalledWith('integration:askAgent', expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith('integration:cancel', expect.anything());
+  });
+
   it('shows why finishing failed, the integration kept', async () => {
     const { store } = await started({
       'integration:finish': () =>
@@ -391,6 +422,11 @@ describe('idle review store', () => {
     await state.setTestCommand('w1', uuid(1), 'make');
     await state.integrate(uuid(1), request, label);
     state.dismissNotice();
+    await state.resolveConflict(uuid(1), 'a.ts', { content: '' });
+    await state.openInEditor(uuid(1), 'a.ts');
+    await state.askAgent(uuid(1));
+    await state.finishIntegration(uuid(1), label);
+    await state.cancelIntegration(uuid(1));
     expect(idleReviewStore.getState()).toMatchObject({ agentId: null, tests: {}, notice: null });
   });
 });

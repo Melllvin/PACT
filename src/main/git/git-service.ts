@@ -27,6 +27,8 @@ export type Snapshot = { commit: string; tree: string };
 export type DiffTarget = { base: string; tree: string; path: string; oldPath: string | null };
 export type MergeConflict = { path: string; kind: ConflictFile['kind'] };
 export type MergeResult = { tree: string; conflicts: MergeConflict[] };
+/** One file of a tree: its mode and blob. */
+export type TreeEntry = { mode: string; oid: string };
 export type CommitPlan = {
   /** The temporary worktree, removed whatever happens. */
   dir: string;
@@ -343,6 +345,61 @@ export class GitService {
         kind: !found.includes('1') ? 'add-add' : found.length === 3 ? 'content' : 'delete-modify',
       })),
     };
+  }
+
+  /** 002 R6 — the file `path` of `treeish`, or null when it has none. */
+  async entry(cwd: string, treeish: string, path: string): Promise<TreeEntry | null> {
+    const out = await this.gitRaw(cwd, [
+      '--literal-pathspecs',
+      'ls-tree',
+      '-z',
+      '--full-tree',
+      treeish,
+      '--',
+      path,
+    ]);
+    // `<mode> <type> <oid>\t<path>\0`
+    const record = out.split('\0').find((line) => line.slice(line.indexOf('\t') + 1) === path);
+    if (!record) return null;
+    const [mode = '', , oid = ''] = record.slice(0, record.indexOf('\t')).split(' ');
+    return { mode, oid };
+  }
+
+  /** The content of a blob, as stored. */
+  async readBlob(cwd: string, oid: string): Promise<string> {
+    return this.gitRaw(cwd, ['cat-file', 'blob', oid]);
+  }
+
+  /** 002 R6 — `content` written as a blob of the repository. */
+  async writeBlob(cwd: string, content: string): Promise<string> {
+    const run = this.run(cwd, ['hash-object', '-w', '--stdin']);
+    (run.child.stdin as Writable).end(content);
+    return (await run).stdout.trim();
+  }
+
+  /**
+   * 002 R6 — `tree` with some files replaced (`null` removes one), through a temporary index:
+   * no index or file of the repository is touched.
+   */
+  async replaceInTree(
+    cwd: string,
+    tree: string,
+    changes: { path: string; entry: TreeEntry | null }[],
+  ): Promise<string> {
+    const temporary = join(tmpdir(), `pact-index-${randomUUID()}`);
+    const env = { GIT_INDEX_FILE: temporary };
+    try {
+      await this.git(cwd, ['read-tree', tree], env);
+      const lines = changes.map(({ path, entry }) =>
+        entry === null ? `0 ${'0'.repeat(40)}\t${path}` : `${entry.mode} ${entry.oid}\t${path}`,
+      );
+      const run = this.run(cwd, ['update-index', '-z', '--index-info'], env);
+      (run.child.stdin as Writable).end(lines.map((line) => `${line}\0`).join(''));
+      await run;
+      return await this.git(cwd, ['write-tree'], env);
+    } finally {
+      await rm(temporary, { force: true });
+    }
   }
 
   /** 002 R4 — the last commit of `main` since `base` that touched `path`. */
