@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createReviewStore, idleReviewStore } from '../../../../src/renderer/store/review-store';
 import type { IpcEvent, IpcEventChannel, PactApi } from '../../../../src/shared/ipc';
 import type { FileDiff, Integration, ReviewSnapshot, TestRun } from '../../../../src/shared/review';
-import { diff, file, snapshot } from '../review/fixtures';
+import { conflicted, diff, file, snapshot } from '../review/fixtures';
 import { uuid } from '../tiles/fixtures';
 
 // 002 T022 — the review shown in the Changements tab: snapshot, file selected, its diff.
@@ -293,26 +293,88 @@ describe('review store, Décision column', () => {
     expect(store.getState().notice).toBeNull();
   });
 
-  it('says which files conflict, main left as it was (FR-027)', async () => {
-    const conflicts = ['src/db.ts', 'src/auth.ts'].map((path) => ({
-      path,
-      kind: 'content' as const,
-      mainCommit: { short: 'abc1234', subject: 'Corrige' },
-      hunks: [],
-      edited: null,
-      resolved: false,
-    }));
-    const { store } = setup({
-      'integration:start': () => integration({ state: 'conflicted', conflicts }),
-    });
+  it('keeps the integration stopped on a conflict, for screen 1q (FR-027)', async () => {
+    const stopped = conflicted({ agentId: uuid(1) });
+    const { store } = setup({ 'integration:start': () => stopped });
     await store.getState().integrate(uuid(1), request, label);
-    expect(store.getState().decisions[uuid(1)]).toEqual({
-      busy: false,
-      error: {
-        message: 'Conflit avec main : rien n’a été intégré.',
-        files: ['src/db.ts', 'src/auth.ts'],
-      },
+    expect(store.getState().decisions[uuid(1)]).toEqual({ busy: false, error: null });
+    expect(store.getState().integrations[uuid(1)]).toEqual(stopped);
+    expect(store.getState().notice).toBeNull();
+  });
+});
+
+describe('review store, conflict screen (002 T050)', () => {
+  const stopped = conflicted({ agentId: uuid(1) });
+  const id = stopped.id;
+  const started = async (answers: Parameters<typeof setup>[0] = {}) => {
+    const harness = setup({ 'integration:start': () => stopped, ...answers });
+    await harness.store.getState().integrate(uuid(1), request, label);
+    return harness;
+  };
+
+  it('follows integration:state for each agent, and forgets it once over', async () => {
+    const { store, emit } = await started();
+    emit('integration:state', { ...stopped, state: 'waiting-agent' });
+    expect(store.getState().integrations[uuid(1)]?.state).toBe('waiting-agent');
+    emit('integration:state', { ...stopped, state: 'cancelled' });
+    expect(store.getState().integrations[uuid(1)]).toBeUndefined();
+  });
+
+  it('resolves a hunk, or a whole content, and keeps the file returned', async () => {
+    const file = stopped.conflicts[0];
+    if (!file) throw new Error('a file expected');
+    const solved = { ...file, resolved: true };
+    const { store, invoke } = await started({ 'integration:resolve': () => solved });
+    await store.getState().resolveConflict(uuid(1), 'src/db.ts', { hunk: 0, choice: 'main' });
+    expect(invoke).toHaveBeenLastCalledWith('integration:resolve', {
+      integrationId: id,
+      path: 'src/db.ts',
+      hunk: 0,
+      choice: 'main',
     });
+    expect(store.getState().integrations[uuid(1)]?.conflicts[0]).toEqual(solved);
+    await store.getState().resolveConflict(uuid(1), 'src/db.ts', { content: 'ok' });
+    expect(invoke).toHaveBeenLastCalledWith('integration:resolve', {
+      integrationId: id,
+      path: 'src/db.ts',
+      content: 'ok',
+    });
+  });
+
+  it('asks the agent, opens the editor, cancels', async () => {
+    const { store, invoke } = await started({
+      'integration:askAgent': () => ({ ...stopped, state: 'waiting-agent' }),
+    });
+    await store.getState().askAgent(uuid(1));
+    expect(store.getState().integrations[uuid(1)]?.state).toBe('waiting-agent');
+    await store.getState().openInEditor(uuid(1), 'src/db.ts');
+    expect(invoke).toHaveBeenCalledWith('integration:openInEditor', {
+      integrationId: id,
+      path: 'src/db.ts',
+    });
+    await store.getState().cancelIntegration(uuid(1));
+    expect(invoke).toHaveBeenLastCalledWith('integration:cancel', { integrationId: id });
+    expect(store.getState().integrations[uuid(1)]).toBeUndefined();
+  });
+
+  it('finishes, then gives the notice like a clean integration', async () => {
+    const { store } = await started({
+      'integration:finish': () => ({ ...stopped, state: 'integrated', conflicts: [] }),
+    });
+    await store.getState().finishIntegration(uuid(1), label);
+    expect(store.getState().integrations[uuid(1)]).toBeUndefined();
+    expect(store.getState().notice?.text).toBe('✓ Intégré · agent/pg-sessions → main');
+  });
+
+  it('shows why finishing failed, the integration kept', async () => {
+    const { store } = await started({
+      'integration:finish': () =>
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        Promise.reject({ code: 'GIT_FAILED', message: 'lint en échec' }),
+    });
+    await store.getState().finishIntegration(uuid(1), label);
+    expect(store.getState().decisions[uuid(1)]?.error?.message).toBe('lint en échec');
+    expect(store.getState().integrations[uuid(1)]).toBeDefined();
   });
 });
 

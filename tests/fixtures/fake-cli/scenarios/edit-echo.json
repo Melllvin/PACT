@@ -1,0 +1,4 @@
+{
+  "echo": true,
+  "files": [{ "write": "src/a.ts", "content": "un\ndeux de l’agent\ntrois\n" }]
+}

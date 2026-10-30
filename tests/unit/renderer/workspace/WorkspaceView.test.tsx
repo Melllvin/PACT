@@ -6,7 +6,7 @@ import {
   type ReviewBinding,
 } from '../../../../src/renderer/workspace/WorkspaceView';
 import type { Agent, CliDefinition, Workspace } from '../../../../src/shared/model';
-import { diff, snapshot } from '../review/fixtures';
+import { conflicted, diff, snapshot } from '../review/fixtures';
 import { rateLimited, scheduledResume } from '../tiles/fixtures';
 
 // T068, T069, T079 — the tiles of the agents and free terminals, in the grid.
@@ -369,6 +369,12 @@ describe('Review (002 T018, US1)', () => {
     comment: vi.fn(),
     send: vi.fn(),
     correcting: {},
+    integrations: {},
+    resolveConflict: vi.fn(),
+    openInEditor: vi.fn(),
+    askAgent: vi.fn(),
+    finishIntegration: vi.fn(),
+    cancelIntegration: vi.fn(),
     ...overrides,
   });
   const view = (review: ReviewBinding, team = agents(2)) => (
@@ -595,5 +601,49 @@ describe('Review (002 T018, US1)', () => {
     expect(screen.getByRole('complementary', { name: 'Décision' }).textContent).toContain(
       'Agent : correction en cours',
     );
+  });
+
+  // 002 T050 — screen 1q, opened while an integration of the agent is in conflict.
+  it('opens the conflict screen of an integration in conflict, with the Intégration column', async () => {
+    const user = userEvent.setup();
+    const stopped = conflicted({ agentId: agent(2).id });
+    const review = binding({ integrations: { [agent(2).id]: stopped } });
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    expect(screen.getByRole('tab', { name: 'Conflits · 2' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    const column = screen.getByRole('complementary', { name: 'Intégration' });
+    expect(screen.queryByRole('complementary', { name: 'Décision' })).toBeNull();
+    const hunk = screen.getByRole('group', { name: /conflit 1 \/ 2/ });
+    await user.click(within(hunk).getByRole('button', { name: 'Garder main' }));
+    expect(review.resolveConflict).toHaveBeenCalledWith(agent(2).id, 'src/db.ts', {
+      hunk: 0,
+      choice: 'main',
+    });
+    await user.click(within(column).getByRole('button', { name: 'Demander' }));
+    expect(review.askAgent).toHaveBeenCalledWith(agent(2).id);
+    await user.click(within(column).getByRole('button', { name: 'Annuler l’intégration' }));
+    expect(review.cancelIntegration).toHaveBeenCalledWith(agent(2).id);
+  });
+
+  it('finishes the integration once every conflict is resolved', async () => {
+    const user = userEvent.setup();
+    const stopped = conflicted({ agentId: agent(2).id });
+    const review = binding({
+      integrations: {
+        [agent(2).id]: {
+          ...stopped,
+          conflicts: stopped.conflicts.map((file) => ({ ...file, resolved: true })),
+        },
+      },
+    });
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.click(screen.getByRole('button', { name: 'Terminer l’intégration' }));
+    expect(review.finishIntegration).toHaveBeenCalledWith(agent(2).id, {
+      branch: agent(2).branch,
+      mainBranch: 'main',
+    });
   });
 });
