@@ -34,7 +34,22 @@ parallel, each in its own Git worktree, while keeping direct access to their ter
 - **The external editor** is the application your system associates with the file. PACT edits a
   copy and reads it back when it is saved; the copies are removed when the integration ends.
 
-## Requirements
+## Install
+
+Download the installer of the latest version from
+[GitHub Releases](https://github.com/Melllvin/PACT/releases): `PACT-<version>-mac-universal.dmg`
+for macOS 13+ (Intel and Apple Silicon), `PACT-<version>-win-x64.exe` or `-win-arm64.exe` for
+Windows 10 (1809+) / 11. PACT needs Git 2.40+ on the machine, and the agent CLIs you want to run.
+
+The V1 installers are not signed with an Apple or Microsoft certificate, so the system warns once:
+
+- **macOS**: drag PACT to Applications, then open it with right click → Ouvrir (or System
+  Settings → Privacy & Security → « Open Anyway »). If macOS says the app is damaged, run
+  `xattr -dr com.apple.quarantine /Applications/PACT.app` once.
+- **Windows**: SmartScreen shows « Windows protected your PC »: More info → Run anyway. The
+  installer installs for the current user, without administrator rights.
+
+## Requirements (development)
 
 - macOS 13+ or Windows 10 (1809+) / 11
 - Node.js 22.12+ and npm 10+, Git 2.40+
@@ -72,3 +87,17 @@ Claude Code needs no approval: PACT passes its hooks as session settings.
 Specifications live in `specs/` (the security review is in
 `specs/001-agent-workspace-core/security-review.md`), and the project rules in
 `.specify/memory/constitution.md`.
+
+## Publishing a release
+
+1. Set the version in `package.json` (`npm version 1.0.1 --no-git-tag-version`), merge it into
+   `main`, then tag it: `git tag v1.0.1 && git push origin v1.0.1`.
+2. Either way, the installers go to a **draft** GitHub Release named after the tag:
+   - **GitHub Actions**: the tag runs `.github/workflows/release.yml`, which builds the macOS and
+     Windows installers on their own runners.
+   - **Locally**, without Actions: on a Mac, then on a Windows PC, from the tagged commit, run
+     `npm ci` then `npm run release` with a `GH_TOKEN` that can write to the repository's
+     contents. Each machine adds its installers to the same draft.
+3. Check the draft on GitHub (both installers present), write the notes, publish.
+
+`npm run dist` builds the same installers into `dist/` without publishing anything.

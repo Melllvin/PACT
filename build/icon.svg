@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1f29"/>
+      <stop offset="1" stop-color="#0b0d12"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#72c3e3" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#72c3e3" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- macOS icon grid: 824 px body on a 1024 canvas, 185 px corners. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+  <!-- The prompt, then three agents working in parallel. -->
+  <path d="M250 330 L350 412 L250 494" fill="none" stroke="#72c3e3" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="420" y="390" width="330" height="44" rx="22" fill="#a58be0"/>
+  <rect x="250" y="560" width="500" height="44" rx="22" fill="#72c3e3"/>
+  <rect x="250" y="680" width="380" height="44" rx="22" fill="#5fc98a"/>
+</svg>
