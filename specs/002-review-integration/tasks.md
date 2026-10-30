@@ -373,10 +373,10 @@ doivent passer de l'un à l'autre, et l'abandon doit laisser la branche principa
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T056 [P] Test de performance : 50 fichiers modifiés ⇒ liste et premier diff en moins de 2 s (SC-001), écriture visible en moins de 3 s (SC-006), consigne dans l'invite en moins de 1 s (SC-004), dans `tests/e2e/perf.spec.ts`.
-- [ ] T057 [P] Test e2e chemins avec espaces et accents : revue, intégration et conflit sur macOS et Windows (FR-033), dans `tests/e2e/paths.spec.ts`.
+- [X] T056 [P] Test de performance : 50 fichiers modifiés ⇒ liste et premier diff en moins de 2 s (SC-001), écriture visible en moins de 3 s (SC-006), consigne dans l'invite en moins de 1 s (SC-004), dans `tests/e2e/perf.spec.ts`.
+- [X] T057 [P] Test e2e chemins avec espaces et accents : revue, intégration et conflit sur macOS et Windows (FR-033), dans `tests/e2e/paths.spec.ts`.
 - [ ] T058 [P] Traduire `research.md`, `data-model.md` et `quickstart.md` de 002 en français, comme le reste des documents (relecture du plan).
-- [ ] T059 [P] Mettre à jour `README.md` : revue, intégration, conflits, tests lancés par PACT, crochets git.
+- [X] T059 [P] Mettre à jour `README.md` : revue, intégration, conflits, tests lancés par PACT, crochets git.
 - [ ] T060 Dérouler `specs/002-review-integration/quickstart.md` (scénarios automatisés + validation manuelle avec les vrais CLI) sur macOS et Windows, et consigner les résultats dans la PR.
 
 ---

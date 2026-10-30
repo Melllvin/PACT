@@ -8,6 +8,31 @@ parallel, each in its own Git worktree, while keeping direct access to their ter
 - Every agent keeps a real terminal. The « À faire » column lists what needs you: a prompt to
   give, a permission to grant, a crash, a rate limit (with optional automatic resume).
 - Workspaces and agents come back after a restart; quitting while agents run asks first.
+- Review each agent's work (« Revue → » or the Revue view): its changes against `main`, committed
+  or not, file by file, with the files you have seen. Comment a line and the comment is typed
+  into the agent's prompt; shortcuts send « Corriger les commentaires », « Tests en échec » or
+  « Conflit avec main ». Nothing is typed while the agent works or waits for an answer.
+- Integrate into the local `main` in one squashed commit (or keeping the agent's commits), then
+  close the tile and remove the worktree, or keep them. Nothing is ever pushed.
+- On a conflict with `main`, ask the agent to resolve it in its worktree, or resolve each
+  conflict in PACT (keep `main`, keep the agent's version, both, or edit the file, in PACT or in
+  your editor). `main` only moves once everything is resolved; cancelling leaves it untouched.
+
+## Review and integration
+
+- **Tests.** The Décision column runs the repository's tests in the agent's worktree, with the
+  agent's `PORT`, when a review opens and on request. The command is detected from
+  `package.json` (`npm test`, `pnpm test` or `yarn test`); otherwise type one in the column, it is
+  kept for the workspace. Failing tests do not block an integration: you decide.
+- **Git hooks.** The integration commit is a real `git commit`, made in a temporary worktree, so
+  the repository's `pre-commit` and `commit-msg` hooks run. A hook that refuses fails the
+  integration and `main` stays as it was; its message is shown as git gave it.
+- **Local changes.** If the folder where `main` is checked out has uncommitted changes to files
+  the integration touches, it is refused before anything changes, with the list of those files.
+  If `main` is not checked out anywhere, only the branch moves.
+- **Comments** stay in PACT (they are saved with the workspace), never in the repository.
+- **The external editor** is the application your system associates with the file. PACT edits a
+  copy and reads it back when it is saved; the copies are removed when the integration ends.
 
 ## Requirements
 

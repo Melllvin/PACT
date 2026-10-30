@@ -20,7 +20,9 @@ let repo: string;
 let launched: LaunchedApp | undefined;
 
 test.beforeEach(async () => {
-  ({ root, repo } = await createRepo('pact-us11-', { 'src/a.ts': 'un\ndeux\ntrois\n' }));
+  ({ root, repo } = await createRepo('pact-us11-', {
+    'src/données à jour.ts': 'un\ndeux\ntrois\n',
+  }));
 });
 
 test.afterEach(async () => {
@@ -35,7 +37,7 @@ const integrateInConflict = async (page: Page) => {
   if (!tile) throw new Error('no tile');
   await typeIn(page, tile, 'Change la ligne 2');
   await expect(tile).toHaveAttribute('data-state', 'done');
-  await writeFile(join(repo, 'src', 'a.ts'), 'un\ndeux de main\ntrois\n');
+  await writeFile(join(repo, 'src', 'données à jour.ts'), 'un\ndeux de main\ntrois\n');
   git(repo, 'commit', '-qam', 'Ajout SSO');
   const main = git(repo, 'rev-parse', 'main');
   await tile.getByRole('button', { name: 'Revue →' }).click();
@@ -60,7 +62,9 @@ test('resolves a conflict by hand, then finishes the integration', async () => {
   const page = await launched.app.firstWindow();
   const { focus, column, main } = await integrateInConflict(page);
 
-  const hunk = focus.getByRole('group', { name: 'src/a.ts · conflit 1 / 1 · ligne 2' });
+  const hunk = focus.getByRole('group', {
+    name: 'src/données à jour.ts · conflit 1 / 1 · ligne 2',
+  });
   await expect(hunk).toContainText('main · « Ajout SSO »');
   await expect(hunk).toContainText('deux de main');
   await expect(hunk).toContainText('deux de l’agent');
@@ -74,7 +78,7 @@ test('resolves a conflict by hand, then finishes the integration', async () => {
     '✓ Intégré · agent/fake-1 → main',
   );
   expect(git(repo, 'rev-list', '--parents', '-n', '1', 'main').split(' ').slice(1)).toEqual([main]);
-  expect(git(repo, 'show', 'main:src/a.ts')).toBe('un\ndeux de l’agent\ntrois');
+  expect(git(repo, 'show', 'main:src/données à jour.ts')).toBe('un\ndeux de l’agent\ntrois');
   expect(git(repo, 'status', '--porcelain')).toBe('');
 });
 
@@ -86,7 +90,7 @@ test('asks the agent, then cancels with main unchanged', async () => {
 
   await column.getByRole('region', { name: 'Recommandé' }).getByRole('button').click();
   await expect(focus.getByLabel('Terminal de Faux CLI 1')).toContainText(
-    'Reçu : Ta branche est en conflit avec main sur : src/a.ts.',
+    'Reçu : Ta branche est en conflit avec main sur : src/données à jour.ts.',
   );
   // The fake CLI does not merge main: once its turn ends, the conflict is still there.
   await expect(column).toContainText('1 conflit avec main');

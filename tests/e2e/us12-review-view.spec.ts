@@ -18,7 +18,9 @@ let repo: string;
 let launched: LaunchedApp | undefined;
 
 test.beforeEach(async () => {
-  ({ root, repo } = await createRepo('pact-us12-', { 'src/a.ts': 'un\ndeux\ntrois\n' }));
+  ({ root, repo } = await createRepo('pact-us12-', {
+    'src/données à jour.ts': 'un\ndeux\ntrois\n',
+  }));
 });
 
 test.afterEach(async () => {
