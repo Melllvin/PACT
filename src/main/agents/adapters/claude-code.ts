@@ -36,6 +36,8 @@ const PERMISSION_HOOK_TIMEOUT_S = 600;
 const hookPayloadSchema = z.looseObject({
   hook_event_name: z.string(),
   session_id: z.string().optional(),
+  /** Set when the hook fires in a subagent or an in-process teammate, never in the lead. */
+  agent_id: z.string().optional(),
   prompt: z.string().optional(),
   tool_name: z.string().optional(),
   tool_input: z.looseObject({ command: z.string().optional() }).optional(),
@@ -155,6 +157,10 @@ export class ClaudeCodeAdapter implements CliAdapter {
     };
     const hook = (handler: object) => [{ hooks: [handler] }];
     return {
+      // Agent teams (experimental): on for every agent, its teammates kept in-process, in the
+      // agent's own terminal. Split panes would need tmux or iTerm2, outside PACT's tile.
+      env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' },
+      teammateMode: 'in-process',
       hooks: {
         // Claude Code refuses HTTP hooks for SessionStart (T049).
         SessionStart: hook({ type: 'command', command: bridgeCommand(this.bridge) }),
@@ -169,7 +175,15 @@ export class ClaudeCodeAdapter implements CliAdapter {
   }
 }
 
+/** Only a question needs the user: what a teammate or subagent asks waits in the lead's terminal. */
 function mapEvent(event: HookPayload): AgentSignal | null {
+  const signal = mapLeadEvent(event);
+  if (event.agent_id === undefined || signal?.type === 'awaiting-answer') return signal;
+  // Its turns, prompts and failures are its own: the state of the agent is its lead's.
+  return null;
+}
+
+function mapLeadEvent(event: HookPayload): AgentSignal | null {
   switch (event.hook_event_name) {
     case 'SessionStart':
       return event.session_id === undefined

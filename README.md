@@ -82,6 +82,17 @@ states (process exit and output heuristics).
 
 Claude Code needs no approval: PACT passes its hooks as session settings.
 
+## Agent teams in Claude Code
+
+PACT starts every Claude Code agent with
+[agent teams](https://code.claude.com/docs/en/agent-teams) enabled
+(`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, passed in its session settings), so you can ask an
+agent to work as a team lead. Teammates run in-process, in the agent's own terminal: select one
+with ↑/↓ in the agents panel under the prompt, Enter to view it, `x` to stop it, Ctrl+T for the
+task list. They share the agent's worktree, so its review and integration hold the whole team's
+work. The tile follows the lead: a teammate finishing does not mark the agent done, but a
+question a teammate asks shows in « À faire » like any other.
+
 ## Project docs
 
 Specifications live in `specs/` (the security review is in
