@@ -31,6 +31,8 @@ type Props = {
   onSendBack: (text: string) => void;
   /** The review sent the agent something it has not finished yet (US3 scenario 6). */
   sent?: boolean;
+  /** « ✕ Abandonner », confirmed: the closing of the agent takes over (FR-032). */
+  onAbandon: () => void;
 };
 
 const STATE: Partial<Record<Agent['state'], string>> = {
@@ -225,6 +227,50 @@ function SendBack({ onSendBack }: Pick<Props, 'onSendBack'>) {
   );
 }
 
+/** « ✕ Abandonner », asked twice: here, then by the closing of the agent (FR-032). */
+function Abandon({ onAbandon }: Pick<Props, 'onAbandon'>) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) {
+    return (
+      <Button
+        variant="danger"
+        onClick={() => {
+          setAsking(true);
+        }}
+      >
+        ✕ Abandonner
+      </Button>
+    );
+  }
+  return (
+    <div
+      role="alertdialog"
+      aria-label="Abandonner ce travail ?"
+      className="flex flex-col gap-2 rounded-xl border border-destructive/40 bg-surface p-3 text-[12.5px]"
+    >
+      <p className="m-0">Abandonner ce travail ? Rien n’est intégré.</p>
+      <div className="flex gap-1.5">
+        <Button
+          variant="danger"
+          onClick={() => {
+            setAsking(false);
+            onAbandon();
+          }}
+        >
+          Abandonner
+        </Button>
+        <Button
+          onClick={() => {
+            setAsking(false);
+          }}
+        >
+          Annuler
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** The message proposed: the first line of the agent's prompt, else its branch (spec). */
 const proposedMessage = (agent: Agent, branch: string) =>
   agent.initialPrompt
@@ -373,6 +419,7 @@ export function DecisionColumn({
   onIntegrate,
   onSendBack,
   sent = false,
+  onAbandon,
 }: Props) {
   const files = snapshot?.files ?? [];
   const unseen = files.filter((file) => !isSeen(file, agent.review.seen)).length;
@@ -424,12 +471,18 @@ export function DecisionColumn({
           />
         </>
       )}
+      {snapshot?.missing && (
+        <Row mark="✕" tone={KO}>
+          Worktree introuvable : il ne reste qu’à abandonner.
+        </Row>
+      )}
       {snapshot !== null && !snapshot.missing && (
         <>
           <div aria-hidden className="my-1 h-px bg-white/6" />
           <SendBack onSendBack={onSendBack} />
         </>
       )}
+      {snapshot !== null && <Abandon key={agent.id} onAbandon={onAbandon} />}
       {error && (
         <div
           role="alert"

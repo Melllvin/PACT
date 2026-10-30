@@ -647,6 +647,12 @@ describe('Review (002 T018, US1)', () => {
     });
   });
 
+  it('counts only the agents still there, even before the pending list catches up', () => {
+    // agent 3 was just closed: its id may still be in the last review:pending.
+    render(view(binding({ pending: [agent(2).id, agent(3).id] }), agents(2)));
+    expect(within(screen.getByRole('radio', { name: /Revue/ })).getByText('1')).toBeDefined();
+  });
+
   // 002 T054, T055 — the Revue view and « ✕ Abandonner ».
   it('opens the Revue view on the first agent to review, its pills limited to those agents', async () => {
     const user = userEvent.setup();

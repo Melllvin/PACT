@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
 import { deriveTodos } from '../../shared/todo';
-import { Toolbar } from '../app/Toolbar';
+import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
 import { ChangesTab } from '../review/ChangesTab';
 import { ConflictsTab } from '../review/ConflictsTab';
@@ -128,11 +128,14 @@ export function WorkspaceView({
   const cliName = (id: string) => clis.find((cli) => cli.id === id)?.name ?? id;
   const canAdd = agents.length < MAX_AGENTS;
   const [todoOpen, setTodoOpen] = useState(true);
-  const pending = review?.pending ?? [];
+  // A closed agent may still be in the last review:pending: only the agents here count.
+  const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
   const todos = deriveTodos(workspace, cliName, pending);
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
+  /** The Revue view: the Focus goes from one agent to review to the next (FR-003). */
+  const [reviewView, setReviewView] = useState(false);
   const focused = agents.some((agent) => agent.id === focusedId) ? focusedId : null;
   // Screen 1q of the agent in Focus, while its integration is stopped on a conflict (FR-027).
   const integration = (focused !== null && review?.integrations[focused]) || null;
@@ -169,6 +172,7 @@ export function WorkspaceView({
     if (notice !== null) {
       setFocusedId(null);
       setFocusTab('terminal');
+      setReviewView(false);
     }
   }
   useEffect(() => {
@@ -184,6 +188,25 @@ export function WorkspaceView({
     setFocusTab(review?.integrations[agentId] ? 'conflicts' : 'changes');
   };
   const reviewActions: AgentActions = { ...actions, onReview: openReview };
+  const backToTiles = () => {
+    setFocusedId(null);
+    setFocusTab('terminal');
+    setReviewView(false);
+  };
+  const changeView = (next: WorkspaceViewMode) => {
+    if (next === 'tiles') {
+      backToTiles();
+      return;
+    }
+    const first = agents.find((agent) => pending.includes(agent.id));
+    if (!first) return;
+    setReviewView(true);
+    openReview(first.id);
+  };
+  const inReview = reviewView && focused !== null;
+  const pills = inReview
+    ? agents.filter((agent) => pending.includes(agent.id) || agent.id === focused)
+    : agents;
   const snapshot = review?.snapshot?.agentId === reviewed ? review.snapshot : null;
 
   // The À faire column and its button appear with the first agent (FR-006).
@@ -196,6 +219,9 @@ export function WorkspaceView({
         setTodoOpen((open) => !open);
       }}
       onAddAgents={launch}
+      reviewCount={review ? pending.length : 0}
+      view={inReview ? 'review' : 'tiles'}
+      onView={changeView}
     />
   );
 
@@ -233,11 +259,12 @@ export function WorkspaceView({
               agentId={focused}
               name={cliName}
               terminals={terminals}
-              onSelect={setFocusedId}
-              onBack={() => {
-                setFocusedId(null);
-                setFocusTab('terminal');
+              pills={pills}
+              onSelect={(agentId) => {
+                if (inReview) openReview(agentId);
+                else setFocusedId(agentId);
               }}
+              onBack={backToTiles}
               tab={tab}
               onTab={setFocusTab}
               conflicts={
@@ -400,10 +427,12 @@ export function WorkspaceView({
             onSendBack={(text) => {
               review.send(reviewedAgent.id, 'request', text);
               // FR-015: the agent works on it, the tiles show it.
-              setFocusedId(null);
-              setFocusTab('terminal');
+              backToTiles();
             }}
             sent={review.correcting[reviewedAgent.id] !== undefined}
+            onAbandon={() => {
+              actions.onClose(reviewedAgent.id);
+            }}
           />
         ) : (
           hasAgents && todoOpen && <TodoColumn todos={todos} agents={agents} {...reviewActions} />

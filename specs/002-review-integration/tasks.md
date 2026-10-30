@@ -354,18 +354,18 @@ doivent passer de l'un à l'autre, et l'abandon doit laisser la branche principa
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T051 [P] [US5] Tests de `Toolbar` et `AgentPills` dans `tests/unit/renderer/app/Toolbar.test.tsx` et `tests/unit/renderer/focus/AgentPills.test.tsx` :
+- [X] T051 [P] [US5] Tests de `Toolbar` et `AgentPills` dans `tests/unit/renderer/app/Toolbar.test.tsx` et `tests/unit/renderer/focus/AgentPills.test.tsx` :
   - Revue inactive et sans badge à zéro ;
   - badge = nombre d'agents dans `review:pending` ;
   - ouverture sur le premier agent ;
   - pastilles limitées aux agents à relire en vue Revue.
-- [ ] T052 [P] [US5] Tests de l'abandon dans `tests/unit/renderer/review/DecisionColumn.test.tsx` : « ✕ Abandonner » demande confirmation, puis la question garder / supprimer de `CloseAgentDialog` ; rien n'est intégré.
-- [ ] T053 [US5] Test e2e : deux agents, badge 2, passage de l'un à l'autre, abandon de l'un, badge 1, branche principale inchangée, dans `tests/e2e/us12-review-view.spec.ts`.
+- [X] T052 [P] [US5] Tests de l'abandon dans `tests/unit/renderer/review/DecisionColumn.test.tsx` : « ✕ Abandonner » demande confirmation, puis la question garder / supprimer de `CloseAgentDialog` ; rien n'est intégré.
+- [X] T053 [US5] Test e2e : deux agents, badge 2, passage de l'un à l'autre, abandon de l'un, badge 1, branche principale inchangée, dans `tests/e2e/us12-review-view.spec.ts`.
 
 ### Implementation for User Story 5
 
-- [ ] T054 [US5] Activer la vue Revue avec son badge dans `src/renderer/app/Toolbar.tsx`, et ouvrir le Focus sur le premier agent à relire dans `src/renderer/store/app-store.ts`.
-- [ ] T055 [US5] Ajouter « ✕ Abandonner » (confirmation, puis `CloseAgentDialog` et `agent:close`) dans `src/renderer/review/DecisionColumn.tsx`.
+- [X] T054 [US5] Activer la vue Revue avec son badge dans `src/renderer/app/Toolbar.tsx`, et ouvrir le Focus sur le premier agent à relire dans `src/renderer/store/app-store.ts`.
+- [X] T055 [US5] Ajouter « ✕ Abandonner » (confirmation, puis `CloseAgentDialog` et `agent:close`) dans `src/renderer/review/DecisionColumn.tsx`.
 
 **Checkpoint**: toutes les stories testées séparément.
 

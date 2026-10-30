@@ -17,8 +17,10 @@ type Props = Omit<AgentActions, 'onClose'> & {
   changes?: ReactNode;
   /** The Conflits tab of screen 1q, while an integration is stopped on a conflict (002 US4). */
   conflicts?: { count: number; content: ReactNode } | undefined;
-  /** Every agent of the workspace, in position order, for the pills. */
+  /** Every agent of the workspace, in position order. */
   agents: Agent[];
+  /** The agents offered as pills; all of them by default, those to review in the Revue view. */
+  pills?: Agent[];
   agentId: string;
   name: (cliId: string) => string;
   terminals: Pick<TerminalRegistry, 'attach'> | undefined;
@@ -42,6 +44,7 @@ export function FocusView({
   changes,
   conflicts,
   agents,
+  pills = agents,
   agentId,
   name,
   terminals,
@@ -92,7 +95,7 @@ export function FocusView({
         >
           ‹ Tuiles
         </button>
-        <AgentPills agents={agents} current={agent.id} name={name} onSelect={onSelect} />
+        <AgentPills agents={pills} current={agent.id} name={name} onSelect={onSelect} />
         <span aria-hidden className="h-[18px] w-px bg-white/8" />
         <Tabs
           value={tab}

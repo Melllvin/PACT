@@ -93,6 +93,10 @@ void app.whenReady().then(async () => {
         .list()
         .find((ws) => ws.agents.some((a) => a.id === event.agentId));
       if (workspace) void review.updatePending(workspace.id);
+      // A closed agent has left its workspace already: each one is checked again.
+      else if (event.state === 'closed') {
+        for (const ws of workspaces.list()) void review.updatePending(ws.id);
+      }
       // US4 — an agent asked to resolve a conflict is checked again once its turn ends.
       integration.agentState(event.agentId, event.state);
     },
