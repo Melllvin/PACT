@@ -1,142 +1,147 @@
 # Data Model: Revue et intégration
 
-This builds on `specs/001-agent-workspace-core/data-model.md`. Schemas live in `src/shared/model.ts`
-(zod) and in `src/shared/review.ts` for review-only types. The field names are English, as in 001.
+S'appuie sur `specs/001-agent-workspace-core/data-model.md`. Les schémas sont dans
+`src/shared/model.ts` (zod) et dans `src/shared/review.ts` pour les types propres à la revue. Les
+noms de champs sont en anglais, comme dans 001.
 
-## Persisted (per-workspace JSON, research R9)
+## Persisté (JSON par workspace, research R9)
 
-### Agent (extended)
+### Agent (étendu)
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
-| `review` | `AgentReview` | defaults to `{ seen: {}, comments: [] }`, so files from 001 still load |
+| `review` | `AgentReview` | vaut `{ seen: {}, comments: [] }` par défaut, pour que les fichiers de 001 se chargent encore |
 
 ### AgentReview
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
-| `seen` | `Record<string, string>` | path → blob id of the content that was marked « vu ». A file counts as seen only while its current blob id equals this one (FR-009, FR-011) |
-| `comments` | `ReviewComment[]` | in creation order |
+| `seen` | `Record<string, string>` | chemin → id du blob du contenu marqué « vu ». Un fichier ne compte comme vu que tant que l'id de son blob actuel est égal à celui-ci (FR-009, FR-011) |
+| `comments` | `ReviewComment[]` | dans l'ordre de création |
 
 ### ReviewComment
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
 | `id` | uuid | |
-| `path` | string | path in the repository, `/`-separated |
-| `line` | int ≥ 1 | line number on the agent's side of the diff |
-| `text` | string, 1–4000 characters | |
+| `path` | string | chemin dans le dépôt, séparé par des `/` |
+| `line` | int ≥ 1 | numéro de ligne côté agent du diff |
+| `text` | string, 1–4000 caractères | |
 | `createdAt` | ISO date | |
-| `treated` | boolean | defaults to `false`; set to `true` once included in « Corriger les commentaires » (R7) |
+| `treated` | boolean | vaut `false` par défaut ; passe à `true` dès qu'il est repris par « Corriger les commentaires » (R7) |
 
-### Workspace (extended)
+### Workspace (étendu)
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
-| `testCommand` | `string \| null` | `null` means detect it from the repository (R8). An empty string is refused |
+| `testCommand` | `string \| null` | `null` signifie la détecter depuis le dépôt (R8). Une chaîne vide est refusée |
 
-## In memory (main process), sent over IPC
+## En mémoire (processus main), envoyé par IPC
 
 ### ReviewSnapshot
 
-The current state of an agent's changes, rebuilt on every change in the worktree (R1, R3).
+L'état actuel des changements d'un agent, reconstruit à chaque changement dans le worktree (R1, R3).
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
 | `agentId` | uuid | |
 | `base` | commit id | `merge-base(main, HEAD)` |
-| `tree` | tree id | the snapshot. It identifies « l'état actuel » and keys test results |
-| `branch` | string | the agent's current branch |
-| `files` | `ChangedFile[]` | sorted by path |
-| `added`, `removed` | int ≥ 0 | sums over `files` (FR-006) |
-| `conflicts` | `'none' \| 'checking' \| string[]` | the conflicting paths against `main` (R4) |
-| `mainHead` | commit id | the `main` the conflict check ran against |
-| `newSinceSeen` | `{ added, removed } \| null` | changes to files that were seen, for « Nouveaux changements : +N −M » |
-| `missing` | boolean | the worktree or branch is gone: the review only offers « Abandonner » |
-| `testCommand` | `string \| null` | the workspace's command, else the one detected in the worktree; `null` shows « Tests : non configurés » without a request (FR-016) |
+| `tree` | tree id | l'instantané. Il identifie « l'état actuel » et sert de clé aux résultats de tests |
+| `branch` | string | la branche actuelle de l'agent |
+| `files` | `ChangedFile[]` | triés par chemin |
+| `added`, `removed` | int ≥ 0 | sommes sur `files` (FR-006) |
+| `conflicts` | `'none' \| 'checking' \| string[]` | les chemins en conflit avec `main` (R4) |
+| `mainHead` | commit id | la `main` contre laquelle la vérification des conflits a tourné |
+| `newSinceSeen` | `{ added, removed } \| null` | changements sur des fichiers déjà vus, pour « Nouveaux changements : +N −M » |
+| `missing` | boolean | le worktree ou la branche a disparu : la revue ne propose que « Abandonner » |
+| `testCommand` | `string \| null` | la commande du workspace, sinon celle détectée dans le worktree ; `null` affiche « Tests : non configurés » sans demande (FR-016) |
 
 ### ChangedFile
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
 | `path` | string | |
-| `oldPath` | `string \| null` | set only when the file was renamed |
+| `oldPath` | `string \| null` | renseigné seulement quand le fichier a été renommé |
 | `status` | `'added' \| 'modified' \| 'deleted' \| 'renamed'` | |
-| `added`, `removed` | `int \| null` | `null` for binary files |
+| `added`, `removed` | `int \| null` | `null` pour les fichiers binaires |
 | `binary` | boolean | |
-| `tooLarge` | boolean | over 1 MB or 5 000 diff lines (R2) |
-| `eolOnly` | boolean | differs only by line endings: « fins de ligne seulement » (R2) |
-| `blob` | blob id \| null | the agent's side, `null` when deleted. Compared with `review.seen[path]` |
+| `tooLarge` | boolean | plus de 1 Mo ou de 5 000 lignes de diff (R2) |
+| `eolOnly` | boolean | ne diffère que par les fins de ligne : « fins de ligne seulement » (R2) |
+| `blob` | blob id \| null | le côté agent, `null` si supprimé. Comparé à `review.seen[path]` |
 
 ### FileDiff
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
 | `path` | string | |
-| `hunks` | `DiffHunk[]` | empty when `binary` or `tooLarge` |
-| `size` | int | in bytes, shown when there is no line diff |
+| `hunks` | `DiffHunk[]` | vide quand `binary` ou `tooLarge` |
+| `size` | int | en octets, affichée quand il n'y a pas de diff ligne à ligne |
 
-`DiffHunk` is `{ oldStart, newStart, lines: { kind: 'context' \| 'add' \| 'del', oldNo, newNo,
-text }[] }`. It is produced by `parseUnifiedDiff` in `src/shared/diff.ts`, a pure function.
+`DiffHunk` vaut `{ oldStart, newStart, lines: { kind: 'context' \| 'add' \| 'del', oldNo, newNo,
+text }[] }`. Il est produit par `parseUnifiedDiff` dans `src/shared/diff.ts`, une fonction pure.
 
 ### TestRun
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
 | `agentId` | uuid | |
 | `command` | string | |
-| `tree` | tree id | the snapshot it ran on; it is `stale` once `tree` differs from the current snapshot |
+| `tree` | tree id | l'instantané sur lequel il a tourné ; il est `stale` dès que `tree` diffère de l'instantané actuel |
 | `status` | `'running' \| 'passed' \| 'failed' \| 'cancelled' \| 'timeout'` | |
-| `passedCount` | `int \| null` | read from the summary when there is one (R8) |
-| `outputTail` | string | the last 200 lines |
+| `passedCount` | `int \| null` | lu dans le résumé quand il y en a un (R8) |
+| `outputTail` | string | les 200 dernières lignes |
 
-The Décision column shows one of these: « Tests : non configurés » (no command), « non lancés »,
-« en cours », « N réussis » / « réussis », or « en échec ».
+La colonne Décision affiche l'un de ces états : « Tests : non configurés » (pas de commande),
+« non lancés », « en cours », « N réussis » / « réussis », ou « en échec ».
 
 ### Integration
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
 | `id` | uuid | |
 | `agentId` | uuid | |
-| `mode` | `'squash' \| 'keep-commits'` | defaults to `squash` (FR-019) |
-| `message` | string, at least 1 character | proposed from the agent's prompt, otherwise from its branch |
-| `after` | `{ closeTile: boolean, removeWorktree: boolean }` | both `true` by default (FR-024) |
-| `snapshot` | commit id | snapshot commit taken on the click (R1) |
-| `mainAtStart` | commit id | `main` when the integration started |
-| `state` | see below | |
+| `mode` | `'squash' \| 'keep-commits'` | vaut `squash` par défaut (FR-019) |
+| `message` | string, au moins 1 caractère | proposé à partir de la consigne de l'agent, sinon de sa branche |
+| `after` | `{ closeTile: boolean, removeWorktree: boolean }` | les deux à `true` par défaut (FR-024) |
+| `snapshot` | commit id | commit d'instantané pris au clic (R1) |
+| `mainAtStart` | commit id | `main` au début de l'intégration |
+| `state` | voir ci-dessous | |
 | `conflicts` | `ConflictFile[]` | |
-| `error` | `string \| null` | git's message as it came (FR-023) |
+| `error` | `string \| null` | le message de git tel quel (FR-023) |
 
-**Integration states**:
+**États de l'intégration** :
 
 ```text
-checking ──clean──────────────▶ committing ──ok──▶ integrated
-   │                               │  └─refused (local changes, FR-021)─▶ blocked
-   └─conflicts─▶ conflicted ──all resolved + Terminer──▶ committing
-                    │  └─Demander à l'agent─▶ waiting-agent ──agent turn ends──▶ checking
+checking ──propre─────────────▶ committing ──ok──▶ integrated
+   │                               │  └─refus (changements locaux, FR-021)─▶ blocked
+   └─conflits──▶ conflicted ──tout résolu + Terminer──▶ committing
+                    │  └─Demander à l'agent─▶ waiting-agent ──fin du tour de l'agent──▶ checking
                     └─Annuler────────────────────────────────────────────────▶ cancelled
-committing ──git error──▶ failed          (main unchanged in every state except integrated)
+committing ──erreur git──▶ failed         (main inchangée dans tous les états sauf integrated)
 ```
 
 ### ConflictFile
 
-| Field | Type | Rule |
+| Champ | Type | Règle |
 |-------|------|------|
 | `path` | string | |
-| `kind` | `'content' \| 'delete-modify' \| 'add-add'` | the last two offer only « Garder main » or « Garder cette version » |
-| `mainCommit` | `{ short, subject }` | the last commit on `main` that touched the file (R4) |
+| `kind` | `'content' \| 'delete-modify' \| 'add-add'` | les deux derniers ne proposent que « Garder main » ou « Garder cette version » |
+| `mainCommit` | `{ short, subject }` | le dernier commit de `main` qui a touché le fichier (R4) |
 | `hunks` | `ConflictHunk[]` | `{ index, line, main: string[], agent: string[], resolution: null \| 'main' \| 'agent' \| 'both' }` |
-| `edited` | `string \| null` | the whole content, set by « Modifier… » or the external editor |
-| `resolved` | boolean | true when every hunk has a resolution, or when `edited` has no conflict markers left |
+| `edited` | `string \| null` | le contenu entier, renseigné par « Modifier… » ou l'éditeur externe |
+| `resolved` | boolean | vrai quand chaque zone a une résolution, ou quand `edited` ne contient plus de marqueurs de conflit |
+| `merged` | string | le fichier tel que git l'a fusionné, marqueurs compris ; vide pour un fichier choisi en entier |
+| `whole` | boolean | le fichier se choisit en entier, d'un côté ou de l'autre : `delete-modify`, `add-add` ou binaire ; une seule zone (index 0) porte les deux côtés |
+| `binary` | boolean | git le tient pour binaire (octet NUL) : ni lignes ni « Modifier… » |
+| `deleted` | `'main' \| 'agent' \| null` | le côté qui a supprimé le fichier (`delete-modify`) |
 
-« Terminer l'intégration » is enabled only when every `ConflictFile.resolved` is true (FR-030).
+« Terminer l'intégration » n'est actif que lorsque chaque `ConflictFile.resolved` est vrai (FR-030).
 
-## Derived (never stored)
+## Dérivé (jamais stocké)
 
-- **To review (badge and « Revue → »)**: the agent's state is `done` or `awaiting-prompt`, its
-  snapshot has at least one file, and it has not been integrated or abandoned since. The badge is
-  the number of such agents (FR-002, FR-003).
-- **Seen count**: the number of files whose `blob` equals `review.seen[path]` (FR-006).
-- **Untreated comments**: the comments with `treated === false`. This is the N in « Corriger les
-  commentaires · N » (FR-013).
+- **À relire (badge et « Revue → »)** : l'état de l'agent est `done` ou `awaiting-prompt`, son
+  instantané a au moins un fichier, et il n'a pas été intégré ni abandonné depuis. Le badge est le
+  nombre de ces agents (FR-002, FR-003).
+- **Nombre de vus** : le nombre de fichiers dont le `blob` est égal à `review.seen[path]` (FR-006).
+- **Commentaires non traités** : les commentaires avec `treated === false`. C'est le N de
+  « Corriger les commentaires · N » (FR-013).
