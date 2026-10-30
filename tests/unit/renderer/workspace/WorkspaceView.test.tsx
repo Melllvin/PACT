@@ -366,6 +366,9 @@ describe('Review (002 T018, US1)', () => {
     setTestCommand: vi.fn(),
     integrate: vi.fn(),
     dismissNotice: vi.fn(),
+    comment: vi.fn(),
+    send: vi.fn(),
+    correcting: {},
     ...overrides,
   });
   const view = (review: ReviewBinding, team = agents(2)) => (
@@ -552,5 +555,45 @@ describe('Review (002 T018, US1)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // 002 T042 — comments, shortcuts and « Renvoyer à l'agent » of the agent reviewed.
+  it('sends a comment on a line, and the shortcuts, about the agent reviewed', async () => {
+    const user = userEvent.setup();
+    const review = binding({
+      snapshot: snapshot({ agentId: agent(2).id, conflicts: ['src/db.ts'] }),
+    });
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.click(screen.getByRole('button', { name: 'Commenter la ligne 2' }));
+    await user.type(
+      screen.getByRole('textbox', { name: 'Commentaire sur la ligne 2' }),
+      'Non.{Enter}',
+    );
+    expect(review.comment).toHaveBeenCalledWith(agent(2).id, 'src/db.ts', 2, 'Non.');
+    await user.click(screen.getByRole('button', { name: 'Conflit avec main' }));
+    expect(review.send).toHaveBeenCalledWith(agent(2).id, 'conflict');
+  });
+
+  it('sends the request back to the agent, then goes back to the tiles (FR-015)', async () => {
+    const user = userEvent.setup();
+    const review = binding();
+    render(view(review));
+    await user.click(within(tile(2)).getByRole('button', { name: 'Revue →' }));
+    await user.type(screen.getByRole('textbox', { name: 'Demande à l’agent' }), 'Encore un test.');
+    await user.click(screen.getByRole('button', { name: 'Renvoyer à l’agent' }));
+    expect(review.send).toHaveBeenCalledWith(agent(2).id, 'request', 'Encore un test.');
+    expect(screen.getByRole('region', { name: 'Tuiles' })).toBeDefined();
+  });
+
+  it('says the agent is correcting what the review sent it', async () => {
+    const user = userEvent.setup();
+    const team = agents(2).map((a) => (a.position === 2 ? { ...a, state: 'working' as const } : a));
+    render(view(binding({ correcting: { [agent(2).id]: 'working' } }), team));
+    await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[1] ?? document.body);
+    await user.click(screen.getByRole('tab', { name: 'Changements' }));
+    expect(screen.getByRole('complementary', { name: 'Décision' }).textContent).toContain(
+      'Agent : correction en cours',
+    );
   });
 });

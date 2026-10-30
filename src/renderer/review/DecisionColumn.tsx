@@ -27,6 +27,10 @@ type Props = {
   onCancelTests: () => void;
   onSetTestCommand: (command: string) => void;
   onIntegrate: (request: IntegrateRequest) => void;
+  /** « Renvoyer à l'agent »: the request written, sent as a prompt (FR-015). */
+  onSendBack: (text: string) => void;
+  /** The review sent the agent something it has not finished yet (US3 scenario 6). */
+  sent?: boolean;
 };
 
 const STATE: Partial<Record<Agent['state'], string>> = {
@@ -184,6 +188,35 @@ function ConflictsLine({
   );
 }
 
+/** « Renvoyer à l'agent » (FR-015). */
+function SendBack({ onSendBack }: Pick<Props, 'onSendBack'>) {
+  const [text, setText] = useState('');
+  return (
+    <form
+      className="flex flex-col gap-1.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSendBack(text.trim());
+        setText('');
+      }}
+    >
+      <textarea
+        aria-label="Demande à l’agent"
+        placeholder="Ce qu’il reste à faire…"
+        rows={2}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+        }}
+        className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 text-[12.5px] text-foreground outline-none focus-visible:border-primary/50"
+      />
+      <Button type="submit" disabled={text.trim() === ''}>
+        Renvoyer à l’agent
+      </Button>
+    </form>
+  );
+}
+
 /** The message proposed: the first line of the agent's prompt, else its branch (spec). */
 const proposedMessage = (agent: Agent, branch: string) =>
   agent.initialPrompt
@@ -330,10 +363,12 @@ export function DecisionColumn({
   onCancelTests,
   onSetTestCommand,
   onIntegrate,
+  onSendBack,
+  sent = false,
 }: Props) {
   const files = snapshot?.files ?? [];
   const unseen = files.filter((file) => !isSeen(file, agent.review.seen)).length;
-  const state = STATE[agent.state];
+  const state = sent && agent.state === 'working' ? 'correction en cours' : STATE[agent.state];
   const reviewable = snapshot !== null && !snapshot.missing && files.length > 0;
   return (
     <aside
@@ -379,6 +414,12 @@ export function DecisionColumn({
             busy={busy}
             onIntegrate={onIntegrate}
           />
+        </>
+      )}
+      {snapshot !== null && !snapshot.missing && (
+        <>
+          <div aria-hidden className="my-1 h-px bg-white/6" />
+          <SendBack onSendBack={onSendBack} />
         </>
       )}
       {error && (

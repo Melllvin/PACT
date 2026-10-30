@@ -135,7 +135,10 @@ describe('DiffView comments (002 T038, FR-012)', () => {
   it('cancels the comment with Escape, without sending anything', async () => {
     const user = userEvent.setup();
     const onComment = vi.fn();
-    const onKeyDown = vi.fn();
+    const escapes = vi.fn();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') escapes();
+    };
     document.addEventListener('keydown', onKeyDown);
     render(
       <DiffView
@@ -152,7 +155,7 @@ describe('DiffView comments (002 T038, FR-012)', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(onComment).not.toHaveBeenCalled();
     // Escape stays with the field: the Focus does not go back to the tiles.
-    expect(onKeyDown).not.toHaveBeenCalled();
+    expect(escapes).not.toHaveBeenCalled();
     document.removeEventListener('keydown', onKeyDown);
   });
 

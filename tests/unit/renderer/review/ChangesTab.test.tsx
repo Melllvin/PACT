@@ -149,7 +149,9 @@ describe('ChangesTab shortcuts above the terminal (002 T038, FR-013)', () => {
 
   it('offers « Tests en échec » only when the tests fail', async () => {
     const { actions, user } = withShortcuts({ tests: failing });
-    await user.click(within(bar() ?? document.body).getByRole('button', { name: 'Tests en échec' }));
+    await user.click(
+      within(bar() ?? document.body).getByRole('button', { name: 'Tests en échec' }),
+    );
     expect(actions.onSend).toHaveBeenCalledWith('failing-tests');
     expect(screen.queryByRole('button', { name: /Corriger les commentaires/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Conflit avec main' })).toBeNull();

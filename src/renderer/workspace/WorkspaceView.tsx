@@ -8,6 +8,7 @@ import { ChangesTab } from '../review/ChangesTab';
 import { DecisionColumn } from '../review/DecisionColumn';
 import { seenBlob, type FileDiff, type ReviewSnapshot, type TestRun } from '../../shared/review';
 import type { Decision, IntegrateRequest } from '../store/review-store';
+import type { ReviewSendKind } from '../store/app-store';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
@@ -55,6 +56,12 @@ export type ReviewBinding = {
     label: { branch: string; mainBranch: string },
   ) => void;
   dismissNotice: () => void;
+  /** A comment on one line of the diff, sent to the agent (002 US3). */
+  comment: (agentId: string, path: string, line: number, text: string) => void;
+  /** A shortcut, or « Renvoyer à l'agent » with its text. */
+  send: (agentId: string, kind: ReviewSendKind, text?: string) => void;
+  /** The agents still on what the review sent them (« Agent : correction en cours »). */
+  correcting: Readonly<Record<string, 'queued' | 'working'>>;
 };
 
 /** How long « ✓ Intégré » stays (US2/AC6). */
@@ -219,6 +226,17 @@ export function WorkspaceView({
                     onSeen={(file, seen) =>
                       review?.markSeen(reviewedAgent.id, file.path, seen ? seenBlob(file) : null)
                     }
+                    comments={reviewedAgent.review.comments}
+                    tests={review?.tests[reviewedAgent.id] ?? null}
+                    mainBranch={workspace.mainBranch}
+                    {...(review && {
+                      onComment: (path: string, line: number, text: string) => {
+                        review.comment(reviewedAgent.id, path, line, text);
+                      },
+                      onSend: (kind: ReviewSendKind) => {
+                        review.send(reviewedAgent.id, kind);
+                      },
+                    })}
                   />
                 )
               }
@@ -293,6 +311,13 @@ export function WorkspaceView({
                 mainBranch: workspace.mainBranch,
               });
             }}
+            onSendBack={(text) => {
+              review.send(reviewedAgent.id, 'request', text);
+              // FR-015: the agent works on it, the tiles show it.
+              setFocusedId(null);
+              setFocusTab('terminal');
+            }}
+            sent={review.correcting[reviewedAgent.id] !== undefined}
           />
         ) : (
           hasAgents && todoOpen && <TodoColumn todos={todos} agents={agents} {...reviewActions} />

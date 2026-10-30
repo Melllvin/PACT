@@ -13,7 +13,11 @@ import {
 describe('commentPrompt', () => {
   it('cites the file, the line and the comment', () => {
     expect(
-      commentPrompt({ path: 'src/auth/otp.ts', line: 3, text: 'Le TTL devrait venir de la config.' }),
+      commentPrompt({
+        path: 'src/auth/otp.ts',
+        line: 3,
+        text: 'Le TTL devrait venir de la config.',
+      }),
     ).toBe('Commentaire sur src/auth/otp.ts:3 — Le TTL devrait venir de la config.');
   });
 

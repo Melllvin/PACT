@@ -1,8 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { watch as fsWatch } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { IpcFailure, type IpcEvent } from '../../shared/ipc';
-import type { Agent, Workspace } from '../../shared/model';
-import { seenBlob, type FileDiff, type ReviewSnapshot } from '../../shared/review';
+import type { Agent, ReviewComment, Workspace } from '../../shared/model';
+import { seenBlob, type FileDiff, type ReviewSnapshot, type TestRun } from '../../shared/review';
+import {
+  commentPrompt,
+  conflictPrompt,
+  failingTestsPrompt,
+  fixCommentsPrompt,
+  requestPrompt,
+} from '../../shared/review-prompts';
 import type { GitService } from '../git/git-service';
 import { detectTestCommandIn, type TestTarget } from './test-runner';
 
@@ -33,6 +41,10 @@ type Options = {
   workspaces: WorkspaceAccess;
   onChanged?: (snapshot: ReviewSnapshot) => void;
   onPending?: (event: IpcEvent<'review:pending'>) => void;
+  /** Types a prompt once the agent is ready for one, never as an answer (R7, FR-014). */
+  prompts?: { sendPrompt(agentId: string, text: string): Promise<void> };
+  /** The last test run of each agent, for « Tests en échec ». */
+  tests?: { latest(agentId: string): TestRun | null };
   watch?: Watch;
   /** Bursts of file events are read once, after this quiet time (R3). */
   debounceMs?: number;
@@ -45,6 +57,10 @@ type Followed = {
   timer?: ReturnType<typeof setTimeout>;
   safety: ReturnType<typeof setInterval>;
 };
+
+/** What a shortcut of the review sends (FR-013, FR-015). */
+export type ReviewSend =
+  { kind: 'fix-comments' | 'failing-tests' | 'conflict' } | { kind: 'request'; text: string };
 
 const NO_COMMIT = '0'.repeat(40);
 const READY: Agent['state'][] = ['done', 'awaiting-prompt'];
@@ -80,6 +96,8 @@ export class ReviewService {
   private readonly workspaces: WorkspaceAccess;
   private readonly onChanged: NonNullable<Options['onChanged']>;
   private readonly onPending: NonNullable<Options['onPending']>;
+  private readonly prompts: Options['prompts'];
+  private readonly tests: Options['tests'];
   private readonly watch: Watch;
   private readonly debounceMs: number;
   private readonly safetyMs: number;
@@ -96,6 +114,8 @@ export class ReviewService {
     this.workspaces = options.workspaces;
     this.onChanged = options.onChanged ?? (() => undefined);
     this.onPending = options.onPending ?? (() => undefined);
+    this.prompts = options.prompts;
+    this.tests = options.tests;
     this.watch = options.watch ?? watchRecursive;
     this.debounceMs = options.debounceMs ?? 300;
     this.safetyMs = options.safetyMs ?? 5000;
@@ -148,18 +168,78 @@ export class ReviewService {
     const { workspace } = this.find(agentId);
     const snapshot = this.snapshots.get(agentId) ?? (await this.open(agentId));
     const file = snapshot.files.find((f) => f.path === path);
-    await this.workspaces.update(workspace.id, (ws) => ({
-      ...ws,
-      agents: ws.agents.map((a) => {
-        if (a.id !== agentId) return a;
-        const next = Object.fromEntries(
-          Object.entries(a.review.seen).filter(([seenPath]) => seenPath !== path),
-        );
-        if (seen && file) next[path] = seenBlob(file);
-        return { ...a, review: { ...a.review, seen: next } };
-      }),
-    }));
+    await this.changeReview(workspace.id, agentId, (review) => {
+      const next = Object.fromEntries(
+        Object.entries(review.seen).filter(([seenPath]) => seenPath !== path),
+      );
+      if (seen && file) next[path] = seenBlob(file);
+      return { ...review, seen: next };
+    });
     if (this.followed.has(agentId)) await this.refresh(agentId, true);
+  }
+
+  /** A comment on one line, saved with the agent and typed to it as a prompt (FR-012). */
+  async comment(
+    agentId: string,
+    { path, line, text }: Pick<ReviewComment, 'path' | 'line' | 'text'>,
+  ): Promise<ReviewComment> {
+    const { workspace } = this.find(agentId);
+    const comment: ReviewComment = {
+      id: randomUUID(),
+      path,
+      line,
+      text: text.trim(),
+      createdAt: new Date().toISOString(),
+      treated: false,
+    };
+    await this.changeReview(workspace.id, agentId, (review) => ({
+      ...review,
+      comments: [...review.comments, comment],
+    }));
+    await this.prompt(agentId, commentPrompt(comment));
+    return comment;
+  }
+
+  /** The shortcuts above the terminal and « Renvoyer à l'agent » (FR-013, FR-015). */
+  async send(agentId: string, request: ReviewSend): Promise<void> {
+    const { workspace, agent } = this.find(agentId);
+    switch (request.kind) {
+      case 'request': {
+        const text = requestPrompt(request.text);
+        if (text === '') throw new IpcFailure('INVALID_INPUT', 'Demande vide.');
+        await this.prompt(agentId, text);
+        return;
+      }
+      case 'fix-comments': {
+        const open = agent.review.comments.filter((comment) => !comment.treated);
+        if (open.length === 0)
+          throw new IpcFailure('INVALID_INPUT', 'Aucun commentaire à corriger.');
+        await this.prompt(agentId, fixCommentsPrompt(open));
+        const ids = new Set(open.map((comment) => comment.id));
+        await this.changeReview(workspace.id, agentId, (review) => ({
+          ...review,
+          comments: review.comments.map((c) => (ids.has(c.id) ? { ...c, treated: true } : c)),
+        }));
+        return;
+      }
+      case 'failing-tests': {
+        const run = this.tests?.latest(agentId);
+        if (run?.status !== 'failed' && run?.status !== 'timeout') {
+          throw new IpcFailure('INVALID_INPUT', 'Aucun test en échec.');
+        }
+        await this.prompt(agentId, failingTestsPrompt(run.command, run.outputTail));
+        return;
+      }
+      case 'conflict': {
+        // Read again: main may have moved since the review was shown.
+        const { conflicts } = await this.compute(agentId);
+        if (!Array.isArray(conflicts)) {
+          throw new IpcFailure('INVALID_INPUT', `Aucun conflit avec ${workspace.mainBranch}.`);
+        }
+        await this.prompt(agentId, conflictPrompt(workspace.mainBranch, conflicts));
+        return;
+      }
+    }
   }
 
   /**
@@ -198,6 +278,22 @@ export class ReviewService {
     for (const agentId of [...this.followed.keys()]) this.close(agentId);
     this.snapshots.clear();
     this.wanted.clear();
+  }
+
+  private async prompt(agentId: string, text: string) {
+    if (!this.prompts) throw new IpcFailure('INTERNAL', 'Aucun agent pour recevoir la consigne.');
+    await this.prompts.sendPrompt(agentId, text);
+  }
+
+  private async changeReview(
+    workspaceId: string,
+    agentId: string,
+    change: (review: Agent['review']) => Agent['review'],
+  ) {
+    await this.workspaces.update(workspaceId, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === agentId ? { ...a, review: change(a.review) } : a)),
+    }));
   }
 
   private async refresh(agentId: string, force = false) {

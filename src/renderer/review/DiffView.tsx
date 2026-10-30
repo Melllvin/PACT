@@ -1,4 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { MessageSquarePlus } from 'lucide-react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import type { ReviewComment } from '../../shared/model';
 import type { ChangedFile, DiffHunk, DiffLine, FileDiff } from '../../shared/review';
 import { cn } from '@/lib/utils';
 
@@ -8,12 +10,28 @@ type Props = {
   diff: FileDiff | null;
   /** The height shown; measured in the app, given where nothing is laid out (tests). */
   viewportHeight?: number;
+  /** The comments on this file, shown under their line (FR-012). */
+  comments?: readonly ReviewComment[];
+  /** Without it, lines cannot be commented. `line` is on the agent's side of the diff. */
+  onComment?: ((line: number, text: string) => void) | undefined;
 };
 
-type Row = { kind: 'hunk'; text: string } | DiffLine;
+type Row =
+  | { kind: 'hunk'; text: string }
+  | DiffLine
+  | { kind: 'comment'; comment: ReviewComment }
+  | { kind: 'editor'; line: number };
 
-/** Every row has this height: the rows shown follow from the scroll alone (R10). */
+/** Each kind of row has a fixed height: the rows shown follow from the scroll alone (R10). */
 const ROW = 20;
+const HEIGHT: Record<Row['kind'], number> = {
+  hunk: ROW,
+  context: ROW,
+  add: ROW,
+  del: ROW,
+  comment: 44,
+  editor: 40,
+};
 /** Rows rendered above and below the visible ones, so a fast scroll shows no gap. */
 const OVERSCAN = 10;
 const FALLBACK_HEIGHT = 600;
@@ -43,8 +61,71 @@ function hunkHeader({ oldStart, newStart, lines }: DiffHunk) {
   return `@@ -${String(oldStart)},${String(old)} +${String(newStart)},${String(added)} @@`;
 }
 
-const toRows = (hunks: DiffHunk[]): Row[] =>
-  hunks.flatMap((hunk): Row[] => [{ kind: 'hunk', text: hunkHeader(hunk) }, ...hunk.lines]);
+/** The lines of the diff, each followed by its comments and, while writing one, its field. */
+function toRows(hunks: DiffHunk[], comments: readonly ReviewComment[], editing: number | null) {
+  const placed = new Set<number>();
+  const after = (line: DiffLine): Row[] => {
+    if (line.kind === 'del' || line.newNo === null || placed.has(line.newNo)) return [];
+    placed.add(line.newNo);
+    const own = comments.filter((comment) => comment.line === line.newNo);
+    const rows: Row[] = own.map((comment) => ({ kind: 'comment', comment }));
+    if (editing === line.newNo) rows.push({ kind: 'editor', line: line.newNo });
+    return rows;
+  };
+  return hunks.flatMap((hunk): Row[] => [
+    { kind: 'hunk', text: hunkHeader(hunk) },
+    ...hunk.lines.flatMap((line) => [line, ...after(line)]),
+  ]);
+}
+
+/** The index of the last row starting at or before `y`, in `tops` sorted ascending. */
+function rowAt(tops: number[], y: number) {
+  let low = 0;
+  let high = tops.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if ((tops[middle] ?? 0) <= y) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+}
+
+/** Enter sends the comment, Escape drops it; neither goes further (the Focus keeps Escape). */
+function CommentField({
+  line,
+  onSubmit,
+  onCancel,
+}: {
+  line: number;
+  onSubmit: (text: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState('');
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
+      onCancel();
+    } else if (event.key === 'Enter' && text.trim() !== '') {
+      event.preventDefault();
+      onSubmit(text.trim());
+    }
+  };
+  return (
+    <input
+      // Opened by a click on the line: the comment is written straight away.
+      autoFocus
+      aria-label={`Commentaire sur la ligne ${String(line)}`}
+      placeholder="Commentaire pour l’agent · Entrée pour envoyer, Échap pour annuler"
+      value={text}
+      onChange={(event) => {
+        setText(event.target.value);
+      }}
+      onKeyDown={onKeyDown}
+      className="h-7 w-full max-w-[640px] rounded-lg border border-primary/50 bg-background px-2.5 font-sans text-[12.5px] text-foreground outline-none"
+    />
+  );
+}
 
 const NOTE = 'm-0 px-4 py-6 text-[13px] text-muted-foreground';
 
@@ -52,10 +133,12 @@ const NOTE = 'm-0 px-4 py-6 text-[13px] text-muted-foreground';
  * The diff of one file against main (FR-008): removed lines red, added green, the numbers of both
  * sides. Only the rows in view are rendered, so a 5 000 line file scrolls as fast as a short one.
  */
-export function DiffView({ file, diff, viewportHeight }: Props) {
+export function DiffView({ file, diff, viewportHeight, comments = [], onComment }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [measured, setMeasured] = useState(0);
+  /** The line whose comment field is open. */
+  const [editing, setEditing] = useState<number | null>(null);
 
   useLayoutEffect(() => {
     const element = box.current;
@@ -77,6 +160,7 @@ export function DiffView({ file, diff, viewportHeight }: Props) {
   if (shownPath !== file.path) {
     setShownPath(file.path);
     setScrollTop(0);
+    setEditing(null);
   }
 
   const kind = KIND_LABEL[file.status];
@@ -93,10 +177,16 @@ export function DiffView({ file, diff, viewportHeight }: Props) {
   if (file.eolOnly) return <p className={NOTE}>Fins de ligne seulement</p>;
   if (!diff) return <p className={NOTE}>Chargement du diff…</p>;
 
-  const rows = toRows(diff.hunks);
+  const rows = toRows(diff.hunks, comments, editing);
+  const tops: number[] = [];
+  let total = 0;
+  for (const row of rows) {
+    tops.push(total);
+    total += HEIGHT[row.kind];
+  }
   const height = viewportHeight ?? (measured || FALLBACK_HEIGHT);
-  const first = Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN);
-  const last = Math.min(rows.length, Math.ceil((scrollTop + height) / ROW) + OVERSCAN);
+  const first = Math.max(0, rowAt(tops, scrollTop) - OVERSCAN);
+  const last = Math.min(rows.length, rowAt(tops, scrollTop + height) + 1 + OVERSCAN);
 
   return (
     <div
@@ -109,10 +199,57 @@ export function DiffView({ file, diff, viewportHeight }: Props) {
       }}
       className="relative min-h-0 flex-1 overflow-auto font-mono text-[12px]"
     >
-      <div role="rowgroup" style={{ height: rows.length * ROW }} className="relative min-w-max">
+      <div role="rowgroup" style={{ height: total }} className="relative min-w-max">
         {rows.slice(first, last).map((row, offset) => {
           const index = first + offset;
-          const style = { top: index * ROW, height: ROW };
+          const style = { top: tops[index], height: HEIGHT[row.kind] };
+          if (row.kind === 'comment') {
+            return (
+              <div
+                key={row.comment.id}
+                role="row"
+                aria-rowindex={index + 1}
+                data-kind="comment"
+                style={style}
+                className="absolute inset-x-0 flex items-center pl-[112px]"
+              >
+                <div
+                  role="note"
+                  aria-label={`Commentaire sur la ligne ${String(row.comment.line)}`}
+                  className={cn(
+                    'flex max-w-[640px] min-w-0 flex-col gap-0.5 rounded-lg border border-primary/30 bg-primary/8 px-2.5 py-1 font-sans text-[12px]',
+                    row.comment.treated && 'opacity-60',
+                  )}
+                >
+                  <span className="truncate text-foreground">{row.comment.text}</span>
+                  <span className="text-[10.5px] text-primary">→ envoyé à l’agent ↓</span>
+                </div>
+              </div>
+            );
+          }
+          if (row.kind === 'editor') {
+            return (
+              <div
+                key={`editor-${String(row.line)}`}
+                role="row"
+                aria-rowindex={index + 1}
+                data-kind="editor"
+                style={style}
+                className="absolute inset-x-0 flex items-center pl-[112px]"
+              >
+                <CommentField
+                  line={row.line}
+                  onCancel={() => {
+                    setEditing(null);
+                  }}
+                  onSubmit={(text) => {
+                    setEditing(null);
+                    onComment?.(row.line, text);
+                  }}
+                />
+              </div>
+            );
+          }
           if (row.kind === 'hunk') {
             return (
               <div
@@ -135,11 +272,23 @@ export function DiffView({ file, diff, viewportHeight }: Props) {
               data-kind={row.kind}
               style={style}
               className={cn(
-                'absolute inset-x-0 flex items-center whitespace-pre',
+                'group absolute inset-x-0 flex items-center whitespace-pre',
                 row.kind === 'add' && 'bg-accept/10',
                 row.kind === 'del' && 'bg-destructive/10',
               )}
             >
+              {onComment && row.newNo !== null && (
+                <button
+                  type="button"
+                  aria-label={`Commenter la ligne ${String(row.newNo)}`}
+                  onClick={() => {
+                    setEditing(row.newNo);
+                  }}
+                  className="absolute left-0.5 flex size-4 cursor-pointer items-center justify-center rounded text-primary opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <MessageSquarePlus aria-hidden className="size-3" />
+                </button>
+              )}
               <span role="cell" className="w-12 flex-none pr-2 text-right text-dim select-none">
                 {row.oldNo ?? ''}
               </span>

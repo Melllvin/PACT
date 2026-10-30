@@ -110,6 +110,8 @@ void app.whenReady().then(async () => {
     onPending: (event) => {
       emit('review:pending', event);
     },
+    prompts: agents,
+    tests: { latest: (agentId) => tests.latest(agentId) },
   });
   // 002 US2 — the tests of the Décision column and the integration into main.
   const tests = new TestRunner({

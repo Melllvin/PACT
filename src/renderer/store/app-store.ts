@@ -88,7 +88,18 @@ export type AppState = {
   closeAgent: (removeWorktree: boolean) => Promise<void>;
   /** « vu » of a file in the review: the content seen, or `null` to forget it (002 FR-009). */
   markSeen: (agentId: string, path: string, blob: string | null) => Promise<void>;
+  /** A comment on one line of the diff, sent to the agent (002 FR-012). */
+  commentLine: (agentId: string, path: string, line: number, text: string) => Promise<void>;
+  /** A shortcut above the terminal, or « Renvoyer à l'agent » with its text (FR-013, FR-015). */
+  sendToAgent: (agentId: string, kind: ReviewSendKind, text?: string) => Promise<void>;
+  /**
+   * The agents the review sent a prompt to: `queued` until they start on it, `working` until
+   * they are ready again (« Agent : correction en cours »).
+   */
+  correcting: Record<string, 'queued' | 'working'>;
 };
+
+export type ReviewSendKind = 'fix-comments' | 'failing-tests' | 'conflict' | 'request';
 
 export type CloneStatus =
   { status: 'running'; percent: number; phase: string } | { status: 'failed'; message: string };
@@ -132,6 +143,20 @@ const applyState =
     ...(event.lastError === undefined ? {} : { lastError: event.lastError }),
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
   });
+
+/** `queued` → `working` once the agent works on the prompt, then dropped once it is ready. */
+function followCorrection(
+  correcting: AppState['correcting'],
+  { agentId, state }: IpcEvent<'agent:state'>,
+): AppState['correcting'] {
+  const current = correcting[agentId];
+  if (current === undefined) return correcting;
+  if (state === 'working') return { ...correcting, [agentId]: 'working' };
+  if (current === 'working' || state === 'closed' || state === 'error') {
+    return Object.fromEntries(Object.entries(correcting).filter(([id]) => id !== agentId));
+  }
+  return correcting;
+}
 
 /** Drops an agent from whichever workspace holds it. */
 const withoutAgent = (workspaces: Workspace[], agentId: string): Workspace[] =>
@@ -211,6 +236,7 @@ export function createAppStore(api: PactApi) {
       actionError: null,
       log: null,
       closingAgentId: null,
+      correcting: {},
 
       async load() {
         set({ status: 'loading', error: null });
@@ -236,6 +262,7 @@ export function createAppStore(api: PactApi) {
                 event.state === 'closed'
                   ? withoutAgent(workspaces, event.agentId)
                   : updateAgent(workspaces, event.agentId, applyState(event)),
+              correcting: followCorrection(get().correcting, event),
             });
           }),
           api.on('agent:branch', ({ agentId, branch }) => {
@@ -462,6 +489,40 @@ export function createAppStore(api: PactApi) {
               if (blob !== null) seen[path] = blob;
               return { ...agent, review: { ...agent.review, seen } };
             }),
+          });
+        }),
+
+      commentLine: (agentId, path, line, text) =>
+        act(async () => {
+          const comment = await api.invoke('review:comment', { agentId, path, line, text });
+          set({
+            workspaces: updateAgent(get().workspaces, agentId, (agent) => ({
+              ...agent,
+              review: { ...agent.review, comments: [...agent.review.comments, comment] },
+            })),
+            correcting: { ...get().correcting, [agentId]: 'queued' },
+          });
+        }),
+
+      sendToAgent: (agentId, kind, text) =>
+        act(async () => {
+          await api.invoke(
+            'review:send',
+            kind === 'request' ? { agentId, kind, text: text ?? '' } : { agentId, kind },
+          );
+          set({
+            ...(kind === 'fix-comments'
+              ? {
+                  workspaces: updateAgent(get().workspaces, agentId, (agent) => ({
+                    ...agent,
+                    review: {
+                      ...agent.review,
+                      comments: agent.review.comments.map((c) => ({ ...c, treated: true })),
+                    },
+                  })),
+                }
+              : {}),
+            correcting: { ...get().correcting, [agentId]: 'queued' },
           });
         }),
     };

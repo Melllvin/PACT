@@ -264,31 +264,31 @@ recevoir le texte attendu, seulement quand il est prêt.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T036 [P] [US3] Tests de `review-prompts` dans `tests/unit/shared/review-prompts.test.ts` :
+- [X] T036 [P] [US3] Tests de `review-prompts` dans `tests/unit/shared/review-prompts.test.ts` :
   - commentaire `Commentaire sur <path>:<line> — <text>` ;
   - « Corriger les commentaires » qui liste tous les commentaires non traités ;
   - « Tests en échec » avec la commande et les 40 dernières lignes ;
   - « Conflit avec main » avec les fichiers et la demande de mise à jour, de résolution et de relance des tests ;
   - demande libre.
-- [ ] T037 [P] [US3] Tests de `ReviewService` pour `comment` et `send` dans `tests/unit/main/review/review-service.test.ts` :
+- [X] T037 [P] [US3] Tests de `ReviewService` pour `comment` et `send` dans `tests/unit/main/review/review-service.test.ts` :
   - commentaire enregistré et persistant (`id`, `createdAt`) ;
   - consigne mise en file par `sendPrompt` ;
   - `fix-comments` marque les commentaires `treated` ;
   - `failing-tests` et `conflict` refusés sans tests en échec ni conflit ;
   - `request` exige `text`.
-- [ ] T038 [P] [US3] Tests des composants dans `tests/unit/renderer/review/DiffView.test.tsx` et `tests/unit/renderer/review/ChangesTab.test.tsx` :
+- [X] T038 [P] [US3] Tests des composants dans `tests/unit/renderer/review/DiffView.test.tsx` et `tests/unit/renderer/review/ChangesTab.test.tsx` :
   - clic sur une ligne ⇒ champ de commentaire, Entrée valide, Échap annule ;
   - commentaire affiché sous la ligne avec « → envoyé à l'agent ↓ » ;
   - raccourcis « Corriger les commentaires · N », « Tests en échec » et « Conflit avec main », visibles seulement quand ils s'appliquent ;
   - « Renvoyer à l'agent » envoie la demande et revient aux tuiles ;
   - ligne « Agent : correction en cours ».
-- [ ] T039 [US3] Test e2e : commentaire ⇒ texte reçu par le faux CLI avec fichier et ligne ; agent en `awaiting-answer` ⇒ rien tapé avant la réponse ; « Corriger les commentaires · 2 » ⇒ une seule consigne, dans `tests/e2e/us10-review-comments.spec.ts`.
+- [X] T039 [US3] Test e2e : commentaire ⇒ texte reçu par le faux CLI avec fichier et ligne ; agent en `awaiting-answer` ⇒ rien tapé avant la réponse ; « Corriger les commentaires · 2 » ⇒ une seule consigne, dans `tests/e2e/us10-review-comments.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T040 [P] [US3] Implémenter les textes des consignes (purs) dans `src/shared/review-prompts.ts`.
-- [ ] T041 [US3] Ajouter `comment` et `send` à `ReviewService`, et brancher `review:comment` et `review:send`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
-- [ ] T042 [US3] Ajouter le commentaire sur une ligne dans `src/renderer/review/DiffView.tsx`, les raccourcis dans `src/renderer/review/ChangesTab.tsx`, et « Renvoyer à l'agent » dans `src/renderer/review/DecisionColumn.tsx`.
+- [X] T040 [P] [US3] Implémenter les textes des consignes (purs) dans `src/shared/review-prompts.ts`.
+- [X] T041 [US3] Ajouter `comment` et `send` à `ReviewService`, et brancher `review:comment` et `review:send`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
+- [X] T042 [US3] Ajouter le commentaire sur une ligne dans `src/renderer/review/DiffView.tsx`, les raccourcis dans `src/renderer/review/ChangesTab.tsx`, et « Renvoyer à l'agent » dans `src/renderer/review/DecisionColumn.tsx`.
 
 **Checkpoint**: US1–US3 testées séparément.
 

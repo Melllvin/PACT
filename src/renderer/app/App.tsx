@@ -138,6 +138,10 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
                       workspaceId: workspace.id,
                     }),
                   dismissNotice: reviewState.dismissNotice,
+                  comment: (agentId, path, line, text) =>
+                    void state.commentLine(agentId, path, line, text),
+                  send: (agentId, kind, text) => void state.sendToAgent(agentId, kind, text),
+                  correcting: state.correcting,
                 }
               }
             />
