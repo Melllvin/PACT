@@ -698,7 +698,8 @@ export class AgentManager {
       ...ws,
       agents: ws.agents.map((a) => (a.id === id ? (changed = next(a)) : a)),
     }));
-    if (!changed) return;
+    // Stopped during the save: the next manager takes over, this one arms and types nothing.
+    if (!changed || this.disposed) return;
     this.emit(changed);
     this.resumes.sync(changed);
     if (isReady(changed.state)) this.flushPrompt(id);
