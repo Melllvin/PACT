@@ -21,6 +21,7 @@ const cli = (id: string, name: string, models: string[]): CliDefinition => ({
   origin: 'detected',
   status: 'installed',
   models,
+  orchestrator: id === 'claude-code',
 });
 
 const clis = [
@@ -302,5 +303,28 @@ describe('DetailedLaunch', () => {
   it('explains its marks', () => {
     setup();
     expect(screen.getByText(/≠ diffère du commun · pointillés = hérité/)).toBeDefined();
+  });
+});
+
+describe('DetailedLaunch, the orchestrator (003 T010)', () => {
+  const box = () => within(inspector()).queryByRole('checkbox', { name: /Orchestrateur/ });
+
+  it('makes the agent inspected the orchestrator, only one at a time', async () => {
+    const { user, draft } = setup();
+    await user.click(agent(0));
+    await user.click(box() ?? document.body);
+    const first = draft()?.agents[0]?.key;
+    expect(draft()?.orchestrator).toBe(first);
+    await user.click(agent(1));
+    await user.click(box() ?? document.body);
+    expect(draft()?.orchestrator).toBe(draft()?.agents[1]?.key);
+    await user.click(box() ?? document.body);
+    expect(draft()?.orchestrator).toBeNull();
+  });
+
+  it('offers it only to a CLI that can be one', async () => {
+    const { user } = setup();
+    await user.click(agent(2));
+    expect(box()).toBeNull();
   });
 });
