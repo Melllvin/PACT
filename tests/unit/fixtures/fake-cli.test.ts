@@ -44,7 +44,11 @@ async function startHookServer(hooks: Hook[]) {
 
 async function runFake(
   scenario: string,
-  { args = [] as string[], cwd = process.cwd(), env = {} as Record<string, string> } = {},
+  {
+    args = [] as string[],
+    cwd = process.cwd(),
+    env = {},
+  }: { args?: string[]; cwd?: string; env?: Record<string, string> } = {},
 ) {
   const hooks: Hook[] = [];
   const url = await startHookServer(hooks);

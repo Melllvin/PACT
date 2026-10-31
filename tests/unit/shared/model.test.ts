@@ -292,7 +292,8 @@ describe('orchestrator (003 T002)', () => {
   });
 
   it('gives agents no role and workspaces no request by default, so files from 002 load', () => {
-    const { role: _role, ...from002 } = agent(1);
+    const from002: Partial<Agent> = agent(1);
+    delete from002.role;
     expect(agentSchema.parse(from002).role).toBeNull();
     expect(workspaceSchema.parse(workspace([agent(1)])).integrationRequests).toEqual([]);
   });
