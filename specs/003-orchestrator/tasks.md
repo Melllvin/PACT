@@ -155,25 +155,25 @@ fin de son tour et lit les mêmes fichiers, diff, tests et conflits que la revue
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T025 [P] [US2] Tests de la file d'événements et de l'attente dans `tests/unit/main/orchestrator/events.test.ts` :
+- [X] T025 [P] [US2] Tests de la file d'événements et de l'attente dans `tests/unit/main/orchestrator/events.test.ts` :
   - au plus 100 événements, les plus anciens oubliés ;
   - une attente se termine au premier événement des agents demandés ;
   - délai écoulé : `timedOut: true` ;
   - `timeoutSeconds` de 1 à 600, défaut 300 ;
   - une seconde attente remplace la première, qui rend « remplacée » ;
   - les événements arrivés entre deux attentes sont rendus tout de suite.
-- [ ] T026 [P] [US2] Tests des outils de lecture dans `tests/integration/orchestrator/tools-read.test.ts` :
+- [X] T026 [P] [US2] Tests des outils de lecture dans `tests/integration/orchestrator/tools-read.test.ts` :
   - `get_changes` donne les mêmes fichiers, totaux, tests et conflits que `ReviewService` ;
   - `get_file_diff` donne le diff unifié, ou `binary` / `tooLarge` avec la taille ;
   - un chemin hors du dépôt est refusé ;
   - `run_tests` lance la commande du workspace ou refuse « Tests non configurés » ;
   - `wait_for_agents` est réveillé en moins de 2 s après une fin de tour (SC-002).
-- [ ] T027 [US2] Test e2e : attente réveillée par la fin de tour d'un agent, puis lecture de ses changements par le faux orchestrateur, dans `tests/e2e/us14-orchestrator-follow.spec.ts`.
+- [X] T027 [US2] Test e2e : attente réveillée par la fin de tour d'un agent, puis lecture de ses changements par le faux orchestrateur, dans `tests/e2e/us14-orchestrator-follow.spec.ts`.
 
 ### Implementation for User Story 2
 
-- [ ] T028 [P] [US2] Implémenter la file d'événements et l'attente dans `src/main/orchestrator/events.ts`.
-- [ ] T029 [US2] Implémenter `get_changes`, `get_file_diff`, `run_tests` et `wait_for_agents` dans `src/main/orchestrator/tools.ts`, avec les événements des états d'agents transmis par `src/main/index.ts`.
+- [X] T028 [P] [US2] Implémenter la file d'événements et l'attente dans `src/main/orchestrator/events.ts`.
+- [X] T029 [US2] Implémenter `get_changes`, `get_file_diff`, `run_tests` et `wait_for_agents` dans `src/main/orchestrator/tools.ts`, avec les événements des états d'agents transmis par `src/main/index.ts`.
 
 **Checkpoint**: US1 + US2, la boucle consigne → attente → lecture.
 

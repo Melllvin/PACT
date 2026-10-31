@@ -84,6 +84,7 @@ void app.whenReady().then(async () => {
   // 003 — the orchestrator of a workspace reaches PACT through its session plugin (R2).
   const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
+    workspaces,
     pluginsDir: join(app.getPath('userData'), 'orchestrator'),
     // Read when the orchestrator calls: the services below exist by then.
     tools: (orchestratorId): McpTool[] =>
@@ -93,6 +94,9 @@ void app.whenReady().then(async () => {
           agents,
           cliName: (cliId) => registry.list().find((cli) => cli.id === cliId)?.name ?? cliId,
           pending: (workspaceId) => review.updatePending(workspaceId),
+          review,
+          tests,
+          wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
         },
         orchestratorId,
       ),
@@ -111,6 +115,8 @@ void app.whenReady().then(async () => {
     resolveEnv: resolveShellEnv,
     onState: (event) => {
       emit('agent:state', event);
+      // 003 R5 — what the orchestrator of the workspace waits for.
+      orchestrator.agentState(event);
       // 002 US1 — « Revue → » follows the agents that are done with changes (FR-002).
       const workspace = workspaces
         .list()
@@ -261,6 +267,7 @@ void app.whenReady().then(async () => {
       review.dispose();
       tests.dispose();
       integration.dispose();
+      orchestrator.dispose();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
       await hooks.stop();

@@ -3,7 +3,13 @@ import { watch as fsWatch } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { IpcFailure, type IpcEvent } from '../../shared/ipc';
 import type { Agent, ReviewComment, Workspace } from '../../shared/model';
-import { seenBlob, type FileDiff, type ReviewSnapshot, type TestRun } from '../../shared/review';
+import {
+  seenBlob,
+  type ChangedFile,
+  type FileDiff,
+  type ReviewSnapshot,
+  type TestRun,
+} from '../../shared/review';
 import {
   commentPrompt,
   conflictPrompt,
@@ -161,6 +167,29 @@ export class ReviewService {
       path,
       oldPath: file.oldPath,
     });
+  }
+
+  /** 003 FR-012 — the review as it is now, without following the worktree. */
+  readChanges(agentId: string): Promise<ReviewSnapshot> {
+    return this.compute(agentId);
+  }
+
+  /** 003 FR-012 — one changed file and its diff, as they are now. */
+  async readFileDiff(
+    agentId: string,
+    path: string,
+  ): Promise<{ file: ChangedFile; diff: FileDiff }> {
+    const { agent } = this.find(agentId);
+    const snapshot = await this.compute(agentId);
+    const file = snapshot.files.find((f) => f.path === path);
+    if (!file) throw new IpcFailure('NOT_FOUND', `« ${path} » ne fait pas partie des changements.`);
+    const diff = await this.git.fileDiff(agent.worktreePath, {
+      base: snapshot.base,
+      tree: snapshot.tree,
+      path,
+      oldPath: file.oldPath,
+    });
+    return { file, diff };
   }
 
   /** Remembers or forgets the blob currently reviewed for `path` (FR-007, FR-009). */

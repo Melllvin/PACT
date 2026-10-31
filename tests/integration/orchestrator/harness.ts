@@ -191,6 +191,9 @@ export async function createHarness() {
       await pty.dispose();
       await hooks.stop();
       workspaces.dispose();
+      // The agents' last state changes are still being written: let them land first.
+      await new Promise((r) => setTimeout(r, 100));
+      await stores.workspace(workspace.id).read();
       await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     },
   };

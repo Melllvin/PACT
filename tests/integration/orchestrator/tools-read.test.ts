@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callTool, createHarness, type Harness } from './harness';
 
@@ -70,6 +72,14 @@ describe('get_changes and get_file_diff', () => {
   });
 });
 
+describe('get_file_diff, a binary file', () => {
+  it('gives its size, without a line diff', async () => {
+    await writeFile(join(h.current(worker)?.worktreePath ?? '', 'logo.bin'), 'logo\0binaire');
+    const { json } = await tool('get_file_diff', { agent: 'Faux CLI 2', path: 'logo.bin' });
+    expect(json).toEqual({ path: 'logo.bin', binary: true, size: 12 });
+  });
+});
+
 describe('run_tests', () => {
   it('refuses without a test command, then runs the workspace one', async () => {
     expect((await tool('run_tests', { agent: 'Faux CLI 2' })).isError).toBe(true);
@@ -116,6 +126,19 @@ describe('wait_for_agents', () => {
     await turn();
     expect((await tool('wait_for_agents', { timeoutSeconds: 1 })).json).toMatchObject({
       events: [{ agentId: worker, kind: 'turn-finished' }],
+    });
+  });
+
+  it('tells a question and a closing too', async () => {
+    const [asker = ''] = (await h.launch([h.draft()], 'ask-permission')).map((a) => a.id);
+    h.pty.write(asker, 'Supprime\r');
+    await h.waitForState(asker, 'awaiting-answer');
+    expect(
+      (await tool('wait_for_agents', { agents: ['Faux CLI 3'], timeoutSeconds: 5 })).text,
+    ).toBe('Faux CLI 3 attend une réponse de l’utilisateur.');
+    await h.manager.close(asker, { removeWorktree: false });
+    expect((await tool('wait_for_agents', { timeoutSeconds: 5 })).json).toMatchObject({
+      events: [{ agentId: asker, kind: 'closed' }],
     });
   });
 });
