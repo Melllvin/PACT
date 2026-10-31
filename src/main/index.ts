@@ -113,6 +113,10 @@ void app.whenReady().then(async () => {
     },
     hookUrl: () => hookUrl,
     resolveEnv: resolveShellEnv,
+    // Its worktree no longer followed before it goes (on Windows a watch blocks the removal).
+    onClosing: (agentId) => {
+      review.close(agentId);
+    },
     onState: (event) => {
       emit('agent:state', event);
       // 003 R5 — what the orchestrator of the workspace waits for.

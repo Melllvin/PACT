@@ -214,9 +214,10 @@ export class IntegrationService {
         const merged = await this.git.mergeTree(repo, main, tip);
         if (merged.conflicts.length > 0) {
           const conflicts = await this.conflicts(repo, main, tip, merged);
-          if (cancelled()) throw new Cancelled();
+          // Announced, then kept in the same step: nothing can ask for it in between.
+          const conflicted = set({ state: 'conflicted', conflicts });
           mine = {
-            integration,
+            integration: conflicted,
             request,
             workspaceId: workspace.id,
             repo,
@@ -227,7 +228,7 @@ export class IntegrationService {
             watched: new Map(),
           };
           this.pending.set(id, mine);
-          return set({ state: 'conflicted', conflicts });
+          return conflicted;
         }
         set({ state: 'committing' });
         // From here main is written: no longer cancellable.

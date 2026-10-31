@@ -44,6 +44,11 @@ type Options = {
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
   autoResume?: (workspaceId: string) => Promise<boolean>;
   clock?: Clock;
+  /**
+   * The agent is closing: what follows its worktree lets go of it first, since on Windows a
+   * folder watched cannot be removed (002 FR-024).
+   */
+  onClosing?: (agentId: string) => void;
   /** 003 R4 — a prompt was typed into the agent, with where it came from. */
   onPromptTyped?: (agentId: string, origin: PromptOrigin) => void;
   /** 003 — the session plugin and token of an orchestrator, prepared before each start (R2). */
@@ -110,6 +115,7 @@ export class AgentManager {
   /** 003 — the question each agent waits on, for the orchestrator's list_agents (FR-011). */
   private readonly questions = new Map<string, string>();
   private readonly onPromptTyped: NonNullable<Options['onPromptTyped']>;
+  private readonly onClosing: NonNullable<Options['onClosing']>;
   /** Agents a prompt was typed to, until they leave the ready state. */
   private readonly promptTyped = new Set<string>();
   private readonly unsubscribe: (() => void)[];
@@ -129,6 +135,7 @@ export class AgentManager {
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
+    this.onClosing = options.onClosing ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
     this.orchestrator = options.orchestrator;
@@ -319,6 +326,7 @@ export class AgentManager {
     this.resumes.forget(id);
     this.prompts.delete(id);
     this.orchestrator?.release(id);
+    this.onClosing(id);
     await this.stop(id);
     if (removeWorktree) {
       // The agent may have renamed its branch since the last check.
