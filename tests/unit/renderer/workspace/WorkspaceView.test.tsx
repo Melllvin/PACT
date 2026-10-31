@@ -778,3 +778,25 @@ describe('Review (002 T018, US1)', () => {
     expect(busy.cancelTests).toHaveBeenCalledWith(agent(2).id);
   });
 });
+
+describe('WorkspaceView with an orchestrator (003 T019)', () => {
+  it('leads the tiles with it, the agent on its prompt marked', () => {
+    const team = agents(3).map((a) =>
+      a.position === 1 ? { ...a, role: 'orchestrator' as const } : a,
+    );
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: team })}
+        clis={clis}
+        fromOrchestrator={{ [agent(2).id]: 'working' }}
+      />,
+    );
+    const lead = screen.getByRole('region', { name: 'Orchestrateur' });
+    expect(within(lead).getByRole('article').getAttribute('aria-label')).toMatch(/^Claude Code 1/);
+    const others = within(screen.getByRole('region', { name: 'Agents dirigés' })).getAllByRole(
+      'article',
+    );
+    expect(others).toHaveLength(2);
+    expect(others[0]?.textContent).toContain('◎ de l’orchestrateur');
+  });
+});

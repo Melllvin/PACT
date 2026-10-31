@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
+import { MAX_AGENTS, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
@@ -105,6 +105,8 @@ type Props = {
   toolbarSlot?: HTMLElement | null;
   /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
   review?: ReviewBinding | undefined;
+  /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
+  fromOrchestrator?: Readonly<Record<string, unknown>>;
 };
 
 const ALERT =
@@ -119,6 +121,7 @@ export function WorkspaceView({
   actionError = null,
   toolbarSlot = null,
   review,
+  fromOrchestrator = {},
 }: Props) {
   const available = workspace.status === 'available';
   const launch = available ? onAddAgents : undefined;
@@ -209,6 +212,46 @@ export function WorkspaceView({
     ? agents.filter((agent) => pending.includes(agent.id) || agent.id === focused)
     : agents;
   const snapshot = review?.snapshot?.agentId === reviewed ? review.snapshot : null;
+
+  // 003 R10 — the orchestrator, if any, leads the tiles from the top.
+  const lead = agents.find((agent) => agent.role === 'orchestrator');
+  const tileOf = (agent: Agent) => (
+    <Tile
+      key={agent.id}
+      fromOrchestrator={fromOrchestrator[agent.id] !== undefined}
+      agent={agent}
+      name={cliName(agent.cliId)}
+      terminals={terminals}
+      onAnswer={(answer) => {
+        actions.onAnswer(agent.id, answer);
+      }}
+      onResume={() => {
+        actions.onResume(agent.id);
+      }}
+      onRestart={() => {
+        actions.onRestart(agent.id);
+      }}
+      onLog={() => {
+        actions.onLog(agent.id);
+      }}
+      onCancelAutoResume={() => {
+        actions.onCancelAutoResume(agent.id);
+      }}
+      onClose={() => {
+        actions.onClose(agent.id);
+      }}
+      onExpand={() => {
+        setFocusedId(agent.id);
+      }}
+      onReview={
+        review && pending.includes(agent.id)
+          ? () => {
+              openReview(agent.id);
+            }
+          : undefined
+      }
+    />
+  );
 
   // The À faire column and its button appear with the first agent (FR-006).
   const toolbar = (
@@ -324,43 +367,8 @@ export function WorkspaceView({
             />
           )}
           {available && hasTiles && !focused && (
-            <TileGrid onAdd={canAdd ? launch : undefined}>
-              {agents.map((agent) => (
-                <Tile
-                  key={agent.id}
-                  agent={agent}
-                  name={cliName(agent.cliId)}
-                  terminals={terminals}
-                  onAnswer={(answer) => {
-                    actions.onAnswer(agent.id, answer);
-                  }}
-                  onResume={() => {
-                    actions.onResume(agent.id);
-                  }}
-                  onRestart={() => {
-                    actions.onRestart(agent.id);
-                  }}
-                  onLog={() => {
-                    actions.onLog(agent.id);
-                  }}
-                  onCancelAutoResume={() => {
-                    actions.onCancelAutoResume(agent.id);
-                  }}
-                  onClose={() => {
-                    actions.onClose(agent.id);
-                  }}
-                  onExpand={() => {
-                    setFocusedId(agent.id);
-                  }}
-                  onReview={
-                    review && pending.includes(agent.id)
-                      ? () => {
-                          openReview(agent.id);
-                        }
-                      : undefined
-                  }
-                />
-              ))}
+            <TileGrid onAdd={canAdd ? launch : undefined} lead={lead ? tileOf(lead) : undefined}>
+              {agents.filter((agent) => agent !== lead).map(tileOf)}
               {workspace.freeTerminals.map((terminal) => (
                 <FreeTerminalTile key={terminal.id} terminal={terminal} terminals={terminals} />
               ))}

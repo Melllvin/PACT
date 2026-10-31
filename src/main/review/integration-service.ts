@@ -49,7 +49,7 @@ type Options = {
   workspaces: { list(): Workspace[] };
   agents: { close(id: string, options: { removeWorktree: boolean }): Promise<void> };
   /** « Demander à l'agent » types its prompt once the agent is ready (R7, FR-028). */
-  prompts?: { sendPrompt(agentId: string, text: string): Promise<void> };
+  prompts?: { sendPrompt(agentId: string, text: string): Promise<unknown> };
   /** `<userData>/integrations`: one temporary worktree per integration, removed after. */
   integrationsDir: string;
   /** `<userData>/conflicts`: the copies opened in the user's editor, removed after (R6). */

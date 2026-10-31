@@ -81,9 +81,8 @@ describe('send_prompt', () => {
     await h.waitForState(second, 'awaiting-answer');
     const { json } = await tool('send_prompt', { agent: 'Faux CLI 2', text: 'Ensuite' });
     expect(json).toEqual({ queued: true, position: 1 });
-    expect((await tool('list_agents')).json).toMatchObject({
-      agents: [expect.objectContaining({ waitingPrompts: 1 })],
-    });
+    const listed = (await tool('list_agents')).json as { agents: { waitingPrompts: number }[] };
+    expect(listed.agents[0]?.waitingPrompts).toBe(1);
     await new Promise((r) => setTimeout(r, 200));
     expect(h.pty.history(second)).not.toContain('Ensuite');
     await h.manager.answer(second, 'allow');

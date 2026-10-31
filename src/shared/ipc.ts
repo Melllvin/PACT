@@ -238,6 +238,8 @@ export const ipcEvents = {
   'review:pending': z.object({ workspaceId: z.string(), agentIds: z.array(z.uuid()) }),
   'review:tests': testRunSchema,
   'integration:state': integrationSchema,
+  /** 003 FR-010 — a prompt of the orchestrator was typed into this agent. */
+  'orchestrator:prompted': z.object({ agentId: z.uuid() }),
 } as const;
 
 export type IpcRequestChannel = keyof typeof ipcRequests;

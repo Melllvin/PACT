@@ -42,7 +42,7 @@ type Options = {
   onChanged?: (snapshot: ReviewSnapshot) => void;
   onPending?: (event: IpcEvent<'review:pending'>) => void;
   /** Types a prompt once the agent is ready for one, never as an answer (R7, FR-014). */
-  prompts?: { sendPrompt(agentId: string, text: string): Promise<void> };
+  prompts?: { sendPrompt(agentId: string, text: string): Promise<unknown> };
   /** The last test run of each agent, for « Tests en échec ». */
   tests?: { latest(agentId: string): TestRun | null };
   watch?: Watch;

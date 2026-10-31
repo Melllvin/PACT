@@ -19,6 +19,8 @@ import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
 import { OrchestratorService } from './orchestrator/orchestrator-service';
+import type { McpTool } from './orchestrator/mcp';
+import { createOrchestratorTools } from './orchestrator/tools';
 import { IntegrationService } from './review/integration-service';
 import { ReviewService } from './review/review-service';
 import { TestRunner } from './review/test-runner';
@@ -80,17 +82,31 @@ void app.whenReady().then(async () => {
   const clock = testClock(process.env);
   if (clock) Object.assign(globalThis, { pactTestClock: clock });
   // 003 — the orchestrator of a workspace reaches PACT through its session plugin (R2).
-  const orchestrator = new OrchestratorService({
+  const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
     pluginsDir: join(app.getPath('userData'), 'orchestrator'),
+    // Read when the orchestrator calls: the services below exist by then.
+    tools: (orchestratorId): McpTool[] =>
+      createOrchestratorTools(
+        {
+          workspaces,
+          agents,
+          cliName: (cliId) => registry.list().find((cli) => cli.id === cliId)?.name ?? cliId,
+          pending: (workspaceId) => review.updatePending(workspaceId),
+        },
+        orchestratorId,
+      ),
   });
-  const agents = new AgentManager({
+  const agents: AgentManager = new AgentManager({
     workspaces,
     registry,
     git,
     pty,
     hooks,
     orchestrator,
+    onPromptTyped: (agentId, origin) => {
+      if (origin === 'orchestrator') emit('orchestrator:prompted', { agentId });
+    },
     hookUrl: () => hookUrl,
     resolveEnv: resolveShellEnv,
     onState: (event) => {

@@ -18,7 +18,7 @@ Règles communes :
 
 | Outil | Entrée | Résultat (JSON) | Exigences |
 |-------|--------|-----------------|-----------|
-| `list_agents` | — | `{ agents: { id, name, cli, branch, state, question: string \| null, toReview: boolean, orchestratorPrompt: boolean }[] }` | FR-011 |
+| `list_agents` | — | `{ agents: { id, name, cli, branch, state, question: string \| null, toReview: boolean, waitingPrompts: number }[] }` | FR-011 |
 | `get_changes` | `{ agent }` | `{ branch, files: ChangedFile[], added, removed, tests: { status, command, passedCount, outputTail } \| null, conflicts: 'none' \| string[] }` (002 data-model) | FR-012 |
 | `get_file_diff` | `{ agent, path }` | `{ path, unified: string }` : le diff en texte unifié, ou `{ path, binary: true, size }` / `{ path, tooLarge: true, size }` | FR-012 |
 | `run_tests` | `{ agent }` | `{ status: 'running' }` ; le résultat arrive par `get_changes` ou un événement | FR-014 |

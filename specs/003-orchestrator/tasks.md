@@ -120,27 +120,27 @@ l'orchestrateur arrivent dans les deux invites, seulement quand les agents sont 
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T017 [P] [US1] Tests des outils `list_agents` et `send_prompt` dans `tests/integration/orchestrator/tools-prompt.test.ts` :
+- [X] T017 [P] [US1] Tests des outils `list_agents` et `send_prompt` dans `tests/integration/orchestrator/tools-prompt.test.ts` :
   - liste sans l'orchestrateur ni les terminaux libres, avec `question` et `toReview` ;
   - un agent désigné par son nom (« Codex 2 », casse ignorée) ou son identifiant ; un nom ambigu ou inconnu est refusé (`isError`) ;
   - une consigne attend la fin d'une question (`awaiting-answer`) et passe une par tour ;
   - un agent fermé, en erreur, l'orchestrateur lui-même ou un agent d'un autre workspace est refusé avec sa raison ;
   - `text` de 1 à 8 000 caractères ;
   - `orchestrator:prompted` est émis à la frappe.
-- [ ] T018 [P] [US1] Tests de la file à origine dans `tests/integration/agents/agent-actions.test.ts` : une consigne d'origine `orchestrator` et une de `review` passent dans l'ordre ; `cancelPrompts(id, 'orchestrator')` ne retire que les premières.
-- [ ] T019 [P] [US1] Tests de la grille dans `tests/unit/renderer/tiles/TileGrid.test.tsx` et `tests/unit/renderer/tiles/Tile.test.tsx` :
+- [X] T018 [P] [US1] Tests de la file à origine dans `tests/integration/agents/agent-actions.test.ts` : une consigne d'origine `orchestrator` et une de `review` passent dans l'ordre ; `cancelPrompts(id, 'orchestrator')` ne retire que les premières.
+- [X] T019 [P] [US1] Tests de la grille dans `tests/unit/renderer/tiles/TileGrid.test.tsx` et `tests/unit/renderer/tiles/Tile.test.tsx` :
   - tuile principale en haut au centre, marquée « ◎ Orchestrateur » ;
   - les autres en dessous dans l'ordre des positions ;
   - sans orchestrateur, la grille du socle ;
   - marque « ◎ de l'orchestrateur » sur une tuile, retirée au retour à un état prêt.
-- [ ] T020 [US1] Test e2e « chef au centre » et deux consignes reçues par le faux CLI, dans `tests/e2e/us13-orchestrator.spec.ts`.
+- [X] T020 [US1] Test e2e « chef au centre » et deux consignes reçues par le faux CLI, dans `tests/e2e/us13-orchestrator.spec.ts`.
 
 ### Implementation for User Story 1
 
-- [ ] T021 [P] [US1] Ajouter l'origine des consignes et `cancelPrompts` dans `src/main/agents/agent-manager.ts`, avec un rappel `onPromptTyped`.
-- [ ] T022 [US1] Implémenter `list_agents` et `send_prompt` dans `src/main/orchestrator/tools.ts`, servis par `OrchestratorService` via `HookServer`.
-- [ ] T023 [US1] Ajouter l'événement `orchestrator:prompted` dans `src/shared/ipc.ts` et `src/main/index.ts`, puis la marque dans `src/renderer/store/app-store.ts` et `src/renderer/tiles/Tile.tsx`.
-- [ ] T024 [US1] Ajouter la tuile principale à `src/renderer/tiles/TileGrid.tsx` et la placer depuis `src/renderer/workspace/WorkspaceView.tsx`.
+- [X] T021 [P] [US1] Ajouter l'origine des consignes et `cancelPrompts` dans `src/main/agents/agent-manager.ts`, avec un rappel `onPromptTyped`.
+- [X] T022 [US1] Implémenter `list_agents` et `send_prompt` dans `src/main/orchestrator/tools.ts`, servis par `OrchestratorService` via `HookServer`.
+- [X] T023 [US1] Ajouter l'événement `orchestrator:prompted` dans `src/shared/ipc.ts` et `src/main/index.ts`, puis la marque dans `src/renderer/store/app-store.ts` et `src/renderer/tiles/Tile.tsx`.
+- [X] T024 [US1] Ajouter la tuile principale à `src/renderer/tiles/TileGrid.tsx` et la placer depuis `src/renderer/workspace/WorkspaceView.tsx`.
 
 **Checkpoint**: MVP — un orchestrateur répartit des consignes ; `npm run check` vert.
 

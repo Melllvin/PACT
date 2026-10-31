@@ -111,6 +111,7 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
                 onClose: state.requestCloseAgent,
               }}
               actionError={state.actionError}
+              fromOrchestrator={state.orchestratorPrompted}
               review={
                 review && {
                   pending: reviewState.pending[workspace.id] ?? [],

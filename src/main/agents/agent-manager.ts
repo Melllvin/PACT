@@ -44,12 +44,19 @@ type Options = {
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
   autoResume?: (workspaceId: string) => Promise<boolean>;
   clock?: Clock;
+  /** 003 R4 — a prompt was typed into the agent, with where it came from. */
+  onPromptTyped?: (agentId: string, origin: PromptOrigin) => void;
   /** 003 — the session plugin and token of an orchestrator, prepared before each start (R2). */
   orchestrator?: {
     prepare(agent: Agent): Promise<OrchestratorLaunch>;
     release(agentId: string): void;
   };
 };
+
+/** Who asked for a prompt: the review (002) or the orchestrator of the workspace (003 R4). */
+export type PromptOrigin = 'review' | 'orchestrator';
+
+type QueuedPrompt = { text: string; origin: PromptOrigin };
 
 export type LaunchRequest = {
   workspaceId: string;
@@ -99,7 +106,10 @@ export class AgentManager {
    * Prompts waiting for the agent to be ready (002 R7): the initial prompt « Relancer » types
    * again, review comments and shortcuts. One is typed per ready transition.
    */
-  private readonly prompts = new Map<string, string[]>();
+  private readonly prompts = new Map<string, QueuedPrompt[]>();
+  /** 003 — the question each agent waits on, for the orchestrator's list_agents (FR-011). */
+  private readonly questions = new Map<string, string>();
+  private readonly onPromptTyped: NonNullable<Options['onPromptTyped']>;
   /** Agents a prompt was typed to, until they leave the ready state. */
   private readonly promptTyped = new Set<string>();
   private readonly unsubscribe: (() => void)[];
@@ -118,6 +128,7 @@ export class AgentManager {
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
+    this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
     this.orchestrator = options.orchestrator;
@@ -257,7 +268,10 @@ export class AgentManager {
     this.resumes.forget(id);
     await this.stop(id);
     if (agent.initialPrompt !== null) {
-      this.prompts.set(id, [agent.initialPrompt, ...(this.prompts.get(id) ?? [])]);
+      this.prompts.set(id, [
+        { text: agent.initialPrompt, origin: 'review' },
+        ...(this.prompts.get(id) ?? []),
+      ]);
     }
     await this.startAgain(workspace, agent, null);
   }
@@ -266,11 +280,31 @@ export class AgentManager {
    * 002 R7 — a prompt typed once the agent awaits one or is done, never while it works or waits
    * for an answer. Multi-line text goes as a bracketed paste, so it stays one prompt.
    */
-  async sendPrompt(id: string, text: string): Promise<void> {
+  async sendPrompt(id: string, text: string, origin: PromptOrigin = 'review'): Promise<number> {
     await Promise.resolve();
     this.find(id);
-    this.prompts.set(id, [...(this.prompts.get(id) ?? []), text]);
+    const item = { text, origin };
+    this.prompts.set(id, [...(this.prompts.get(id) ?? []), item]);
     this.flushPrompt(id);
+    // Where it waits: 0 when typed at once.
+    return (this.prompts.get(id) ?? []).indexOf(item) + 1;
+  }
+
+  /** 003 — the prompts of `origin` still waiting for the agent (FR-011). */
+  waitingPrompts(id: string, origin: PromptOrigin): number {
+    return (this.prompts.get(id) ?? []).filter((item) => item.origin === origin).length;
+  }
+
+  /** 003 FR-004 — the role is withdrawn: its prompts not typed yet are dropped. */
+  cancelPrompts(id: string, origin: PromptOrigin): void {
+    const kept = (this.prompts.get(id) ?? []).filter((item) => item.origin !== origin);
+    if (kept.length === 0) this.prompts.delete(id);
+    else this.prompts.set(id, kept);
+  }
+
+  /** 003 FR-011 — what the agent asks, while it waits for an answer. */
+  questionOf(id: string): string | null {
+    return this.questions.get(id) ?? null;
   }
 
   /** « Journal »: the output kept for the agent, across its restarts. */
@@ -626,8 +660,10 @@ export class AgentManager {
     // A request without a ruleKey (a Notification) keeps the one its PermissionRequest gave.
     if (signal.type === 'awaiting-answer') {
       if (signal.ruleKey !== undefined) this.pendingRule.set(id, signal.ruleKey);
+      this.questions.set(id, signal.summary);
     } else {
       this.pendingRule.delete(id);
+      this.questions.delete(id);
     }
     const resetAt = signal.type === 'failed' ? signal.resetAt : undefined;
     const schedule =
@@ -670,14 +706,16 @@ export class AgentManager {
   }
 
   private flushPrompt(id: string) {
-    const [text, ...rest] = this.prompts.get(id) ?? [];
+    const [next, ...rest] = this.prompts.get(id) ?? [];
     const state = this.find(id).agent.state;
-    if (text === undefined || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
+    if (next === undefined || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
       return;
     if (rest.length === 0) this.prompts.delete(id);
     else this.prompts.set(id, rest);
     this.promptTyped.add(id);
+    const { text, origin } = next;
     this.pty.write(id, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}\r` : `${text}\r`);
+    this.onPromptTyped(id, origin);
   }
 
   private emit({ id, state, lastError, scheduledResume }: Agent) {

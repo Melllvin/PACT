@@ -228,6 +228,7 @@ describe('IPC event schemas', () => {
       'agent:state',
       'clone:progress',
       'integration:state',
+      'orchestrator:prompted',
       'review:changed',
       'review:pending',
       'review:tests',

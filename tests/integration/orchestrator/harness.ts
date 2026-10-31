@@ -99,7 +99,6 @@ export async function createHarness() {
     });
   };
   // Assigned at once: the tools above only read it when an orchestrator calls them.
-  // eslint-disable-next-line prefer-const
   let manager: AgentManager = await createManager();
 
   const current = (id: string) => workspaces.get(workspace.id)?.agents.find((a) => a.id === id);

@@ -32,13 +32,23 @@ type Props = TileActionHandlers & {
   onClose: () => void;
   /** ⤢: opens the Focus on this agent (US5). */
   onExpand?: (() => void) | undefined;
+  /** 003 FR-010 — the agent works on a prompt of the orchestrator. */
+  fromOrchestrator?: boolean;
 };
 
 /**
  * An agent tile (screens 1f, 1n): the raw CLI, bordered with the agent's color. The border pulses
  * once on each change of state and keeps a red halo in error (FR-020…FR-024).
  */
-export function Tile({ agent, name, terminals, onClose, onExpand, ...actions }: Props) {
+export function Tile({
+  agent,
+  name,
+  terminals,
+  onClose,
+  onExpand,
+  fromOrchestrator = false,
+  ...actions
+}: Props) {
   // Counted during render: a pulse per state change, none for the first one shown.
   const [seen, setSeen] = useState(agent.state);
   const [pulses, setPulses] = useState(0);
@@ -86,6 +96,11 @@ export function Tile({ agent, name, terminals, onClose, onExpand, ...actions }: 
           label={`Terminal de ${title}`}
           className={cn('px-4 pt-10', acting ? 'pb-14' : 'pb-3.5')}
         />
+      )}
+      {(agent.role === 'orchestrator' || fromOrchestrator) && (
+        <span className="absolute top-2.5 left-3 rounded-md border border-(--agent-color)/40 bg-surface/80 px-1.5 py-0.5 text-[11px] text-(--agent-color)">
+          {agent.role === 'orchestrator' ? '◎ Orchestrateur' : '◎ de l’orchestrateur'}
+        </span>
       )}
       <div
         role="toolbar"

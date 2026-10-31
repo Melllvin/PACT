@@ -400,8 +400,12 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
   it('keeps the origin of each prompt, and cancels only the orchestrator ones (003 T018)', async () => {
     scenario = 'ask-then-echo';
     const agent = await launchOne();
+    // Nothing queued, nothing asked yet.
+    manager.cancelPrompts(agent.id, 'orchestrator');
+    expect(manager.questionOf(agent.id)).toBeNull();
     pty.write(agent.id, 'Supprime le fichier\r');
     await waitForState(agent.id, 'awaiting-answer');
+    expect(manager.questionOf(agent.id)).toBe('rm fichier.txt');
     await manager.sendPrompt(agent.id, 'Du chef', 'orchestrator');
     await manager.sendPrompt(agent.id, 'De la revue');
     expect(manager.waitingPrompts(agent.id, 'orchestrator')).toBe(1);
