@@ -55,7 +55,7 @@ toutes les stories.
 
 ### Tests (Red)
 
-- [ ] T004 [P] Tests du protocole MCP pur dans `tests/unit/main/orchestrator/mcp.test.ts` (research R1) :
+- [X] T004 [P] Tests du protocole MCP pur dans `tests/unit/main/orchestrator/mcp.test.ts` (research R1) :
   - `initialize` répond `protocolVersion` (celle du client), `capabilities.tools`, `serverInfo` ;
   - `ping` répond `{}` ;
   - une notification (sans `id`) donne `202` sans corps ;
@@ -64,7 +64,7 @@ toutes les stories.
   - une méthode inconnue donne `-32601` ;
   - `server/discover` donne `-32601` sans casser la session ;
   - un corps qui n'est pas du JSON-RPC donne `-32600`.
-- [ ] T005 [P] Tests de `HookServer` étendu dans `tests/integration/hooks/hook-server.test.ts` (R1, R3) :
+- [X] T005 [P] Tests de `HookServer` étendu dans `tests/integration/hooks/hook-server.test.ts` (R1, R3) :
   - `POST /mcp` avec le jeton d'un gestionnaire MCP atteint ce gestionnaire, qui choisit le statut (`200`, `202`) ;
   - `GET /mcp` donne `405` ;
   - sans jeton ou avec un jeton révoqué : `401` ;
@@ -72,19 +72,19 @@ toutes les stories.
   - en-tête `Origin` présent : `403` ;
   - les hooks de 001 répondent comme avant (tests existants inchangés) ;
   - un jeton de hook ne donne pas accès à `/mcp`, et inversement.
-- [ ] T006 [P] Tests de l'écriture du plugin dans `tests/unit/main/orchestrator/plugin.test.ts` (R2) :
+- [X] T006 [P] Tests de l'écriture du plugin dans `tests/unit/main/orchestrator/plugin.test.ts` (R2) :
   - `.claude-plugin/plugin.json` a `name: "pact"` ;
   - `skills/orchestrateur/SKILL.md` a un en-tête `name` et `description` et rappelle les règles du skill ;
   - `.mcp.json` décrit le serveur `pact` en `http` sur l'URL donnée, avec `X-Pact-Token: ${PACT_ORCHESTRATOR_TOKEN}` ;
   - le jeton n'apparaît dans aucun fichier ;
   - un second appel réécrit l'URL ;
   - chemins avec espaces et accents.
-- [ ] T007 [P] Tests de contrat de l'orchestrateur Claude Code dans `tests/contract/claude-code.contract.test.ts` (R2) :
+- [X] T007 [P] Tests de contrat de l'orchestrateur Claude Code dans `tests/contract/claude-code.contract.test.ts` (R2) :
   - avec `orchestrator` dans l'entrée : `--plugin-dir <dossier>`, `permissions.allow` contient `mcp__plugin_pact_pact__*` (avec les règles `ask` du niveau « actions sensibles »), `--append-system-prompt` nomme le skill ;
   - `PACT_ORCHESTRATOR_TOKEN` et `MCP_TOOL_TIMEOUT` sont dans l'environnement, jamais dans les arguments ;
   - sans `orchestrator`, rien de tout cela ;
   - `supportsOrchestrator` vaut vrai.
-- [ ] T008 [P] Tests de contrat des autres adaptateurs dans `tests/contract/fake.contract.test.ts`, `tests/contract/codex.contract.test.ts` et `tests/contract/generic.contract.test.ts` :
+- [X] T008 [P] Tests de contrat des autres adaptateurs dans `tests/contract/fake.contract.test.ts`, `tests/contract/codex.contract.test.ts` et `tests/contract/generic.contract.test.ts` :
   - le faux CLI reçoit `PACT_ORCHESTRATOR_URL` et `PACT_ORCHESTRATOR_TOKEN` dans son environnement ;
   - Codex et les CLI génériques : `supportsOrchestrator` faux.
 - [ ] T009 [P] Tests de `OrchestratorService` (sessions) dans `tests/integration/orchestrator/orchestrator-service.test.ts` :
@@ -100,10 +100,10 @@ toutes les stories.
 
 ### Implementation (Green)
 
-- [ ] T011 Implémenter le protocole MCP pur dans `src/main/orchestrator/mcp.ts`.
-- [ ] T012 Étendre `src/main/agents/hook-server.ts` : routes `/mcp`, statut choisi par le gestionnaire, contrôle de `Host` et `Origin`, jetons MCP distincts des jetons de hook.
-- [ ] T013 [P] Implémenter l'écriture du plugin et le texte du skill dans `src/main/orchestrator/plugin.ts`.
-- [ ] T014 Ajouter `supportsOrchestrator` et l'entrée `orchestrator: { pluginDir, url, token } | null` de `LaunchInput` dans `src/main/agents/adapters/types.ts`, puis les implémenter dans `claude-code.ts`, `fake.ts`, `codex.ts` et `generic.ts` sous `src/main/agents/adapters/`.
+- [X] T011 Implémenter le protocole MCP pur dans `src/main/orchestrator/mcp.ts`.
+- [X] T012 Étendre `src/main/agents/hook-server.ts` : routes `/mcp`, statut choisi par le gestionnaire, contrôle de `Host` et `Origin`, jetons MCP distincts des jetons de hook.
+- [X] T013 [P] Implémenter l'écriture du plugin et le texte du skill dans `src/main/orchestrator/plugin.ts`.
+- [X] T014 Ajouter `supportsOrchestrator` et l'entrée `orchestrator: { pluginDir, url, token } | null` de `LaunchInput` dans `src/main/agents/adapters/types.ts`, puis les implémenter dans `claude-code.ts`, `fake.ts`, `codex.ts` et `generic.ts` sous `src/main/agents/adapters/`.
 - [ ] T015 Créer `src/main/orchestrator/orchestrator-service.ts` (sessions, jetons, plugin, révocation), appelé par `AgentManager` au lancement et à la reprise d'un agent `role: 'orchestrator'` dans `src/main/agents/agent-manager.ts`, et branché dans `src/main/index.ts`.
 - [ ] T016 Ajouter l'option « Orchestrateur » dans `src/shared/launch-draft.ts`, `src/shared/ipc.ts` (brouillon, `CliDefinition.orchestrator`), `src/renderer/launch/QuickLaunch.tsx` et `src/renderer/launch/DetailedLaunch.tsx`.
 

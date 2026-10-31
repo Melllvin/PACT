@@ -15,6 +15,7 @@ const adapter = (
   models: string[] = [],
 ): CliAdapter => ({
   id,
+  supportsOrchestrator: id === 'claude-code',
   detect,
   listModels: () => Promise.resolve(models),
   buildLaunch: vi.fn(),

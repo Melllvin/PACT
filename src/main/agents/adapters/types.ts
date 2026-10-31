@@ -23,7 +23,11 @@ export type LaunchInput = {
   sessionId?: string;
   port: number;
   hook: { url: string; token: string };
+  /** 003 — set for the orchestrator of the workspace: its session plugin, URL and token (R2). */
+  orchestrator?: OrchestratorLaunch | null | undefined;
 };
+
+export type OrchestratorLaunch = { pluginDir: string; url: string; token: string };
 
 export type LaunchSpec = {
   file: string;
@@ -67,6 +71,8 @@ export type OutputContext = { exitCode?: number; idleMs?: number };
 
 export interface CliAdapter {
   readonly id: AdapterId;
+  /** 003 R8 — whether this CLI can be the orchestrator of its workspace. */
+  readonly supportsOrchestrator: boolean;
   detect(env: ResolvedEnv): Promise<DetectionResult>;
   listModels(): Promise<string[]>;
   buildLaunch(input: LaunchInput): LaunchSpec;

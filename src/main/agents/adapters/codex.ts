@@ -56,6 +56,7 @@ type Options = {
 
 export class CodexAdapter implements CliAdapter {
   readonly id = 'codex';
+  readonly supportsOrchestrator = false;
   private readonly platform: NodeJS.Platform;
   private readonly bridge: HookBridge;
   private readonly run: CommandRunner;
