@@ -27,6 +27,12 @@ type Props = {
   onCancelTests: () => void;
   onSetTestCommand: (command: string) => void;
   onIntegrate: (request: IntegrateRequest) => void;
+  /** « Renvoyer à l'agent »: the request written, sent as a prompt (FR-015). */
+  onSendBack: (text: string) => void;
+  /** The review sent the agent something it has not finished yet (US3 scenario 6). */
+  sent?: boolean;
+  /** « ✕ Abandonner », confirmed: the closing of the agent takes over (FR-032). */
+  onAbandon: () => void;
 };
 
 const STATE: Partial<Record<Agent['state'], string>> = {
@@ -37,17 +43,25 @@ const STATE: Partial<Record<Agent['state'], string>> = {
   error: 'est en erreur',
 };
 
-const MODES: Record<IntegrationMode, string> = {
+export const MODES: Record<IntegrationMode, string> = {
   squash: 'Squash en 1 commit',
   'keep-commits': 'Garder les commits',
 };
 
-const OK = 'text-accept';
-const KO = 'text-destructive';
-const DIM = 'text-dim';
+export const OK = 'text-accept';
+export const KO = 'text-destructive';
+export const DIM = 'text-dim';
 const ROW = 'm-0 flex items-center gap-2 text-[12px]';
 
-function Row({ mark, tone, children }: { mark: string; tone: string; children: React.ReactNode }) {
+export function Row({
+  mark,
+  tone,
+  children,
+}: {
+  mark: string;
+  tone: string;
+  children: React.ReactNode;
+}) {
   return (
     <p className={ROW}>
       <span aria-hidden className={`w-3 flex-none text-center ${tone}`}>
@@ -58,8 +72,8 @@ function Row({ mark, tone, children }: { mark: string; tone: string; children: R
   );
 }
 
-/** The Tests line of screen 1h, with what can be done from it (FR-016, FR-017). */
-function TestsLine({
+/** The Tests line of screens 1h and 1q, with what can be done from it (FR-016, FR-017). */
+export function TestsLine({
   run,
   snapshot,
   onRunTests,
@@ -181,6 +195,79 @@ function ConflictsLine({
     <Row mark="✕" tone={KO}>
       {count} {count === 1 ? 'conflit' : 'conflits'} avec {main}
     </Row>
+  );
+}
+
+/** « Renvoyer à l'agent » (FR-015). */
+function SendBack({ onSendBack }: Pick<Props, 'onSendBack'>) {
+  const [text, setText] = useState('');
+  return (
+    <form
+      className="flex flex-col gap-1.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSendBack(text.trim());
+        setText('');
+      }}
+    >
+      <textarea
+        aria-label="Demande à l’agent"
+        placeholder="Ce qu’il reste à faire…"
+        rows={2}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+        }}
+        className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 text-[12.5px] text-foreground outline-none focus-visible:border-primary/50"
+      />
+      <Button type="submit" disabled={text.trim() === ''}>
+        Renvoyer à l’agent
+      </Button>
+    </form>
+  );
+}
+
+/** « ✕ Abandonner », asked twice: here, then by the closing of the agent (FR-032). */
+function Abandon({ onAbandon }: Pick<Props, 'onAbandon'>) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) {
+    return (
+      <Button
+        variant="danger"
+        onClick={() => {
+          setAsking(true);
+        }}
+      >
+        ✕ Abandonner
+      </Button>
+    );
+  }
+  return (
+    <div
+      role="alertdialog"
+      aria-label="Abandonner ce travail ?"
+      className="flex flex-col gap-2 rounded-xl border border-destructive/40 bg-surface p-3 text-[12.5px]"
+    >
+      <p className="m-0">Abandonner ce travail ? Rien n’est intégré.</p>
+      <div className="flex gap-1.5">
+        <Button
+          variant="danger"
+          onClick={() => {
+            setAsking(false);
+            onAbandon();
+          }}
+        >
+          Abandonner
+        </Button>
+        <Button
+          onClick={() => {
+            setAsking(false);
+          }}
+        >
+          Annuler
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -330,10 +417,13 @@ export function DecisionColumn({
   onCancelTests,
   onSetTestCommand,
   onIntegrate,
+  onSendBack,
+  sent = false,
+  onAbandon,
 }: Props) {
   const files = snapshot?.files ?? [];
   const unseen = files.filter((file) => !isSeen(file, agent.review.seen)).length;
-  const state = STATE[agent.state];
+  const state = sent && agent.state === 'working' ? 'correction en cours' : STATE[agent.state];
   const reviewable = snapshot !== null && !snapshot.missing && files.length > 0;
   return (
     <aside
@@ -381,6 +471,18 @@ export function DecisionColumn({
           />
         </>
       )}
+      {snapshot?.missing && (
+        <Row mark="✕" tone={KO}>
+          Worktree introuvable : il ne reste qu’à abandonner.
+        </Row>
+      )}
+      {snapshot !== null && !snapshot.missing && (
+        <>
+          <div aria-hidden className="my-1 h-px bg-white/6" />
+          <SendBack onSendBack={onSendBack} />
+        </>
+      )}
+      {snapshot !== null && <Abandon key={agent.id} onAbandon={onAbandon} />}
       {error && (
         <div
           role="alert"

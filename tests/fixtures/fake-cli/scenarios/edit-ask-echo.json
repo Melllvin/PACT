@@ -1,0 +1,5 @@
+{
+  "echo": true,
+  "permission": "npm test",
+  "files": [{ "write": "src/a.ts", "content": "un\ndeux\ntrois\n" }]
+}

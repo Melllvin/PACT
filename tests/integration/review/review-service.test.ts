@@ -10,7 +10,7 @@ import { ReviewService } from '../../../src/main/review/review-service';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
 import type { IpcEvent } from '../../../src/shared/ipc';
 import type { Agent, AgentState, Workspace } from '../../../src/shared/model';
-import type { ReviewSnapshot } from '../../../src/shared/review';
+import type { ReviewSnapshot, TestRun } from '../../../src/shared/review';
 
 // 002 T016 — the review of an agent's worktree, followed while it changes (research R1–R3, R9).
 
@@ -37,6 +37,8 @@ let workspace: Workspace;
 let service: ReviewService;
 let changed: ReviewSnapshot[];
 let pending: IpcEvent<'review:pending'>[];
+let typed: { agentId: string; text: string }[];
+let latestRun: TestRun | null;
 
 const agent = (worktreePath: string, state: AgentState = 'done'): Agent => ({
   id: AGENT_ID,
@@ -66,6 +68,13 @@ const createService = (options: Partial<ConstructorParameters<typeof ReviewServi
     workspaces,
     onChanged: (snapshot) => changed.push(snapshot),
     onPending: (event) => pending.push(event),
+    prompts: {
+      sendPrompt: (agentId, text) => {
+        typed.push({ agentId, text });
+        return Promise.resolve();
+      },
+    },
+    tests: { latest: () => latestRun },
     ...options,
   });
 
@@ -103,6 +112,8 @@ beforeEach(async () => {
   await workspaces.update(workspace.id, (ws) => ({ ...ws, agents: [agent(worktree)] }));
   changed = [];
   pending = [];
+  typed = [];
+  latestRun = null;
   service = createService();
 });
 
@@ -320,6 +331,92 @@ describe('ReviewService when git fails', () => {
     await expect(service.open(AGENT_ID)).rejects.toMatchObject({
       code: 'GIT_FAILED',
       message: expect.stringContaining('index.lock') as string,
+    });
+  });
+});
+
+describe('ReviewService comments (FR-012, FR-014)', () => {
+  it('keeps the comment, saved with the agent, and queues it as a prompt', async () => {
+    await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
+    const comment = await service.comment(AGENT_ID, {
+      path: 'a.txt',
+      line: 2,
+      text: 'Pourquoi en majuscules ?',
+    });
+    expect(comment).toMatchObject({ path: 'a.txt', line: 2, treated: false });
+    expect(comment.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(Date.parse(comment.createdAt)).not.toBeNaN();
+    expect(typed).toEqual([
+      { agentId: AGENT_ID, text: 'Commentaire sur a.txt:2 — Pourquoi en majuscules ?' },
+    ]);
+    const reloaded = await openStores(userData).workspace(workspace.id).read();
+    expect(reloaded?.agents[0]?.review.comments).toEqual([comment]);
+  });
+
+  it('refuses a comment on an unknown agent', async () => {
+    await expect(
+      service.comment('00000000-0000-4000-8000-000000000099', { path: 'a', line: 1, text: 'x' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('ReviewService shortcuts (FR-013, FR-015)', () => {
+  it('« Corriger les commentaires » sends every untreated comment once, then marks them treated', async () => {
+    await service.comment(AGENT_ID, { path: 'a.txt', line: 1, text: 'Un.' });
+    await service.comment(AGENT_ID, { path: 'b.txt', line: 4, text: 'Deux.' });
+    typed = [];
+    await service.send(AGENT_ID, { kind: 'fix-comments' });
+    expect(typed).toEqual([
+      {
+        agentId: AGENT_ID,
+        text: 'Corrige les commentaires de revue suivants :\n- a.txt:1 — Un.\n- b.txt:4 — Deux.',
+      },
+    ]);
+    const comments = workspaces.get(workspace.id)?.agents[0]?.review.comments ?? [];
+    expect(comments.map((c) => c.treated)).toEqual([true, true]);
+    await expect(service.send(AGENT_ID, { kind: 'fix-comments' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+  });
+
+  it('« Tests en échec » needs failing tests, and sends their command and output', async () => {
+    await expect(service.send(AGENT_ID, { kind: 'failing-tests' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+    latestRun = {
+      agentId: AGENT_ID,
+      command: 'npm test',
+      tree: '0'.repeat(40),
+      status: 'passed',
+      passedCount: 3,
+      outputTail: '',
+    };
+    await expect(service.send(AGENT_ID, { kind: 'failing-tests' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+    latestRun = { ...latestRun, status: 'failed', outputTail: 'FAIL a.test.ts\n' };
+    await service.send(AGENT_ID, { kind: 'failing-tests' });
+    expect(typed.at(-1)?.text).toBe(
+      'Les tests échouent (`npm test`). Corrige-les, puis relance-les.\nDernières lignes de la sortie :\nFAIL a.test.ts',
+    );
+  });
+
+  it('« Conflit avec main » needs a conflict, and names its files', async () => {
+    await writeFile(join(worktree, 'a.txt'), 'un\nAGENT\n');
+    await expect(service.send(AGENT_ID, { kind: 'conflict' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+    await writeFile(join(repo, 'a.txt'), 'un\nMAIN\n');
+    git(repo, 'commit', '-am', 'main change');
+    await service.send(AGENT_ID, { kind: 'conflict' });
+    expect(typed.at(-1)?.text).toMatch(/^Ta branche est en conflit avec main sur : a\.txt\./);
+  });
+
+  it('« Renvoyer à l’agent » sends the request written, which is required', async () => {
+    await service.send(AGENT_ID, { kind: 'request', text: ' Ajoute un test. ' });
+    expect(typed).toEqual([{ agentId: AGENT_ID, text: 'Ajoute un test.' }]);
+    await expect(service.send(AGENT_ID, { kind: 'request', text: '  ' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
     });
   });
 });

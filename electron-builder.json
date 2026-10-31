@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "dev.pact.app",
+  "productName": "PACT",
+  "copyright": "Copyright © 2026 Melvin",
+  "icon": "build/icon.png",
+  "directories": { "output": "dist", "buildResources": "build" },
+  "files": ["out/**", "package.json"],
+  "asarUnpack": ["node_modules/node-pty/**"],
+  "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+  "publish": { "provider": "github", "owner": "Melllvin", "repo": "PACT", "releaseType": "draft" },
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "target": [{ "target": "dmg", "arch": ["universal"] }],
+    "identity": "-"
+  },
+  "win": { "target": [{ "target": "nsis", "arch": ["x64", "arm64"] }] },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true
+  },
+  "linux": { "target": ["dir"], "category": "Development" }
+}

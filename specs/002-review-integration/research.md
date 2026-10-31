@@ -1,239 +1,269 @@
 # Research: Revue et intégration
 
-Builds on `specs/001-agent-workspace-core/research.md`. The stack, git ≥ 2.40 through `execFile`
-(R7), JSON + zod persistence (R9), the IPC rules (R11), the tests and CI (R12), the fake CLI (R13)
-and the appearance (R17) do not change. R1 and R4 were checked with a probe on git 2.43; the
-other git steps are standard commands, to be pinned by the integration tests.
+S'appuie sur `specs/001-agent-workspace-core/research.md`. La pile, git ≥ 2.40 via `execFile`
+(R7), la persistance JSON + zod (R9), les règles IPC (R11), les tests et la CI (R12), le faux CLI
+(R13) et l'apparence (R17) ne changent pas. R1 et R4 ont été vérifiés par une sonde sur git 2.43 ;
+les autres étapes git sont des commandes standard, que les tests d'intégration figeront.
 
-## R1. Snapshot of an agent's changes
+## R1. Instantané des changements d'un agent
 
-- **Decision**: a review compares two git trees.
-  - **Base**: `git merge-base <main> HEAD`, run in the agent's worktree.
-  - **Snapshot**: a tree of the worktree as it is on disk. To build it, copy the worktree's index
-    into a temporary file, then run `GIT_INDEX_FILE=<tmp> git add -A` and `git write-tree`. Its id
-    identifies « l'état actuel des changements » (FR-017) and keys test results.
-  - **Snapshot commit**: `git commit-tree <tree> -p HEAD` wraps the snapshot in a commit. The
-    commit is unreferenced and later pruned by git; integration and the conflict check use it.
-  - **Cost**: copying the index keeps git's stat cache, so `add -A` only hashes changed files.
-- **Rationale**:
-  - The snapshot covers committed, uncommitted and untracked work while honouring `.gitignore`
-    (FR-005), in one tree.
-  - The agent's real index and files are never touched; the probe showed `git status` unchanged
-    after a snapshot.
-  - Everything later works on immutable objects, so the main branch moves only at the very end.
-- **Alternatives**:
-  - `git diff <base>` plus `git ls-files --others`: two sources to merge, and no single id for the
-    state.
-  - `git stash create`: leaves out untracked files unless `-u`, and `-u` touches the worktree.
+- **Décision** : une revue compare deux arbres git.
+  - **Base** : `git merge-base <main> HEAD`, lancé dans le worktree de l'agent.
+  - **Instantané** : un arbre du worktree tel qu'il est sur le disque. Pour le construire, copier
+    l'index du worktree dans un fichier temporaire, puis lancer `GIT_INDEX_FILE=<tmp> git add -A`
+    et `git write-tree`. Son id identifie « l'état actuel des changements » (FR-017) et sert de clé
+    aux résultats de tests.
+  - **Commit d'instantané** : `git commit-tree <tree> -p HEAD` enveloppe l'instantané dans un
+    commit. Ce commit n'est pas référencé et git le nettoie plus tard ; l'intégration et la
+    vérification des conflits s'en servent.
+  - **Coût** : copier l'index garde le cache stat de git, donc `add -A` ne hache que les fichiers
+    modifiés.
+- **Justification** :
+  - L'instantané couvre en un seul arbre le travail commité, non commité et non suivi, en
+    respectant `.gitignore` (FR-005).
+  - L'index et les fichiers réels de l'agent ne sont jamais touchés ; la sonde a montré un
+    `git status` inchangé après un instantané.
+  - Tout ce qui suit travaille sur des objets immuables, si bien que la branche principale ne
+    bouge qu'à la toute fin.
+- **Alternatives** :
+  - `git diff <base>` plus `git ls-files --others` : deux sources à fusionner, et pas d'id unique
+    pour l'état.
+  - `git stash create` : laisse de côté les fichiers non suivis sauf avec `-u`, et `-u` touche le
+    worktree.
 
-## R2. File list and diff
+## R2. Liste des fichiers et diff
 
-- **Decision**:
-  - **List**: `git diff --numstat -z -M <base> <tree>` for counts and renames.
-  - **Types**: `git diff --name-status -z -M` for the change types, and `git diff --raw` for the
-    blob ids of each side. « Vu » is stored against the new blob id, so a file whose content
-    changes becomes unseen again (FR-009).
-  - **One file**: `git diff --no-color -U3 <base> <tree> -- <path>`, parsed into hunks by a pure
-    function in `src/shared/diff.ts`, which is tested on its own.
-  - **Binary files**: `-\t-` in numstat; shown with a type and a size (`git cat-file -s`), no diff.
-  - **Large files**: a file over 1 MB or 5 000 diff lines is shown the same way, without a diff
-    (FR-008).
-  - **Line endings**:
-    - the diff uses `--ignore-cr-at-eol`, so CRLF/LF differences between macOS and Windows do not
-      show a whole file as changed (FR-033);
-    - the list does not use it: a file that differs only by its line endings stays listed, with
-      0 lines added and removed and the note « fins de ligne seulement ». The review hides nothing
-      that integration would carry into `main`;
-    - an integration test checks a CRLF-only change.
-    The content that gets integrated is the snapshot, byte for byte.
-  - **Encoding**: every git call runs with `LC_ALL=C` and `core.quotePath=false`, so messages are
-    not translated (the probe showed French ones) and accented paths come back as UTF-8.
-- **Rationale**: git already computes renames, binaries and stats. Parsing the unified diff is the
-  only new logic, and it is pure.
-- **Alternatives**: the `diff` npm package (a new dependency, and git computes the same thing);
-  diffing on the renderer side (that process cannot read files).
+- **Décision** :
+  - **Liste** : `git diff --numstat -z -M <base> <tree>` pour les comptes et les renommages.
+  - **Types** : `git diff --name-status -z -M` pour les types de changement, et `git diff --raw`
+    pour les ids de blob de chaque côté. « Vu » est enregistré par rapport au nouvel id de blob,
+    donc un fichier dont le contenu change redevient non vu (FR-009).
+  - **Un fichier** : `git diff --no-color -U3 <base> <tree> -- <path>`, découpé en zones par une
+    fonction pure de `src/shared/diff.ts`, testée seule.
+  - **Fichiers binaires** : `-\t-` dans numstat ; affichés avec un type et une taille
+    (`git cat-file -s`), sans diff.
+  - **Gros fichiers** : un fichier de plus de 1 Mo ou de 5 000 lignes de diff est affiché de la
+    même façon, sans diff (FR-008).
+  - **Fins de ligne** :
+    - le diff utilise `--ignore-cr-at-eol`, pour que les différences CRLF/LF entre macOS et
+      Windows ne fassent pas apparaître un fichier entier comme modifié (FR-033) ;
+    - la liste ne l'utilise pas : un fichier qui ne diffère que par ses fins de ligne reste listé,
+      avec 0 ligne ajoutée et retirée et la mention « fins de ligne seulement ». La revue ne cache
+      rien de ce que l'intégration porterait dans `main` ;
+    - un test d'intégration vérifie un changement CRLF seul.
+    Le contenu intégré est l'instantané, octet pour octet.
+  - **Encodage** : chaque appel git tourne avec `LC_ALL=C` et `core.quotePath=false`, pour que
+    les messages ne soient pas traduits (la sonde en a montré en français) et que les chemins
+    accentués reviennent en UTF-8.
+- **Justification** : git calcule déjà les renommages, les binaires et les statistiques. Le
+  découpage du diff unifié est la seule logique nouvelle, et elle est pure.
+- **Alternatives** : le paquet npm `diff` (une dépendance de plus, et git calcule la même chose) ;
+  le diff côté renderer (ce processus ne peut pas lire les fichiers).
 
-## R3. Following the worktree
+## R3. Suivi du worktree
 
-- **Decision**:
-  - **Watching**: `fs.watch(worktree, { recursive: true })`, supported on macOS and Windows,
-    ignoring `.git/`. Event bursts are grouped into one snapshot after 300 ms.
-  - **Safety net**: a fresh snapshot every 5 s while a review is open, the same pattern as the
-    folder watch in `WorkspaceService` (T121).
-  - **Events**: a new tree id sends `review:changed` to the renderer.
-  - **Scope**: worktrees are watched only while their review is open, or while their agent works
-    and has the « Revue → » button pending.
-- **Rationale**: SC-006 (a change visible in under 3 s) without polling git every second.
-- **Alternatives**: `chokidar` (a dependency, and `fs.watch` recursive covers both platforms);
-  polling only (meets SC-006 only at a high CPU cost).
+- **Décision** :
+  - **Surveillance** : `fs.watch(worktree, { recursive: true })`, pris en charge sous macOS et
+    Windows, en ignorant `.git/`. Les rafales d'événements sont regroupées en un seul instantané
+    après 300 ms.
+  - **Filet de sécurité** : un nouvel instantané toutes les 5 s tant qu'une revue est ouverte,
+    même schéma que la surveillance du dossier dans `WorkspaceService` (T121).
+  - **Événements** : un nouvel id d'arbre envoie `review:changed` au renderer.
+  - **Portée** : les worktrees ne sont surveillés que lorsque leur revue est ouverte, ou lorsque
+    leur agent travaille et a le bouton « Revue → » en attente.
+- **Justification** : SC-006 (un changement visible en moins de 3 s) sans interroger git chaque
+  seconde.
+- **Alternatives** : `chokidar` (une dépendance, et `fs.watch` récursif couvre les deux
+  plateformes) ; interrogation périodique seule (ne tient SC-006 qu'au prix d'un coût CPU élevé).
 
-## R4. Conflict check without changing anything
+## R4. Vérification des conflits sans rien modifier
 
-- **Decision**:
-  - **Check**: `git merge-tree --write-tree -z <main> <snapshot commit>`, available since git 2.38.
-    Exit 0 means clean. Exit 1 means conflicts, which are listed as stage lines (mode, oid,
-    stage 1/2/3, path) and returned with a tree whose conflicted files hold the markers.
-  - **When it runs**: when the review opens, when the snapshot changes, and when `main` moves.
-    `main` is watched through its ref (`git rev-parse <main>`), checked on the same timer.
-  - **Commit that introduced a conflict**: shown as « main · « Ajout SSO » a41f2 », taken from
+- **Décision** :
+  - **Vérification** : `git merge-tree --write-tree -z <main> <snapshot commit>`, disponible
+    depuis git 2.38. Le code de sortie 0 signifie propre. Le code 1 signifie des conflits, listés
+    sous forme de lignes d'étape (mode, oid, étape 1/2/3, chemin) et renvoyés avec un arbre dont
+    les fichiers en conflit contiennent les marqueurs.
+  - **Quand elle tourne** : à l'ouverture de la revue, quand l'instantané change et quand `main`
+    bouge. `main` est surveillée par sa référence (`git rev-parse <main>`), vérifiée au même
+    rythme.
+  - **Commit qui a introduit un conflit** : affiché comme « main · « Ajout SSO » a41f2 », tiré de
     `git log -1 --format=%h%x00%s <base>..<main> -- <path>`.
-- **Rationale**: FR-018 and FR-027. The main branch, its working folder and the agent's worktree
-  are never touched, because merge-tree writes objects only.
-- **Alternatives**: `git merge --no-commit` in a temporary worktree (slower, and it needs cleaning
-  up); `git apply --check` (misses three-way merges).
+- **Justification** : FR-018 et FR-027. La branche principale, son dossier de travail et le
+  worktree de l'agent ne sont jamais touchés, car merge-tree n'écrit que des objets.
+- **Alternatives** : `git merge --no-commit` dans un worktree temporaire (plus lent, et il faut
+  nettoyer ensuite) ; `git apply --check` (rate les fusions à trois voies).
 
-## R5. Integration
+## R5. Intégration
 
-- **Decision**: compute the result from objects, make the final commit with a real `git commit`
-  so the repository's hooks run (user decision of 2026-10-03), and move the branch once.
-  - **Result tree**: the merge-tree tree of R4 (or the resolved tree of R6). When `main` has not
-    moved since the agent's base, this is simply the snapshot tree.
-  - **Commit with hooks**: in a temporary detached worktree on `main`
-    (`git worktree add --detach <userData>/integrations/<id> <main>`), run `git read-tree -m -u
-    <result tree>`, then `git commit -F <message file>`. `pre-commit` and `commit-msg` run as
-    usual, so a hook that refuses (or rewrites the message) is honoured. The temporary worktree is
-    removed whatever happens.
-  - **Squash** (default): the commit above has the single parent `main`.
-  - **Keep commits**: if the agent has uncommitted changes, they become a commit on top of its
-    `HEAD` first, made the same way in a temporary worktree so hooks run. Then:
-    - when `main` is an ancestor of the result, `main` fast-forwards to it;
-    - otherwise the temporary worktree runs `git merge --no-ff <that commit>` (hooks run here
-      too), using the resolutions of R6 when there were conflicts.
+- **Décision** : calculer le résultat à partir d'objets, faire le commit final avec un vrai
+  `git commit` pour que les crochets du dépôt passent (décision de l'utilisateur du 2026-10-03),
+  et déplacer la branche une seule fois.
+  - **Arbre résultat** : l'arbre merge-tree de R4 (ou l'arbre résolu de R6). Quand `main` n'a pas
+    bougé depuis la base de l'agent, c'est simplement l'arbre de l'instantané.
+  - **Commit avec crochets** : dans un worktree temporaire détaché sur `main`
+    (`git worktree add --detach <userData>/integrations/<id> <main>`), lancer `git read-tree -m -u
+    <result tree>`, puis `git commit -F <message file>`. `pre-commit` et `commit-msg` passent
+    normalement, donc un crochet qui refuse (ou réécrit le message) est respecté. Le worktree
+    temporaire est supprimé quoi qu'il arrive.
+  - **Squash** (par défaut) : le commit ci-dessus a pour seul parent `main`.
+  - **Garder les commits** : si l'agent a des changements non commités, ils deviennent d'abord un
+    commit au-dessus de son `HEAD`, fait de la même façon dans un worktree temporaire pour que les
+    crochets passent. Ensuite :
+    - quand `main` est un ancêtre du résultat, `main` avance en fast-forward jusqu'à lui ;
+    - sinon le worktree temporaire lance `git merge --no-ff <that commit>` (les crochets passent
+      ici aussi), avec les résolutions de R6 s'il y a eu des conflits.
 
-    The agent's existing commits keep their messages and are not re-checked by the hooks (FR-019).
-  - **Moving `main`**: depends on whether it is checked out (`git worktree list --porcelain`).
-    - **Checked out somewhere**: `git merge --ff-only <commit>` runs in that folder. Git updates
-      the files and refuses, before writing anything, if local changes would be overwritten. That
-      refusal is FR-021; the file list comes from the error, read with `LC_ALL=C`.
-    - **Not checked out**: `git update-ref refs/heads/<main> <new> <old>`, an atomic compare: if
-      `main` moved in between, nothing is written and the check is redone (FR-022).
-  - **Failure**: a refusing hook, a full disk or a git error all happen before the branch moves.
-    Nothing is rolled back because nothing was written to `main`; the temporary worktree is
-    removed and git's output is shown (FR-023).
-  - **Queue**: one per workspace, the same promise chain as `AgentManager.queue` (FR-026).
-  - **Agent closed after integration** (both boxes ticked): `GitService.removeWorktree` is called
-    with `force: true`. Its uncommitted changes are already in `main`, and without `force` git
-    refuses (FR-024).
-  - **Agent kept** (« Conserver le worktree », US2/AC4): the worktree moves onto the new `main`
-    with `git reset --hard <new>`, when its tree is unchanged since the snapshot. Nothing is lost:
-    the snapshot is inside the new commit, and `--keep` would refuse the very files just
-    integrated.
-    - If the agent wrote since then, its later edits are carried over with a three-way merge
-      (base snapshot, ours new `main`, theirs current tree, via `merge-tree --merge-base`),
-      applied with `read-tree -m -u`.
-    - If that merge conflicts, the worktree is left as it is and the review says so.
-- **Rationale**:
-  - SC-003 (100 % of failed or cancelled integrations leave `main` and its folder as they were):
-    no step before the last one touches a ref or a file.
-  - Git's own `--ff-only` refusal provides the « changements locaux » check exactly, instead of
-    re-implementing it.
-- **Alternatives**:
-  - `git merge --squash` in the main repository: touches the user's index and files before the
-    result is known.
-  - `commit-tree` alone: faster, but skips `pre-commit` / `commit-msg`, which the user rejected.
-  - Cherry-picking commit by commit: conflicts would happen commit by commit.
+    Les commits existants de l'agent gardent leurs messages et ne sont pas revérifiés par les
+    crochets (FR-019).
+  - **Déplacer `main`** : dépend de son extraction ou non (`git worktree list --porcelain`).
+    - **Extraite quelque part** : `git merge --ff-only <commit>` tourne dans ce dossier. Git met à
+      jour les fichiers et refuse, avant d'écrire quoi que ce soit, si des changements locaux
+      seraient écrasés. Ce refus, c'est FR-021 ; la liste des fichiers vient de l'erreur, lue avec
+      `LC_ALL=C`.
+    - **Non extraite** : `git update-ref refs/heads/<main> <new> <old>`, une comparaison atomique :
+      si `main` a bougé entre-temps, rien n'est écrit et la vérification est refaite (FR-022).
+  - **Échec** : un crochet qui refuse, un disque plein ou une erreur git surviennent tous avant
+    que la branche bouge. Rien n'est annulé puisque rien n'a été écrit dans `main` ; le worktree
+    temporaire est supprimé et la sortie de git est affichée (FR-023).
+  - **File** : une par workspace, la même chaîne de promesses que `AgentManager.queue` (FR-026).
+  - **Agent fermé après l'intégration** (les deux cases cochées) : `GitService.removeWorktree` est
+    appelé avec `force: true`. Ses changements non commités sont déjà dans `main`, et sans `force`
+    git refuse (FR-024).
+  - **Agent gardé** (« Conserver le worktree », US2/AC4) : le worktree passe sur la nouvelle
+    `main` avec `git reset --hard <new>`, quand son arbre n'a pas changé depuis l'instantané. Rien
+    n'est perdu : l'instantané est dans le nouveau commit, et `--keep` refuserait justement les
+    fichiers qui viennent d'être intégrés.
+    - Si l'agent a écrit depuis, ses modifications ultérieures sont reportées par une fusion à
+      trois voies (base l'instantané, ours la nouvelle `main`, theirs l'arbre actuel, via
+      `merge-tree --merge-base`), appliquée avec `read-tree -m -u`.
+    - Si cette fusion est en conflit, le worktree est laissé tel quel et la revue l'indique.
+- **Justification** :
+  - SC-003 (100 % des intégrations échouées ou annulées laissent `main` et son dossier comme ils
+    étaient) : aucune étape avant la dernière ne touche une référence ou un fichier.
+  - Le refus `--ff-only` de git lui-même fournit exactement la vérification « changements
+    locaux », au lieu de la réimplémenter.
+- **Alternatives** :
+  - `git merge --squash` dans le dépôt principal : touche l'index et les fichiers de
+    l'utilisateur avant que le résultat soit connu.
+  - `commit-tree` seul : plus rapide, mais saute `pre-commit` / `commit-msg`, ce que
+    l'utilisateur a refusé.
+  - Cherry-pick commit par commit : les conflits arriveraient commit par commit.
 
-## R6. Resolving conflicts in PACT
+## R6. Résolution des conflits dans PACT
 
-- **Decision**:
-  - **Content**: each conflicted file is read from the merge-tree result tree, and its markers
-    are parsed into hunks by a pure function. Each hunk keeps the main side and the agent side.
-  - **Resolving a hunk**: « Garder main », « Garder cette version » or « Les deux » rewrites that
-    hunk.
-  - **« Modifier… »**: edits the whole file in a monospace `<textarea>`.
-  - **« Ouvrir dans l'éditeur ▾ »**: writes a copy to `userData/conflicts/<integrationId>/<path>`,
-    opens it with `shell.openPath` or the editor set in git's `core.editor`, and watches it.
-  - **Resolved**: a file counts as resolved once it has no `<<<<<<<` / `>>>>>>>` markers left.
-  - **Applying the resolutions**: `git hash-object -w` for each resolved file, then a temporary
-    index (`read-tree <merged tree>`, `update-index --cacheinfo`, `write-tree`) gives the final
-    tree, and integration continues as in R5.
-  - **Delete/modify and add/add conflicts**: offer only « Garder main » or « Garder cette version ».
-- **Rationale**: FR-029 to FR-031. Cancelling means discarding objects and the `conflicts/`
-  folder: the agent's worktree was never modified.
-- **Alternatives**: CodeMirror or Monaco for « Modifier… » (heavy dependencies for an occasional
-  fallback, and the editor button already covers advanced cases).
+- **Décision** :
+  - **Contenu** : chaque fichier en conflit est lu depuis l'arbre résultat de merge-tree, et ses
+    marqueurs sont découpés en zones par une fonction pure. Chaque zone garde le côté main et le
+    côté agent.
+  - **Résoudre une zone** : « Garder main », « Garder cette version » ou « Les deux » réécrit
+    cette zone.
+  - **« Modifier… »** : édite le fichier entier dans un `<textarea>` à chasse fixe.
+  - **« Ouvrir dans l'éditeur ▾ »** : écrit une copie dans
+    `userData/conflicts/<integrationId>/<path>`, l'ouvre avec `shell.openPath` ou l'éditeur réglé
+    dans `core.editor` de git, et la surveille.
+  - **Résolu** : un fichier compte comme résolu dès qu'il ne contient plus de marqueurs
+    `<<<<<<<` / `>>>>>>>`.
+  - **Appliquer les résolutions** : `git hash-object -w` pour chaque fichier résolu, puis un index
+    temporaire (`read-tree <merged tree>`, `update-index --cacheinfo`, `write-tree`) donne l'arbre
+    final, et l'intégration continue comme en R5.
+  - **Conflits suppression/modification et ajout/ajout** : ne proposent que « Garder main » ou
+    « Garder cette version ».
+- **Justification** : FR-029 à FR-031. Annuler revient à jeter des objets et le dossier
+  `conflicts/` : le worktree de l'agent n'a jamais été modifié.
+- **Alternatives** : CodeMirror ou Monaco pour « Modifier… » (dépendances lourdes pour un recours
+  occasionnel, et le bouton éditeur couvre déjà les cas avancés).
 
-## R7. Instructions sent to the agent
+## R7. Consignes envoyées à l'agent
 
-- **Decision**:
-  - **When**: comments, shortcuts, « Renvoyer à l'agent » and « Demander à l'agent » reuse the
-    `retype` mechanism of `AgentManager`. The agent is « prêt » in `awaiting-prompt` or `done`.
-    A finished turn (`turn-finished`) leads to `done`, and reviews happen precisely then.
-    - Text is written at once when the agent is ready.
-    - Otherwise it waits for the next transition to a ready state.
-    - It is never written during `awaiting-answer`, `working` or `starting`, so it cannot answer a
-      question (FR-014).
-  - **Queue**: becomes a per-agent FIFO, replacing the single entry of « Relancer ».
-    - One item is written per ready transition. The next item waits for the agent to be ready
-      again after the turn that one started.
-    - The first red tests cover: immediate write when already ready, nothing written during
-      `awaiting-answer`, and N items written one per turn, never all at once.
-  - **How**: multi-line text is sent as a bracketed paste (`ESC[200~ … ESC[201~`) followed by
-    `\r`. Claude Code and Codex accept it; the fake CLI gets a scenario to check it.
-  - **Formats**, built by a pure function in `src/shared/review-prompts.ts`:
-    - comment: `Commentaire sur <path>:<line> — <text>`;
-    - « Corriger les commentaires · N »: one list of every untreated comment;
-    - « Tests en échec »: the command plus the last 40 lines of output;
-    - « Conflit avec main »: the conflicting files plus a request to update from `main`, resolve
-      and run the tests again.
-  - **Treated comments**: a comment is marked treated once it has been sent as part of « Corriger
-    les commentaires ».
-- **Rationale**: one way to type into a CLI, already tested, which also covers « Relancer ».
-- **Alternatives**: writing straight away (would answer a pending question); typing character by
-  character (slow, and does not protect line breaks).
+- **Décision** :
+  - **Quand** : commentaires, raccourcis, « Renvoyer à l'agent » et « Demander à l'agent »
+    réutilisent le mécanisme `retype` de `AgentManager`. L'agent est « prêt » en
+    `awaiting-prompt` ou `done`. Un tour terminé (`turn-finished`) mène à `done`, et c'est
+    justement là que les revues ont lieu.
+    - Le texte est écrit tout de suite quand l'agent est prêt.
+    - Sinon il attend la prochaine transition vers un état prêt.
+    - Il n'est jamais écrit pendant `awaiting-answer`, `working` ou `starting`, pour qu'il ne
+      puisse pas répondre à une question (FR-014).
+  - **File** : devient une FIFO par agent, à la place de l'entrée unique de « Relancer ».
+    - Un élément est écrit par transition vers prêt. L'élément suivant attend que l'agent soit de
+      nouveau prêt après le tour que le précédent a lancé.
+    - Les premiers tests rouges couvrent : écriture immédiate quand l'agent est déjà prêt, rien
+      d'écrit pendant `awaiting-answer`, et N éléments écrits un par tour, jamais tous d'un coup.
+  - **Comment** : un texte sur plusieurs lignes est envoyé en collage entre crochets
+    (`ESC[200~ … ESC[201~`) suivi de `\r`. Claude Code et Codex l'acceptent ; le faux CLI reçoit
+    un scénario pour le vérifier.
+  - **Formats**, construits par une fonction pure de `src/shared/review-prompts.ts` :
+    - commentaire : `Commentaire sur <path>:<line> — <text>` ;
+    - « Corriger les commentaires · N » : une seule liste de tous les commentaires non traités ;
+    - « Tests en échec » : la commande et les 40 dernières lignes de sortie ;
+    - « Conflit avec main » : les fichiers en conflit et une demande de mise à jour depuis
+      `main`, de résolution et de relance des tests.
+  - **Commentaires traités** : un commentaire est marqué traité dès qu'il a été envoyé dans
+    « Corriger les commentaires ».
+- **Justification** : une seule façon de taper dans un CLI, déjà testée, qui couvre aussi
+  « Relancer ».
+- **Alternatives** : écrire tout de suite (répondrait à une question en attente) ; taper caractère
+  par caractère (lent, et ne protège pas les sauts de ligne).
 
-## R8. Tests in the agent's worktree
+## R8. Tests dans le worktree de l'agent
 
-- **Decision**:
-  - **Command**: `testCommand` of the workspace, `null` meaning « détecter ». Detection reads
-    `package.json`: a `test` script that is not npm's placeholder gives `npm test`, or `pnpm test`
-    / `yarn test` depending on the lockfile. Other ecosystems are typed by the user.
-  - **Run**: the login shell from R3 of 001 (`sh -lc` / `cmd /d /s /c`), in the worktree, with
-    the agent's `PORT`. No PTY: output is captured, the last 200 lines kept, timeout 10 min, can
-    be cancelled.
-  - **When**: when the review opens if no result matches the snapshot tree id, and on request.
-    One run at a time per agent; a new snapshot during a run marks its result as « ancien ».
-  - **Status**: the exit code decides passed or failed. The count (« 24 réussis ») is read from
-    common summaries (Vitest/Jest `Tests N passed`, pytest `N passed`, `cargo test`
-    `test result: ok. N passed`), otherwise left out.
-- **Rationale**: user's answer (clarification of 2026-10-03), and FR-016 / FR-017.
-- **Alternatives**: running the tests in a PTY tile (pollutes the grid); reading tests from the
-  agent's output (fragile, rejected by the user).
+- **Décision** :
+  - **Commande** : `testCommand` du workspace, `null` signifiant « détecter ». La détection lit
+    `package.json` : un script `test` qui n'est pas le substitut de npm donne `npm test`, ou
+    `pnpm test` / `yarn test` selon le fichier de verrouillage. Les autres écosystèmes sont saisis
+    par l'utilisateur.
+  - **Exécution** : le shell de connexion de R3 de 001 (`sh -lc` / `cmd /d /s /c`), dans le
+    worktree, avec le `PORT` de l'agent. Pas de PTY : la sortie est capturée, les 200 dernières
+    lignes gardées, délai max 10 min, annulable.
+  - **Quand** : à l'ouverture de la revue si aucun résultat ne correspond à l'id d'arbre de
+    l'instantané, et à la demande. Une exécution à la fois par agent ; un nouvel instantané pendant
+    une exécution marque son résultat comme « ancien ».
+  - **État** : le code de sortie décide réussi ou en échec. Le nombre (« 24 réussis ») est lu dans
+    les résumés courants (Vitest/Jest `Tests N passed`, pytest `N passed`, `cargo test`
+    `test result: ok. N passed`), sinon omis.
+- **Justification** : réponse de l'utilisateur (clarification du 2026-10-03), et FR-016 / FR-017.
+- **Alternatives** : lancer les tests dans une tuile PTY (encombre la grille) ; lire les tests
+  dans la sortie de l'agent (fragile, refusé par l'utilisateur).
 
-## R9. Persistence
+## R9. Persistance
 
-- **Decision**: no new file. The per-workspace JSON (R9 of 001) gains these fields, all with zod
-  defaults so files from 001 still load without a migration (`SCHEMA_VERSION` stays at 1):
-  - on each agent, `review: { seen: Record<path, blobId>, comments: Comment[] }`;
-  - on the workspace, `testCommand: string | null`.
+- **Décision** : aucun nouveau fichier. Le JSON par workspace (R9 de 001) reçoit ces champs, tous
+  avec des valeurs par défaut zod pour que les fichiers de 001 se chargent encore sans migration
+  (`SCHEMA_VERSION` reste à 1) :
+  - sur chaque agent, `review: { seen: Record<path, blobId>, comments: Comment[] }` ;
+  - sur le workspace, `testCommand: string | null`.
 
-  Test results and integrations in progress are not saved: a restart runs the tests again and
-  cancels any unfinished integration, which is safe because nothing was written (R5).
-- **Rationale**: FR-011, YAGNI.
+  Les résultats de tests et les intégrations en cours ne sont pas enregistrés : un redémarrage
+  relance les tests et annule toute intégration inachevée, ce qui est sûr puisque rien n'a été
+  écrit (R5).
+- **Justification** : FR-011, YAGNI.
 
-## R10. Screens
+## R10. Écrans
 
-- **Decision**:
-  - **Onglet Changements** in `FocusView` (`src/renderer/review/`): file list on the left, diff in
-    the centre, the agent's terminal underneath. The terminal reuses the agent's existing xterm
-    through `terminal-registry` (the same instance as the tile).
-  - **Colonne Décision** replaces `TodoColumn` in the same place while the tab is open (FR-004).
-  - **Vue Revue**: the Toolbar button is enabled with a badge. It opens the Focus on the first
-    agent that has changes, using the existing pills.
-  - **Components**: existing shadcn primitives (Tabs, Checkbox, Button, Dialog, Badge, Tooltip,
-    ToggleGroup) plus a DropdownMenu for « Squash en 1 commit ▾ » and « Ouvrir dans l'éditeur ▾ »,
-    added through the shadcn CLI as in R16 of 001.
-  - **Diff view**: virtualised by hand (fixed line height, only visible lines rendered), because a
-    5 000-line file must stay smooth. No new dependency.
-- **Rationale**: screens 1h and 1q; reuse (Constitution IV).
-- **Alternatives**: `react-diff-view` or `diff2html` (a dependency plus a theme to override, for a
-  plain two-colour view).
+- **Décision** :
+  - **Onglet Changements** dans `FocusView` (`src/renderer/review/`) : liste des fichiers à
+    gauche, diff au centre, le terminal de l'agent en dessous. Le terminal réutilise le xterm
+    existant de l'agent via `terminal-registry` (la même instance que la tuile).
+  - **Colonne Décision** remplace `TodoColumn` au même endroit tant que l'onglet est ouvert
+    (FR-004).
+  - **Vue Revue** : le bouton de la Toolbar est activé avec un badge. Il ouvre le Focus sur le
+    premier agent qui a des changements, avec les pastilles existantes.
+  - **Composants** : primitives shadcn existantes (Tabs, Checkbox, Button, Dialog, Badge, Tooltip,
+    ToggleGroup) plus un DropdownMenu pour « Squash en 1 commit ▾ » et « Ouvrir dans l'éditeur ▾ »,
+    ajouté par le CLI shadcn comme en R16 de 001.
+  - **Vue du diff** : virtualisée à la main (hauteur de ligne fixe, seules les lignes visibles
+    sont rendues), car un fichier de 5 000 lignes doit rester fluide. Aucune nouvelle dépendance.
+- **Justification** : écrans 1h et 1q ; réutilisation (Constitution IV).
+- **Alternatives** : `react-diff-view` ou `diff2html` (une dépendance plus un thème à surcharger,
+  pour une simple vue en deux couleurs).
 
-## R11. Fake CLI and test repositories
+## R11. Faux CLI et dépôts de test
 
-- **Decision**:
-  - **Fake CLI**: new scenario steps write, delete and rename files in its cwd (the worktree) and
-    commit, so the e2e tests can produce real changes.
-  - **Integration tests**: run on temporary git repositories, as for 001, including a branch that
-    has moved, conflicting changes and paths with spaces and accents on both platforms.
-- **Rationale**: Constitution I (each story testable before it is implemented).
+- **Décision** :
+  - **Faux CLI** : de nouvelles étapes de scénario écrivent, suppriment et renomment des fichiers
+    dans son cwd (le worktree) et commitent, pour que les tests e2e produisent de vrais
+    changements.
+  - **Tests d'intégration** : tournent sur des dépôts git temporaires, comme pour 001, y compris
+    une branche qui a bougé, des changements en conflit et des chemins avec espaces et accents sur
+    les deux plateformes.
+- **Justification** : Constitution I (chaque story testable avant d'être implémentée).

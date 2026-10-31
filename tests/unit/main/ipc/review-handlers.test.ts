@@ -15,13 +15,22 @@ const setup = (command: string | null = 'npm test') => {
     setSeen: vi.fn(() => Promise.resolve()),
     updatePending: vi.fn(() => Promise.resolve([agentId])),
     testPlan: vi.fn(() => Promise.resolve({ target, command, tree: 'current' })),
+    comment: vi.fn(() => Promise.resolve('comment')),
+    send: vi.fn(() => Promise.resolve()),
   };
   const tests = {
     run: vi.fn(() => Promise.resolve('running')),
     ensure: vi.fn(() => Promise.resolve(undefined)),
     cancel: vi.fn(),
   };
-  const integration = { start: vi.fn(() => Promise.resolve('integration')) };
+  const integration = {
+    start: vi.fn(() => Promise.resolve('integration')),
+    resolve: vi.fn(() => Promise.resolve('file')),
+    openInEditor: vi.fn(() => Promise.resolve()),
+    askAgent: vi.fn(() => Promise.resolve('waiting')),
+    finish: vi.fn(() => Promise.resolve('integrated')),
+    cancel: vi.fn(() => Promise.resolve()),
+  };
   const workspaces = {
     update: vi.fn((_id: string, change: (ws: object) => object) =>
       Promise.resolve(change({ id: 'w1', testCommand: null })),
@@ -109,5 +118,53 @@ describe('review handlers', () => {
     };
     expect(await services['integration:start'](request)).toBe('integration');
     expect(integration.start).toHaveBeenCalledWith(request);
+  });
+
+  it('comments a line and sends the shortcuts (FR-012, FR-013, FR-015)', async () => {
+    const { services, review } = setup();
+    expect(
+      await services['review:comment']({ agentId, path: 'a.ts', line: 3, text: 'Renommer.' }),
+    ).toBe('comment');
+    expect(review.comment).toHaveBeenCalledWith(agentId, {
+      path: 'a.ts',
+      line: 3,
+      text: 'Renommer.',
+    });
+    await services['review:send']({ agentId, kind: 'fix-comments' });
+    expect(review.send).toHaveBeenLastCalledWith(agentId, { kind: 'fix-comments' });
+    await services['review:send']({ agentId, kind: 'request', text: 'Ajoute un test.' });
+    expect(review.send).toHaveBeenLastCalledWith(agentId, {
+      kind: 'request',
+      text: 'Ajoute un test.',
+    });
+  });
+
+  it('passes the conflict screen requests to the integration (FR-028…FR-031)', async () => {
+    const { services, integration } = setup();
+    const integrationId = '00000000-0000-4000-8000-0000000000e1';
+    expect(
+      await services['integration:resolve']({
+        integrationId,
+        path: 'a.ts',
+        hunk: 0,
+        choice: 'main',
+      }),
+    ).toBe('file');
+    expect(integration.resolve).toHaveBeenLastCalledWith(integrationId, {
+      path: 'a.ts',
+      hunk: 0,
+      choice: 'main',
+    });
+    await services['integration:resolve']({ integrationId, path: 'a.ts', content: 'x' });
+    expect(integration.resolve).toHaveBeenLastCalledWith(integrationId, {
+      path: 'a.ts',
+      content: 'x',
+    });
+    await services['integration:openInEditor']({ integrationId, path: 'a.ts' });
+    expect(integration.openInEditor).toHaveBeenCalledWith(integrationId, 'a.ts');
+    expect(await services['integration:askAgent']({ integrationId })).toBe('waiting');
+    expect(await services['integration:finish']({ integrationId })).toBe('integrated');
+    await services['integration:cancel']({ integrationId });
+    expect(integration.cancel).toHaveBeenCalledWith(integrationId);
   });
 });

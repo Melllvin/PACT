@@ -14,21 +14,34 @@ type Props = {
   todoOpen?: boolean;
   onToggleTodo?: () => void;
   onAddAgents?: (() => void) | undefined;
+  /** The agents with changes to review: the badge of Revue, inactive at zero (002 FR-003). */
+  reviewCount?: number;
+  view?: WorkspaceViewMode;
+  onView?: (view: WorkspaceViewMode) => void;
 };
 
-/** Workspace views; Comparer and Revue stay visible but inactive in the core (FR-006). */
+export type WorkspaceViewMode = 'tiles' | 'review';
+
+/** Workspace views; Comparer stays visible but inactive until the Aperçus spec (FR-006). */
 export function Toolbar({
   todoCount,
   showTodo = true,
   todoOpen = false,
   onToggleTodo,
   onAddAgents,
+  reviewCount = 0,
+  view = 'tiles',
+  onView,
 }: Props) {
   return (
     <nav role="toolbar" aria-label="Vues" className="flex items-center gap-2">
       <ToggleGroup
         type="single"
-        value="tiles"
+        value={view}
+        onValueChange={(value) => {
+          // Pressing the current view again keeps it.
+          if (value === 'tiles' || value === 'review') onView?.(value);
+        }}
         aria-label="Vue"
         variant="segment"
         className="rounded-[10px] border border-white/6 bg-white/3 p-[3px]"
@@ -39,8 +52,13 @@ export function Toolbar({
         <ToggleGroupItem value="compare" className="w-[78px]" disabled>
           Comparer
         </ToggleGroupItem>
-        <ToggleGroupItem value="review" className="w-[78px]" disabled>
+        <ToggleGroupItem
+          value="review"
+          className="min-w-[78px] gap-1.5 px-2"
+          disabled={reviewCount === 0 && view !== 'review'}
+        >
           Revue
+          {reviewCount > 0 && <Badge variant="waiting">{reviewCount}</Badge>}
         </ToggleGroupItem>
       </ToggleGroup>
       {showTodo && (

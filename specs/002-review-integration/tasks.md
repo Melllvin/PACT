@@ -264,31 +264,31 @@ recevoir le texte attendu, seulement quand il est prêt.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T036 [P] [US3] Tests de `review-prompts` dans `tests/unit/shared/review-prompts.test.ts` :
+- [X] T036 [P] [US3] Tests de `review-prompts` dans `tests/unit/shared/review-prompts.test.ts` :
   - commentaire `Commentaire sur <path>:<line> — <text>` ;
   - « Corriger les commentaires » qui liste tous les commentaires non traités ;
   - « Tests en échec » avec la commande et les 40 dernières lignes ;
   - « Conflit avec main » avec les fichiers et la demande de mise à jour, de résolution et de relance des tests ;
   - demande libre.
-- [ ] T037 [P] [US3] Tests de `ReviewService` pour `comment` et `send` dans `tests/unit/main/review/review-service.test.ts` :
+- [X] T037 [P] [US3] Tests de `ReviewService` pour `comment` et `send` dans `tests/unit/main/review/review-service.test.ts` :
   - commentaire enregistré et persistant (`id`, `createdAt`) ;
   - consigne mise en file par `sendPrompt` ;
   - `fix-comments` marque les commentaires `treated` ;
   - `failing-tests` et `conflict` refusés sans tests en échec ni conflit ;
   - `request` exige `text`.
-- [ ] T038 [P] [US3] Tests des composants dans `tests/unit/renderer/review/DiffView.test.tsx` et `tests/unit/renderer/review/ChangesTab.test.tsx` :
+- [X] T038 [P] [US3] Tests des composants dans `tests/unit/renderer/review/DiffView.test.tsx` et `tests/unit/renderer/review/ChangesTab.test.tsx` :
   - clic sur une ligne ⇒ champ de commentaire, Entrée valide, Échap annule ;
   - commentaire affiché sous la ligne avec « → envoyé à l'agent ↓ » ;
   - raccourcis « Corriger les commentaires · N », « Tests en échec » et « Conflit avec main », visibles seulement quand ils s'appliquent ;
   - « Renvoyer à l'agent » envoie la demande et revient aux tuiles ;
   - ligne « Agent : correction en cours ».
-- [ ] T039 [US3] Test e2e : commentaire ⇒ texte reçu par le faux CLI avec fichier et ligne ; agent en `awaiting-answer` ⇒ rien tapé avant la réponse ; « Corriger les commentaires · 2 » ⇒ une seule consigne, dans `tests/e2e/us10-review-comments.spec.ts`.
+- [X] T039 [US3] Test e2e : commentaire ⇒ texte reçu par le faux CLI avec fichier et ligne ; agent en `awaiting-answer` ⇒ rien tapé avant la réponse ; « Corriger les commentaires · 2 » ⇒ une seule consigne, dans `tests/e2e/us10-review-comments.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T040 [P] [US3] Implémenter les textes des consignes (purs) dans `src/shared/review-prompts.ts`.
-- [ ] T041 [US3] Ajouter `comment` et `send` à `ReviewService`, et brancher `review:comment` et `review:send`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
-- [ ] T042 [US3] Ajouter le commentaire sur une ligne dans `src/renderer/review/DiffView.tsx`, les raccourcis dans `src/renderer/review/ChangesTab.tsx`, et « Renvoyer à l'agent » dans `src/renderer/review/DecisionColumn.tsx`.
+- [X] T040 [P] [US3] Implémenter les textes des consignes (purs) dans `src/shared/review-prompts.ts`.
+- [X] T041 [US3] Ajouter `comment` et `send` à `ReviewService`, et brancher `review:comment` et `review:send`, dans `src/main/review/review-service.ts` et `src/main/ipc/review-handlers.ts`.
+- [X] T042 [US3] Ajouter le commentaire sur une ligne dans `src/renderer/review/DiffView.tsx`, les raccourcis dans `src/renderer/review/ChangesTab.tsx`, et « Renvoyer à l'agent » dans `src/renderer/review/DecisionColumn.tsx`.
 
 **Checkpoint**: US1–US3 testées séparément.
 
@@ -308,12 +308,12 @@ rien modifier ; les deux voies de résolution doivent donner le commit attendu.
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T043 [P] [US4] Tests de `conflicts.ts` dans `tests/unit/shared/conflicts.test.ts` :
+- [X] T043 [P] [US4] Tests de `conflicts.ts` dans `tests/unit/shared/conflicts.test.ts` :
   - découpe des marqueurs en zones (`main`, `agent`, ligne) ;
   - choix `main`, `agent`, `both` ;
   - fichier résolu seulement sans `<<<<<<<` ni `>>>>>>>` ;
   - `delete-modify` et `add-add` limités à « Garder main » / « Garder cette version ».
-- [ ] T044 [P] [US4] Tests d'intégration de la résolution (research R6) dans `tests/integration/review/integration-conflicts.test.ts` :
+- [X] T044 [P] [US4] Tests d'intégration de la résolution (research R6) dans `tests/integration/review/integration-conflicts.test.ts` :
   - `integration:start` en conflit ⇒ `conflicted`, branche principale, dossier et worktree inchangés ;
   - chaque choix donne le contenu attendu dans le commit final ;
   - `content` libre ;
@@ -322,7 +322,7 @@ rien modifier ; les deux voies de résolution doivent donner le commit attendu.
   - `cancel` supprime les copies et ne change rien ;
   - `askAgent` met en file la consigne « Conflit avec main », passe en `waiting-agent` puis revérifie à la fin du tour de l'agent ;
   - crochets respectés au commit final.
-- [ ] T045 [P] [US4] Tests de `ConflictsTab` dans `tests/unit/renderer/review/ConflictsTab.test.tsx` :
+- [X] T045 [P] [US4] Tests de `ConflictsTab` dans `tests/unit/renderer/review/ConflictsTab.test.tsx` :
   - onglet « Conflits · N » ;
   - fichiers « ⚠ » et « ✓ N sans conflit » ;
   - zone « conflit i / n · ligne L » avec « main · « sujet » hash » et « cette version » ;
@@ -331,14 +331,14 @@ rien modifier ; les deux voies de résolution doivent donner le commit attendu.
   - « Terminer l'intégration » inactif tant que tout n'est pas résolu ;
   - « Demander à l'agent » marqué « Recommandé » ;
   - « Annuler l'intégration · main n'est pas modifié ».
-- [ ] T046 [US4] Test e2e : conflit ⇒ écran 1q ; résolution à la main puis « Terminer » ⇒ commit attendu ; un second conflit puis « Annuler » ⇒ branche principale inchangée ; « Demander à l'agent » ⇒ consigne reçue par le faux CLI, dans `tests/e2e/us11-conflicts.spec.ts`.
+- [X] T046 [US4] Test e2e : conflit ⇒ écran 1q ; résolution à la main puis « Terminer » ⇒ commit attendu ; un second conflit puis « Annuler » ⇒ branche principale inchangée ; « Demander à l'agent » ⇒ consigne reçue par le faux CLI, dans `tests/e2e/us11-conflicts.spec.ts`.
 
 ### Implementation for User Story 4
 
-- [ ] T047 [P] [US4] Implémenter le découpage en zones et l'application des choix (purs) dans `src/shared/conflicts.ts`.
-- [ ] T048 [US4] Ajouter à `IntegrationService` les états `conflicted` et `waiting-agent`, `resolve`, `openInEditor` (copie, `shell.openPath` ou `core.editor`, suivi du fichier), `askAgent`, `finish` (`hash-object -w`, index temporaire, `write-tree`, puis le dernier pas de R5) et `cancel`, dans `src/main/review/integration-service.ts`.
-- [ ] T049 [US4] Brancher `integration:resolve`, `integration:openInEditor`, `integration:askAgent`, `integration:finish` et `integration:cancel` dans `src/main/ipc/review-handlers.ts`.
-- [ ] T050 [US4] Implémenter `ConflictsTab.tsx` et la colonne « Intégration » (zone de texte à chasse fixe pour « Modifier… ») dans `src/renderer/review/`, ouverts par `FocusView` quand une intégration est `conflicted`.
+- [X] T047 [P] [US4] Implémenter le découpage en zones et l'application des choix (purs) dans `src/shared/conflicts.ts`.
+- [X] T048 [US4] Ajouter à `IntegrationService` les états `conflicted` et `waiting-agent`, `resolve`, `openInEditor` (copie, `shell.openPath` ou `core.editor`, suivi du fichier), `askAgent`, `finish` (`hash-object -w`, index temporaire, `write-tree`, puis le dernier pas de R5) et `cancel`, dans `src/main/review/integration-service.ts`.
+- [X] T049 [US4] Brancher `integration:resolve`, `integration:openInEditor`, `integration:askAgent`, `integration:finish` et `integration:cancel` dans `src/main/ipc/review-handlers.ts`.
+- [X] T050 [US4] Implémenter `ConflictsTab.tsx` et la colonne « Intégration » (zone de texte à chasse fixe pour « Modifier… ») dans `src/renderer/review/`, ouverts par `FocusView` quand une intégration est `conflicted`.
 
 **Checkpoint**: US1–US4 testées séparément.
 
@@ -354,18 +354,18 @@ doivent passer de l'un à l'autre, et l'abandon doit laisser la branche principa
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T051 [P] [US5] Tests de `Toolbar` et `AgentPills` dans `tests/unit/renderer/app/Toolbar.test.tsx` et `tests/unit/renderer/focus/AgentPills.test.tsx` :
+- [X] T051 [P] [US5] Tests de `Toolbar` et `AgentPills` dans `tests/unit/renderer/app/Toolbar.test.tsx` et `tests/unit/renderer/focus/AgentPills.test.tsx` :
   - Revue inactive et sans badge à zéro ;
   - badge = nombre d'agents dans `review:pending` ;
   - ouverture sur le premier agent ;
   - pastilles limitées aux agents à relire en vue Revue.
-- [ ] T052 [P] [US5] Tests de l'abandon dans `tests/unit/renderer/review/DecisionColumn.test.tsx` : « ✕ Abandonner » demande confirmation, puis la question garder / supprimer de `CloseAgentDialog` ; rien n'est intégré.
-- [ ] T053 [US5] Test e2e : deux agents, badge 2, passage de l'un à l'autre, abandon de l'un, badge 1, branche principale inchangée, dans `tests/e2e/us12-review-view.spec.ts`.
+- [X] T052 [P] [US5] Tests de l'abandon dans `tests/unit/renderer/review/DecisionColumn.test.tsx` : « ✕ Abandonner » demande confirmation, puis la question garder / supprimer de `CloseAgentDialog` ; rien n'est intégré.
+- [X] T053 [US5] Test e2e : deux agents, badge 2, passage de l'un à l'autre, abandon de l'un, badge 1, branche principale inchangée, dans `tests/e2e/us12-review-view.spec.ts`.
 
 ### Implementation for User Story 5
 
-- [ ] T054 [US5] Activer la vue Revue avec son badge dans `src/renderer/app/Toolbar.tsx`, et ouvrir le Focus sur le premier agent à relire dans `src/renderer/store/app-store.ts`.
-- [ ] T055 [US5] Ajouter « ✕ Abandonner » (confirmation, puis `CloseAgentDialog` et `agent:close`) dans `src/renderer/review/DecisionColumn.tsx`.
+- [X] T054 [US5] Activer la vue Revue avec son badge dans `src/renderer/app/Toolbar.tsx`, et ouvrir le Focus sur le premier agent à relire dans `src/renderer/store/app-store.ts`.
+- [X] T055 [US5] Ajouter « ✕ Abandonner » (confirmation, puis `CloseAgentDialog` et `agent:close`) dans `src/renderer/review/DecisionColumn.tsx`.
 
 **Checkpoint**: toutes les stories testées séparément.
 
@@ -373,10 +373,10 @@ doivent passer de l'un à l'autre, et l'abandon doit laisser la branche principa
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T056 [P] Test de performance : 50 fichiers modifiés ⇒ liste et premier diff en moins de 2 s (SC-001), écriture visible en moins de 3 s (SC-006), consigne dans l'invite en moins de 1 s (SC-004), dans `tests/e2e/perf.spec.ts`.
-- [ ] T057 [P] Test e2e chemins avec espaces et accents : revue, intégration et conflit sur macOS et Windows (FR-033), dans `tests/e2e/paths.spec.ts`.
-- [ ] T058 [P] Traduire `research.md`, `data-model.md` et `quickstart.md` de 002 en français, comme le reste des documents (relecture du plan).
-- [ ] T059 [P] Mettre à jour `README.md` : revue, intégration, conflits, tests lancés par PACT, crochets git.
+- [X] T056 [P] Test de performance : 50 fichiers modifiés ⇒ liste et premier diff en moins de 2 s (SC-001), écriture visible en moins de 3 s (SC-006), consigne dans l'invite en moins de 1 s (SC-004), dans `tests/e2e/perf.spec.ts`.
+- [X] T057 [P] Test e2e chemins avec espaces et accents : revue, intégration et conflit sur macOS et Windows (FR-033), dans `tests/e2e/paths.spec.ts`.
+- [X] T058 [P] Traduire `research.md`, `data-model.md` et `quickstart.md` de 002 en français, comme le reste des documents (relecture du plan).
+- [X] T059 [P] Mettre à jour `README.md` : revue, intégration, conflits, tests lancés par PACT, crochets git.
 - [ ] T060 Dérouler `specs/002-review-integration/quickstart.md` (scénarios automatisés + validation manuelle avec les vrais CLI) sur macOS et Windows, et consigner les résultats dans la PR.
 
 ---

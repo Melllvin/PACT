@@ -6,7 +6,7 @@ import { createAppStore } from '../../../../src/renderer/store/app-store';
 import { createReviewStore } from '../../../../src/renderer/store/review-store';
 import type { PactApi } from '../../../../src/shared/ipc';
 import type { CliDefinition, Workspace } from '../../../../src/shared/model';
-import { diff, snapshot } from '../review/fixtures';
+import { conflicted, diff, snapshot } from '../review/fixtures';
 import { agent } from '../tiles/fixtures';
 
 const workspace = (id: string, name: string): Workspace => ({
@@ -553,6 +553,153 @@ describe('App review (002 T018)', () => {
       'integration:start',
       expect.objectContaining({ agentId: done.id, mode: 'squash' }),
     );
+    expect((await screen.findByRole('status')).textContent).toBe(
+      `✓ Intégré · ${done.branch} → main`,
+    );
+  });
+
+  it('comments, sends to the agent, resolves a conflict and abandons (002 US3–US5)', async () => {
+    const user = userEvent.setup();
+    const done = agent(1, { state: 'done' });
+    const shown = snapshot({ agentId: done.id });
+    const stopped = conflicted({ agentId: done.id });
+    const invoke = vi.fn<(channel: string, input?: unknown) => Promise<unknown>>(
+      (channel, input) => {
+        switch (channel) {
+          case 'app:getState':
+            return Promise.resolve({
+              workspaces: [{ ...workspace('w1', 'w1'), agents: [done] }],
+              recents: [],
+              clis: [],
+              permission: null,
+            });
+          case 'review:listPending':
+            return Promise.resolve([done.id]);
+          case 'review:open':
+            return Promise.resolve(shown);
+          case 'review:fileDiff':
+            return Promise.resolve(diff((input as { path: string }).path));
+          case 'review:comment':
+            return Promise.resolve({
+              id: '00000000-0000-4000-8000-0000000000c1',
+              path: 'src/auth.ts',
+              line: 2,
+              text: 'Non.',
+              createdAt: '2026-10-30T10:00:00.000Z',
+              treated: false,
+            });
+          case 'integration:start':
+            return Promise.resolve(stopped);
+          case 'integration:resolve':
+            return Promise.resolve({ ...stopped.conflicts[0], resolved: true });
+          case 'integration:askAgent':
+            return Promise.resolve({ ...stopped, state: 'waiting-agent' });
+          default:
+            return Promise.resolve(undefined);
+        }
+      },
+    );
+    const api = { invoke, on: () => () => undefined } as unknown as PactApi;
+    render(
+      <App store={createAppStore(api)} review={createReviewStore(api)} getPathForFile={() => ''} />,
+    );
+    const [onTile] = await screen.findAllByRole('button', { name: 'Revue →' });
+    await user.click(onTile ?? document.body);
+
+    await user.click(await screen.findByRole('button', { name: 'Commenter la ligne 2' }));
+    await user.type(
+      screen.getByRole('textbox', { name: 'Commentaire sur la ligne 2' }),
+      'Non.{Enter}',
+    );
+    expect(invoke).toHaveBeenCalledWith('review:comment', {
+      agentId: done.id,
+      path: 'src/auth.ts',
+      line: 2,
+      text: 'Non.',
+    });
+    await user.click(await screen.findByRole('button', { name: 'Corriger les commentaires · 1' }));
+    expect(invoke).toHaveBeenCalledWith('review:send', { agentId: done.id, kind: 'fix-comments' });
+
+    const decision = screen.getByRole('complementary', { name: 'Décision' });
+    await user.click(within(decision).getByRole('button', { name: '✓ Intégrer' }));
+    const column = await screen.findByRole('complementary', { name: 'Intégration' });
+    const hunk = screen.getByRole('group', { name: /conflit 1 \/ 2/ });
+    await user.click(within(hunk).getByRole('button', { name: 'Garder main' }));
+    expect(invoke).toHaveBeenCalledWith('integration:resolve', {
+      integrationId: stopped.id,
+      path: 'src/db.ts',
+      hunk: 0,
+      choice: 'main',
+    });
+    await user.click(screen.getByRole('button', { name: 'Ouvrir dans l’éditeur' }));
+    expect(invoke).toHaveBeenCalledWith('integration:openInEditor', {
+      integrationId: stopped.id,
+      path: 'src/auth.ts',
+    });
+    await user.click(within(column).getByRole('button', { name: 'Demander' }));
+    expect(invoke).toHaveBeenCalledWith('integration:askAgent', { integrationId: stopped.id });
+    await user.click(within(column).getByRole('button', { name: 'Annuler l’intégration' }));
+    expect(invoke).toHaveBeenCalledWith('integration:cancel', { integrationId: stopped.id });
+
+    const back = await screen.findByRole('complementary', { name: 'Décision' });
+    await user.type(within(back).getByRole('textbox', { name: 'Demande à l’agent' }), 'Encore.');
+    await user.click(within(back).getByRole('button', { name: 'Renvoyer à l’agent' }));
+    expect(invoke).toHaveBeenCalledWith('review:send', {
+      agentId: done.id,
+      kind: 'request',
+      text: 'Encore.',
+    });
+
+    await user.click(screen.getByRole('radio', { name: /Revue/ }));
+    const abandon = await screen.findByRole('complementary', { name: 'Décision' });
+    await user.click(within(abandon).getByRole('button', { name: '✕ Abandonner' }));
+    await user.click(
+      within(within(abandon).getByRole('alertdialog')).getByRole('button', { name: 'Abandonner' }),
+    );
+    expect(await screen.findByRole('dialog', { name: `Fermer ${done.cliId} 1` })).toBeDefined();
+  });
+
+  it('finishes an integration once its conflicts are resolved', async () => {
+    const user = userEvent.setup();
+    const done = agent(1, { state: 'done' });
+    const stopped = conflicted({ agentId: done.id });
+    const resolved = {
+      ...stopped,
+      conflicts: stopped.conflicts.map((file) => ({ ...file, resolved: true })),
+    };
+    const invoke = vi.fn<(channel: string, input?: unknown) => Promise<unknown>>((channel) => {
+      switch (channel) {
+        case 'app:getState':
+          return Promise.resolve({
+            workspaces: [{ ...workspace('w1', 'w1'), agents: [done] }],
+            recents: [],
+            clis: [],
+            permission: null,
+          });
+        case 'review:listPending':
+          return Promise.resolve([done.id]);
+        case 'review:open':
+          return Promise.resolve(snapshot({ agentId: done.id }));
+        case 'review:fileDiff':
+          return Promise.resolve(diff());
+        case 'integration:start':
+          return Promise.resolve(resolved);
+        case 'integration:finish':
+          return Promise.resolve({ ...resolved, state: 'integrated' });
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    const api = { invoke, on: () => () => undefined } as unknown as PactApi;
+    render(
+      <App store={createAppStore(api)} review={createReviewStore(api)} getPathForFile={() => ''} />,
+    );
+    const [onTile] = await screen.findAllByRole('button', { name: 'Revue →' });
+    await user.click(onTile ?? document.body);
+    const decision = await screen.findByRole('complementary', { name: 'Décision' });
+    await user.click(within(decision).getByRole('button', { name: '✓ Intégrer' }));
+    await user.click(await screen.findByRole('button', { name: 'Terminer l’intégration' }));
+    expect(invoke).toHaveBeenCalledWith('integration:finish', { integrationId: stopped.id });
     expect((await screen.findByRole('status')).textContent).toBe(
       `✓ Intégré · ${done.branch} → main`,
     );

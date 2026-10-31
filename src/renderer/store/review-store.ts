@@ -1,14 +1,26 @@
 import { createStore } from 'zustand/vanilla';
 import { ipcErrorSchema, type IpcInput, type PactApi } from '../../shared/ipc';
-import type { FileDiff, ReviewSnapshot, TestRun } from '../../shared/review';
+import type {
+  ConflictChoice,
+  FileDiff,
+  Integration,
+  ReviewSnapshot,
+  TestRun,
+} from '../../shared/review';
 
 // 002 T022 — the review shown in the Changements tab, fed by review:open and review:changed.
 // T035 — the Décision column: the tests and the integration of each agent.
+// T050 — screen 1q: the integrations stopped on a conflict, and what resolves them.
 
 export type IntegrateRequest = Omit<IpcInput<'integration:start'>, 'agentId'>;
 
 /** Where an agent's integration stands in the Décision column. */
 export type Decision = { busy: boolean; error: { message: string; files: string[] } | null };
+
+/** Where an integration is said to have landed, for « ✓ Intégré · branche → main ». */
+export type IntegrationLabel = { workspaceId: string; branch: string; mainBranch: string };
+
+export type ConflictAnswer = { hunk: number; choice: ConflictChoice } | { content: string };
 
 export type ReviewState = {
   /** The agent whose review is open, followed by the main process until `close`. */
@@ -22,6 +34,8 @@ export type ReviewState = {
   /** The last test run of each agent (`review:tests`). */
   tests: Record<string, TestRun>;
   decisions: Record<string, Decision>;
+  /** The integrations stopped on a conflict, per agent (screen 1q, FR-027). */
+  integrations: Record<string, Integration>;
   /** « ✓ Intégré · branche → main », shown briefly in its workspace (US2/AC6). */
   notice: { workspaceId: string; text: string } | null;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
@@ -34,13 +48,17 @@ export type ReviewState = {
   cancelTests: (agentId: string) => Promise<void>;
   /** Saves the command for the workspace, then runs the tests of the agent with it. */
   setTestCommand: (workspaceId: string, agentId: string, command: string) => Promise<void>;
-  integrate: (
-    agentId: string,
-    request: IntegrateRequest,
-    label: { workspaceId: string; branch: string; mainBranch: string },
-  ) => Promise<void>;
+  integrate: (agentId: string, request: IntegrateRequest, label: IntegrationLabel) => Promise<void>;
   dismissNotice: () => void;
+  resolveConflict: (agentId: string, path: string, answer: ConflictAnswer) => Promise<void>;
+  openInEditor: (agentId: string, path: string) => Promise<void>;
+  askAgent: (agentId: string) => Promise<void>;
+  finishIntegration: (agentId: string, label: IntegrationLabel) => Promise<void>;
+  cancelIntegration: (agentId: string) => Promise<void>;
 };
+
+/** The states of an integration that screen 1q shows. */
+const ON_SCREEN: Integration['state'][] = ['conflicted', 'waiting-agent', 'checking', 'committing'];
 
 const message = (error: unknown) => {
   const parsed = ipcErrorSchema.safeParse(error);
@@ -91,12 +109,53 @@ export function createReviewStore(api: PactApi) {
     const keepRun = (run: TestRun) => {
       set({ tests: { ...get().tests, [run.agentId]: run } });
     };
+    /** Where each integration shown would land, for its notice. */
+    const labels = new Map<string, IntegrationLabel>();
+    const noticeFor = ({ workspaceId, branch, mainBranch }: IntegrationLabel) => ({
+      workspaceId,
+      text: `✓ Intégré · ${branch} → ${mainBranch}`,
+    });
+    /** Keeps an integration on screen 1q, or forgets it once over. */
+    const keepIntegration = (integration: Integration) => {
+      const { [integration.agentId]: shown, ...others } = get().integrations;
+      if (ON_SCREEN.includes(integration.state)) {
+        // A clean integration passes through these states too: only a conflict opens 1q.
+        if (!shown && integration.state !== 'conflicted') return;
+        set({ integrations: { ...others, [integration.agentId]: integration } });
+        return;
+      }
+      if (!shown) return;
+      set({ integrations: others });
+      const label = labels.get(integration.agentId);
+      if (integration.state === 'integrated' && label) set({ notice: noticeFor(label) });
+      if (integration.state === 'failed' || integration.state === 'blocked') {
+        decide(integration.agentId, {
+          busy: false,
+          error: { message: integration.error ?? 'Intégration échouée', files: [] },
+        });
+      }
+    };
+    /** Runs a request about the integration shown for `agentId`; its error goes to the column. */
+    const onIntegration = async (
+      agentId: string,
+      action: (integration: Integration) => Promise<unknown>,
+    ) => {
+      const integration = get().integrations[agentId];
+      if (!integration) return;
+      try {
+        await action(integration);
+        decide(agentId, { busy: false, error: null });
+      } catch (error) {
+        decide(agentId, { busy: false, error: failure(error) });
+      }
+    };
 
     return {
       ...CLOSED,
       pending: {},
       tests: {},
       decisions: {},
+      integrations: {},
       notice: null,
 
       connect() {
@@ -108,6 +167,7 @@ export function createReviewStore(api: PactApi) {
             set({ pending: { ...get().pending, [workspaceId]: agentIds } });
           }),
           api.on('review:tests', keepRun),
+          api.on('integration:state', keepIntegration),
         ];
         return () => {
           for (const unsubscribe of unsubscribers) unsubscribe();
@@ -173,27 +233,55 @@ export function createReviewStore(api: PactApi) {
         await get().runTests(agentId);
       },
 
-      async integrate(agentId, request, { workspaceId, branch, mainBranch }) {
+      async integrate(agentId, request, label) {
         decide(agentId, { busy: true, error: null });
+        labels.set(agentId, label);
         try {
           const integration = await api.invoke('integration:start', { agentId, ...request });
-          if (integration.state === 'integrated') {
-            decide(agentId, { busy: false, error: null });
-            set({ notice: { workspaceId, text: `✓ Intégré · ${branch} → ${mainBranch}` } });
-            return;
-          }
-          // The conflict screen comes with US4 (FR-027); main has not moved.
-          decide(agentId, {
-            busy: false,
-            error: {
-              message: `Conflit avec ${mainBranch} : rien n’a été intégré.`,
-              files: integration.conflicts.map((conflict) => conflict.path),
-            },
-          });
+          decide(agentId, { busy: false, error: null });
+          if (integration.state === 'integrated') set({ notice: noticeFor(label) });
+          // In conflict, main has not moved: screen 1q opens on it (FR-027).
+          else keepIntegration(integration);
         } catch (error) {
           decide(agentId, { busy: false, error: failure(error) });
         }
       },
+
+      resolveConflict: (agentId, path, answer) =>
+        onIntegration(agentId, async ({ id }) => {
+          const file = await api.invoke('integration:resolve', {
+            integrationId: id,
+            path,
+            ...answer,
+          });
+          const shown = get().integrations[agentId];
+          if (!shown) return;
+          const conflicts = shown.conflicts.map((f) => (f.path === path ? file : f));
+          set({ integrations: { ...get().integrations, [agentId]: { ...shown, conflicts } } });
+        }),
+
+      openInEditor: (agentId, path) =>
+        onIntegration(agentId, ({ id }) =>
+          api.invoke('integration:openInEditor', { integrationId: id, path }),
+        ),
+
+      askAgent: (agentId) =>
+        onIntegration(agentId, async ({ id }) => {
+          keepIntegration(await api.invoke('integration:askAgent', { integrationId: id }));
+        }),
+
+      finishIntegration: (agentId, label) =>
+        onIntegration(agentId, async ({ id }) => {
+          labels.set(agentId, label);
+          decide(agentId, { busy: true, error: null });
+          keepIntegration(await api.invoke('integration:finish', { integrationId: id }));
+        }),
+
+      cancelIntegration: (agentId) =>
+        onIntegration(agentId, async (integration) => {
+          await api.invoke('integration:cancel', { integrationId: integration.id });
+          keepIntegration({ ...integration, state: 'cancelled' });
+        }),
 
       dismissNotice() {
         set({ notice: null });
@@ -210,6 +298,7 @@ export const idleReviewStore: ReviewStore = createStore<ReviewState>()(() => ({
   pending: {},
   tests: {},
   decisions: {},
+  integrations: {},
   notice: null,
   connect: () => () => undefined,
   loadPending: () => Promise.resolve(),
@@ -221,4 +310,9 @@ export const idleReviewStore: ReviewStore = createStore<ReviewState>()(() => ({
   setTestCommand: () => Promise.resolve(),
   integrate: () => Promise.resolve(),
   dismissNotice: () => undefined,
+  resolveConflict: () => Promise.resolve(),
+  openInEditor: () => Promise.resolve(),
+  askAgent: () => Promise.resolve(),
+  finishIntegration: () => Promise.resolve(),
+  cancelIntegration: () => Promise.resolve(),
 }));

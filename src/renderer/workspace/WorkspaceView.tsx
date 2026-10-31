@@ -2,12 +2,21 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type CliDefinition, type Workspace } from '../../shared/model';
 import { deriveTodos } from '../../shared/todo';
-import { Toolbar } from '../app/Toolbar';
+import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
 import { ChangesTab } from '../review/ChangesTab';
+import { ConflictsTab } from '../review/ConflictsTab';
 import { DecisionColumn } from '../review/DecisionColumn';
-import { seenBlob, type FileDiff, type ReviewSnapshot, type TestRun } from '../../shared/review';
-import type { Decision, IntegrateRequest } from '../store/review-store';
+import { IntegrationColumn } from '../review/IntegrationColumn';
+import {
+  seenBlob,
+  type FileDiff,
+  type Integration,
+  type ReviewSnapshot,
+  type TestRun,
+} from '../../shared/review';
+import type { ConflictAnswer, Decision, IntegrateRequest } from '../store/review-store';
+import type { ReviewSendKind } from '../store/app-store';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
@@ -55,6 +64,19 @@ export type ReviewBinding = {
     label: { branch: string; mainBranch: string },
   ) => void;
   dismissNotice: () => void;
+  /** A comment on one line of the diff, sent to the agent (002 US3). */
+  comment: (agentId: string, path: string, line: number, text: string) => void;
+  /** A shortcut, or « Renvoyer à l'agent » with its text. */
+  send: (agentId: string, kind: ReviewSendKind, text?: string) => void;
+  /** The agents still on what the review sent them (« Agent : correction en cours »). */
+  correcting: Readonly<Record<string, 'queued' | 'working'>>;
+  /** The integrations stopped on a conflict, per agent (screen 1q, 002 US4). */
+  integrations: Readonly<Record<string, Integration>>;
+  resolveConflict: (agentId: string, path: string, answer: ConflictAnswer) => void;
+  openInEditor: (agentId: string, path: string) => void;
+  askAgent: (agentId: string) => void;
+  finishIntegration: (agentId: string, label: { branch: string; mainBranch: string }) => void;
+  cancelIntegration: (agentId: string) => void;
 };
 
 /** How long « ✓ Intégré » stays (US2/AC6). */
@@ -106,14 +128,28 @@ export function WorkspaceView({
   const cliName = (id: string) => clis.find((cli) => cli.id === id)?.name ?? id;
   const canAdd = agents.length < MAX_AGENTS;
   const [todoOpen, setTodoOpen] = useState(true);
-  const pending = review?.pending ?? [];
+  // A closed agent may still be in the last review:pending: only the agents here count.
+  const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
   const todos = deriveTodos(workspace, cliName, pending);
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
+  /** The Revue view: the Focus goes from one agent to review to the next (FR-003). */
+  const [reviewView, setReviewView] = useState(false);
   const focused = agents.some((agent) => agent.id === focusedId) ? focusedId : null;
-  const reviewed = focused !== null && focusTab === 'changes' ? focused : null;
+  // Screen 1q of the agent in Focus, while its integration is stopped on a conflict (FR-027).
+  const integration = (focused !== null && review?.integrations[focused]) || null;
+  const tab = focusTab === 'conflicts' && !integration ? 'changes' : focusTab;
+  const reviewed = focused !== null && tab !== 'terminal' ? focused : null;
   const reviewedAgent = agents.find((agent) => agent.id === reviewed);
+
+  // The conflict screen opens by itself once « Intégrer » meets a conflict.
+  const conflictId = integration?.state === 'conflicted' ? integration.id : null;
+  const [shownConflict, setShownConflict] = useState<string | null>(null);
+  if (conflictId !== shownConflict) {
+    setShownConflict(conflictId);
+    if (conflictId !== null && focusTab === 'changes') setFocusTab('conflicts');
+  }
 
   // The main process follows the worktree of the agent reviewed, and only while it is (R3).
   const binding = useRef(review);
@@ -136,6 +172,7 @@ export function WorkspaceView({
     if (notice !== null) {
       setFocusedId(null);
       setFocusTab('terminal');
+      setReviewView(false);
     }
   }
   useEffect(() => {
@@ -148,9 +185,29 @@ export function WorkspaceView({
 
   const openReview = (agentId: string) => {
     setFocusedId(agentId);
-    setFocusTab('changes');
+    setFocusTab(review?.integrations[agentId] ? 'conflicts' : 'changes');
   };
   const reviewActions: AgentActions = { ...actions, onReview: openReview };
+  const backToTiles = () => {
+    setFocusedId(null);
+    setFocusTab('terminal');
+    setReviewView(false);
+  };
+  const changeView = (next: WorkspaceViewMode) => {
+    if (next === 'tiles') {
+      backToTiles();
+      return;
+    }
+    // Revue is only enabled with an agent to review: the view opens on the first one.
+    for (const first of agents.filter((agent) => pending.includes(agent.id)).slice(0, 1)) {
+      setReviewView(true);
+      openReview(first.id);
+    }
+  };
+  const inReview = reviewView && focused !== null;
+  const pills = inReview
+    ? agents.filter((agent) => pending.includes(agent.id) || agent.id === focused)
+    : agents;
   const snapshot = review?.snapshot?.agentId === reviewed ? review.snapshot : null;
 
   // The À faire column and its button appear with the first agent (FR-006).
@@ -163,6 +220,9 @@ export function WorkspaceView({
         setTodoOpen((open) => !open);
       }}
       onAddAgents={launch}
+      reviewCount={review ? pending.length : 0}
+      view={inReview ? 'review' : 'tiles'}
+      onView={changeView}
     />
   );
 
@@ -200,13 +260,40 @@ export function WorkspaceView({
               agentId={focused}
               name={cliName}
               terminals={terminals}
-              onSelect={setFocusedId}
-              onBack={() => {
-                setFocusedId(null);
-                setFocusTab('terminal');
+              pills={pills}
+              onSelect={(agentId) => {
+                if (inReview) openReview(agentId);
+                else setFocusedId(agentId);
               }}
-              tab={focusTab}
+              onBack={backToTiles}
+              tab={tab}
               onTab={setFocusTab}
+              conflicts={
+                integration && review
+                  ? {
+                      count: integration.conflicts.length,
+                      content: (
+                        <ConflictsTab
+                          integration={integration}
+                          mainBranch={workspace.mainBranch}
+                          clean={Math.max(
+                            0,
+                            (snapshot?.files.length ?? 0) - integration.conflicts.length,
+                          )}
+                          onResolve={(path, hunk, choice) => {
+                            review.resolveConflict(integration.agentId, path, { hunk, choice });
+                          }}
+                          onEdit={(path, content) => {
+                            review.resolveConflict(integration.agentId, path, { content });
+                          }}
+                          onOpenInEditor={(path) => {
+                            review.openInEditor(integration.agentId, path);
+                          }}
+                        />
+                      ),
+                    }
+                  : undefined
+              }
               changes={
                 reviewedAgent && (
                   <ChangesTab
@@ -219,6 +306,17 @@ export function WorkspaceView({
                     onSeen={(file, seen) =>
                       review?.markSeen(reviewedAgent.id, file.path, seen ? seenBlob(file) : null)
                     }
+                    comments={reviewedAgent.review.comments}
+                    tests={review?.tests[reviewedAgent.id] ?? null}
+                    mainBranch={workspace.mainBranch}
+                    {...(review && {
+                      onComment: (path: string, line: number, text: string) => {
+                        review.comment(reviewedAgent.id, path, line, text);
+                      },
+                      onSend: (kind: ReviewSendKind) => {
+                        review.send(reviewedAgent.id, kind);
+                      },
+                    })}
                   />
                 )
               }
@@ -269,8 +367,42 @@ export function WorkspaceView({
             </TileGrid>
           )}
         </section>
-        {/* Décision takes the place of À faire while a review is open (FR-004). */}
-        {reviewedAgent && review ? (
+        {/* Décision takes the place of À faire while a review is open (FR-004), and Intégration
+            the place of Décision while its integration is stopped on a conflict (1q). */}
+        {reviewedAgent && review && integration ? (
+          <IntegrationColumn
+            integration={integration}
+            agent={reviewedAgent}
+            agentName={cliName(reviewedAgent.cliId)}
+            snapshot={snapshot}
+            tests={review.tests[reviewedAgent.id] ?? null}
+            mainBranch={workspace.mainBranch}
+            busy={review.decisions[reviewedAgent.id]?.busy ?? false}
+            error={review.decisions[reviewedAgent.id]?.error ?? null}
+            onAskAgent={() => {
+              review.askAgent(reviewedAgent.id);
+            }}
+            onFinish={() => {
+              review.finishIntegration(reviewedAgent.id, {
+                branch: reviewedAgent.branch,
+                mainBranch: workspace.mainBranch,
+              });
+            }}
+            onCancel={() => {
+              review.cancelIntegration(reviewedAgent.id);
+              setFocusTab('changes');
+            }}
+            onRunTests={() => {
+              review.runTests(reviewedAgent.id);
+            }}
+            onCancelTests={() => {
+              review.cancelTests(reviewedAgent.id);
+            }}
+            onSetTestCommand={(command) => {
+              review.setTestCommand(reviewedAgent.id, command);
+            }}
+          />
+        ) : reviewedAgent && review ? (
           <DecisionColumn
             agent={reviewedAgent}
             snapshot={snapshot}
@@ -292,6 +424,15 @@ export function WorkspaceView({
                 branch: reviewedAgent.branch,
                 mainBranch: workspace.mainBranch,
               });
+            }}
+            onSendBack={(text) => {
+              review.send(reviewedAgent.id, 'request', text);
+              // FR-015: the agent works on it, the tiles show it.
+              backToTiles();
+            }}
+            sent={review.correcting[reviewedAgent.id] !== undefined}
+            onAbandon={() => {
+              actions.onClose(reviewedAgent.id);
             }}
           />
         ) : (

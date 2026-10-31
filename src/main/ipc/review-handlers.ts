@@ -6,14 +6,18 @@ import type { TestRunner } from '../review/test-runner';
 
 // 002 — review channels (contracts/ipc.md). T021: US1, reading the changes of an agent.
 // T034: US2, the tests of the Décision column and the integration into main.
+// T041: US3, comments and prompts sent to the agent. T049: US4, the conflict screen.
 
 type Dependencies = {
   review: Pick<
     ReviewService,
-    'open' | 'close' | 'fileDiff' | 'setSeen' | 'updatePending' | 'testPlan'
+    'open' | 'close' | 'fileDiff' | 'setSeen' | 'updatePending' | 'testPlan' | 'comment' | 'send'
   >;
   tests: Pick<TestRunner, 'run' | 'ensure' | 'cancel'>;
-  integration: Pick<IntegrationService, 'start'>;
+  integration: Pick<
+    IntegrationService,
+    'start' | 'resolve' | 'openInEditor' | 'askAgent' | 'finish' | 'cancel'
+  >;
   workspaces: {
     update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace>;
   };
@@ -41,6 +45,10 @@ export function createReviewServices({ review, tests, integration, workspaces }:
       review.fileDiff(agentId, path),
     'review:setSeen': ({ agentId, path, seen }: IpcInput<'review:setSeen'>) =>
       review.setSeen(agentId, path, seen),
+    'review:comment': ({ agentId, ...comment }: IpcInput<'review:comment'>) =>
+      review.comment(agentId, comment),
+    'review:send': ({ agentId, ...request }: IpcInput<'review:send'>) =>
+      review.send(agentId, request),
     'review:runTests': async ({ agentId }: IpcInput<'review:runTests'>) => {
       const { target, command, tree } = await review.testPlan(agentId);
       // The column offers « Configurer » instead (FR-017).
@@ -57,5 +65,15 @@ export function createReviewServices({ review, tests, integration, workspaces }:
       await workspaces.update(workspaceId, (workspace) => ({ ...workspace, testCommand: command }));
     },
     'integration:start': (request: IpcInput<'integration:start'>) => integration.start(request),
+    'integration:resolve': ({ integrationId, ...resolution }: IpcInput<'integration:resolve'>) =>
+      integration.resolve(integrationId, resolution),
+    'integration:openInEditor': ({ integrationId, path }: IpcInput<'integration:openInEditor'>) =>
+      integration.openInEditor(integrationId, path),
+    'integration:askAgent': ({ integrationId }: IpcInput<'integration:askAgent'>) =>
+      integration.askAgent(integrationId),
+    'integration:finish': ({ integrationId }: IpcInput<'integration:finish'>) =>
+      integration.finish(integrationId),
+    'integration:cancel': ({ integrationId }: IpcInput<'integration:cancel'>) =>
+      integration.cancel(integrationId),
   };
 }

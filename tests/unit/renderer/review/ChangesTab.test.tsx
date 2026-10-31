@@ -2,7 +2,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ChangesTab } from '../../../../src/renderer/review/ChangesTab';
-import type { ReviewSnapshot } from '../../../../src/shared/review';
+import type { ReviewComment } from '../../../../src/shared/model';
+import type { ReviewSnapshot, TestRun } from '../../../../src/shared/review';
 import { diff, snapshot } from './fixtures';
 
 // 002 T017 — the Changements tab of the Focus (screen 1h, FR-006, FR-009).
@@ -86,5 +87,91 @@ describe('ChangesTab', () => {
       />,
     );
     expect(screen.getByRole('alert').textContent).toBe('git a échoué');
+  });
+});
+
+const note = (n: number, overrides: Partial<ReviewComment> = {}): ReviewComment => ({
+  id: `00000000-0000-4000-8000-00000000000${String(n)}`,
+  path: 'src/db.ts',
+  line: n,
+  text: `Commentaire ${String(n)}`,
+  createdAt: '2026-10-30T10:00:00.000Z',
+  treated: false,
+  ...overrides,
+});
+
+const failing: TestRun = {
+  agentId: snapshot().agentId,
+  command: 'npm test',
+  tree: snapshot().tree,
+  status: 'failed',
+  passedCount: null,
+  outputTail: 'FAIL\n',
+};
+
+const withShortcuts = (
+  props: { shown?: ReviewSnapshot; comments?: ReviewComment[]; tests?: TestRun | null } = {},
+) => {
+  const actions = { onSelect: vi.fn(), onSeen: vi.fn(), onComment: vi.fn(), onSend: vi.fn() };
+  render(
+    <ChangesTab
+      snapshot={props.shown ?? snapshot()}
+      seen={{}}
+      selected="src/db.ts"
+      diff={diff('src/db.ts')}
+      error={null}
+      comments={props.comments ?? []}
+      tests={props.tests ?? null}
+      {...actions}
+    />,
+  );
+  return { actions, user: userEvent.setup() };
+};
+
+const bar = () => screen.queryByRole('toolbar', { name: 'Consignes pour l’agent' });
+
+describe('ChangesTab shortcuts above the terminal (002 T038, FR-013)', () => {
+  it('shows none when nothing applies', () => {
+    withShortcuts();
+    expect(bar()).toBeNull();
+  });
+
+  it('counts the untreated comments, and sends them in one prompt', async () => {
+    const { actions, user } = withShortcuts({
+      comments: [note(1), note(2), note(3, { treated: true })],
+    });
+    const button = within(bar() ?? document.body).getByRole('button', {
+      name: 'Corriger les commentaires · 2',
+    });
+    await user.click(button);
+    expect(actions.onSend).toHaveBeenCalledWith('fix-comments');
+  });
+
+  it('offers « Tests en échec » only when the tests fail', async () => {
+    const { actions, user } = withShortcuts({ tests: failing });
+    await user.click(
+      within(bar() ?? document.body).getByRole('button', { name: 'Tests en échec' }),
+    );
+    expect(actions.onSend).toHaveBeenCalledWith('failing-tests');
+    expect(screen.queryByRole('button', { name: /Corriger les commentaires/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Conflit avec main' })).toBeNull();
+  });
+
+  it('offers « Conflit avec main » only with a conflict', async () => {
+    const { actions, user } = withShortcuts({ shown: snapshot({ conflicts: ['src/db.ts'] }) });
+    await user.click(
+      within(bar() ?? document.body).getByRole('button', { name: 'Conflit avec main' }),
+    );
+    expect(actions.onSend).toHaveBeenCalledWith('conflict');
+  });
+
+  it('passes the comments of the file shown to its diff, and a new one with its path', async () => {
+    const { actions, user } = withShortcuts({
+      comments: [note(2), note(1, { path: 'src/auth.ts' })],
+    });
+    expect(screen.getAllByRole('note')).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Commenter la ligne 1' }));
+    await user.type(screen.getByRole('textbox'), 'Voir ici{Enter}');
+    expect(actions.onComment).toHaveBeenCalledWith('src/db.ts', 1, 'Voir ici');
   });
 });

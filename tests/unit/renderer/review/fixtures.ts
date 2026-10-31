@@ -1,4 +1,10 @@
-import type { ChangedFile, FileDiff, ReviewSnapshot } from '../../../../src/shared/review';
+import type {
+  ChangedFile,
+  ConflictFile,
+  FileDiff,
+  Integration,
+  ReviewSnapshot,
+} from '../../../../src/shared/review';
 import { uuid } from '../tiles/fixtures';
 
 export const blob = (n: number) => String(n).padStart(40, '0');
@@ -50,5 +56,59 @@ export const diff = (path = 'src/db.ts', overrides: Partial<FileDiff> = {}): Fil
       ],
     },
   ],
+  ...overrides,
+});
+
+/** An integration stopped on a conflict in `src/db.ts` (screen 1q). */
+export const conflicted = (
+  overrides: Partial<Integration> = {},
+  file: Partial<ConflictFile> = {},
+): Integration => ({
+  id: '00000000-0000-4000-8000-0000000000e1',
+  agentId: uuid(1),
+  mode: 'squash',
+  message: 'Ajoute les sessions',
+  after: { closeTile: true, removeWorktree: true },
+  snapshot: blob(3),
+  mainAtStart: blob(4),
+  state: 'conflicted',
+  conflicts: [
+    {
+      path: 'src/db.ts',
+      kind: 'content',
+      mainCommit: { short: 'a41f2c0', subject: 'Ajout SSO' },
+      hunks: [
+        {
+          index: 0,
+          line: 42,
+          main: ['<Button sso>'],
+          agent: ['<OtpForm code />'],
+          resolution: null,
+        },
+        { index: 1, line: 60, main: ['a'], agent: ['b'], resolution: null },
+      ],
+      edited: null,
+      resolved: false,
+      merged:
+        'x\n<<<<<<< main\n<Button sso>\n=======\n<OtpForm code />\n>>>>>>> agent\ny\n<<<<<<< main\na\n=======\nb\n>>>>>>> agent\n',
+      whole: false,
+      binary: false,
+      deleted: null,
+      ...file,
+    },
+    {
+      path: 'src/auth.ts',
+      kind: 'delete-modify',
+      mainCommit: { short: 'b52e3d1', subject: 'Retire auth' },
+      hunks: [{ index: 0, line: 1, main: [], agent: ['export {};'], resolution: null }],
+      edited: null,
+      resolved: false,
+      merged: '',
+      whole: true,
+      binary: false,
+      deleted: 'main',
+    },
+  ],
+  error: null,
   ...overrides,
 });

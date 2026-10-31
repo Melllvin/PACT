@@ -89,6 +89,13 @@ export const conflictFileSchema = z.object({
   /** The whole content, from « Modifier… » or the external editor. */
   edited: z.string().nullable(),
   resolved: z.boolean(),
+  /** The file as git merged it, conflict markers included; empty for a file chosen whole. */
+  merged: z.string().default(''),
+  /** Chosen whole, one side or the other: delete/modify, add/add or binary (R6). */
+  whole: z.boolean().default(false),
+  binary: z.boolean().default(false),
+  /** The side that deleted the file, for a delete/modify conflict. */
+  deleted: z.enum(['main', 'agent']).nullable().default(null),
 });
 
 export const integrationModeSchema = z.enum(['squash', 'keep-commits']);
@@ -136,6 +143,7 @@ export type FileDiff = z.infer<typeof fileDiffSchema>;
 export type TestRun = z.infer<typeof testRunSchema>;
 export type ConflictHunk = z.infer<typeof conflictHunkSchema>;
 export type ConflictFile = z.infer<typeof conflictFileSchema>;
+export type ConflictChoice = NonNullable<ConflictHunk['resolution']>;
 export type IntegrationMode = z.infer<typeof integrationModeSchema>;
 export type IntegrationState = z.infer<typeof integrationStateSchema>;
 export type Integration = z.infer<typeof integrationSchema>;

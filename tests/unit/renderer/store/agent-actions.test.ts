@@ -179,3 +179,73 @@ describe('« vu » in the review (002 T022, FR-009, FR-011)', () => {
     expect(store.getState().actionError).toBe('Refusé');
   });
 });
+
+describe('comments and prompts of the review (002 T038, FR-012…FR-015)', () => {
+  const comments = (store: Awaited<ReturnType<typeof setup>>['store']) =>
+    store.getState().workspaces[0]?.agents[0]?.review.comments;
+  const saved = {
+    id: '00000000-0000-4000-8000-0000000000c1',
+    path: 'src/a.ts',
+    line: 3,
+    text: 'Renommer.',
+    createdAt: '2026-10-30T10:00:00.000Z',
+    treated: false,
+  };
+
+  it('comments a line and keeps the comment returned with the agent', async () => {
+    const { store, invoke } = await setup();
+    invoke.mockImplementation((channel) =>
+      Promise.resolve(channel === 'review:comment' ? saved : undefined),
+    );
+    await store.getState().commentLine(id, 'src/a.ts', 3, 'Renommer.');
+    expect(invoke).toHaveBeenCalledWith('review:comment', {
+      agentId: id,
+      path: 'src/a.ts',
+      line: 3,
+      text: 'Renommer.',
+    });
+    expect(comments(store)).toEqual([saved]);
+    expect(store.getState().correcting[id]).toBe('queued');
+  });
+
+  it('marks the comments treated once « Corriger les commentaires » is sent', async () => {
+    const { store, invoke } = await setup();
+    invoke.mockImplementation((channel) =>
+      Promise.resolve(channel === 'review:comment' ? saved : undefined),
+    );
+    await store.getState().commentLine(id, 'src/a.ts', 3, 'Renommer.');
+    await store.getState().sendToAgent(id, 'fix-comments');
+    expect(invoke).toHaveBeenLastCalledWith('review:send', { agentId: id, kind: 'fix-comments' });
+    expect(comments(store)?.map((c) => c.treated)).toEqual([true]);
+  });
+
+  it('sends a request written in the Décision column', async () => {
+    const { store, invoke } = await setup();
+    await store.getState().sendToAgent(id, 'request', 'Ajoute un test.');
+    expect(invoke).toHaveBeenLastCalledWith('review:send', {
+      agentId: id,
+      kind: 'request',
+      text: 'Ajoute un test.',
+    });
+  });
+
+  it('follows the correction: working after a prompt, over once the agent is ready again', async () => {
+    const { store, emit } = await setup();
+    await store.getState().sendToAgent(id, 'conflict');
+    expect(store.getState().correcting[id]).toBe('queued');
+    // Ready while the prompt waits for its turn: the correction has not started yet.
+    emit('agent:state', { agentId: id, state: 'done' });
+    expect(store.getState().correcting[id]).toBe('queued');
+    emit('agent:state', { agentId: id, state: 'working' });
+    expect(store.getState().correcting[id]).toBe('working');
+    emit('agent:state', { agentId: id, state: 'done' });
+    expect(store.getState().correcting[id]).toBeUndefined();
+  });
+
+  it('shows why a prompt was refused, and follows nothing', async () => {
+    const { store } = await setup('review:send');
+    await store.getState().sendToAgent(id, 'failing-tests');
+    expect(store.getState().actionError).toBe('Refusé');
+    expect(store.getState().correcting[id]).toBeUndefined();
+  });
+});

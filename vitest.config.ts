@@ -29,6 +29,10 @@ export default defineConfig({
           name: 'integration',
           environment: 'node',
           include: ['tests/integration/**/*.test.ts'],
+          // Real git repositories and processes: a loaded Windows or macOS runner needs more
+          // than the default 5 s, as the agent suites already give themselves.
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
         },
       },
       {

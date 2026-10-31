@@ -46,6 +46,8 @@ const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1
 type Settings = {
   hooks: Record<string, { hooks: Record<string, unknown>[] }[]>;
   permissions?: { ask?: string[] };
+  env?: Record<string, string>;
+  teammateMode?: string;
 };
 const settingsOf = (args: string[]) => JSON.parse(valueAfter(args, '--settings') ?? '') as Settings;
 
@@ -145,6 +147,59 @@ describe('Claude Code launch arguments', () => {
 
   it('runs the resolved executable directly on macOS', () => {
     expect(create().buildLaunch(input).file).toBe(input.executablePath);
+  });
+});
+
+describe('Claude Code agent teams', () => {
+  it('enables agent teams for every launch and resume, whatever the user settings say', () => {
+    for (const { args } of [
+      create().buildLaunch(input),
+      create().buildResume({ ...input, sessionId: input.sessionId ?? '' }),
+    ]) {
+      expect(settingsOf(args).env).toEqual({ CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' });
+    }
+  });
+
+  it('keeps the teammates in the agent’s own terminal, never in tmux or iTerm2 panes', () => {
+    expect(settingsOf(create().buildLaunch(input).args).teammateMode).toBe('in-process');
+  });
+
+  const teammate = {
+    session_id: input.sessionId,
+    cwd: input.cwd,
+    agent_id: 'a82417bbd28c89c6e',
+    agent_type: 'general-purpose',
+  };
+  const adapter = create();
+
+  it('leaves the state of the agent to its lead: a teammate stopping or prompted changes nothing', () => {
+    for (const event of [
+      { hook_event_name: 'Stop', stop_hook_active: false, last_assistant_message: 'OK' },
+      { hook_event_name: 'UserPromptSubmit', prompt: 'Message du chef' },
+      { hook_event_name: 'StopFailure', error: 'server_error' },
+      { hook_event_name: 'SubagentStop', last_assistant_message: 'OK' },
+    ]) {
+      expect(adapter.mapHookEvent({ ...teammate, ...event })).toBeNull();
+    }
+  });
+
+  it('still shows a question a teammate asks, since it waits in the lead’s terminal', () => {
+    expect(
+      adapter.mapHookEvent({
+        ...teammate,
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'Bash',
+        tool_input: { command: 'rm probe.txt' },
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'rm probe.txt', ruleKey: 'Bash(rm probe.txt)' });
+    expect(
+      adapter.mapHookEvent({
+        ...teammate,
+        hook_event_name: 'Notification',
+        message: 'helper needs your permission',
+        notification_type: 'permission_prompt',
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'helper needs your permission' });
   });
 });
 
