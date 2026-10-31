@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -177,6 +177,66 @@ describe('ReviewService following the worktree (R3)', () => {
     await service.open(AGENT_ID);
     await writeFile(join(worktree, 'rate.ts'), 'export {};\n');
     await waitFor(() => paths(changed.at(-1))?.includes('rate.ts') === true, 'safety net missed');
+  });
+
+  /** A watch moved by hand: each refresh comes when the test says so. */
+  const handWatch = () => {
+    const triggers: ((file: string | null) => void)[] = [];
+    service.dispose();
+    service = createService({
+      watch: (_dir, onChange) => {
+        triggers.push(onChange);
+        return () => undefined;
+      },
+      debounceMs: 10,
+      safetyMs: 60_000,
+    });
+    return () => {
+      for (const trigger of triggers) trigger(null);
+    };
+  };
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+
+  it('announces nothing when an event leaves the review as it was', async () => {
+    const touch = handWatch();
+    await service.open(AGENT_ID);
+    touch();
+    await settle();
+    expect(changed).toEqual([]);
+  });
+
+  it('stops following an agent gone from its workspace', async () => {
+    const touch = handWatch();
+    await service.open(AGENT_ID);
+    await workspaces.update(workspace.id, (ws) => ({ ...ws, agents: [] }));
+    touch();
+    await settle();
+    await writeFile(join(worktree, 'parti.ts'), 'export {};\n');
+    touch();
+    await settle();
+    expect(changed).toEqual([]);
+  });
+
+  it('drops what git computed for a review closed meanwhile', async () => {
+    const touch = handWatch();
+    await service.open(AGENT_ID);
+    await writeFile(join(worktree, 'pendant.ts'), 'export {};\n');
+    touch();
+    await new Promise((r) => setTimeout(r, 15));
+    service.close(AGENT_ID);
+    touch();
+    await settle();
+    expect(changed).toEqual([]);
+  });
+
+  it('ignores what happens in the .git of the worktree', async () => {
+    service.dispose();
+    service = createService({ safetyMs: 60_000, debounceMs: 10 });
+    await service.open(AGENT_ID);
+    git(worktree, 'update-ref', 'refs/pact/test', 'HEAD');
+    await writeFile(join(worktree, '.git'), await readFile(join(worktree, '.git'), 'utf8'));
+    await settle();
+    expect(changed).toEqual([]);
   });
 
   it('stops following once closed', async () => {
