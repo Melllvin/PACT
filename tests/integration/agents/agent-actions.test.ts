@@ -397,6 +397,21 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     expect(between(writes[0], writes[1])).toEqual(['working', 'done']);
   });
 
+  it('keeps the origin of each prompt, and cancels only the orchestrator ones (003 T018)', async () => {
+    scenario = 'ask-then-echo';
+    const agent = await launchOne();
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    await manager.sendPrompt(agent.id, 'Du chef', 'orchestrator');
+    await manager.sendPrompt(agent.id, 'De la revue');
+    expect(manager.waitingPrompts(agent.id, 'orchestrator')).toBe(1);
+    manager.cancelPrompts(agent.id, 'orchestrator');
+    expect(manager.waitingPrompts(agent.id, 'orchestrator')).toBe(0);
+    await manager.answer(agent.id, 'allow');
+    await waitForOutput(agent.id, 'Reçu : De la revue');
+    expect(pty.history(agent.id)).not.toContain('Du chef');
+  });
+
   it('sends a multi-line prompt as a bracketed paste', async () => {
     scenario = 'echo-prompt';
     const agent = await launchOne();

@@ -16,7 +16,7 @@
 //                                   { write, content } | { delete } | { rename: [from, to] }
 //                                   | { commit: message } (stages everything first)
 //   echo: boolean                   prints `Reçu : <prompt>`, to check what PACT typed
-//   mcp: { tool, arguments }[]      calls these PACT tools as an orchestrator (003 R11), on
+//   mcp: { tool, arguments }[]      calls these PACT tools when it is the orchestrator (003 R11), on
 //                                   PACT_ORCHESTRATOR_URL with PACT_ORCHESTRATOR_TOKEN, and prints
 //                                   `MCP <tool> : <text>`. In string arguments, `{{prompt}}` is the
 //                                   prompt typed and `{{prompt.N}}` its N-th `|`-separated part
@@ -175,7 +175,8 @@ async function runTurn(line) {
     console.log('Reprise');
   }
 
-  for (const step of scenario.mcp ?? []) {
+  // Only the orchestrator gets PACT's tools; the agents it leads skip these steps.
+  for (const step of process.env.PACT_ORCHESTRATOR_URL ? (scenario.mcp ?? []) : []) {
     console.log(
       `MCP ${step.tool} : ${await callTool(step.tool, fillArguments(step.arguments, line))}`,
     );

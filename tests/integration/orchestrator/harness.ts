@@ -9,6 +9,7 @@ import { CliRegistry } from '../../../src/main/agents/cli-registry';
 import { HookServer } from '../../../src/main/agents/hook-server';
 import { GitService } from '../../../src/main/git/git-service';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
+import { createOrchestratorTools } from '../../../src/main/orchestrator/tools';
 import { openStores, type Stores } from '../../../src/main/persistence/store';
 import { PtyManager } from '../../../src/main/pty/pty-manager';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
@@ -53,9 +54,22 @@ export async function createHarness() {
   const events: AgentStateEvent[] = [];
   /** The scenario each agent runs, by position; `default` for the others. */
   const scenarios: Record<string, string> = { default: 'prompt-then-done' };
+  /** The agents with changes to review, as ReviewService would tell; set by a suite. */
+  const pending = { ids: [] as string[] };
+  const typed: { agentId: string; origin: string }[] = [];
   const orchestrator = new OrchestratorService({
     hooks,
     pluginsDir: join(userData, 'orchestrator'),
+    tools: (orchestratorId) =>
+      createOrchestratorTools(
+        {
+          workspaces,
+          agents: manager,
+          cliName: () => 'Faux CLI',
+          pending: () => Promise.resolve(pending.ids),
+        },
+        orchestratorId,
+      ),
   });
 
   const createManager = async () => {
@@ -80,10 +94,13 @@ export async function createHarness() {
         }),
       isPortInUse: () => Promise.resolve(false),
       onState: (event) => events.push(event),
+      onPromptTyped: (agentId, origin) => typed.push({ agentId, origin }),
       orchestrator,
     });
   };
-  let manager = await createManager();
+  // Assigned at once: the tools above only read it when an orchestrator calls them.
+  // eslint-disable-next-line prefer-const
+  let manager: AgentManager = await createManager();
 
   const current = (id: string) => workspaces.get(workspace.id)?.agents.find((a) => a.id === id);
 
@@ -139,6 +156,8 @@ export async function createHarness() {
     adapter,
     events,
     orchestrator,
+    pending,
+    typed,
     get manager() {
       return manager;
     },
