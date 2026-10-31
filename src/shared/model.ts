@@ -165,6 +165,8 @@ export const cliDefinitionSchema = z.object({
   origin: z.enum(['detected', 'custom']),
   status: z.enum(['installed', 'missing', 'unsupported-version']),
   models: z.array(z.string()),
+  /** 003 — its adapter can make it the orchestrator of a workspace (R8). */
+  orchestrator: z.boolean().optional(),
 });
 
 export type AgentColor = z.infer<typeof agentColorSchema>;

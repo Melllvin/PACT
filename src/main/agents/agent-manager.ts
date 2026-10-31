@@ -6,7 +6,7 @@ import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
 import type { PtyManager } from '../pty/pty-manager';
 import { IDLE_QUESTION_MS } from './adapters/generic';
-import type { AgentSignal, CliAdapter, ResolvedEnv } from './adapters/types';
+import type { AgentSignal, CliAdapter, OrchestratorLaunch, ResolvedEnv } from './adapters/types';
 import { applyExit, applySignal } from './agent-state';
 import { AutoResume, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
@@ -44,6 +44,11 @@ type Options = {
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
   autoResume?: (workspaceId: string) => Promise<boolean>;
   clock?: Clock;
+  /** 003 — the session plugin and token of an orchestrator, prepared before each start (R2). */
+  orchestrator?: {
+    prepare(agent: Agent): Promise<OrchestratorLaunch>;
+    release(agentId: string): void;
+  };
 };
 
 export type LaunchRequest = {
@@ -86,6 +91,7 @@ export class AgentManager {
   private readonly idleMs: number;
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
   private readonly resumes: AutoResume;
+  private readonly orchestrator: Options['orchestrator'];
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
@@ -114,6 +120,7 @@ export class AgentManager {
     this.onBranch = options.onBranch ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
+    this.orchestrator = options.orchestrator;
     this.resumes = new AutoResume({
       ...(options.clock ? { clock: options.clock } : {}),
       onDue: (resume) => void this.resumeDue(resume),
@@ -277,6 +284,7 @@ export class AgentManager {
     const { workspace, agent } = this.find(id);
     this.resumes.forget(id);
     this.prompts.delete(id);
+    this.orchestrator?.release(id);
     await this.stop(id);
     if (removeWorktree) {
       // The agent may have renamed its branch since the last check.
@@ -354,7 +362,7 @@ export class AgentManager {
     const started: Agent = { ...agent, ...fields };
     this.emit(started);
     this.resumes.sync(started);
-    this.start(started, workspace.path, cli, env);
+    this.start(started, workspace.path, cli, env, await this.prepareOrchestrator(started));
   }
 
   /**
@@ -414,6 +422,7 @@ export class AgentManager {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
     const clis = drafts.map((draft) => this.installedCli(draft.cliId));
+    this.validateOrchestrator(workspace, drafts, clis);
     await this.validate(workspace, drafts);
 
     const positions = freePositions(workspace.agents, drafts.length);
@@ -458,13 +467,13 @@ export class AgentManager {
         lastError: null,
         scheduledResume: null,
         review: { seen: {}, comments: [] },
-        role: null,
+        role: draft.orchestrator === true ? 'orchestrator' : null,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
       // Saved before the process starts: its first hook must find the agent.
       await this.workspaces.update(workspaceId, (ws) => ({ ...ws, agents: [...ws.agents, agent] }));
-      this.start(agent, workspace.path, cli, env);
+      this.start(agent, workspace.path, cli, env, await this.prepareOrchestrator(agent));
       launched.push(agent);
     }
     await this.workspaces.update(workspaceId, (ws) => ({ ...ws, quickLaunchCounters: counters }));
@@ -503,7 +512,35 @@ export class AgentManager {
   }
 
   /** Starts the agent's CLI; a known `sessionId` resumes that session (R6). */
-  private start(agent: Agent, repoPath: string, cli: InstalledCli, env: ResolvedEnv) {
+  /** 003 — at most one orchestrator per workspace, of a CLI that can be one (FR-001, R8). */
+  private validateOrchestrator(workspace: Workspace, drafts: AgentDraft[], clis: InstalledCli[]) {
+    const asked = drafts.filter((draft) => draft.orchestrator === true).length;
+    if (asked === 0) return;
+    if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
+    if (asked + workspace.agents.filter((agent) => agent.role === 'orchestrator').length > 1) {
+      throw new IpcFailure('INVALID_INPUT', 'Un seul orchestrateur par workspace.');
+    }
+    if (
+      drafts.some(
+        (draft, i) => draft.orchestrator === true && !clis[i]?.adapter.supportsOrchestrator,
+      )
+    ) {
+      throw new IpcFailure('INVALID_INPUT', 'Ce CLI ne peut pas être orchestrateur.');
+    }
+  }
+
+  private async prepareOrchestrator(agent: Agent): Promise<OrchestratorLaunch | null> {
+    if (agent.role !== 'orchestrator' || !this.orchestrator) return null;
+    return this.orchestrator.prepare(agent);
+  }
+
+  private start(
+    agent: Agent,
+    repoPath: string,
+    cli: InstalledCli,
+    env: ResolvedEnv,
+    orchestrator: OrchestratorLaunch | null = null,
+  ) {
     const { adapter } = cli;
     const token = this.hooks.register(agent.id, (payload) => {
       const signal = adapter.mapHookEvent(payload);
@@ -525,6 +562,7 @@ export class AgentManager {
       permissionLevel: agent.permissionLevel,
       port: agent.port,
       hook: { url: this.hookUrl(), token },
+      orchestrator,
     };
     const spec =
       agent.sessionId === null

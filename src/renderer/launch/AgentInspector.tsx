@@ -4,6 +4,7 @@ import {
   effective,
   preview,
   setAgent,
+  setOrchestrator,
   setCommon,
   setOverride,
   type CommonSettings,
@@ -12,6 +13,7 @@ import {
 } from '../../shared/launch-draft';
 import type { Agent, CliDefinition, PermissionLevel } from '../../shared/model';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 /** research.md R5: the three levels, as 1d names them. */
@@ -33,6 +35,8 @@ type AgentInspectorProps = {
   running: Pick<Agent, 'position' | 'color'>[];
   /** The agent inspected, or null for « Commun à tous ». */
   index: number | null;
+  /** 003 — the workspace has no orchestrator yet (FR-001). */
+  canOrchestrate?: boolean;
   onDuplicate: () => void;
   onRemove: () => void;
 };
@@ -88,6 +92,7 @@ export function AgentInspector({
   clis,
   index,
   running,
+  canOrchestrate = true,
   onDuplicate,
   onRemove,
 }: AgentInspectorProps) {
@@ -235,6 +240,19 @@ export function AgentInspector({
               }}
             />
           </Field>
+          {cli?.orchestrator === true && (
+            <label className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+              <Checkbox
+                aria-label="◎ Orchestrateur : dirige les autres agents"
+                checked={draft.orchestrator === agent.key}
+                disabled={!canOrchestrate}
+                onCheckedChange={(value) => {
+                  onChange(setOrchestrator(draft, value === true ? agent.key : null));
+                }}
+              />
+              ◎ Orchestrateur : dirige les autres agents
+            </label>
+          )}
         </>
       )}
 

@@ -260,6 +260,15 @@ describe('QuickLaunch, the orchestrator (003 T010)', () => {
     expect(draft?.orchestrator).toBe(first?.key);
   });
 
+  it('launches no orchestrator once unchecked', async () => {
+    const user = userEvent.setup();
+    const { onLaunch } = renderLauncher({ counters: { freeTerminal: 0, 'claude-code': 1 } });
+    await user.click(orchestratorBox() ?? document.body);
+    await user.click(orchestratorBox() ?? document.body);
+    await user.click(screen.getByRole('button', { name: 'Lancer 1 agent' }));
+    expect(onLaunch.mock.lastCall?.[0].orchestrator).toBeNull();
+  });
+
   it('offers nothing without an agent of a CLI that can be one', () => {
     renderLauncher({ counters: { freeTerminal: 0, codex: 2 } });
     expect(orchestratorBox()).toBeNull();
@@ -268,8 +277,22 @@ describe('QuickLaunch, the orchestrator (003 T010)', () => {
   it('is disabled when the workspace has one already', () => {
     renderLauncher({
       counters: { freeTerminal: 0, 'claude-code': 1 },
-      running: [{ position: 1, color: 'purple', role: 'orchestrator' } as Agent],
+      running: [{ position: 1, color: 'purple', role: 'orchestrator' }],
     });
+    expect(orchestratorBox()?.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('stays disabled in the detailed mode too when the workspace has one already', async () => {
+    const user = userEvent.setup();
+    renderLauncher({
+      counters: { freeTerminal: 0, 'claude-code': 1 },
+      running: [{ position: 1, color: 'purple', role: 'orchestrator' }],
+    });
+    await user.click(screen.getByRole('button', { name: /Mode détaillé/ }));
+    const list = screen.getByRole('list', { name: 'Agents' });
+    await user.click(
+      within(list).getAllByRole('button', { name: /^Claude Code/ })[0] ?? document.body,
+    );
     expect(orchestratorBox()?.hasAttribute('disabled')).toBe(true);
   });
 });

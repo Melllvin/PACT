@@ -98,6 +98,8 @@ export const agentDraftSchema = z.object({
   branch: z.string().nullable(),
   port: port.nullable(),
   startCommand: z.string().nullable(),
+  /** 003 — the orchestrator of the workspace (FR-001). */
+  orchestrator: z.boolean().optional(),
 });
 export type AgentDraft = z.infer<typeof agentDraftSchema>;
 

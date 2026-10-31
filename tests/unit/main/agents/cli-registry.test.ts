@@ -88,6 +88,7 @@ describe('CliRegistry', () => {
         origin: 'detected',
         status: 'installed',
         models: ['opus'],
+        orchestrator: true,
       },
       {
         id: 'codex',
@@ -99,6 +100,7 @@ describe('CliRegistry', () => {
         origin: 'detected',
         status: 'unsupported-version',
         models: [],
+        orchestrator: false,
       },
     ]);
   });

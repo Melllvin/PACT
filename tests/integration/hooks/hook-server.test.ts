@@ -209,4 +209,17 @@ describe('HookServer, the orchestrator MCP route (003 T005)', () => {
   it('gives the URL of the route', () => {
     expect(server.mcpUrl()).toBe(`${url}/mcp`);
   });
+
+  it('answers 400 to a body that is not JSON, 413 to one too large, 500 when the handler fails', async () => {
+    const token = server.registerMcp('agent-1', () => Promise.reject(new Error('boom')));
+    expect((await raw('POST', '/mcp', { 'x-pact-token': token }, 'pas du json')).status).toBe(400);
+    expect(
+      (await raw('POST', '/mcp', { 'x-pact-token': token }, 'x'.repeat(1_000_001))).status,
+    ).toBe(413);
+    expect((await raw('POST', '/mcp', { 'x-pact-token': token }, '{}')).status).toBe(500);
+  });
+
+  it('has no URL before it starts', () => {
+    expect(() => new HookServer().mcpUrl()).toThrow();
+  });
 });

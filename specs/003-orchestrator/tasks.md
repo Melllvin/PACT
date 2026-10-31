@@ -87,13 +87,13 @@ toutes les stories.
 - [X] T008 [P] Tests de contrat des autres adaptateurs dans `tests/contract/fake.contract.test.ts`, `tests/contract/codex.contract.test.ts` et `tests/contract/generic.contract.test.ts` :
   - le faux CLI reçoit `PACT_ORCHESTRATOR_URL` et `PACT_ORCHESTRATOR_TOKEN` dans son environnement ;
   - Codex et les CLI génériques : `supportsOrchestrator` faux.
-- [ ] T009 [P] Tests de `OrchestratorService` (sessions) dans `tests/integration/orchestrator/orchestrator-service.test.ts` :
+- [X] T009 [P] Tests de `OrchestratorService` (sessions) dans `tests/integration/orchestrator/orchestrator-service.test.ts` :
   - un agent lancé avec `orchestrator: true` a `role: 'orchestrator'`, une session, un jeton de 64 caractères hexadécimaux et un plugin écrit ;
   - un second orchestrateur dans le workspace est refusé (`INVALID_INPUT`) ;
   - un CLI sans `supportsOrchestrator` est refusé ;
   - après un redémarrage (`restore` puis reprise), le rôle reste et le jeton change ;
   - la fermeture de l'orchestrateur révoque son jeton.
-- [ ] T010 [P] Tests du lanceur dans `tests/unit/renderer/launch/QuickLaunch.test.tsx`, `tests/unit/renderer/launch/DetailedLaunch.test.tsx` et `tests/unit/shared/launch-draft.test.ts` :
+- [X] T010 [P] Tests du lanceur dans `tests/unit/renderer/launch/QuickLaunch.test.tsx`, `tests/unit/renderer/launch/DetailedLaunch.test.tsx` et `tests/unit/shared/launch-draft.test.ts` :
   - option « Orchestrateur » sur un agent Claude Code seulement, et sur un seul agent ;
   - inactive quand le workspace a déjà un orchestrateur ;
   - le brouillon porte `orchestrator: true`.
@@ -104,8 +104,8 @@ toutes les stories.
 - [X] T012 Étendre `src/main/agents/hook-server.ts` : routes `/mcp`, statut choisi par le gestionnaire, contrôle de `Host` et `Origin`, jetons MCP distincts des jetons de hook.
 - [X] T013 [P] Implémenter l'écriture du plugin et le texte du skill dans `src/main/orchestrator/plugin.ts`.
 - [X] T014 Ajouter `supportsOrchestrator` et l'entrée `orchestrator: { pluginDir, url, token } | null` de `LaunchInput` dans `src/main/agents/adapters/types.ts`, puis les implémenter dans `claude-code.ts`, `fake.ts`, `codex.ts` et `generic.ts` sous `src/main/agents/adapters/`.
-- [ ] T015 Créer `src/main/orchestrator/orchestrator-service.ts` (sessions, jetons, plugin, révocation), appelé par `AgentManager` au lancement et à la reprise d'un agent `role: 'orchestrator'` dans `src/main/agents/agent-manager.ts`, et branché dans `src/main/index.ts`.
-- [ ] T016 Ajouter l'option « Orchestrateur » dans `src/shared/launch-draft.ts`, `src/shared/ipc.ts` (brouillon, `CliDefinition.orchestrator`), `src/renderer/launch/QuickLaunch.tsx` et `src/renderer/launch/DetailedLaunch.tsx`.
+- [X] T015 Créer `src/main/orchestrator/orchestrator-service.ts` (sessions, jetons, plugin, révocation), appelé par `AgentManager` au lancement et à la reprise d'un agent `role: 'orchestrator'` dans `src/main/agents/agent-manager.ts`, et branché dans `src/main/index.ts`.
+- [X] T016 Ajouter l'option « Orchestrateur » dans `src/shared/launch-draft.ts`, `src/shared/ipc.ts` (brouillon, `CliDefinition.orchestrator`), `src/renderer/launch/QuickLaunch.tsx` et `src/renderer/launch/DetailedLaunch.tsx`.
 
 **Checkpoint**: un orchestrateur se lance avec son plugin et son accès ; `npm run check` vert.
 

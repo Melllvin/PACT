@@ -29,6 +29,8 @@ export type LaunchDraft = {
   agents: DraftAgent[];
   freeTerminal: number;
   nextKey: number;
+  /** 003 — the key of the agent launched as orchestrator, if any (FR-001). */
+  orchestrator?: string | null;
 };
 
 export type Conflict = { index: number; kind: 'branch' | 'port'; value: string | number };
@@ -142,6 +144,11 @@ export function setAgent(
   });
 }
 
+/** 003 — `key` becomes the orchestrator, or none with `null`; one at most (FR-001). */
+export function setOrchestrator(draft: LaunchDraft, key: string | null): LaunchDraft {
+  return { ...draft, orchestrator: key };
+}
+
 export function effective(draft: LaunchDraft, index: number): CommonSettings {
   return { ...draft.common, ...draft.agents[index]?.overrides };
 }
@@ -251,6 +258,7 @@ export function toAgentDrafts(
       branch: agent.branch,
       port: agent.port,
       startCommand: settings.startCommand,
+      ...(agent.key === draft.orchestrator ? { orchestrator: true } : {}),
     };
   });
 }

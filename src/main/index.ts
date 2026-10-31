@@ -18,6 +18,7 @@ import { createEventEmitter, registerHandlers } from './ipc/handlers';
 import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
+import { OrchestratorService } from './orchestrator/orchestrator-service';
 import { IntegrationService } from './review/integration-service';
 import { ReviewService } from './review/review-service';
 import { TestRunner } from './review/test-runner';
@@ -78,12 +79,18 @@ void app.whenReady().then(async () => {
   // The e2e harness moves this clock itself from the main process (T106).
   const clock = testClock(process.env);
   if (clock) Object.assign(globalThis, { pactTestClock: clock });
+  // 003 — the orchestrator of a workspace reaches PACT through its session plugin (R2).
+  const orchestrator = new OrchestratorService({
+    hooks,
+    pluginsDir: join(app.getPath('userData'), 'orchestrator'),
+  });
   const agents = new AgentManager({
     workspaces,
     registry,
     git,
     pty,
     hooks,
+    orchestrator,
     hookUrl: () => hookUrl,
     resolveEnv: resolveShellEnv,
     onState: (event) => {
