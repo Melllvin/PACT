@@ -233,8 +233,9 @@ describe('ReviewService following the worktree (R3)', () => {
     service.dispose();
     service = createService({ safetyMs: 60_000, debounceMs: 10 });
     await service.open(AGENT_ID);
-    git(worktree, 'update-ref', 'refs/pact/test', 'HEAD');
-    await writeFile(join(worktree, '.git'), await readFile(join(worktree, '.git'), 'utf8'));
+    // Rewritten in place: on Windows this .git file is hidden, which `w` cannot open.
+    const dotGit = join(worktree, '.git');
+    await writeFile(dotGit, await readFile(dotGit, 'utf8'), { flag: 'r+' });
     await settle();
     expect(changed).toEqual([]);
   });
