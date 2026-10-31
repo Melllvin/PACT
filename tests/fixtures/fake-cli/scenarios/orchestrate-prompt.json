@@ -1,0 +1,5 @@
+{
+  "mcp": [
+    { "tool": "send_prompt", "arguments": { "agent": "{{prompt.0}}", "text": "{{prompt.1}}" } }
+  ]
+}

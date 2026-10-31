@@ -27,6 +27,7 @@ const agent = (n: number, state: Agent['state'], color: Agent['color']): Agent =
   lastError: null,
   scheduledResume: null,
   review: { seen: {}, comments: [] },
+  role: null,
 });
 
 const atelier: Workspace = {

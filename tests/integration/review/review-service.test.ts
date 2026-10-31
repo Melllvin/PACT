@@ -60,6 +60,7 @@ const agent = (worktreePath: string, state: AgentState = 'done'): Agent => ({
   lastError: null,
   scheduledResume: null,
   review: { seen: {}, comments: [] },
+  role: null,
 });
 
 const createService = (options: Partial<ConstructorParameters<typeof ReviewService>[0]> = {}) =>

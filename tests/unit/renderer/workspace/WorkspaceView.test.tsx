@@ -31,6 +31,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   lastError: null,
   scheduledResume: null,
   review: { seen: {}, comments: [] },
+  role: null,
   ...overrides,
 });
 
