@@ -2,8 +2,10 @@ import { createServer, type Server } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { allocatePort, isPortInUse } from '../../../../src/main/ports/port-allocator';
 
-// A random high base keeps the tests away from ports used by other programs on the machine.
-const base = 20000 + Math.floor(Math.random() * 20000);
+// A random base keeps the tests away from ports used by other programs on the machine, below the
+// ephemeral ranges (Linux 32768+, macOS and Windows 49152+): the servers other suites open on port
+// 0 at the same time are given ports there, and once took base + 4 from this suite.
+const base = 20000 + Math.floor(Math.random() * 12000);
 const servers: Server[] = [];
 
 const occupy = (port: number, host: string) =>
