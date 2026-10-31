@@ -39,6 +39,8 @@ let manager: AgentManager;
 let adapter: FakeAdapter;
 let events: AgentStateEvent[];
 let branches: IpcEvent<'agent:branch'>[];
+/** The agents let go before closing, and whether their worktree was still there then. */
+let closing: { id: string; worktree: boolean }[];
 let scenario: string;
 
 const createManager = async () => {
@@ -60,6 +62,13 @@ const createManager = async () => {
     isPortInUse: () => Promise.resolve(false),
     onState: (event) => events.push(event),
     onBranch: (event) => branches.push(event),
+    onClosing: (id) =>
+      closing.push({
+        id,
+        worktree: existsSync(
+          workspaces.get(workspace.id)?.agents.find((a) => a.id === id)?.worktreePath ?? '',
+        ),
+      }),
   });
 };
 
@@ -129,6 +138,7 @@ beforeEach(async () => {
   adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: process.platform });
   events = [];
   branches = [];
+  closing = [];
   scenario = 'prompt-then-done';
   manager = await createManager();
 }, 30_000);
@@ -299,6 +309,8 @@ describe('AgentManager.close (FR-037)', { timeout: 30_000 }, () => {
     await writeFile(join(agent.worktreePath, 'brouillon.txt'), 'en cours\n');
     await manager.close(agent.id, { removeWorktree: true });
     expect(existsSync(agent.worktreePath)).toBe(false);
+    // What follows the worktree let go of it first: on Windows a watch blocks its removal.
+    expect(closing).toEqual([{ id: agent.id, worktree: true }]);
     expect(git(repo, 'branch', '--list', agent.branch)).toBe('');
     expect((await stores.workspace(workspace.id).read())?.agents).toEqual([]);
   });
