@@ -32,16 +32,16 @@ contracts/ipc.md, quickstart.md
 
 **Purpose**: schémas partagés et outillage de test.
 
-- [ ] T001 [P] Tests puis schémas zod de 003 dans `tests/unit/shared/orchestrator.test.ts` et `src/shared/orchestrator.ts` :
+- [X] T001 [P] Tests puis schémas zod de 003 dans `tests/unit/shared/orchestrator.test.ts` et `src/shared/orchestrator.ts` :
   - `IntegrationRequest` (`id` uuid, `agentId` uuid, `mode` `'squash' | 'keep-commits'` défaut `squash`, `message` « string, 1 à 4 000 caractères », `requestedAt` date ISO) ;
   - `OrchestratorEvent` (`kind` `'turn-finished' | 'awaiting-answer' | 'error' | 'closed' | 'integration'`, `integration.outcome` `'integrated' | 'refused' | 'conflicted' | 'failed'`) ;
   - `OrchestratorAction` (`tool` parmi `send_prompt`, `launch_agent`, `close_agent`, `request_integration`, `run_tests` ; `summary` « 200 caractères au plus » ; `outcome` `'ok' | 'refused'`).
-- [ ] T002 [P] Tests puis extension des schémas persistés dans `tests/unit/shared/model.test.ts` et `src/shared/model.ts` :
+- [X] T002 [P] Tests puis extension des schémas persistés dans `tests/unit/shared/model.test.ts` et `src/shared/model.ts` :
   - `Agent.role: 'orchestrator' | null`, défaut `null` ;
   - `Workspace.integrationRequests`, défaut `[]` ;
   - au plus un agent `orchestrator` par workspace (`superRefine`) ;
   - un fichier de workspace de 002 se charge sans changement.
-- [ ] T003 [P] Tests puis étape `mcp` du faux CLI dans `tests/unit/fixtures/fake-cli.test.ts`, `tests/fixtures/fake-cli/fake-cli.mjs` et de nouveaux scénarios sous `tests/fixtures/fake-cli/scenarios/` :
+- [X] T003 [P] Tests puis étape `mcp` du faux CLI dans `tests/unit/fixtures/fake-cli.test.ts`, `tests/fixtures/fake-cli/fake-cli.mjs` et de nouveaux scénarios sous `tests/fixtures/fake-cli/scenarios/` :
   - `{ mcp: { tool, arguments } }` appelle `tools/call` sur `PACT_ORCHESTRATOR_URL` avec l'en-tête `X-Pact-Token: $PACT_ORCHESTRATOR_TOKEN` ;
   - la réponse texte est imprimée (`MCP <tool> : <texte>`) ;
   - les arguments acceptent `{{prompt}}`, remplacé par la consigne tapée, pour qu'un test pilote le faux orchestrateur depuis son terminal.

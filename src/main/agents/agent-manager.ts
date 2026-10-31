@@ -458,6 +458,7 @@ export class AgentManager {
         lastError: null,
         scheduledResume: null,
         review: { seen: {}, comments: [] },
+        role: null,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');

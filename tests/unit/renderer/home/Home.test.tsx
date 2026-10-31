@@ -40,6 +40,7 @@ const atelier: Workspace = {
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
   testCommand: null,
+  integrationRequests: [],
   lastOpenedAt: now.toISOString(),
   status: 'available',
 };

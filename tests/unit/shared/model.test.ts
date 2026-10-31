@@ -51,6 +51,7 @@ const workspace = (agents: Agent[]): Workspace => ({
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
   testCommand: null,
+  integrationRequests: [],
   lastOpenedAt: now,
   status: 'available',
 });

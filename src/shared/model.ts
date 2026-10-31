@@ -92,6 +92,17 @@ export const agentSchema = z.object({
   scheduledResume: scheduledResumeSchema.nullable(),
   /** 002 — defaulted so that workspace files from 001 load without a migration (R9). */
   review: agentReviewSchema.default(() => ({ seen: {}, comments: [] })),
+  /** 003 — the orchestrator of its workspace, at most one (R8). */
+  role: z.enum(['orchestrator']).nullable().default(null),
+});
+
+/** 003 — an integration the orchestrator asks for, waiting for the user (FR-017, FR-020). */
+export const integrationRequestSchema = z.object({
+  id: z.uuid(),
+  agentId: z.uuid(),
+  mode: z.enum(['squash', 'keep-commits']).default('squash'),
+  message: z.string().min(1).max(4000),
+  requestedAt: isoDate,
 });
 
 export const freeTerminalSchema = z.object({
@@ -117,6 +128,8 @@ export const workspaceSchema = z
     permissionOverride: permissionPreferenceSchema.nullable(),
     /** `null`: detected from the repository (002 R8). */
     testCommand: z.string().trim().min(1).nullable().default(null),
+    /** 003 — integrations the orchestrator asked for, waiting for the user (R6). */
+    integrationRequests: z.array(integrationRequestSchema).default([]),
     lastOpenedAt: isoDate,
     status: z.enum(['available', 'unavailable']),
   })
@@ -125,6 +138,9 @@ export const workspaceSchema = z
       if (hasDuplicates(agents.map((a) => a[field]))) {
         ctx.addIssue({ code: 'custom', path: ['agents'], message: `duplicate agent ${field}` });
       }
+    }
+    if (agents.filter((agent) => agent.role === 'orchestrator').length > 1) {
+      ctx.addIssue({ code: 'custom', path: ['agents'], message: 'more than one orchestrator' });
     }
   });
 
