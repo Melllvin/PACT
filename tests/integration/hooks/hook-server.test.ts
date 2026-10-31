@@ -1,3 +1,4 @@
+import { request } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HookServer } from '../../../src/main/agents/hook-server';
 
@@ -111,5 +112,101 @@ describe('HookServer', () => {
     await server.stop();
     await server.stop();
     await expect(post('x', '{}')).rejects.toThrow();
+  });
+});
+
+/** A raw request, since fetch never lets a test choose Host. */
+const raw = (
+  method: string,
+  path: string,
+  headers: Record<string, string>,
+  body = '',
+): Promise<{ status: number; body: string }> =>
+  new Promise((resolve, reject) => {
+    const { port } = new URL(url);
+    const req = request(
+      { host: '127.0.0.1', port, method, path, headers: { host: `127.0.0.1:${port}`, ...headers } },
+      (res) => {
+        let text = '';
+        res.on('data', (chunk: Buffer) => (text += chunk.toString()));
+        res.on('end', () => {
+          resolve({ status: res.statusCode ?? 0, body: text });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.end(body);
+  });
+
+describe('HookServer, the orchestrator MCP route (003 T005)', () => {
+  const mcp = () =>
+    vi.fn((payload: unknown) =>
+      Promise.resolve(
+        (payload as { id?: number }).id === undefined
+          ? { status: 202 }
+          : { status: 200, body: { jsonrpc: '2.0', id: 1, result: {} } },
+      ),
+    );
+
+  it('gives POST /mcp to the handler of the token, which chooses the status', async () => {
+    const handler = mcp();
+    const token = server.registerMcp('agent-1', handler);
+    const reply = await raw(
+      'POST',
+      '/mcp',
+      { 'x-pact-token': token },
+      '{"jsonrpc":"2.0","id":1,"method":"ping"}',
+    );
+    expect(reply.status).toBe(200);
+    expect(JSON.parse(reply.body)).toEqual({ jsonrpc: '2.0', id: 1, result: {} });
+    expect(handler).toHaveBeenCalledWith({ jsonrpc: '2.0', id: 1, method: 'ping' });
+    const notified = await raw(
+      'POST',
+      '/mcp',
+      { 'x-pact-token': token },
+      '{"jsonrpc":"2.0","method":"x"}',
+    );
+    expect(notified).toEqual({ status: 202, body: '' });
+  });
+
+  it('answers GET /mcp with 405: no stream from the server', async () => {
+    const token = server.registerMcp('agent-1', mcp());
+    expect((await raw('GET', '/mcp', { 'x-pact-token': token })).status).toBe(405);
+  });
+
+  it('refuses no token, a hook token, or a revoked one with 401', async () => {
+    const handler = mcp();
+    const token = server.registerMcp('agent-1', handler);
+    const hookToken = server.register('agent-1', vi.fn());
+    expect((await raw('POST', '/mcp', {}, '{}')).status).toBe(401);
+    expect((await raw('POST', '/mcp', { 'x-pact-token': hookToken }, '{}')).status).toBe(401);
+    server.revokeMcp('agent-1');
+    expect((await raw('POST', '/mcp', { 'x-pact-token': token }, '{}')).status).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('never lets an MCP token post hooks', async () => {
+    const hook = vi.fn();
+    server.register('agent-1', hook);
+    const token = server.registerMcp('agent-1', mcp());
+    expect((await post(token, '{}')).status).toBe(401);
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it('refuses a Host other than its own and any Origin with 403, as a browser would send', async () => {
+    const handler = mcp();
+    const token = server.registerMcp('agent-1', handler);
+    expect(
+      (await raw('POST', '/mcp', { 'x-pact-token': token, host: 'evil.example:80' }, '{}')).status,
+    ).toBe(403);
+    expect(
+      (await raw('POST', '/mcp', { 'x-pact-token': token, origin: 'http://evil.example' }, '{}'))
+        .status,
+    ).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('gives the URL of the route', () => {
+    expect(server.mcpUrl()).toBe(`${url}/mcp`);
   });
 });

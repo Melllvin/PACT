@@ -149,3 +149,11 @@ describe('generic adapter specifics', () => {
     expect(adapter.parseRateLimitReset('Rate limit reached')).toBeNull();
   });
 });
+
+describe('generic CLI as an orchestrator (003 T008)', () => {
+  it('cannot be one: skills belong to Claude Code', () => {
+    expect(
+      new GenericAdapter({ command: 'aider --no-git', platform: 'darwin' }).supportsOrchestrator,
+    ).toBe(false);
+  });
+});
