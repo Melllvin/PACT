@@ -11,6 +11,8 @@ import { GitService } from '../../../src/main/git/git-service';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
 import { createOrchestratorTools } from '../../../src/main/orchestrator/tools';
 import { openStores, type Stores } from '../../../src/main/persistence/store';
+import { ReviewService } from '../../../src/main/review/review-service';
+import { TestRunner } from '../../../src/main/review/test-runner';
 import { PtyManager } from '../../../src/main/pty/pty-manager';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
 import type { AgentDraft } from '../../../src/shared/ipc';
@@ -57,8 +59,11 @@ export async function createHarness() {
   /** The agents with changes to review, as ReviewService would tell; set by a suite. */
   const pending = { ids: [] as string[] };
   const typed: { agentId: string; origin: string }[] = [];
-  const orchestrator = new OrchestratorService({
+  const review = new ReviewService({ git: gitService, workspaces });
+  const tests = new TestRunner({ env: () => Promise.resolve(gitEnv), onUpdate: () => undefined });
+  const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
+    workspaces,
     pluginsDir: join(userData, 'orchestrator'),
     tools: (orchestratorId) =>
       createOrchestratorTools(
@@ -67,6 +72,9 @@ export async function createHarness() {
           agents: manager,
           cliName: () => 'Faux CLI',
           pending: () => Promise.resolve(pending.ids),
+          review,
+          tests,
+          wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
         },
         orchestratorId,
       ),
@@ -93,7 +101,10 @@ export async function createHarness() {
           FAKE_CLI_SCENARIO: scenarioPath(scenarios.next ?? scenarios.default ?? ''),
         }),
       isPortInUse: () => Promise.resolve(false),
-      onState: (event) => events.push(event),
+      onState: (event) => {
+        events.push(event);
+        orchestrator.agentState(event);
+      },
       onPromptTyped: (agentId, origin) => typed.push({ agentId, origin }),
       orchestrator,
     });
@@ -157,6 +168,8 @@ export async function createHarness() {
     orchestrator,
     pending,
     typed,
+    review,
+    tests,
     get manager() {
       return manager;
     },
@@ -171,6 +184,9 @@ export async function createHarness() {
     draft,
     launch,
     async dispose() {
+      review.dispose();
+      tests.dispose();
+      orchestrator.dispose();
       await manager.dispose();
       await pty.dispose();
       await hooks.stop();

@@ -1,0 +1,9 @@
+{
+  "echo": true,
+  "files": [{ "write": "src/fonction.ts", "content": "export const f = 1;\n" }],
+  "mcp": [
+    { "tool": "send_prompt", "arguments": { "agent": "{{prompt.0}}", "text": "{{prompt.1}}" } },
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 30 } },
+    { "tool": "get_changes", "arguments": { "agent": "{{prompt.0}}" } }
+  ]
+}
