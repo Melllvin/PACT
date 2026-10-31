@@ -1,8 +1,9 @@
-import { countsOf, withCount, type LaunchDraft } from '../../shared/launch-draft';
+import { countsOf, setOrchestrator, withCount, type LaunchDraft } from '../../shared/launch-draft';
 import { MAX_AGENTS, type CliDefinition } from '../../shared/model';
 import { Waves } from '../effects/Waves';
 import { LocalChangesNotice } from './LocalChangesNotice';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogBody,
@@ -19,6 +20,8 @@ export type QuickLaunchProps = {
   onChange: (draft: LaunchDraft) => void;
   /** Agents already in the workspace, counted against the limit of six. */
   existingAgents: number;
+  /** 003 — the workspace has no orchestrator yet (FR-001). */
+  canOrchestrate?: boolean;
   error: string | null;
   /** The repository has uncommitted changes, left out of the worktrees (T122). */
   localChanges?: boolean;
@@ -101,12 +104,50 @@ export function launchableClis(clis: CliDefinition[]) {
   };
 }
 
+/**
+ * 003 FR-001 — « ◎ Orchestrateur » : the first agent of a CLI that can be one leads the others.
+ */
+function OrchestratorChoice({
+  draft,
+  clis,
+  enabled,
+  onChange,
+}: {
+  draft: LaunchDraft;
+  clis: CliDefinition[];
+  enabled: boolean;
+  onChange: (draft: LaunchDraft) => void;
+}) {
+  const able = clis.filter((cli) => cli.orchestrator === true);
+  const found = draft.agents.flatMap((agent) =>
+    able.filter((cli) => cli.id === agent.cliId).map((cli) => ({ agent, cli })),
+  )[0];
+  if (!found) return null;
+  const { agent: candidate, cli } = found;
+  const name = cli.name;
+  return (
+    <label className="flex items-center gap-2 text-[12.5px] text-muted-foreground">
+      <Checkbox
+        aria-label={`◎ Orchestrateur : le premier ${name} dirige les autres`}
+        checked={enabled && draft.orchestrator === candidate.key}
+        disabled={!enabled}
+        onCheckedChange={(value) => {
+          onChange(setOrchestrator(draft, value === true ? candidate.key : null));
+        }}
+      />
+      ◎ Orchestrateur : le premier {name} dirige les autres
+      {!enabled && <span className="text-dim"> · déjà un orchestrateur</span>}
+    </label>
+  );
+}
+
 /** Screen 1c — mode rapide: how many agents of each CLI, and free terminals (FR-009, FR-010). */
 export function QuickLaunch({
   clis,
   draft,
   onChange,
   existingAgents,
+  canOrchestrate = true,
   error,
   localChanges = false,
   onLaunch,
@@ -174,6 +215,12 @@ export function QuickLaunch({
               {MAX_AGENTS} agents au plus par workspace.
             </p>
           )}
+          <OrchestratorChoice
+            draft={draft}
+            clis={clis}
+            enabled={canOrchestrate}
+            onChange={onChange}
+          />
           <div className="h-px bg-border" />
           <label className="flex items-center gap-2.5 text-[12.5px] text-muted-foreground">
             <span className="flex-1">Workflow</span>

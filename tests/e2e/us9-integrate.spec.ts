@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -50,6 +50,28 @@ test.afterEach(async () => {
   launched = undefined;
   await rm(root, { recursive: true, force: true });
 });
+
+/** Where the close after the integration stopped, should the tile stay (Windows runner). */
+const closeState = (userDataDir: string) => {
+  const run = (file: string, ...args: string[]) => {
+    try {
+      return execFileSync(file, args, { cwd: repo, env: gitEnv, encoding: 'utf8' }).trim();
+    } catch (error) {
+      return String(error);
+    }
+  };
+  const worktrees = join(repo, '.worktrees');
+  const saved = join(userDataDir, 'workspaces');
+  return [
+    `worktree list:\n${run('git', 'worktree', 'list', '--porcelain')}`,
+    `branches: ${run('git', 'branch', '--list')}`,
+    `.worktrees: ${existsSync(worktrees) ? readdirSync(worktrees).join(', ') : 'none'}`,
+    ...(existsSync(saved)
+      ? readdirSync(saved).map((file) => `${file}: ${readFileSync(join(saved, file), 'utf8')}`)
+      : []),
+    ...(process.platform === 'win32' ? [run('tasklist', '/FI', 'IMAGENAME eq node.exe')] : []),
+  ].join('\n');
+};
 
 /** Sets a counter of the quick launcher (1c) to `target`. */
 const setCount = async (group: Locator, target: number) => {
@@ -103,7 +125,11 @@ test('integrates an agent into main in one commit, then closes its tile and work
   await expect(page.getByRole('status').filter({ hasText: '✓ Intégré' })).toHaveText(
     '✓ Intégré · agent/fake-1 → main',
   );
-  await expect(tile).toHaveCount(0);
+  await expect(tile)
+    .toHaveCount(0)
+    .catch((error: unknown) => {
+      throw new Error(`${String(error)}\n${closeState(launched?.userDataDir ?? '')}`);
+    });
 
   // One commit on main with everything, committed or not (US2/AC1), in the folder too (FR-022).
   expect(git(repo, 'rev-list', '--count', `${mainBefore}..main`)).toBe('1');

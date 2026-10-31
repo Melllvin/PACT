@@ -335,4 +335,24 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
     await waitForState(id, 'awaiting-prompt');
     expect(current(id)?.scheduledResume).toBeNull();
   });
+
+  it('arms nothing more once stopped while it was saving a transition', async () => {
+    const update = workspaces.update.bind(workspaces);
+    const slow = vi.spyOn(workspaces, 'update').mockImplementation(async (...args) => {
+      const updated = await update(...args);
+      await new Promise((r) => setTimeout(r, 100));
+      return updated;
+    });
+    const id = await limited();
+    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await manager.dispose();
+    slow.mockRestore();
+    await new Promise((r) => setTimeout(r, 200)); // the save under way ends
+    manager = await createManager();
+    await manager.restore(workspace.id);
+    const start = vi.spyOn(pty, 'start');
+    clock.advanceTo(RESET);
+    await waitForState(id, 'awaiting-prompt');
+    expect(start).toHaveBeenCalledOnce();
+  });
 });

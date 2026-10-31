@@ -7,7 +7,10 @@ import { agent, rateLimited, scheduledResume, time } from './fixtures';
 
 // T070 — the agent tile (FR-020…FR-024, US3 scenarios 3 to 6, screens 1f and 1n).
 
-const setup = (overrides: Partial<Agent> = {}, extra: { onExpand?: () => void } = {}) => {
+const setup = (
+  overrides: Partial<Agent> = {},
+  extra: { onExpand?: () => void; fromOrchestrator?: boolean } = {},
+) => {
   const actions = {
     onAnswer: vi.fn(),
     onResume: vi.fn(),
@@ -187,5 +190,22 @@ describe('Tile', () => {
       />,
     );
     expect(screen.queryByLabelText(/Terminal de/)).toBeNull();
+  });
+});
+
+describe('Tile and the orchestrator (003 T019)', () => {
+  it('marks the orchestrator', () => {
+    const { tile } = setup({ role: 'orchestrator' });
+    expect(within(tile()).getByText('◎ Orchestrateur')).toBeDefined();
+  });
+
+  it('marks an agent working on a prompt of the orchestrator', () => {
+    const { tile } = setup({ state: 'working' }, { fromOrchestrator: true });
+    expect(within(tile()).getByText('◎ de l’orchestrateur')).toBeDefined();
+  });
+
+  it('marks neither for an ordinary agent', () => {
+    const { tile } = setup();
+    expect(within(tile()).queryByText(/◎/)).toBeNull();
   });
 });

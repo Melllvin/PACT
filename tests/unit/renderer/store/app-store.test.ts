@@ -25,6 +25,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   lastError: null,
   scheduledResume: null,
   review: { seen: {}, comments: [] },
+  role: null,
   ...overrides,
 });
 
@@ -38,6 +39,7 @@ const workspace = (id: string, agents: Agent[] = []): Workspace => ({
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
   testCommand: null,
+  integrationRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 });

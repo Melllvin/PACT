@@ -42,7 +42,14 @@ async function startHookServer(hooks: Hook[]) {
   return `http://127.0.0.1:${String(typeof address === 'object' && address ? address.port : 0)}`;
 }
 
-async function runFake(scenario: string, { args = [] as string[], cwd = process.cwd() } = {}) {
+async function runFake(
+  scenario: string,
+  {
+    args = [] as string[],
+    cwd = process.cwd(),
+    env = {},
+  }: { args?: string[]; cwd?: string; env?: Record<string, string> } = {},
+) {
   const hooks: Hook[] = [];
   const url = await startHookServer(hooks);
   const proc = spawn(process.execPath, [FAKE_CLI, ...args], {
@@ -52,6 +59,7 @@ async function runFake(scenario: string, { args = [] as string[], cwd = process.
       FAKE_CLI_SCENARIO: scenarioPath(scenario),
       PACT_HOOK_URL: url,
       PACT_AGENT_TOKEN: 'secret-token',
+      ...env,
     },
   });
   child = proc;
@@ -219,5 +227,48 @@ describe('fake CLI', () => {
     await fake.waitForPrompt(1);
     fake.send('go');
     await fake.waitFor('burst 2000\n');
+  });
+
+  it('calls a PACT tool over MCP with its own token, the prompt typed in its arguments (003 R11)', async () => {
+    const calls: { body: Record<string, unknown>; token: unknown }[] = [];
+    const mcp = createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk: Buffer) => (raw += chunk.toString()));
+      req.on('end', () => {
+        const body = JSON.parse(raw) as Record<string, unknown>;
+        calls.push({ body, token: req.headers['x-pact-token'] });
+        res.setHeader('content-type', 'application/json');
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: body.id,
+            result: { content: [{ type: 'text', text: 'Consigne en file' }] },
+          }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => mcp.listen(0, '127.0.0.1', resolve));
+    const address = mcp.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    try {
+      const fake = await runFake('orchestrate-prompt', {
+        env: {
+          PACT_ORCHESTRATOR_URL: `http://127.0.0.1:${String(port)}/mcp`,
+          PACT_ORCHESTRATOR_TOKEN: 'orchestrator-token',
+        },
+      });
+      await fake.waitForPrompt(1);
+      fake.send('Codex 2|Écris les tests');
+      await fake.waitFor('MCP send_prompt : Consigne en file');
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.token).toBe('orchestrator-token');
+      expect(calls[0]?.body).toMatchObject({
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { name: 'send_prompt', arguments: { agent: 'Codex 2', text: 'Écris les tests' } },
+      });
+    } finally {
+      await new Promise((resolve) => mcp.close(resolve));
+    }
   });
 });

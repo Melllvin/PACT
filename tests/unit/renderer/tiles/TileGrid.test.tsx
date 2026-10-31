@@ -55,3 +55,28 @@ describe('TileGrid', () => {
     expect(plus()).toHaveLength(0);
   });
 });
+
+describe('TileGrid with an orchestrator (003 T019)', () => {
+  it('puts the lead tile on top, centred, and the others below in order', () => {
+    render(
+      <TileGrid onAdd={vi.fn()} lead={<article aria-label="Chef" />}>
+        {tiles(3)}
+      </TileGrid>,
+    );
+    expect(grid().dataset.layout).toBe('lead');
+    const lead = screen.getByRole('region', { name: 'Orchestrateur' });
+    expect(lead.contains(screen.getByRole('article', { name: 'Chef' }))).toBe(true);
+    const others = screen.getByRole('region', { name: 'Agents dirigés' });
+    expect(
+      Array.from(others.querySelectorAll('article')).map((a) => a.getAttribute('aria-label')),
+    ).toEqual(['Tuile 1', 'Tuile 2', 'Tuile 3']);
+    // Up to six agents in all: two more fit below.
+    expect(plus()).toHaveLength(2);
+  });
+
+  it('keeps the plain grid without one', () => {
+    render(<TileGrid onAdd={vi.fn()}>{tiles(2)}</TileGrid>);
+    expect(grid().dataset.layout).toBe('2x2');
+    expect(screen.queryByRole('region', { name: 'Orchestrateur' })).toBeNull();
+  });
+});

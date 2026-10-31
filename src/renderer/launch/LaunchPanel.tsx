@@ -9,7 +9,7 @@ export type LaunchPanelProps = {
   /** Counters last used in this workspace (FR-010). */
   counters: Workspace['quickLaunchCounters'];
   /** Agents of this workspace: the limit of six, and where new tiles land. */
-  running: Pick<Agent, 'position' | 'color'>[];
+  running: Pick<Agent, 'position' | 'color' | 'role'>[];
   /** Agents of every workspace: their branches and ports are taken. */
   taken: Pick<Agent, 'branch' | 'port'>[];
   /** Draft of a refused launch, to start again from it. */
@@ -56,6 +56,7 @@ export function LaunchPanel({
       onChange={setDraft}
       running={running}
       taken={taken}
+      canOrchestrate={!running.some((agent) => agent.role === 'orchestrator')}
       error={error}
       localChanges={localChanges}
       onLaunch={() => {
@@ -72,6 +73,7 @@ export function LaunchPanel({
       draft={draft}
       onChange={setDraft}
       existingAgents={running.length}
+      canOrchestrate={!running.some((agent) => agent.role === 'orchestrator')}
       error={error}
       localChanges={localChanges}
       onLaunch={() => {

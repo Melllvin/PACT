@@ -25,6 +25,8 @@ export type DetailedLaunchProps = {
   taken: Pick<Agent, 'branch' | 'port'>[];
   /** Why main refused the launch (LIMIT, BRANCH_CONFLICT, PORT_CONFLICT). */
   error: string | null;
+  /** 003 — the workspace has no orchestrator yet (FR-001). */
+  canOrchestrate?: boolean;
   /** The repository has uncommitted changes, left out of the worktrees (T122). */
   localChanges?: boolean;
   onLaunch: () => void;
@@ -45,6 +47,7 @@ export function DetailedLaunch({
   running,
   taken,
   error,
+  canOrchestrate = true,
   localChanges = false,
   onLaunch,
   onQuick,
@@ -95,6 +98,7 @@ export function DetailedLaunch({
             clis={installed}
             running={running}
             index={index === -1 ? null : index}
+            canOrchestrate={canOrchestrate}
             onDuplicate={() => {
               onChange(duplicate(draft, index));
             }}

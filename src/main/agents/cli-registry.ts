@@ -49,7 +49,7 @@ export class CliRegistry {
         const result = await adapter.detect(env).catch(() => MISSING);
         const models =
           result.status === 'missing' ? [] : await adapter.listModels().catch(() => []);
-        return { adapter, definition: this.definition(adapter.id, result, models) };
+        return { adapter, definition: this.definition(adapter, result, models) };
       }),
     );
     const saved = (await this.stores.state.read()).customClis;
@@ -102,7 +102,11 @@ export class CliRegistry {
     return { adapter, definition: { ...definition, resolvedPath, status } };
   }
 
-  private definition(id: AdapterId, result: DetectionResult, models: string[]): CliDefinition {
+  private definition(
+    { id, supportsOrchestrator }: CliAdapter,
+    result: DetectionResult,
+    models: string[],
+  ): CliDefinition {
     if (id === 'generic') throw new Error('Generic CLIs are user-defined, never detected');
     return {
       id,
@@ -113,6 +117,7 @@ export class CliRegistry {
       origin: 'detected',
       status: result.status,
       models,
+      orchestrator: supportsOrchestrator,
     };
   }
 }

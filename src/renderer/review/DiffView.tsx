@@ -1,6 +1,7 @@
 import { MessageSquarePlus } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { ReviewComment } from '../../shared/model';
+import { hunkHeader } from '../../shared/diff';
 import type { ChangedFile, DiffHunk, DiffLine, FileDiff } from '../../shared/review';
 import { cn } from '@/lib/utils';
 
@@ -52,13 +53,6 @@ export function formatSize(bytes: number) {
   if (bytes < 1024) return `${String(bytes)} octets`;
   if (bytes < 1024 * 1024) return `${format(bytes / 1024)} Ko`;
   return `${format(bytes / (1024 * 1024))} Mo`;
-}
-
-/** `@@ -1,2 +1,3 @@`, counted from the lines of the hunk. */
-function hunkHeader({ oldStart, newStart, lines }: DiffHunk) {
-  const old = lines.filter((line) => line.kind !== 'add').length;
-  const added = lines.filter((line) => line.kind !== 'del').length;
-  return `@@ -${String(oldStart)},${String(old)} +${String(newStart)},${String(added)} @@`;
 }
 
 /** The lines of the diff, each followed by its comments and, while writing one, its field. */

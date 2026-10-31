@@ -20,6 +20,7 @@ import {
  */
 export class FakeAdapter implements CliAdapter {
   readonly id = 'fake';
+  readonly supportsOrchestrator = true;
   private readonly cliPath: string;
   private readonly platform: NodeJS.Platform;
   private readonly runtime: string;
@@ -89,7 +90,17 @@ export class FakeAdapter implements CliAdapter {
     return {
       ...command,
       cwd: input.cwd,
-      env: { ...pactEnv(input), ELECTRON_RUN_AS_NODE: '1' },
+      env: {
+        ...pactEnv(input),
+        ELECTRON_RUN_AS_NODE: '1',
+        // 003 R11: the fake orchestrator calls PACT's tools itself, with no plugin to read.
+        ...(input.orchestrator
+          ? {
+              PACT_ORCHESTRATOR_URL: input.orchestrator.url,
+              PACT_ORCHESTRATOR_TOKEN: input.orchestrator.token,
+            }
+          : {}),
+      },
     };
   }
 }

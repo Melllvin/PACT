@@ -16,6 +16,10 @@
 //                                   { write, content } | { delete } | { rename: [from, to] }
 //                                   | { commit: message } (stages everything first)
 //   echo: boolean                   prints `Reçu : <prompt>`, to check what PACT typed
+//   mcp: { tool, arguments }[]      calls these PACT tools when it is the orchestrator (003 R11), on
+//                                   PACT_ORCHESTRATOR_URL with PACT_ORCHESTRATOR_TOKEN, and prints
+//                                   `MCP <tool> : <text>`. In string arguments, `{{prompt}}` is the
+//                                   prompt typed and `{{prompt.N}}` its N-th `|`-separated part
 //   signal: object                  final hook payload (default { type: 'turn-finished' })
 //   exitCode: number                exits with this code after the turn
 //
@@ -74,6 +78,43 @@ const nextPrompt = async () => {
   return parts.join('\n').replace(PASTE_END, '').trim();
 };
 const prompt = () => process.stdout.write('> ');
+
+/** `{{prompt}}` and `{{prompt.N}}` in the string values of `args`, from the prompt typed. */
+function fillArguments(args, line) {
+  const parts = line.split('|');
+  const fill = (value) =>
+    typeof value !== 'string'
+      ? value
+      : value
+          .replaceAll('{{prompt}}', line)
+          .replace(/\{\{prompt\.(\d+)\}\}/g, (_, n) => parts[Number(n)] ?? '');
+  return Object.fromEntries(Object.entries(args ?? {}).map(([key, value]) => [key, fill(value)]));
+}
+
+/** One `tools/call` to PACT's MCP server, as Claude Code makes it. */
+async function callTool(tool, args) {
+  try {
+    const response = await fetch(process.env.PACT_ORCHESTRATOR_URL ?? '', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'x-pact-token': process.env.PACT_ORCHESTRATOR_TOKEN ?? '',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: { name: tool, arguments: args },
+      }),
+    });
+    if (!response.ok) return `HTTP ${String(response.status)}`;
+    const reply = await response.json();
+    return reply.result?.content?.[0]?.text ?? JSON.stringify(reply.error ?? reply);
+  } catch (error) {
+    return `injoignable (${error.message})`;
+  }
+}
 
 function editFiles(steps) {
   const git = (...args) => execFileSync('git', args, { stdio: 'ignore' });
@@ -134,6 +175,12 @@ async function runTurn(line) {
     console.log('Reprise');
   }
 
+  // Only the orchestrator gets PACT's tools; the agents it leads skip these steps.
+  for (const step of process.env.PACT_ORCHESTRATOR_URL ? (scenario.mcp ?? []) : []) {
+    console.log(
+      `MCP ${step.tool} : ${await callTool(step.tool, fillArguments(step.arguments, line))}`,
+    );
+  }
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);
   if (scenario.renameBranch) {

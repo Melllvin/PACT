@@ -45,7 +45,7 @@ const valueAfter = (args: string[], flag: string) => args[args.indexOf(flag) + 1
 
 type Settings = {
   hooks: Record<string, { hooks: Record<string, unknown>[] }[]>;
-  permissions?: { ask?: string[] };
+  permissions?: { ask?: string[]; allow?: string[] };
   env?: Record<string, string>;
   teammateMode?: string;
 };
@@ -200,6 +200,48 @@ describe('Claude Code agent teams', () => {
         notification_type: 'permission_prompt',
       }),
     ).toEqual({ type: 'awaiting-answer', summary: 'helper needs your permission' });
+  });
+});
+
+describe('Claude Code as an orchestrator (003 T007)', () => {
+  const orchestrator = {
+    pluginDir: '/Users/me/Library/Application Support/PACT/orchestrator/a 1/plugin',
+    url: 'http://127.0.0.1:4567/mcp',
+    token: 'e'.repeat(64),
+  };
+  const launch = (permissionLevel: LaunchInput['permissionLevel'] = 'always-allow') =>
+    create().buildLaunch({ ...input, permissionLevel, orchestrator });
+
+  it('can be one', () => {
+    expect(create().supportsOrchestrator).toBe(true);
+  });
+
+  it('loads the session plugin and is told its role', () => {
+    const { args } = launch();
+    expect(valueAfter(args, '--plugin-dir')).toBe(orchestrator.pluginDir);
+    expect(valueAfter(args, '--append-system-prompt')).toContain('pact:orchestrateur');
+  });
+
+  it('allows the PACT tools without a prompt, keeping the asks of « actions sensibles »', () => {
+    expect(settingsOf(launch().args).permissions?.allow).toEqual(['mcp__plugin_pact_pact__*']);
+    const sensitive = settingsOf(launch('ask-sensitive').args).permissions;
+    expect(sensitive?.allow).toEqual(['mcp__plugin_pact_pact__*']);
+    expect(sensitive?.ask).toContain('Bash(rm *)');
+  });
+
+  it('gets its token and a long MCP tool timeout from its environment, never its arguments', () => {
+    const spec = launch();
+    expect(spec.env.PACT_ORCHESTRATOR_TOKEN).toBe(orchestrator.token);
+    expect(Number(spec.env.MCP_TOOL_TIMEOUT)).toBeGreaterThan(600_000);
+    expect(spec.args.join(' ')).not.toContain(orchestrator.token);
+  });
+
+  it('adds none of it for an ordinary agent', () => {
+    const spec = create().buildLaunch({ ...input, orchestrator: null });
+    expect(spec.args).not.toContain('--plugin-dir');
+    expect(spec.args).not.toContain('--append-system-prompt');
+    expect(settingsOf(spec.args).permissions).toBeUndefined();
+    expect(spec.env.PACT_ORCHESTRATOR_TOKEN).toBeUndefined();
   });
 });
 

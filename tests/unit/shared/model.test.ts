@@ -37,6 +37,7 @@ const agent = (position: number, overrides: Partial<Agent> = {}): Agent => ({
   lastError: null,
   scheduledResume: null,
   review: { seen: {}, comments: [] },
+  role: null,
   ...overrides,
 });
 
@@ -50,6 +51,7 @@ const workspace = (agents: Agent[]): Workspace => ({
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
   testCommand: null,
+  integrationRequests: [],
   lastOpenedAt: now,
   status: 'available',
 });
@@ -272,5 +274,38 @@ describe('Workspace.testCommand (002)', () => {
     );
     expect(workspaceSchema.safeParse({ ...workspace([]), testCommand: '' }).success).toBe(false);
     expect(workspaceSchema.safeParse({ ...workspace([]), testCommand: '  ' }).success).toBe(false);
+  });
+});
+
+describe('orchestrator (003 T002)', () => {
+  const workspace = (agents: Agent[]): unknown => ({
+    id: 'w1',
+    path: '/repo',
+    name: 'repo',
+    mainBranch: 'main',
+    agents,
+    freeTerminals: [],
+    quickLaunchCounters: { freeTerminal: 0 },
+    permissionOverride: null,
+    lastOpenedAt: now,
+    status: 'available',
+  });
+
+  it('gives agents no role and workspaces no request by default, so files from 002 load', () => {
+    const from002: Partial<Agent> = agent(1);
+    delete from002.role;
+    expect(agentSchema.parse(from002).role).toBeNull();
+    expect(workspaceSchema.parse(workspace([agent(1)])).integrationRequests).toEqual([]);
+  });
+
+  it('allows one orchestrator per workspace', () => {
+    expect(
+      workspaceSchema.safeParse(workspace([agent(1, { role: 'orchestrator' }), agent(2)])).success,
+    ).toBe(true);
+    expect(
+      workspaceSchema.safeParse(
+        workspace([agent(1, { role: 'orchestrator' }), agent(2, { role: 'orchestrator' })]),
+      ).success,
+    ).toBe(false);
   });
 });

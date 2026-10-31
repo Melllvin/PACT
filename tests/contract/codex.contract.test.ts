@@ -290,3 +290,9 @@ describe('Codex detection', () => {
     expect(await adapter.detect({ PATH: dir })).toMatchObject({ status: 'unsupported-version' });
   });
 });
+
+describe('Codex as an orchestrator (003 T008)', () => {
+  it('cannot be one: skills belong to Claude Code', () => {
+    expect(create().supportsOrchestrator).toBe(false);
+  });
+});

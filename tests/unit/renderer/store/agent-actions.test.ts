@@ -18,6 +18,7 @@ const workspace: Workspace = {
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
   testCommand: null,
+  integrationRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 };
@@ -247,5 +248,17 @@ describe('comments and prompts of the review (002 T038, FR-012…FR-015)', () =>
     await store.getState().sendToAgent(id, 'failing-tests');
     expect(store.getState().actionError).toBe('Refusé');
     expect(store.getState().correcting[id]).toBeUndefined();
+  });
+});
+
+describe('prompts of the orchestrator (003 T019)', () => {
+  it('marks the agent from the prompt typed until it is ready again', async () => {
+    const { store, emit } = await setup();
+    emit('orchestrator:prompted', { agentId: id });
+    expect(store.getState().orchestratorPrompted[id]).toBe('queued');
+    emit('agent:state', { agentId: id, state: 'working' });
+    expect(store.getState().orchestratorPrompted[id]).toBe('working');
+    emit('agent:state', { agentId: id, state: 'done' });
+    expect(store.getState().orchestratorPrompted[id]).toBeUndefined();
   });
 });

@@ -27,6 +27,7 @@ const RATE_LIMIT_LINES = 3;
 
 export class GenericAdapter implements CliAdapter {
   readonly id = 'generic';
+  readonly supportsOrchestrator = false;
   private readonly executable: string;
   private readonly args: string[];
   private readonly platform: NodeJS.Platform;

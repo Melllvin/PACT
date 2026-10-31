@@ -55,3 +55,19 @@ export function parseUnifiedDiff(text: string): DiffHunk[] {
     return undefined;
   }
 }
+
+/** `@@ -1,2 +1,3 @@`, counted from the lines of the hunk. */
+export function hunkHeader({ oldStart, newStart, lines }: DiffHunk): string {
+  const old = lines.filter((line) => line.kind !== 'add').length;
+  const added = lines.filter((line) => line.kind !== 'del').length;
+  return `@@ -${String(oldStart)},${String(old)} +${String(newStart)},${String(added)} @@`;
+}
+
+const SIGN: Record<DiffLine['kind'], string> = { context: ' ', add: '+', del: '-' };
+
+/** 003 — the hunks back as unified diff text, for the orchestrator (FR-012). */
+export function unifiedText(hunks: readonly DiffHunk[]): string {
+  return hunks
+    .flatMap((hunk) => [hunkHeader(hunk), ...hunk.lines.map((line) => SIGN[line.kind] + line.text)])
+    .join('\n');
+}

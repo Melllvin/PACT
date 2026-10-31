@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { PermissionLevel } from '../../../shared/model';
 import { toSpawnCommand } from '../../env/resolve-command';
+import { SKILL_NAME } from '../../orchestrator/plugin';
 import { bridgeCommand, detectCommand, nextClockTime, tryRun } from './shared';
 import {
   pactEnv,
@@ -30,6 +31,14 @@ const SENSITIVE_RULES = [
   'WebFetch',
 ];
 
+/** 003 R2 — the tools of the session plugin's MCP server, as Claude Code names them. */
+const PACT_TOOLS = 'mcp__plugin_pact_pact__*';
+
+/** 003 R5 — above the longest wait_for_agents (600 s), so Claude Code does not give up on it. */
+const MCP_TOOL_TIMEOUT_MS = '660000';
+
+const ORCHESTRATOR_PROMPT = `Tu es l'orchestrateur de ce workspace PACT : tu diriges les autres agents avec le skill ${SKILL_NAME} et les outils du serveur MCP « pact ».`;
+
 /** A permission dialog waits for the user; ten minutes before Claude Code gives up the hook. */
 const PERMISSION_HOOK_TIMEOUT_S = 600;
 
@@ -57,6 +66,7 @@ type Options = {
 
 export class ClaudeCodeAdapter implements CliAdapter {
   readonly id = 'claude-code';
+  readonly supportsOrchestrator = true;
   private readonly platform: NodeJS.Platform;
   private readonly bridge: HookBridge;
   private readonly run: CommandRunner;
@@ -135,11 +145,28 @@ export class ClaudeCodeAdapter implements CliAdapter {
       '--settings',
       JSON.stringify(this.settings(input, level)),
       ...(input.model ? ['--model', input.model] : []),
+      ...(input.orchestrator
+        ? [
+            '--plugin-dir',
+            input.orchestrator.pluginDir,
+            '--append-system-prompt',
+            ORCHESTRATOR_PROMPT,
+          ]
+        : []),
     ];
     return {
       ...toSpawnCommand(input.executablePath, args, this.platform, process.env),
       cwd: input.cwd,
-      env: pactEnv(input),
+      env: {
+        ...pactEnv(input),
+        // The plugin's .mcp.json reads the token here: never in the arguments nor in a file.
+        ...(input.orchestrator
+          ? {
+              PACT_ORCHESTRATOR_TOKEN: input.orchestrator.token,
+              MCP_TOOL_TIMEOUT: MCP_TOOL_TIMEOUT_MS,
+            }
+          : {}),
+      },
     };
   }
 
@@ -170,12 +197,21 @@ export class ClaudeCodeAdapter implements CliAdapter {
         StopFailure: hook(http),
         PermissionRequest: hook({ ...http, timeout: PERMISSION_HOOK_TIMEOUT_S }),
       },
-      ...(level === 'ask-sensitive' ? { permissions: { ask: SENSITIVE_RULES } } : {}),
+      ...permissions(level, input.orchestrator != null),
     };
   }
 }
 
 /** Only a question needs the user: what a teammate or subagent asks waits in the lead's terminal. */
+/** « Actions sensibles » asks (R5 of 001); an orchestrator also uses PACT's tools freely (003 R2). */
+function permissions(level: PermissionLevel, orchestrator: boolean) {
+  const rules = {
+    ...(orchestrator ? { allow: [PACT_TOOLS] } : {}),
+    ...(level === 'ask-sensitive' ? { ask: SENSITIVE_RULES } : {}),
+  };
+  return Object.keys(rules).length === 0 ? {} : { permissions: rules };
+}
+
 function mapEvent(event: HookPayload): AgentSignal | null {
   const signal = mapLeadEvent(event);
   if (event.agent_id === undefined || signal?.type === 'awaiting-answer') return signal;

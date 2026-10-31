@@ -70,6 +70,7 @@ const agent = (): Agent => ({
   lastError: null,
   scheduledResume: null,
   review: { seen: {}, comments: [] },
+  role: null,
 });
 
 type Options = ConstructorParameters<typeof IntegrationService>[0];
@@ -488,6 +489,45 @@ describe('IntegrationService refusals and edge cases', () => {
     await writeFile(copy, 'trop tard\n');
     await new Promise((r) => setTimeout(r, 200));
     expect(states.at(-1)?.conflicts[0]?.edited).toBeNull();
+  });
+
+  it('cancels while it is checked again after the agent, and nothing comes back', async () => {
+    await conflict();
+    const { id } = await start(service);
+    await service.askAgent(id);
+    service.agentState(AGENT_ID, 'working');
+    service.agentState(AGENT_ID, 'done');
+    // Cancelled at once, while the check runs: still the user's integration to cancel.
+    await service.cancel(id);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(states.at(-1)?.state).toBe('cancelled');
+    expect((await failure(service.finish(id))).code).toBe('NOT_FOUND');
+  });
+
+  it('neither finishes nor asks the agent again while it is checked again', async () => {
+    await conflict();
+    const { id } = await start(service);
+    await service.askAgent(id);
+    service.agentState(AGENT_ID, 'working');
+    service.agentState(AGENT_ID, 'done');
+    expect((await failure(service.finish(id))).code).toBe('INVALID_INPUT');
+    expect((await failure(service.askAgent(id))).code).toBe('INVALID_INPUT');
+    await waitFor(() => states.at(-1)?.state === 'conflicted', 'not checked again');
+  });
+
+  it('writes nothing to main when cancelled while the agent’s resolution is checked', async () => {
+    await conflict();
+    const main = git(repo, 'rev-parse', 'main');
+    const { id } = await start(service);
+    await service.askAgent(id);
+    service.agentState(AGENT_ID, 'working');
+    commitAll(worktree, 'Avant la mise à jour');
+    git(worktree, 'merge', '-q', '-s', 'ours', '-m', 'Met à jour depuis main', 'main');
+    service.agentState(AGENT_ID, 'done');
+    await service.cancel(id);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(states.at(-1)?.state).toBe('cancelled');
+    expect(git(repo, 'rev-parse', 'main')).toBe(main);
   });
 
   it('says why the integration failed when it is checked again after the agent', async () => {

@@ -6,7 +6,7 @@ import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
 import type { PtyManager } from '../pty/pty-manager';
 import { IDLE_QUESTION_MS } from './adapters/generic';
-import type { AgentSignal, CliAdapter, ResolvedEnv } from './adapters/types';
+import type { AgentSignal, CliAdapter, OrchestratorLaunch, ResolvedEnv } from './adapters/types';
 import { applyExit, applySignal } from './agent-state';
 import { AutoResume, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
@@ -44,7 +44,24 @@ type Options = {
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
   autoResume?: (workspaceId: string) => Promise<boolean>;
   clock?: Clock;
+  /**
+   * The agent is closing: what follows its worktree lets go of it first, since on Windows a
+   * folder watched cannot be removed (002 FR-024).
+   */
+  onClosing?: (agentId: string) => void;
+  /** 003 R4 — a prompt was typed into the agent, with where it came from. */
+  onPromptTyped?: (agentId: string, origin: PromptOrigin) => void;
+  /** 003 — the session plugin and token of an orchestrator, prepared before each start (R2). */
+  orchestrator?: {
+    prepare(agent: Agent): Promise<OrchestratorLaunch>;
+    release(agentId: string): void;
+  };
 };
+
+/** Who asked for a prompt: the review (002) or the orchestrator of the workspace (003 R4). */
+export type PromptOrigin = 'review' | 'orchestrator';
+
+type QueuedPrompt = { text: string; origin: PromptOrigin };
 
 export type LaunchRequest = {
   workspaceId: string;
@@ -86,6 +103,7 @@ export class AgentManager {
   private readonly idleMs: number;
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
   private readonly resumes: AutoResume;
+  private readonly orchestrator: Options['orchestrator'];
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
@@ -93,7 +111,11 @@ export class AgentManager {
    * Prompts waiting for the agent to be ready (002 R7): the initial prompt « Relancer » types
    * again, review comments and shortcuts. One is typed per ready transition.
    */
-  private readonly prompts = new Map<string, string[]>();
+  private readonly prompts = new Map<string, QueuedPrompt[]>();
+  /** 003 — the question each agent waits on, for the orchestrator's list_agents (FR-011). */
+  private readonly questions = new Map<string, string>();
+  private readonly onPromptTyped: NonNullable<Options['onPromptTyped']>;
+  private readonly onClosing: NonNullable<Options['onClosing']>;
   /** Agents a prompt was typed to, until they leave the ready state. */
   private readonly promptTyped = new Set<string>();
   private readonly unsubscribe: (() => void)[];
@@ -112,8 +134,11 @@ export class AgentManager {
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
+    this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
+    this.onClosing = options.onClosing ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
+    this.orchestrator = options.orchestrator;
     this.resumes = new AutoResume({
       ...(options.clock ? { clock: options.clock } : {}),
       onDue: (resume) => void this.resumeDue(resume),
@@ -250,7 +275,10 @@ export class AgentManager {
     this.resumes.forget(id);
     await this.stop(id);
     if (agent.initialPrompt !== null) {
-      this.prompts.set(id, [agent.initialPrompt, ...(this.prompts.get(id) ?? [])]);
+      this.prompts.set(id, [
+        { text: agent.initialPrompt, origin: 'review' },
+        ...(this.prompts.get(id) ?? []),
+      ]);
     }
     await this.startAgain(workspace, agent, null);
   }
@@ -259,11 +287,31 @@ export class AgentManager {
    * 002 R7 — a prompt typed once the agent awaits one or is done, never while it works or waits
    * for an answer. Multi-line text goes as a bracketed paste, so it stays one prompt.
    */
-  async sendPrompt(id: string, text: string): Promise<void> {
+  async sendPrompt(id: string, text: string, origin: PromptOrigin = 'review'): Promise<number> {
     await Promise.resolve();
     this.find(id);
-    this.prompts.set(id, [...(this.prompts.get(id) ?? []), text]);
+    const item = { text, origin };
+    this.prompts.set(id, [...(this.prompts.get(id) ?? []), item]);
     this.flushPrompt(id);
+    // Where it waits: 0 when typed at once.
+    return (this.prompts.get(id) ?? []).indexOf(item) + 1;
+  }
+
+  /** 003 — the prompts of `origin` still waiting for the agent (FR-011). */
+  waitingPrompts(id: string, origin: PromptOrigin): number {
+    return (this.prompts.get(id) ?? []).filter((item) => item.origin === origin).length;
+  }
+
+  /** 003 FR-004 — the role is withdrawn: its prompts not typed yet are dropped. */
+  cancelPrompts(id: string, origin: PromptOrigin): void {
+    const kept = (this.prompts.get(id) ?? []).filter((item) => item.origin !== origin);
+    if (kept.length === 0) this.prompts.delete(id);
+    else this.prompts.set(id, kept);
+  }
+
+  /** 003 FR-011 — what the agent asks, while it waits for an answer. */
+  questionOf(id: string): string | null {
+    return this.questions.get(id) ?? null;
   }
 
   /** « Journal »: the output kept for the agent, across its restarts. */
@@ -277,6 +325,8 @@ export class AgentManager {
     const { workspace, agent } = this.find(id);
     this.resumes.forget(id);
     this.prompts.delete(id);
+    this.orchestrator?.release(id);
+    this.onClosing(id);
     await this.stop(id);
     if (removeWorktree) {
       // The agent may have renamed its branch since the last check.
@@ -354,7 +404,7 @@ export class AgentManager {
     const started: Agent = { ...agent, ...fields };
     this.emit(started);
     this.resumes.sync(started);
-    this.start(started, workspace.path, cli, env);
+    this.start(started, workspace.path, cli, env, await this.prepareOrchestrator(started));
   }
 
   /**
@@ -414,6 +464,7 @@ export class AgentManager {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
     const clis = drafts.map((draft) => this.installedCli(draft.cliId));
+    this.validateOrchestrator(workspace, drafts, clis);
     await this.validate(workspace, drafts);
 
     const positions = freePositions(workspace.agents, drafts.length);
@@ -458,12 +509,13 @@ export class AgentManager {
         lastError: null,
         scheduledResume: null,
         review: { seen: {}, comments: [] },
+        role: draft.orchestrator === true ? 'orchestrator' : null,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
       // Saved before the process starts: its first hook must find the agent.
       await this.workspaces.update(workspaceId, (ws) => ({ ...ws, agents: [...ws.agents, agent] }));
-      this.start(agent, workspace.path, cli, env);
+      this.start(agent, workspace.path, cli, env, await this.prepareOrchestrator(agent));
       launched.push(agent);
     }
     await this.workspaces.update(workspaceId, (ws) => ({ ...ws, quickLaunchCounters: counters }));
@@ -502,7 +554,35 @@ export class AgentManager {
   }
 
   /** Starts the agent's CLI; a known `sessionId` resumes that session (R6). */
-  private start(agent: Agent, repoPath: string, cli: InstalledCli, env: ResolvedEnv) {
+  /** 003 — at most one orchestrator per workspace, of a CLI that can be one (FR-001, R8). */
+  private validateOrchestrator(workspace: Workspace, drafts: AgentDraft[], clis: InstalledCli[]) {
+    const asked = drafts.filter((draft) => draft.orchestrator === true).length;
+    if (asked === 0) return;
+    if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
+    if (asked + workspace.agents.filter((agent) => agent.role === 'orchestrator').length > 1) {
+      throw new IpcFailure('INVALID_INPUT', 'Un seul orchestrateur par workspace.');
+    }
+    if (
+      drafts.some(
+        (draft, i) => draft.orchestrator === true && !clis[i]?.adapter.supportsOrchestrator,
+      )
+    ) {
+      throw new IpcFailure('INVALID_INPUT', 'Ce CLI ne peut pas être orchestrateur.');
+    }
+  }
+
+  private async prepareOrchestrator(agent: Agent): Promise<OrchestratorLaunch | null> {
+    if (agent.role !== 'orchestrator' || !this.orchestrator) return null;
+    return this.orchestrator.prepare(agent);
+  }
+
+  private start(
+    agent: Agent,
+    repoPath: string,
+    cli: InstalledCli,
+    env: ResolvedEnv,
+    orchestrator: OrchestratorLaunch | null = null,
+  ) {
     const { adapter } = cli;
     const token = this.hooks.register(agent.id, (payload) => {
       const signal = adapter.mapHookEvent(payload);
@@ -524,6 +604,7 @@ export class AgentManager {
       permissionLevel: agent.permissionLevel,
       port: agent.port,
       hook: { url: this.hookUrl(), token },
+      orchestrator,
     };
     const spec =
       agent.sessionId === null
@@ -587,8 +668,10 @@ export class AgentManager {
     // A request without a ruleKey (a Notification) keeps the one its PermissionRequest gave.
     if (signal.type === 'awaiting-answer') {
       if (signal.ruleKey !== undefined) this.pendingRule.set(id, signal.ruleKey);
+      this.questions.set(id, signal.summary);
     } else {
       this.pendingRule.delete(id);
+      this.questions.delete(id);
     }
     const resetAt = signal.type === 'failed' ? signal.resetAt : undefined;
     const schedule =
@@ -623,7 +706,8 @@ export class AgentManager {
       ...ws,
       agents: ws.agents.map((a) => (a.id === id ? (changed = next(a)) : a)),
     }));
-    if (!changed) return;
+    // Stopped during the save: the next manager takes over, this one arms and types nothing.
+    if (!changed || this.disposed) return;
     this.emit(changed);
     this.resumes.sync(changed);
     if (isReady(changed.state)) this.flushPrompt(id);
@@ -631,14 +715,16 @@ export class AgentManager {
   }
 
   private flushPrompt(id: string) {
-    const [text, ...rest] = this.prompts.get(id) ?? [];
+    const [next, ...rest] = this.prompts.get(id) ?? [];
     const state = this.find(id).agent.state;
-    if (text === undefined || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
+    if (next === undefined || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
       return;
     if (rest.length === 0) this.prompts.delete(id);
     else this.prompts.set(id, rest);
     this.promptTyped.add(id);
+    const { text, origin } = next;
     this.pty.write(id, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}\r` : `${text}\r`);
+    this.onPromptTyped(id, origin);
   }
 
   private emit({ id, state, lastError, scheduledResume }: Agent) {

@@ -77,6 +77,7 @@ const agent = (id: string, worktreePath: string, state: AgentState = 'done'): Ag
   lastError: null,
   scheduledResume: null,
   review: { seen: {}, comments: [] },
+  role: null,
 });
 
 const createService = (git: Partial<GitService> = {}) =>

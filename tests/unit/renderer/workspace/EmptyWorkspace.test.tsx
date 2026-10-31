@@ -14,6 +14,7 @@ const workspace = (overrides: Partial<Workspace> = {}): Workspace => ({
   quickLaunchCounters: { freeTerminal: 0 },
   permissionOverride: null,
   testCommand: null,
+  integrationRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
   ...overrides,

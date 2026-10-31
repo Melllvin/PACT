@@ -13,6 +13,7 @@ import {
   remove,
   setAgent,
   setCommon,
+  setOrchestrator,
   setOverride,
   toAgentDrafts,
   withCount,
@@ -239,5 +240,20 @@ describe('freePositions / freeColors (shared with the agent manager)', () => {
   it('takes the lowest free positions and the colors left, in palette order', () => {
     expect(freePositions([existing(2)], 3)).toEqual([1, 3, 4]);
     expect(freeColors([existing(1)], 2)).toEqual(['cyan', 'green']);
+  });
+});
+
+describe('orchestrator in the draft (003 T010)', () => {
+  it('marks only the agent chosen, and none once it is gone', () => {
+    const base = draftFromCounts({ 'claude-code': 2 }, 0);
+    const key = base.agents[1]?.key ?? '';
+    const chosen = setOrchestrator(base, key);
+    const drafts = toAgentDrafts(chosen, 'always-allow', () => []);
+    expect(drafts.map((d) => d.orchestrator ?? false)).toEqual([false, true]);
+    expect(setOrchestrator(chosen, null).orchestrator).toBeNull();
+    const removed = remove(chosen, 1);
+    expect(toAgentDrafts(removed, 'always-allow', () => []).some((d) => d.orchestrator)).toBe(
+      false,
+    );
   });
 });

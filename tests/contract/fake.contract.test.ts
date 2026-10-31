@@ -123,3 +123,26 @@ describe('default command runner', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('fake adapter as an orchestrator (003 T008)', () => {
+  it('can be one, and finds the MCP URL and its token in its environment', () => {
+    const adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: 'darwin' });
+    expect(adapter.supportsOrchestrator).toBe(true);
+    const spec = adapter.buildLaunch({
+      agentId: '00000000-0000-4000-8000-000000000001',
+      executablePath: process.execPath,
+      repoPath: '/repo',
+      cwd: '/repo/.worktrees/fake-1',
+      model: null,
+      permissionLevel: 'always-allow',
+      port: 3001,
+      hook: { url: 'http://127.0.0.1:4567', token: 'f'.repeat(64) },
+      orchestrator: { pluginDir: '/p', url: 'http://127.0.0.1:4567/mcp', token: 'e'.repeat(64) },
+    });
+    expect(spec.env).toMatchObject({
+      PACT_ORCHESTRATOR_URL: 'http://127.0.0.1:4567/mcp',
+      PACT_ORCHESTRATOR_TOKEN: 'e'.repeat(64),
+    });
+    expect(spec.args.join(' ')).not.toContain('e'.repeat(64));
+  });
+});

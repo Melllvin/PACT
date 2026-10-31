@@ -97,6 +97,8 @@ export type AppState = {
    * they are ready again (« Agent : correction en cours »).
    */
   correcting: Record<string, 'queued' | 'working'>;
+  /** 003 FR-010 — the agents on a prompt of the orchestrator, followed the same way. */
+  orchestratorPrompted: Record<string, 'queued' | 'working'>;
 };
 
 export type ReviewSendKind = 'fix-comments' | 'failing-tests' | 'conflict' | 'request';
@@ -237,6 +239,7 @@ export function createAppStore(api: PactApi) {
       log: null,
       closingAgentId: null,
       correcting: {},
+      orchestratorPrompted: {},
 
       async load() {
         set({ status: 'loading', error: null });
@@ -263,7 +266,11 @@ export function createAppStore(api: PactApi) {
                   ? withoutAgent(workspaces, event.agentId)
                   : updateAgent(workspaces, event.agentId, applyState(event)),
               correcting: followCorrection(get().correcting, event),
+              orchestratorPrompted: followCorrection(get().orchestratorPrompted, event),
             });
+          }),
+          api.on('orchestrator:prompted', ({ agentId }) => {
+            set({ orchestratorPrompted: { ...get().orchestratorPrompted, [agentId]: 'queued' } });
           }),
           api.on('agent:branch', ({ agentId, branch }) => {
             set({ workspaces: updateAgent(get().workspaces, agentId, (a) => ({ ...a, branch })) });
