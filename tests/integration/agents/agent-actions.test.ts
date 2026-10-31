@@ -315,15 +315,25 @@ describe('AgentManager.close (FR-037)', { timeout: 30_000 }, () => {
 // 002 R7 — review prompts wait for the agent to be ready, one per ready transition.
 describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
   /** Each write to the agent, with its state and the output so far at that moment. */
+  /**
+   * Each write with the state of the agent then, and the states it went through before. States,
+   * not output: on Windows ConPTY may deliver the output after the hook that ends the turn.
+   */
   const spyWrites = () => {
-    const writes: { data: string; state: AgentState | undefined; before: string }[] = [];
+    const writes: { data: string; state: AgentState | undefined; states: AgentState[] }[] = [];
     const write = pty.write.bind(pty);
     vi.spyOn(pty, 'write').mockImplementation((id, data) => {
-      writes.push({ data, state: current(id)?.state, before: pty.history(id) });
+      const states = events.filter((e) => e.agentId === id).map((e) => e.state);
+      writes.push({ data, state: current(id)?.state, states });
       write(id, data);
     });
     return writes;
   };
+  /** The states between two writes: one prompt per turn means a turn in between. */
+  const between = (
+    first: { states: AgentState[] } | undefined,
+    second: { states: AgentState[] } | undefined,
+  ) => second?.states.slice(first?.states.length ?? 0) ?? [];
 
   it('types the prompt right away when the agent awaits a prompt, then when it is done', async () => {
     scenario = 'echo-prompt';
@@ -343,7 +353,8 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     await manager.sendPrompt(agent.id, 'second');
     await waitForOutput(agent.id, 'Reçu : second');
     expect(writes.map((w) => w.data)).toEqual(['premier\r', 'second\r']);
-    expect(writes[1]?.before).toContain('Reçu : premier');
+    expect(between(writes[0], writes[1])).toEqual(['working', 'done']);
+    expect(writes[1]?.state).toBe('done');
     for (const { state } of writes) expect(['awaiting-prompt', 'done']).toContain(state);
   });
 
@@ -383,7 +394,7 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     await waitForOutput(agent.id, 'Reçu : Puis celui-ci');
     expect(writes.map((w) => w.data)).toEqual(['Dès que prêt\r', 'Puis celui-ci\r']);
     expect(writes[0]?.state).toBe('awaiting-prompt');
-    expect(writes[1]?.before).toContain('Reçu : Dès que prêt');
+    expect(between(writes[0], writes[1])).toEqual(['working', 'done']);
   });
 
   it('sends a multi-line prompt as a bracketed paste', async () => {
