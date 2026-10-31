@@ -93,6 +93,9 @@ const ATTEMPTS = 2;
 
 class MainMoved extends Error {}
 
+/** Cancelled by the user while it was checked again: nothing more is written. */
+class Cancelled extends Error {}
+
 const MAIN_MOVED = 'La branche principale a bougé pendant l’intégration. Réessayer.';
 const READY: AgentState[] = ['done', 'awaiting-prompt'];
 
@@ -171,8 +174,10 @@ export class IntegrationService {
   private async integrate(
     request: IntegrationRequest,
     snapshot: Snapshot,
-    id: string = randomUUID(),
+    /** « Demander à l'agent »: checked again under its id, still the user's to cancel meanwhile. */
+    recheck?: Pending,
   ): Promise<Integration> {
+    const id = recheck?.integration.id ?? randomUUID();
     // Read again in the queue: the workspace and the agent may have changed while waiting.
     const { workspace, agent } = this.find(request.agentId);
     const repo = workspace.path;
@@ -188,7 +193,10 @@ export class IntegrationService {
       conflicts: [],
       error: null,
     };
+    let mine = recheck;
+    const cancelled = () => mine !== undefined && this.pending.get(id) !== mine;
     const set = (change: Partial<Integration>) => {
+      if (cancelled()) throw new Cancelled();
       integration = { ...integration, ...change };
       const pending = this.pending.get(id);
       if (pending) pending.integration = integration;
@@ -206,7 +214,8 @@ export class IntegrationService {
         const merged = await this.git.mergeTree(repo, main, tip);
         if (merged.conflicts.length > 0) {
           const conflicts = await this.conflicts(repo, main, tip, merged);
-          this.pending.set(id, {
+          if (cancelled()) throw new Cancelled();
+          mine = {
             integration,
             request,
             workspaceId: workspace.id,
@@ -216,10 +225,14 @@ export class IntegrationService {
             tree: merged.tree,
             sawWorking: false,
             watched: new Map(),
-          });
+          };
+          this.pending.set(id, mine);
           return set({ state: 'conflicted', conflicts });
         }
         set({ state: 'committing' });
+        // From here main is written: no longer cancellable.
+        if (mine) this.pending.delete(id);
+        mine = undefined;
         try {
           next = await this.land(repo, dir, workspace.mainBranch, {
             main,
@@ -234,6 +247,7 @@ export class IntegrationService {
         }
       }
     } catch (error) {
+      if (error instanceof Cancelled) return integration;
       const { failure, state, detail } = failureOf(error);
       set({ state, error: detail });
       throw failure;
@@ -308,7 +322,7 @@ export class IntegrationService {
 
   /** « Demander à l'agent »: the conflict prompt, then checked again when its turn ends (FR-028). */
   async askAgent(id: string): Promise<Integration> {
-    const pending = this.get(id);
+    const pending = this.settled(id);
     const { workspace } = this.find(pending.integration.agentId);
     if (!this.options.prompts) throw new IpcFailure('INTERNAL', 'Aucun agent pour la consigne.');
     await this.options.prompts.sendPrompt(
@@ -331,9 +345,12 @@ export class IntegrationService {
       else if (state === 'closed') void this.cancel(integration.id);
       else if (READY.includes(state) && pending.sawWorking) {
         const { worktreePath } = this.find(agentId).agent;
-        this.drop(pending);
+        // Kept while it is checked again: « Annuler » still works meanwhile.
+        for (const stop of pending.watched.values()) stop();
+        pending.watched.clear();
+        this.update(pending, { state: 'checking' });
         void this.enqueue(pending.workspaceId, async () =>
-          this.integrate(pending.request, await this.git.snapshot(worktreePath), integration.id),
+          this.integrate(pending.request, await this.git.snapshot(worktreePath), pending),
         ).catch(() => undefined);
       }
     }
@@ -341,7 +358,7 @@ export class IntegrationService {
 
   /** « Terminer l'intégration »: the resolutions committed, then main moved (FR-030). */
   async finish(id: string): Promise<Integration> {
-    const pending = this.get(id);
+    const pending = this.settled(id);
     if (!pending.integration.conflicts.every((file) => file.resolved)) {
       throw new IpcFailure('INVALID_INPUT', 'Il reste des conflits à résoudre.');
     }
@@ -440,6 +457,15 @@ export class IntegrationService {
   private get(id: string): Pending {
     const pending = this.pending.get(id);
     if (!pending) throw new IpcFailure('NOT_FOUND', 'Intégration inconnue ou terminée.');
+    return pending;
+  }
+
+  /** Not while it is checked again after the agent: its conflicts are being read anew. */
+  private settled(id: string): Pending {
+    const pending = this.get(id);
+    if (pending.integration.state === 'checking') {
+      throw new IpcFailure('INVALID_INPUT', 'L’intégration est en cours de vérification.');
+    }
     return pending;
   }
 

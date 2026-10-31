@@ -504,6 +504,17 @@ describe('IntegrationService refusals and edge cases', () => {
     expect((await failure(service.finish(id))).code).toBe('NOT_FOUND');
   });
 
+  it('neither finishes nor asks the agent again while it is checked again', async () => {
+    await conflict();
+    const { id } = await start(service);
+    await service.askAgent(id);
+    service.agentState(AGENT_ID, 'working');
+    service.agentState(AGENT_ID, 'done');
+    expect((await failure(service.finish(id))).code).toBe('INVALID_INPUT');
+    expect((await failure(service.askAgent(id))).code).toBe('INVALID_INPUT');
+    await waitFor(() => states.at(-1)?.state === 'conflicted', 'not checked again');
+  });
+
   it('writes nothing to main when cancelled while the agent’s resolution is checked', async () => {
     await conflict();
     const main = git(repo, 'rev-parse', 'main');
