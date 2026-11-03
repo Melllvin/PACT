@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import type { Agent, AgentState, Workspace } from '../../shared/model';
+import type { Role } from '../../shared/primitives';
 import { randomUUID } from 'node:crypto';
 import type { OrchestratorAction, OrchestratorEvent } from '../../shared/orchestrator';
 import type { AgentMcpLaunch, OrchestratorLaunch } from '../agents/adapters/types';
@@ -8,7 +9,7 @@ import type { HookServer } from '../agents/hook-server';
 import { createAgentTools } from './agent-tools';
 import { EventQueue, type WaitResult } from './events';
 import { handleMcp, type McpTool } from './mcp';
-import { writeOrchestratorPlugin } from './plugin';
+import { removeRoleFiles, writeRoleSkills } from './role-skills';
 
 // 003 — the orchestrator of each workspace: its session plugin, its token and the tools it
 // reaches PACT with (research R2, R3).
@@ -16,8 +17,10 @@ import { writeOrchestratorPlugin } from './plugin';
 type Options = {
   hooks: Pick<HookServer, 'registerMcp' | 'revokeMcp' | 'mcpUrl'>;
   workspaces: { list(): Workspace[] };
-  /** `<userData>/orchestrator`: one session plugin per orchestrator. */
-  pluginsDir: string;
+  /** `<userData>/roles`: the copy of its skills and its session plugin, per agent (004 R3). */
+  rolesDir: string;
+  /** The suite of skills shipped with PACT (`resources/skills`). */
+  skillsDir: string;
   /** The tools an orchestrator gets, for its own id. */
   tools?: (orchestratorId: string) => readonly McpTool[];
   /** 004 R5 — the tools of an agent with another role: submit_report by default. */
@@ -49,25 +52,34 @@ export class OrchestratorService {
 
   constructor(private readonly options: Options) {}
 
-  /** Writes the plugin and registers a new token: called on each start or resume (R2). */
+  /** Writes the skills and plugin, registers a new token: on each start or resume (R2, 004 R3). */
   async prepare(agent: Pick<Agent, 'id' | 'workspaceId'>): Promise<OrchestratorLaunch> {
-    const { hooks, pluginsDir, tools = () => [] } = this.options;
-    const pluginDir = join(pluginsDir, agent.id, 'plugin');
+    const { hooks, tools = () => [] } = this.options;
     const url = hooks.mcpUrl();
-    await writeOrchestratorPlugin(pluginDir, { url });
+    const skills = await this.writeSkills(agent.id, 'orchestrator', url);
     const token = hooks.registerMcp(agent.id, (payload) => handleMcp(payload, tools(agent.id)));
     this.sessions.get(agent.id)?.events.close();
     this.sessions.set(agent.id, { workspaceId: agent.workspaceId, events: new EventQueue() });
-    return { pluginDir, url, token };
+    return { pluginDir: skills.pluginDir, url, token, skills };
   }
 
-  /** 004 R5 — a token of its own for an agent with a role: it opens submit_report only. */
-  prepareAgent(agent: Pick<Agent, 'id'>): AgentMcpLaunch {
+  /**
+   * 004 R5 — a token of its own for an agent with a role: it opens submit_report only; with the
+   * skills of its role (R3).
+   */
+  async prepareAgent(agent: Pick<Agent, 'id' | 'role'>): Promise<AgentMcpLaunch> {
     const { hooks, agentTools = (id: string) => createAgentTools({}, id) } = this.options;
+    const url = hooks.mcpUrl();
+    const skills = await this.writeSkills(agent.id, agent.role ?? 'dev', url);
     const token = hooks.registerMcp(agent.id, (payload) =>
       handleMcp(payload, agentTools(agent.id), { refusal: 'Outil réservé à l’orchestrateur.' }),
     );
-    return { url: hooks.mcpUrl(), token };
+    return { url, token, skills };
+  }
+
+  private writeSkills(agentId: string, role: Role, url: string) {
+    const { rolesDir, skillsDir } = this.options;
+    return writeRoleSkills(join(rolesDir, agentId), { role, skillsDir, url });
   }
 
   /** What the orchestrator waits for (R5); refused once its session is gone. */
@@ -135,6 +147,13 @@ export class OrchestratorService {
 
   /** The role is gone or the agent is closed: its token stops working at once (FR-004, FR-007). */
   release(agentId: string): void {
+    // Its copy of the skills goes too, and the `.pact/ROLE.md` of a generic CLI (004 R3).
+    const worktree =
+      this.options.workspaces
+        .list()
+        .flatMap((ws) => ws.agents)
+        .find((a) => a.id === agentId)?.worktreePath ?? null;
+    void removeRoleFiles(join(this.options.rolesDir, agentId), worktree);
     this.options.hooks.revokeMcp(agentId);
     this.sessions.get(agentId)?.events.close();
     this.sessions.delete(agentId);

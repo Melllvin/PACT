@@ -291,9 +291,52 @@ describe('Codex detection', () => {
   });
 });
 
-describe('Codex as an orchestrator (003 T008)', () => {
-  it('cannot be one: skills belong to Claude Code', () => {
-    expect(create().supportsOrchestrator).toBe(false);
+describe('Codex with a role (004 T043, R3, R4)', () => {
+  const dir = '/Users/me/Library/Application Support/PACT/roles/a 3/plugin/skills';
+  const skillsOf = (role: 'orchestrator' | 'test') => ({
+    role,
+    pluginDir: '/p',
+    skills: [{ name: `pact-${role}`, file: `${dir}/pact-${role}/SKILL.md` }],
+    contract: `${dir}/pact-${role}/pact-contract.md`,
+  });
+  const url = 'http://127.0.0.1:4567/mcp';
+
+  it('can be the orchestrator (FR-031)', () => {
+    expect(create().supportsOrchestrator).toBe(true);
+  });
+
+  it('gives the orchestrator its skill, the pact server and a long tool timeout', () => {
+    const skills = skillsOf('orchestrator');
+    const orchestrator = { pluginDir: '/p', url, token: 'o'.repeat(64), skills };
+    const spec = create().buildLaunch({ ...input, orchestrator, skills });
+    const all = configs(spec.args);
+    expect(all).toContain(
+      `developer_instructions="Tu es l'agent orchestrateur de PACT. Lis et applique ${dir}/pact-orchestrator/SKILL.md et ${dir}/pact-orchestrator/pact-contract.md."`,
+    );
+    expect(all).toContain(`mcp_servers.pact.url="${url}"`);
+    expect(all).toContain(
+      'mcp_servers.pact.env_http_headers={ "X-Pact-Token" = "PACT_ORCHESTRATOR_TOKEN" }',
+    );
+    expect(all).toContain('mcp_servers.pact.tool_timeout_sec=660');
+    expect(spec.env.PACT_ORCHESTRATOR_TOKEN).toBe(orchestrator.token);
+    expect(spec.args.join(' ')).not.toContain(orchestrator.token);
+  });
+
+  it('gives an agent of another role its own token', () => {
+    const skills = skillsOf('test');
+    const agentMcp = { url, token: 't'.repeat(64), skills };
+    const spec = create().buildLaunch({ ...input, agentMcp, skills });
+    expect(configs(spec.args)).toContain(
+      'mcp_servers.pact.env_http_headers={ "X-Pact-Token" = "PACT_AGENT_MCP_TOKEN" }',
+    );
+    expect(spec.env.PACT_AGENT_MCP_TOKEN).toBe(agentMcp.token);
+    expect(spec.args.join(' ')).not.toContain(agentMcp.token);
+  });
+
+  it('adds none of it for an agent with no role', () => {
+    const all = configs(create().buildLaunch(input).args).join(' ');
+    expect(all).not.toContain('developer_instructions');
+    expect(all).not.toContain('mcp_servers');
   });
 });
 

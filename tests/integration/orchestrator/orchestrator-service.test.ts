@@ -38,7 +38,7 @@ describe('OrchestratorService, the session of an orchestrator', () => {
     expect(tokens).toHaveLength(1);
     expect(tokens[0]).toMatch(/^[0-9a-f]{64}$/);
     const mcp = JSON.parse(
-      await readFile(join(h.userData, 'orchestrator', lead.id, 'plugin', '.mcp.json'), 'utf8'),
+      await readFile(join(h.userData, 'roles', lead.id, 'plugin', '.mcp.json'), 'utf8'),
     ) as { mcpServers: { pact: { url: string } } };
     expect(mcp.mcpServers.pact.url).toBe(h.hooks.mcpUrl());
     expect((await ping(tokens[0] ?? '')).status).toBe(200);

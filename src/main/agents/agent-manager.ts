@@ -26,6 +26,12 @@ import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
 import { TerminalText } from './terminal-text';
+import {
+  ROLE_FILE,
+  ROLE_FILE_PROMPT,
+  writeRoleFile,
+  type RoleSkills,
+} from '../orchestrator/role-skills';
 
 // US2 — agents launched in their own worktree and pseudo-terminal, followed through their hooks
 // (FR-009…FR-018, FR-038, FR-039). US3 — the tile actions: answer, resume, restart, log, close
@@ -47,7 +53,8 @@ type Options = {
     /** 004 — every CLI, for the default role profiles. */
     list(): CliDefinition[];
   };
-  git: Pick<GitService, 'addWorktree' | 'branchExists' | 'currentBranch' | 'removeWorktree'>;
+  git: Pick<GitService, 'addWorktree' | 'branchExists' | 'currentBranch' | 'removeWorktree'> &
+    Partial<Pick<GitService, 'exclude'>>;
   pty: PtyManager;
   hooks: Pick<HookServer, 'register' | 'unregister'>;
   /** Base URL of the hook server, known once it listens. */
@@ -72,7 +79,7 @@ type Options = {
   orchestrator?: {
     prepare(agent: Agent): Promise<OrchestratorLaunch>;
     /** 004 R5 — the MCP access of an agent with another role. */
-    prepareAgent?(agent: Agent): AgentMcpLaunch;
+    prepareAgent?(agent: Agent): Promise<AgentMcpLaunch>;
     release(agentId: string): void;
   };
 };
@@ -81,6 +88,13 @@ type Options = {
 export type PromptOrigin = 'review' | 'orchestrator';
 
 type QueuedPrompt = { text: string; origin: PromptOrigin };
+
+/** What a start carries for the role of the agent (003 R2, 004 R3). */
+type Prepared = {
+  orchestrator: OrchestratorLaunch | null;
+  agentMcp: AgentMcpLaunch | null;
+  skills: RoleSkills | null;
+};
 
 export type LaunchRequest = {
   workspaceId: string;
@@ -93,6 +107,8 @@ type Running = {
   adapter: CliAdapter;
   output: TerminalText;
   idle?: ReturnType<typeof setTimeout>;
+  /** 004 R3 — typed into a generic CLI with a role at its first output, before anything else. */
+  roleFilePrompt?: boolean;
 };
 type InstalledCli = { adapter: CliAdapter; executablePath: string };
 
@@ -460,7 +476,13 @@ export class AgentManager {
     const started: Agent = { ...agent, ...fields };
     this.emit(started);
     this.resumes.sync(started);
-    this.start(started, workspace.path, cli, env, await this.prepareOrchestrator(started));
+    this.start(
+      started,
+      workspace.path,
+      cli,
+      env,
+      await this.prepareRole(started, workspace.path, cli),
+    );
   }
 
   /**
@@ -576,7 +598,13 @@ export class AgentManager {
       if (!cli) throw new Error('unreachable: one CLI per draft');
       // Saved before the process starts: its first hook must find the agent.
       await this.workspaces.update(workspaceId, (ws) => ({ ...ws, agents: [...ws.agents, agent] }));
-      this.start(agent, workspace.path, cli, env, await this.prepareOrchestrator(agent));
+      this.start(
+        agent,
+        workspace.path,
+        cli,
+        env,
+        await this.prepareRole(agent, workspace.path, cli),
+      );
       launched.push(agent);
     }
     await this.workspaces.update(workspaceId, (ws) => ({ ...ws, quickLaunchCounters: counters }));
@@ -637,9 +665,28 @@ export class AgentManager {
     }
   }
 
-  private async prepareOrchestrator(agent: Agent): Promise<OrchestratorLaunch | null> {
-    if (agent.role !== 'orchestrator' || !this.orchestrator) return null;
-    return this.orchestrator.prepare(agent);
+  /**
+   * 003 R2, 004 R3 — what an agent with a role starts with: the orchestrator's plugin and token, or
+   * the MCP access of another role; its skills either way. A generic CLI reads them from
+   * `.pact/ROLE.md`, told to before any other prompt.
+   */
+  private async prepareRole(agent: Agent, repoPath: string, cli: InstalledCli): Promise<Prepared> {
+    const none = { orchestrator: null, agentMcp: null, skills: null };
+    if (agent.role === null || !this.orchestrator) return none;
+    let prepared: Prepared;
+    if (agent.role === 'orchestrator') {
+      const orchestrator = await this.orchestrator.prepare(agent);
+      prepared = { orchestrator, agentMcp: null, skills: orchestrator.skills };
+    } else {
+      const agentMcp = (await this.orchestrator.prepareAgent?.(agent)) ?? null;
+      if (!agentMcp) return none;
+      prepared = { orchestrator: null, agentMcp, skills: agentMcp.skills };
+    }
+    if (cli.adapter.id === 'generic' && prepared.skills) {
+      await writeRoleFile(agent.worktreePath, prepared.skills);
+      await this.git.exclude?.(repoPath, `/${ROLE_FILE}`);
+    }
+    return prepared;
   }
 
   private start(
@@ -647,12 +694,12 @@ export class AgentManager {
     repoPath: string,
     cli: InstalledCli,
     env: ResolvedEnv,
-    orchestrator: OrchestratorLaunch | null = null,
+    { orchestrator, agentMcp, skills }: Prepared = {
+      orchestrator: null,
+      agentMcp: null,
+      skills: null,
+    },
   ) {
-    const agentMcp =
-      agent.role !== null && agent.role !== 'orchestrator'
-        ? (this.orchestrator?.prepareAgent?.(agent) ?? null)
-        : null;
     const { adapter } = cli;
     const token = this.hooks.register(agent.id, (payload) => {
       const signal = adapter.mapHookEvent(payload);
@@ -677,6 +724,7 @@ export class AgentManager {
       hook: { url: this.hookUrl(), token },
       orchestrator,
       agentMcp,
+      skills,
     };
     const spec =
       agent.sessionId === null
@@ -686,6 +734,8 @@ export class AgentManager {
       workspaceId: agent.workspaceId,
       adapter,
       output: new TerminalText(),
+      // No hook tells when a generic CLI is ready: its first output is its prompt.
+      roleFilePrompt: adapter.id === 'generic' && skills !== null,
     });
     this.pty.start(agent.id, {
       file: spec.file,
@@ -707,6 +757,10 @@ export class AgentManager {
     const running = this.running.get(id);
     if (!running) return;
     clearTimeout(running.idle);
+    if (running.roleFilePrompt) {
+      running.roleFilePrompt = false;
+      this.pty.write(id, `${ROLE_FILE_PROMPT}\r`);
+    }
     const signal = running.adapter.mapOutput(running.output.push(data), {});
     if (signal) {
       running.output.consume();

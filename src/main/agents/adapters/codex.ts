@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PermissionLevel } from '../../../shared/model';
 import { toSpawnCommand } from '../../env/resolve-command';
+import { mcpTokenVariable, roleInstruction } from '../../orchestrator/role-skills';
 import { bridgeCommand, detectCommand, nextClockTime, tryRun } from './shared';
 import {
   pactEnv,
@@ -47,6 +48,9 @@ const notifyPayloadSchema = z.looseObject({
 /** TOML basic strings share JSON's escapes for the characters paths and commands contain. */
 const toml = (value: string) => JSON.stringify(value);
 
+/** Longer than the longest wait_for_agents (600 s). */
+const MCP_TOOL_TIMEOUT_S = 660;
+
 type Options = {
   platform: NodeJS.Platform;
   bridge: HookBridge;
@@ -56,7 +60,8 @@ type Options = {
 
 export class CodexAdapter implements CliAdapter {
   readonly id = 'codex';
-  readonly supportsOrchestrator = false;
+  /** 004 R4 — the pact MCP server is given by `-c mcp_servers.pact…`, the skill by R3. */
+  readonly supportsOrchestrator = true;
   private readonly platform: NodeJS.Platform;
   private readonly bridge: HookBridge;
   private readonly run: CommandRunner;
@@ -168,6 +173,14 @@ export class CodexAdapter implements CliAdapter {
 
   private spec(input: LaunchInput, sessionArgs: string[]): LaunchSpec {
     const { approval, sandbox } = PERMISSIONS[supportedLevel(input.permissionLevel)];
+    const access = input.orchestrator ?? input.agentMcp ?? null;
+    const mcp = access
+      ? {
+          url: access.url,
+          token: access.token,
+          variable: mcpTokenVariable(input.orchestrator ? 'orchestrator' : 'dev'),
+        }
+      : null;
     const config = (value: string) => ['-c', value];
     const hookCommand = toml(bridgeCommand(this.bridge));
     const notify = ['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', ...this.bridgeArgs('--notify')];
@@ -185,6 +198,21 @@ export class CodexAdapter implements CliAdapter {
       ),
       // No /usr/bin/env on Windows, where notify was not characterized: heuristic only there.
       ...(this.platform === 'win32' ? [] : config(`notify=[${notify.map(toml).join(',')}]`)),
+      // 004 R3, R4 — the role's skills by a short instruction (the content stays in the files) and
+      // PACT's MCP server, its token read from the environment, never from the arguments.
+      ...(input.skills
+        ? config(`developer_instructions=${toml(roleInstruction(input.skills))}`)
+        : []),
+      ...(mcp
+        ? [
+            ...config(`mcp_servers.pact.url=${toml(mcp.url)}`),
+            ...config(
+              `mcp_servers.pact.env_http_headers={ "X-Pact-Token" = ${toml(mcp.variable)} }`,
+            ),
+            // wait_for_agents may wait 10 minutes.
+            ...config(`mcp_servers.pact.tool_timeout_sec=${String(MCP_TOOL_TIMEOUT_S)}`),
+          ]
+        : []),
       ...(input.model ? ['-m', input.model] : []),
       // Codex takes low, medium and high: the higher efforts get its highest.
       ...(input.effort
@@ -196,7 +224,7 @@ export class CodexAdapter implements CliAdapter {
     return {
       ...toSpawnCommand(input.executablePath, args, this.platform, process.env),
       cwd: input.cwd,
-      env: pactEnv(input),
+      env: { ...pactEnv(input), ...(mcp ? { [mcp.variable]: mcp.token } : {}) },
     };
   }
 

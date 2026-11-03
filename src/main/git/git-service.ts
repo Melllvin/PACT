@@ -123,7 +123,7 @@ export class GitService {
       branch,
     }: { cli: string; position: number; base: string; branch?: string },
   ): Promise<Worktree> {
-    await this.excludeWorktrees(repo);
+    await this.exclude(repo, EXCLUDE_LINE);
     const name = `${cli}-${String(position)}`;
     if (branch !== undefined) {
       const path = await this.freePath(join(repo, '.worktrees', name));
@@ -528,8 +528,11 @@ export class GitService {
     }
   }
 
-  /** `.git` may be a file (linked worktree, submodule): the exclude file lives in the common dir. */
-  private async excludeWorktrees(repo: string) {
+  /**
+   * Adds `line` to the exclude file of `repo`, once. `.git` may be a file (linked worktree,
+   * submodule): the exclude file lives in the common dir, shared by the worktrees.
+   */
+  async exclude(repo: string, line: string): Promise<void> {
     const commonDir = resolve(repo, await this.git(repo, ['rev-parse', '--git-common-dir']));
     const file = join(commonDir, 'info', 'exclude');
     let text = '';
@@ -538,9 +541,9 @@ export class GitService {
     } catch {
       // A fresh repository may have no exclude file yet.
     }
-    if (text.split(/\r?\n/).includes(EXCLUDE_LINE)) return;
+    if (text.split(/\r?\n/).includes(line)) return;
     await mkdir(dirname(file), { recursive: true });
-    await appendFile(file, `${text && !text.endsWith('\n') ? '\n' : ''}${EXCLUDE_LINE}\n`);
+    await appendFile(file, `${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`);
   }
 }
 

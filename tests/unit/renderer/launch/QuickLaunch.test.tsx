@@ -275,6 +275,18 @@ describe('QuickLaunch, the orchestrator (003 T010)', () => {
     expect(orchestratorBox()).toBeNull();
   });
 
+  it('offers it for Codex once Codex can be one (004 FR-031)', async () => {
+    const user = userEvent.setup();
+    const { onLaunch } = renderLauncher({
+      clis: [cli('codex', 'Codex', { adapter: 'codex', orchestrator: true })],
+      counters: { freeTerminal: 0, codex: 1 },
+    });
+    await user.click(orchestratorBox() ?? document.body);
+    await user.click(screen.getByRole('button', { name: 'Lancer 1 agent' }));
+    const [draft] = onLaunch.mock.lastCall ?? [];
+    expect(draft?.orchestrator).toBe(draft?.agents[0]?.key);
+  });
+
   it('is disabled when the workspace has one already', () => {
     renderLauncher({
       counters: { freeTerminal: 0, 'claude-code': 1 },
