@@ -131,6 +131,7 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               clis={state.clis}
               terminals={terminals}
               toolbarSlot={toolbarSlot}
+              usage={Object.values(state.usage)}
               onAddAgents={() => {
                 state.openLauncher(workspace.id);
               }}

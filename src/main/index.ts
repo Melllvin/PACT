@@ -13,6 +13,8 @@ import { FreeTerminals } from './agents/free-terminals';
 import { HookServer } from './agents/hook-server';
 import { PermissionService } from './agents/permission-service';
 import { guardQuit, quitQuestion } from './app-lifecycle';
+import { UsageService } from './usage/usage-service';
+import { createUsageServices } from './ipc/usage-handlers';
 import { createAppServices, devServerUrl, trustedSenderCheck } from './app-services';
 import { resolveShellEnv } from './env/shell-env';
 import { GitService } from './git/git-service';
@@ -138,6 +140,14 @@ void app.whenReady().then(async () => {
         orchestratorId,
       ),
   });
+  // 005 — the usage limits of the CLI accounts, as the agents' CLIs report them.
+  const thresholds = (await stores.state.read()).usageThresholds;
+  const usage = new UsageService({
+    thresholds: () => thresholds,
+    onState: (state) => {
+      emit('usage:state', state);
+    },
+  });
   const agents: AgentManager = new AgentManager({
     workspaces,
     registry,
@@ -145,6 +155,7 @@ void app.whenReady().then(async () => {
     pty,
     hooks,
     orchestrator,
+    usage,
     onPromptTyped: (agentId, origin) => {
       if (origin === 'orchestrator') emit('orchestrator:prompted', { agentId });
     },
@@ -359,6 +370,7 @@ void app.whenReady().then(async () => {
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
       ...createPreviewServices({ preview }),
+      ...createUsageServices({ usage }),
       ...createOrchestratorServices({
         requests,
         orchestrator,
@@ -400,6 +412,7 @@ void app.whenReady().then(async () => {
       tests.dispose();
       integration.dispose();
       orchestrator.dispose();
+      usage.stop();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
       await hooks.stop();

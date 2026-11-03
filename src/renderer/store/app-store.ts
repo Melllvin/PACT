@@ -16,6 +16,7 @@ import type {
   Workspace,
 } from '../../shared/model';
 import type { OrchestratorAction } from '../../shared/orchestrator';
+import type { UsageState } from '../../shared/usage';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
 
@@ -67,6 +68,8 @@ export type AppState = {
   log: { agentId: string; text: string } | null;
   /** Agent whose close dialog is open (FR-037). */
   closingAgentId: string | null;
+  /** 005 — the usage of each CLI account, by `<cliId>\0<account>`. */
+  usage: Record<string, UsageState>;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
@@ -284,6 +287,7 @@ export function createAppStore(api: PactApi) {
       actionError: null,
       log: null,
       closingAgentId: null,
+      usage: {},
       correcting: {},
       orchestratorPrompted: {},
       orchestratorActions: {},
@@ -299,6 +303,13 @@ export function createAppStore(api: PactApi) {
             status: 'ready',
             activeTab: first ? { kind: 'workspace', id: first.id } : { kind: 'home' },
           });
+          // 005 — the gauges come later, without holding the window back.
+          void Promise.resolve()
+            .then(() => api.invoke('usage:get'))
+            .then((states) => {
+              set({ usage: { ...byAccount(states), ...get().usage } });
+            })
+            .catch(() => undefined);
         } catch (error) {
           set({ status: 'error', error: errorMessage(error) });
         }
@@ -306,6 +317,9 @@ export function createAppStore(api: PactApi) {
 
       connect() {
         const unsubscribers = [
+          api.on('usage:state', (state) => {
+            set({ usage: { ...get().usage, ...byAccount([state]) } });
+          }),
           api.on('agent:state', (event) => {
             const { workspaces } = get();
             set({
@@ -666,3 +680,7 @@ export function createAppStore(api: PactApi) {
 }
 
 export type AppStore = ReturnType<typeof createAppStore>;
+
+/** 005 — the usage states keyed by account. */
+const byAccount = (states: readonly UsageState[]): Record<string, UsageState> =>
+  Object.fromEntries(states.map((state) => [`${state.cliId}\u0000${state.account}`, state]));

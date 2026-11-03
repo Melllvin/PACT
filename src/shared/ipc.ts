@@ -31,6 +31,7 @@ import {
   reviewSnapshotSchema,
   testRunSchema,
 } from './review';
+import { usageStateSchema } from './usage';
 
 // contracts/ipc.md — every channel is validated on both sides of the bridge.
 
@@ -241,6 +242,8 @@ export const ipcRequests = {
   ),
   'integrationRequest:refuse': request(z.object({ requestId: z.uuid() }), none),
   /** 003 US5 — the journal « ◎ Actions », the latest first (FR-021). */
+  /** 005 — the usage of every CLI account read so far, when the renderer loads. */
+  'usage:get': request(none, z.array(usageStateSchema)),
   'orchestrator:actions': request(
     z.object({ agentId: z.uuid() }),
     z.array(orchestratorActionSchema),
@@ -337,6 +340,8 @@ export const ipcEvents = {
     issues: z.array(issueSchema),
     publishRequests: z.array(publishRequestSchema),
   }),
+  /** 005 — a new reading of a CLI account, or a change of its level. */
+  'usage:state': usageStateSchema,
   /** 004 US2 — a report, a missing one, the end of a loop or files two agents change. */
   'orchestrator:report': z.object({
     workspaceId: z.string(),

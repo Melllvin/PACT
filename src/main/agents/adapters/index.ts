@@ -49,7 +49,7 @@ export function createAdapters({
 }): CliAdapter[] {
   if (env.PACT_TEST_MODE === '1') {
     const { PACT_FAKE_CLI: cliPath, PACT_FAKE_NODE: runtime } = env;
-    return cliPath ? [new FakeAdapter({ cliPath, platform, runtime })] : [];
+    return cliPath ? [new FakeAdapter({ cliPath, platform, runtime, bridge })] : [];
   }
   return [
     new ClaudeCodeAdapter({ platform, bridge, run }),

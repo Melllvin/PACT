@@ -101,3 +101,16 @@
     }
   }
 }
+
+/* 005 FR-009 — a narrow window keeps only the percentage of each usage gauge. */
+.usage-gauge-short {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .usage-gauge-long {
+    display: none;
+  }
+  .usage-gauge-short {
+    display: inline;
+  }
+}

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { draftRole, IpcFailure, type AgentDraft, type IpcEvent } from '../../shared/ipc';
 import { freeColors, freePositions } from '../../shared/launch-draft';
 import {
@@ -26,6 +28,7 @@ import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
 import { TerminalText } from './terminal-text';
+import { accountOf, type UsageSource } from '../usage/usage-service';
 import {
   ROLE_FILE,
   ROLE_FILE_PROMPT,
@@ -82,6 +85,12 @@ type Options = {
     prepareAgent?(agent: Agent): Promise<AgentMcpLaunch>;
     release(agentId: string): void;
   };
+  /** 005 R1, R2 — where the usage the agents' CLIs report goes. */
+  usage?: {
+    statusLine(source: UsageSource, payload: unknown): string;
+    follow(source: UsageSource, rollout: { codexHome: string; sessionId: string }): void;
+    release(agentId: string): void;
+  };
 };
 
 /** Who asked for a prompt: the review (002) or the orchestrator of the workspace (003 R4). */
@@ -109,6 +118,8 @@ type Running = {
   idle?: ReturnType<typeof setTimeout>;
   /** 004 R3 — typed into a generic CLI with a role at its first output, before anything else. */
   roleFilePrompt?: boolean;
+  /** 005 — who reports the usage of this agent's CLI account, and where Codex writes. */
+  usage?: { source: UsageSource; codexHome: string };
 };
 type InstalledCli = { adapter: CliAdapter; executablePath: string };
 
@@ -139,6 +150,7 @@ export class AgentManager {
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
   private readonly resumes: AutoResume;
   private readonly orchestrator: Options['orchestrator'];
+  private readonly usage: Options['usage'];
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
@@ -174,6 +186,7 @@ export class AgentManager {
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
     this.orchestrator = options.orchestrator;
+    this.usage = options.usage;
     this.resumes = new AutoResume({
       ...(options.clock ? { clock: options.clock } : {}),
       onDue: (resume) => void this.resumeDue(resume),
@@ -701,17 +714,25 @@ export class AgentManager {
     },
   ) {
     const { adapter } = cli;
-    const token = this.hooks.register(agent.id, (payload) => {
-      const signal = adapter.mapHookEvent(payload);
-      if (!signal) return {};
-      if (this.alwaysAllowed(agent.id, signal)) {
-        if (adapter.permissionDecision) return adapter.permissionDecision('allow');
-        this.pty.write(agent.id, adapter.answerKeys('allow'));
+    const statusLine = (payload: unknown) => {
+      const usage = this.running.get(agent.id)?.usage;
+      return usage && this.usage ? this.usage.statusLine(usage.source, payload) : 'PACT';
+    };
+    const token = this.hooks.register(
+      agent.id,
+      (payload) => {
+        const signal = adapter.mapHookEvent(payload);
+        if (!signal) return {};
+        if (this.alwaysAllowed(agent.id, signal)) {
+          if (adapter.permissionDecision) return adapter.permissionDecision('allow');
+          this.pty.write(agent.id, adapter.answerKeys('allow'));
+          return {};
+        }
+        void this.apply(agent.id, signal);
         return {};
-      }
-      void this.apply(agent.id, signal);
-      return {};
-    });
+      },
+      ...(adapter.usageSource === 'claude-statusline' ? [statusLine] : []),
+    );
     const input = {
       agentId: agent.id,
       executablePath: cli.executablePath,
@@ -730,21 +751,41 @@ export class AgentManager {
       agent.sessionId === null
         ? adapter.buildLaunch(input)
         : adapter.buildResume({ ...input, sessionId: agent.sessionId });
+    const ownEnv = agentEnv(env, spec.env);
+    const usage = this.usageOf(agent, adapter, ownEnv);
     this.running.set(agent.id, {
       workspaceId: agent.workspaceId,
       adapter,
       output: new TerminalText(),
       // No hook tells when a generic CLI is ready: its first output is its prompt.
       roleFilePrompt: adapter.id === 'generic' && skills !== null,
+      ...(usage ? { usage } : {}),
     });
     this.pty.start(agent.id, {
       file: spec.file,
       args: spec.args,
       cwd: spec.cwd,
-      env: agentEnv(env, spec.env),
+      env: ownEnv,
       windowsVerbatimArguments: spec.windowsVerbatimArguments,
     });
     this.branches.watch(agent.id, agent.worktreePath, agent.branch);
+  }
+
+  /** 005 R3 — the account of the agent's CLI: its configuration folder, or `default`. */
+  private usageOf(agent: Agent, adapter: CliAdapter, env: Record<string, string>) {
+    if (!this.usage || !adapter.usageSource) return undefined;
+    const folder =
+      adapter.usageSource === 'claude-statusline' ? env.CLAUDE_CONFIG_DIR : env.CODEX_HOME;
+    const name = this.registry.get(agent.cliId)?.definition.name ?? agent.cliId;
+    const source: UsageSource = {
+      agentId: agent.id,
+      workspaceId: agent.workspaceId,
+      label: `${name} ${String(agent.position)}`,
+      role: agent.role,
+      cliId: agent.cliId,
+      account: accountOf(folder),
+    };
+    return { source, codexHome: env.CODEX_HOME || join(env.HOME || homedir(), '.codex') };
   }
 
   /** A request the user already allowed for this worktree (FR-034). */
@@ -782,6 +823,7 @@ export class AgentManager {
     clearTimeout(running.idle);
     this.running.delete(id);
     this.hooks.unregister(id);
+    this.usage?.release(id);
     this.branches.unwatch(id);
     this.promptTyped.delete(id);
     this.pendingRule.delete(id);
@@ -798,6 +840,18 @@ export class AgentManager {
     } else {
       this.pendingRule.delete(id);
       this.questions.delete(id);
+    }
+    // 005 R2 — Codex names its rollout after the session: followed from its start.
+    if (
+      signal.type === 'session-started' &&
+      signal.sessionId !== undefined &&
+      running.adapter.usageSource === 'codex-rollout' &&
+      running.usage
+    ) {
+      this.usage?.follow(running.usage.source, {
+        codexHome: running.usage.codexHome,
+        sessionId: signal.sessionId,
+      });
     }
     const resetAt = signal.type === 'failed' ? signal.resetAt : undefined;
     const schedule =

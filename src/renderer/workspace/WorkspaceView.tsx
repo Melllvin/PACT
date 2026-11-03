@@ -1,3 +1,5 @@
+import type { UsageState } from '../../shared/usage';
+import { UsageGauges } from './UsageGauge';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
@@ -120,6 +122,8 @@ type Props = {
   actionError?: string | null;
   /** The place the tab bar keeps for the views (1b); without it they sit above the tiles. */
   toolbarSlot?: HTMLElement | null;
+  /** 005 — the usage of every CLI account read so far. */
+  usage?: readonly UsageState[];
   /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
@@ -149,6 +153,7 @@ export function WorkspaceView({
   actions = NO_ACTIONS,
   actionError = null,
   toolbarSlot = null,
+  usage = [],
   review,
   fromOrchestrator = {},
   loopReports = [],
@@ -336,6 +341,7 @@ export function WorkspaceView({
       reviewCount={review ? pending.length : 0}
       view={inReview ? 'review' : 'tiles'}
       onView={changeView}
+      usage={<UsageGauges workspace={workspace} usage={usage} clis={clis} />}
     />
   );
 
