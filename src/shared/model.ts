@@ -303,6 +303,8 @@ export type TodoItem = {
   actions: TileAction[];
   /** 003 US3 — the integration the orchestrator asks for, for `integration-request`. */
   request?: { id: string; message: string };
+  /** 004 FR-018 — the loop stopped after 3 rounds, for `loop-escalated`. */
+  loop?: { issueId: string };
 };
 export type TodoKind =
-  'answer' | 'integration-request' | 'rate-limit' | 'review' | 'prompt' | 'info';
+  'answer' | 'integration-request' | 'loop-escalated' | 'rate-limit' | 'review' | 'prompt' | 'info';

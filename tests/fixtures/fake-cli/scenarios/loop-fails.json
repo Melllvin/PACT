@@ -1,0 +1,27 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "{{prompt.0}}",
+      "json": "{{prompt.1}}"
+    }
+  ],
+  "report": [
+    {
+      "issue": "{{prompt}}",
+      "status": "defects",
+      "summary": "Le test échoue",
+      "files": ["tests/a.test.ts"],
+      "checks": [
+        {
+          "command": "npm test",
+          "exitCode": 1
+        }
+      ],
+      "verdict": {
+        "result": "defects",
+        "defects": ["a() renvoie 2"]
+      }
+    }
+  ]
+}

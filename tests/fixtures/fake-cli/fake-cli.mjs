@@ -19,7 +19,9 @@
 //   mcp: { tool, arguments }[]      calls these PACT tools when it is the orchestrator (003 R11), on
 //                                   PACT_ORCHESTRATOR_URL with PACT_ORCHESTRATOR_TOKEN, and prints
 //                                   `MCP <tool> : <text>`. In string arguments, `{{prompt}}` is the
-//                                   prompt typed and `{{prompt.N}}` its N-th `|`-separated part
+//                                   prompt typed and `{{prompt.N}}` its N-th `|`-separated part.
+//                                   `tool` is filled the same way; `json` instead of `arguments`
+//                                   is filled, then parsed as the arguments (004 e2e)
 //   report: object | object[]       calls `submit_report` with it on PACT_AGENT_MCP_URL, with the
 //                                   agent's PACT_AGENT_MCP_TOKEN (004 R5), and prints
 //                                   `MCP submit_report : <text>`; an array gives one report per
@@ -219,9 +221,12 @@ async function runTurn(line) {
 
   // Only the orchestrator gets PACT's tools; the agents it leads skip these steps.
   for (const step of process.env.PACT_ORCHESTRATOR_URL ? (scenario.mcp ?? []) : []) {
-    console.log(
-      `MCP ${step.tool} : ${await callTool(step.tool, fillArguments(step.arguments, line))}`,
-    );
+    const tool = fillDeep(step.tool, line);
+    const args =
+      step.json === undefined
+        ? fillArguments(step.arguments, line)
+        : JSON.parse(fillDeep(step.json, line));
+    console.log(`MCP ${tool} : ${await callTool(tool, args)}`);
   }
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);

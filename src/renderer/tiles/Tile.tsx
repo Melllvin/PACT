@@ -38,7 +38,14 @@ type Props = TileActionHandlers & {
   onExpand?: (() => void) | undefined;
   /** 003 FR-010 — the agent works on a prompt of the orchestrator. */
   fromOrchestrator?: boolean;
+  /** 004 US2 — the round of the loop the agent works in, if any. */
+  round?: number | null;
+  /** 004 US2 — the orchestrator's « Rapports » band: what its loops told, the latest last. */
+  reports?: readonly { kind: string; summary: string }[];
 };
+
+/** The band shows the latest reports only; the Focus keeps them all. */
+const BAND_REPORTS = 3;
 
 /**
  * An agent tile (screens 1f, 1n): the raw CLI, bordered with the agent's color. The border pulses
@@ -51,6 +58,8 @@ export function Tile({
   onClose,
   onExpand,
   fromOrchestrator = false,
+  round = null,
+  reports = [],
   ...actions
 }: Props) {
   // Counted during render: a pulse per state change, none for the first one shown.
@@ -101,12 +110,29 @@ export function Tile({
           className={cn('px-4 pt-10', acting ? 'pb-14' : 'pb-3.5')}
         />
       )}
+      {agent.role === 'orchestrator' && reports.length > 0 && (
+        <ol
+          aria-label="Rapports"
+          className="mx-4 mb-3 flex flex-none flex-col gap-0.5 border-t border-white/6 pt-2 font-mono text-[12px] text-dim"
+        >
+          {reports.slice(-BAND_REPORTS).map((report, index) => (
+            <li key={index} data-kind={report.kind} className="truncate">
+              {report.summary.split('\n')[0]}
+            </li>
+          ))}
+        </ol>
+      )}
       {(agent.role !== null || fromOrchestrator) && (
         <span className="absolute top-2.5 left-3 flex gap-1">
           {agent.role !== null && agent.role !== 'orchestrator' && (
             // 004 FR-006: the role of the agent, at a glance.
             <span aria-label="Rôle" className={BADGE}>
               {ROLE_LABELS[agent.role]}
+            </span>
+          )}
+          {round !== null && (
+            <span aria-label="Tour" className={BADGE}>
+              tour {round}/3
             </span>
           )}
           {(agent.role === 'orchestrator' || fromOrchestrator) && (

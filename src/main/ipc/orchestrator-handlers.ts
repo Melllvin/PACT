@@ -4,6 +4,7 @@ import { roleProfileSchema, roleSchema, type CliDefinition } from '../../shared/
 import { profileWarnings, profilesOf } from '../../shared/roles';
 import type { AgentManager } from '../agents/agent-manager';
 import type { IntegrationRequests } from '../orchestrator/integration-requests';
+import type { LoopService } from '../orchestrator/loop-service';
 import type { OrchestratorService } from '../orchestrator/orchestrator-service';
 import type { WorkspaceService } from '../workspace/workspace-service';
 
@@ -15,8 +16,10 @@ type Dependencies = {
   orchestrator: Pick<OrchestratorService, 'actions'>;
   agents: Pick<AgentManager, 'revokeOrchestrator'>;
   /** 004 — the role profiles. */
-  workspaces: Pick<WorkspaceService, 'update'>;
+  workspaces: Pick<WorkspaceService, 'update' | 'list'>;
   clis: () => CliDefinition[];
+  /** 004 US2 — the loops: the user's decision, and closed with the orchestrator's role. */
+  loops?: Pick<LoopService, 'decide' | 'closeAll'>;
 };
 
 export function createOrchestratorServices({
@@ -25,6 +28,7 @@ export function createOrchestratorServices({
   agents,
   workspaces,
   clis,
+  loops,
 }: Dependencies) {
   return {
     'integrationRequest:confirm': (input: IpcInput<'integrationRequest:confirm'>) =>
@@ -34,8 +38,16 @@ export function createOrchestratorServices({
     },
     'orchestrator:actions': ({ agentId }: IpcInput<'orchestrator:actions'>) =>
       orchestrator.actions(agentId),
-    'orchestrator:revoke': ({ agentId }: IpcInput<'orchestrator:revoke'>) =>
-      agents.revokeOrchestrator(agentId),
+    'orchestrator:revoke': async ({ agentId }: IpcInput<'orchestrator:revoke'>) => {
+      const workspace = workspaces.list().find((ws) => ws.agents.some((a) => a.id === agentId));
+      await agents.revokeOrchestrator(agentId);
+      // 004 — its loops close; the agents they had stay open.
+      if (workspace) await loops?.closeAll(workspace.id);
+    },
+    'loop:decide': async ({ workspaceId, issueId, decision }: IpcInput<'loop:decide'>) => {
+      if (!loops) return;
+      await loops.decide(workspaceId, issueId, decision);
+    },
     'roles:setProfiles': async ({ workspaceId, ...input }: IpcInput<'roles:setProfiles'>) => {
       const profiles = z.partialRecord(roleSchema, roleProfileSchema).parse(input.profiles);
       await workspaces.update(workspaceId, (ws) => ({ ...ws, roleProfiles: profiles }));

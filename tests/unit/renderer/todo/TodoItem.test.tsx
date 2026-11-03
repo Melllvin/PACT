@@ -125,3 +125,37 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
     expect(screen.queryByRole('button', { name: 'Revue →' })).toBeNull();
   });
 });
+
+// 004 T022 — the user decides on a loop stopped after 3 rounds (FR-018).
+describe('TodoItem of a loop stopped after 3 rounds', () => {
+  it.each([
+    ['Relancer 3 tours', 'restart'],
+    ['Reprendre la main', 'take-over'],
+    ['Abandonner', 'abandon'],
+  ] as const)('« %s » decides %s', async (label, decision) => {
+    const user = userEvent.setup();
+    const onDecideLoop = vi.fn();
+    const dev = agent(2, { state: 'done', role: 'dev' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: '0012-connexion:loop-escalated',
+            agentId: dev.id,
+            kind: 'loop-escalated',
+            title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
+            actions: [],
+            loop: { issueId: '0012-connexion' },
+          }}
+          agent={dev}
+          {...actions()}
+          onDecideLoop={onDecideLoop}
+        />
+      </ul>,
+    );
+    expect(screen.getByText('✕ Boucle arrêtée')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Revue →' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: label }));
+    expect(onDecideLoop).toHaveBeenCalledWith('0012-connexion', decision);
+  });
+});

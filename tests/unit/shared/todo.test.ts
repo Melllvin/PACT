@@ -190,4 +190,44 @@ describe('deriveTodos', () => {
       request: { id: 'r1', message: 'feat: connexion' },
     });
   });
+
+  // 004 T022 — « ✕ Boucle arrêtée »: after the integrations asked for, before the reviews.
+  it('asks the user to decide on a loop stopped after 3 rounds (FR-018)', () => {
+    const loop = (issueId: string, state: 'running' | 'escalated', devAgentId = 'a2') => ({
+      issueId,
+      devAgentId,
+      testAgentId: 'a3',
+      round: 3,
+      rounds: [],
+      state,
+      escalatedModel: null,
+    });
+    const todos = deriveTodos(
+      {
+        ...workspace([
+          agent(1, { state: 'done' }),
+          agent(2, { state: 'done' }),
+          agent(3, { state: 'awaiting-answer' }),
+        ]),
+        loops: [
+          loop('0012-connexion', 'escalated'),
+          loop('0013-panier', 'running'),
+          // A loop whose dev is gone gives nothing.
+          loop('0014-paiement', 'escalated', 'a9'),
+        ],
+      },
+      names,
+      ['a1'],
+    );
+    expect(todos.map((t) => t.id)).toEqual([
+      'a3:answer',
+      '0012-connexion:loop-escalated',
+      'a1:review',
+    ]);
+    expect(todos.find((t) => t.kind === 'loop-escalated')).toMatchObject({
+      agentId: 'a2',
+      title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
+      loop: { issueId: '0012-connexion' },
+    });
+  });
 });

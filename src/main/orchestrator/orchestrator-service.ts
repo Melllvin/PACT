@@ -24,6 +24,15 @@ type Options = {
   agentTools?: (agentId: string) => readonly McpTool[];
   /** Each new entry of a journal (`orchestrator:action`, US5). */
   onAction?: (orchestratorId: string, action: OrchestratorAction) => void;
+  /** 004 R5 — an agent's turn ended: its loop checks it gave a report. */
+  onTurnFinished?: (agentId: string) => void;
+};
+
+/** 004 US2 — what a loop tells the orchestrator: a report, a missing one, its end, an overlap. */
+export type Notice = {
+  agentId: string;
+  kind: 'report' | 'report-missing' | 'loop' | 'overlap';
+  summary: string;
 };
 
 /** The journal keeps the latest actions only (FR-021). */
@@ -82,6 +91,17 @@ export class OrchestratorService {
     this.lastStates.set(agentId, { state, workspaceId });
     const event = eventOf(agentId, state, previous, lastError?.message ?? '');
     if (event) this.push(workspaceId, event);
+    if (event?.kind === 'turn-finished') this.options.onTurnFinished?.(agentId);
+  }
+
+  /** A loop's notice, with the agent's state as it is now. */
+  notice(workspaceId: string, { agentId, kind, summary }: Notice): void {
+    const agent = this.options.workspaces
+      .list()
+      .find((ws) => ws.id === workspaceId)
+      ?.agents.find((a) => a.id === agentId);
+    const state = agent?.state ?? this.lastStates.get(agentId)?.state ?? 'closed';
+    this.push(workspaceId, { at: new Date().toISOString(), agentId, kind, state, summary });
   }
 
   /** Tells the orchestrators of a workspace, never about themselves. */

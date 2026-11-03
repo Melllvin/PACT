@@ -41,6 +41,8 @@ export type AgentActions = {
   onConfirmIntegration?: (requestId: string, message: string) => void;
   /** 003 US3 — « Refuser » of a request of the orchestrator. */
   onRefuseIntegration?: (requestId: string) => void;
+  /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
+  onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
 };
 
 /** The review of the app (review-store and « vu » of app-store), for this workspace. */
@@ -112,6 +114,8 @@ type Props = {
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
   fromOrchestrator?: Readonly<Record<string, unknown>>;
+  /** 004 US2 — what the loops of this workspace told, for the orchestrator's « Rapports ». */
+  loopReports?: readonly { kind: string; summary: string }[];
   /** 003 US5 — the journal « ◎ Actions » of the orchestrator and the withdrawal of its role. */
   orchestration?: OrchestrationBinding | undefined;
 };
@@ -135,6 +139,7 @@ export function WorkspaceView({
   toolbarSlot = null,
   review,
   fromOrchestrator = {},
+  loopReports = [],
   orchestration,
 }: Props) {
   const available = workspace.status === 'available';
@@ -242,10 +247,17 @@ export function WorkspaceView({
 
   // 003 R10 — the orchestrator, if any, leads the tiles from the top.
   const lead = agents.find((agent) => agent.role === 'orchestrator');
+  // 004 US2 — « tour N/3 » on the dev and the test of a running loop.
+  const roundOf = (agentId: string) =>
+    workspace.loops.find(
+      (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
+    )?.round ?? null;
   const tileOf = (agent: Agent) => (
     <Tile
       key={agent.id}
       fromOrchestrator={fromOrchestrator[agent.id] !== undefined}
+      round={roundOf(agent.id)}
+      reports={loopReports}
       agent={agent}
       name={cliName(agent.cliId)}
       terminals={terminals}

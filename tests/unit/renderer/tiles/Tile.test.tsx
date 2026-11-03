@@ -9,7 +9,12 @@ import { agent, rateLimited, scheduledResume, time } from './fixtures';
 
 const setup = (
   overrides: Partial<Agent> = {},
-  extra: { onExpand?: () => void; fromOrchestrator?: boolean } = {},
+  extra: {
+    onExpand?: () => void;
+    fromOrchestrator?: boolean;
+    round?: number | null;
+    reports?: { kind: string; summary: string }[];
+  } = {},
 ) => {
   const actions = {
     onAnswer: vi.fn(),
@@ -225,5 +230,39 @@ describe('Tile and the roles (004 T011, FR-006)', () => {
   it('shows no role for an ordinary agent', () => {
     const { tile } = setup();
     expect(within(tile()).queryByLabelText('Rôle')).toBeNull();
+  });
+});
+
+describe('Tile and the loops (004 T022)', () => {
+  it('shows the round of the loop the agent works in', () => {
+    const { tile } = setup({ role: 'dev' }, { round: 2 });
+    expect(within(tile()).getByLabelText('Tour').textContent).toBe('tour 2/3');
+  });
+
+  it('shows no round outside a loop', () => {
+    const { tile } = setup({ role: 'dev' });
+    expect(within(tile()).queryByLabelText('Tour')).toBeNull();
+  });
+
+  it('shows the latest three reports on the orchestrator, their first line only', () => {
+    const reports = ['un', 'deux', 'trois', 'quatre\nFAIL a.test.ts'].map((summary) => ({
+      kind: 'report',
+      summary,
+    }));
+    const { tile } = setup({ role: 'orchestrator' }, { reports });
+    const band = within(tile()).getByRole('list', { name: 'Rapports' });
+    expect(
+      within(band)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['deux', 'trois', 'quatre']);
+  });
+
+  it('shows no band on another agent, nor without a report', () => {
+    expect(
+      within(
+        setup({ role: 'dev' }, { reports: [{ kind: 'report', summary: 'un' }] }).tile(),
+      ).queryByRole('list', { name: 'Rapports' }),
+    ).toBeNull();
   });
 });

@@ -186,6 +186,13 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
   'integrationRequest:refuse': { valid: { requestId: integrationId }, invalid: [{}] },
   'orchestrator:actions': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
   'orchestrator:revoke': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
+  'loop:decide': {
+    valid: { workspaceId: 'w1', issueId: '0012-connexion', decision: 'restart' },
+    invalid: [
+      { workspaceId: 'w1', issueId: '', decision: 'restart' },
+      { workspaceId: 'w1', issueId: '0012-connexion', decision: 'retry' },
+    ],
+  },
   'roles:setProfiles': {
     valid: {
       workspaceId: 'w1',
@@ -255,12 +262,14 @@ describe('IPC event schemas', () => {
       'integration:state',
       'orchestrator:action',
       'orchestrator:prompted',
+      'orchestrator:report',
       'review:changed',
       'review:pending',
       'review:tests',
       'term:data',
       'term:exit',
       'workspace:integrationRequests',
+      'workspace:loops',
       'workspace:status',
     ]);
   });

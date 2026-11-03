@@ -23,6 +23,8 @@ import { IntegrationRequests } from './orchestrator/integration-requests';
 import { OrchestratorService } from './orchestrator/orchestrator-service';
 import type { McpTool } from './orchestrator/mcp';
 import { createOrchestratorTools } from './orchestrator/tools';
+import { createAgentTools } from './orchestrator/agent-tools';
+import { LoopService } from './orchestrator/loop-service';
 import { IntegrationService } from './review/integration-service';
 import { ReviewService } from './review/review-service';
 import { TestRunner } from './review/test-runner';
@@ -91,6 +93,12 @@ void app.whenReady().then(async () => {
       emit('orchestrator:action', { ...action, orchestratorId });
     },
     pluginsDir: join(app.getPath('userData'), 'orchestrator'),
+    // 004 US2 — the hand-off reports of the agents with a role go to their loop.
+    agentTools: (agentId) =>
+      createAgentTools({ onReport: (id, report) => loops.report(id, report) }, agentId),
+    onTurnFinished: (agentId) => {
+      loops.turnFinished(agentId);
+    },
     // Read when the orchestrator calls: the services below exist by then.
     tools: (orchestratorId): McpTool[] =>
       createOrchestratorTools(
@@ -103,6 +111,7 @@ void app.whenReady().then(async () => {
           tests,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
+          loops,
           clis: () => registry.list(),
           permissions,
           log: (entry) => {
@@ -171,6 +180,23 @@ void app.whenReady().then(async () => {
     env: resolveShellEnv,
     onUpdate: (run) => {
       emit('review:tests', run);
+      // 004 FR-019 — PACT's own run of the tests is the proof of a loop.
+      void loops.testRun(run);
+    },
+  });
+  // 004 US2 — the dev ↔ test loops of the issues.
+  const loops: LoopService = new LoopService({
+    workspaces,
+    git,
+    review,
+    tests,
+    agents,
+    notify: (workspaceId, notice) => {
+      orchestrator.notice(workspaceId, notice);
+      emit('orchestrator:report', { workspaceId, ...notice });
+    },
+    onChange: (workspaceId, change) => {
+      emit('workspace:loops', { workspaceId, ...change });
     },
   });
   const integration = new IntegrationService({
@@ -271,6 +297,7 @@ void app.whenReady().then(async () => {
         orchestrator,
         agents,
         workspaces,
+        loops,
         clis: () => registry.list(),
       }),
     },

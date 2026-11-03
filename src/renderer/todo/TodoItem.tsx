@@ -28,10 +28,11 @@ export function TodoItem({
   onReview,
   onConfirmIntegration,
   onRefuseIntegration,
+  onDecideLoop,
 }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
-  const { request } = todo;
+  const { request, loop } = todo;
   const separator = <span className="sr-only">{SEPARATOR}</span>;
 
   if (todo.kind === 'info') {
@@ -53,7 +54,8 @@ export function TodoItem({
         'flex origin-top animate-unfold flex-col gap-2.5 overflow-hidden rounded-xl border border-white/6 bg-surface p-3 motion-reduce:animate-none',
         todo.kind === 'answer' && 'border-waiting/30 bg-waiting/6',
         todo.kind === 'integration-request' && 'border-primary/30 bg-primary/6',
-        todo.kind === 'rate-limit' && 'border-destructive/30 bg-destructive/6',
+        (todo.kind === 'rate-limit' || todo.kind === 'loop-escalated') &&
+          'border-destructive/30 bg-destructive/6',
       )}
     >
       <span className="font-mono text-[12px] leading-[1.5] break-words text-foreground">
@@ -89,7 +91,33 @@ export function TodoItem({
           }
         />
       )}
-      {agent && !request && (
+      {loop && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onDecideLoop?.(loop.issueId, 'restart');
+            }}
+          >
+            Relancer 3 tours
+          </Button>
+          <Button
+            onClick={() => {
+              onDecideLoop?.(loop.issueId, 'take-over');
+            }}
+          >
+            Reprendre la main
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onDecideLoop?.(loop.issueId, 'abandon');
+            }}
+          >
+            Abandonner
+          </Button>
+        </div>
+      )}
+      {agent && !request && !loop && (
         <TileActions
           state={agent.state}
           scheduledResume={agent.scheduledResume}

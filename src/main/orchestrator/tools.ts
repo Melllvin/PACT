@@ -22,6 +22,7 @@ import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
 import type { WaitResult } from './events';
 import type { IntegrationRequests } from './integration-requests';
+import type { LoopService } from './loop-service';
 import type { McpTool, ToolResult } from './mcp';
 
 // 003 contracts/mcp-tools.md — the tools of the pact MCP server, for one orchestrator. A refusal
@@ -44,6 +45,8 @@ export type ToolDependencies = {
   wait: (agentIds: readonly string[] | undefined, timeoutMs: number) => Promise<WaitResult>;
   /** The integrations waiting for the user (US3). */
   requests: Pick<IntegrationRequests, 'request'>;
+  /** 004 US2 — the dev ↔ test loops. */
+  loops?: Pick<LoopService, 'start' | 'next' | 'get'>;
   /** The journal « ◎ Actions »: each action, done or refused (US5, FR-021). */
   log?: (entry: ActionEntry) => void;
 };
@@ -94,6 +97,15 @@ const optionalString = (args: unknown, key: string): string | null => {
   return value.trim();
 };
 
+/** The loop's refusals become the orchestrator's (004 FR-018). */
+const loopRefusal = async <T>(run: () => Promise<T>): Promise<T> => {
+  try {
+    return await run();
+  } catch (error) {
+    throw new Refusal(error instanceof Error ? error.message : String(error));
+  }
+};
+
 /** The launcher's refusals (limit, branch, CLI) become the orchestrator's (FR-022). */
 const asRefusal = async <T>(run: () => Promise<T>): Promise<T> => {
   try {
@@ -122,6 +134,11 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     if (!found) throw new Refusal('L’orchestrateur n’est plus dans un workspace ouvert.');
     if (found.status !== 'available') throw new Refusal('Le dossier du workspace est introuvable.');
     return found;
+  };
+
+  const loopsOf = () => {
+    if (!deps.loops) throw new Refusal('Les boucles ne sont pas disponibles.');
+    return deps.loops;
   };
 
   /** By id or by displayed name, case ignored; never the orchestrator itself (FR-008). */
@@ -507,6 +524,48 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         return reply(text, { events, timedOut });
       },
     ),
+    tool(
+      'start_loop',
+      'Démarre la boucle dev ↔ test d’une issue prête (3 tours au plus) : PACT compte les tours, valide le verdict du test et fait la preuve par ses propres tests.',
+      { issue: { type: 'string', minLength: 1 }, dev: agentArgument, test: agentArgument },
+      ['issue', 'dev', 'test'],
+      async (args) => {
+        const loops = loopsOf();
+        const dev = resolve(stringArg(args, 'dev'));
+        const test = resolve(stringArg(args, 'test'));
+        const issue = stringArg(args, 'issue');
+        const loop = await loopRefusal(() =>
+          loops.start(workspace().id, { issue, dev: dev.id, test: test.id }),
+        );
+        return reply(`Boucle de ${issue} démarrée : tour 1/3.`, { loop });
+      },
+    ),
+    tool(
+      'next_round',
+      'Passe au tour suivant d’une boucle, après un verdict « defects » du test ; refusé au-delà de 3 tours.',
+      { issue: { type: 'string', minLength: 1 } },
+      ['issue'],
+      async (args) => {
+        const loops = loopsOf();
+        const issue = stringArg(args, 'issue');
+        const loop = await loopRefusal(() => loops.next(workspace().id, issue));
+        return reply(`${issue} : tour ${String(loop.round)}/3.`, { loop });
+      },
+    ),
+    tool(
+      'get_loop',
+      'Lit la boucle d’une issue : son tour, ses rapports, la preuve par les tests.',
+      { issue: { type: 'string', minLength: 1 } },
+      ['issue'],
+      (args) => {
+        const issue = stringArg(args, 'issue');
+        const loop = loopsOf().get(workspace().id, issue);
+        if (!loop) throw new Refusal(`Aucune boucle pour ${issue}.`);
+        return Promise.resolve(
+          reply(`${issue} : tour ${String(loop.round)}/3, ${loop.state}.`, { loop }),
+        );
+      },
+    ),
   ];
 }
 
@@ -523,6 +582,13 @@ function describe(event: OrchestratorEvent, name: string): string {
       return `${name} a été fermé.`;
     case 'integration':
       return `${name} : intégration ${event.integration?.outcome ?? ''}. ${event.summary}`;
+    case 'report':
+      return `${name} a rendu son rapport : ${event.summary}`;
+    case 'report-missing':
+      return `${name} a fini son tour sans rapport.`;
+    case 'loop':
+    case 'overlap':
+      return `${name} : ${event.summary}`;
   }
 }
 

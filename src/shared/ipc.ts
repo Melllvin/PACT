@@ -6,6 +6,8 @@ import {
   agentStateSchema,
   cliDefinitionSchema,
   integrationRequestSchema,
+  issueSchema,
+  loopSchema,
   MAX_AGENTS,
   permissionLevelSchema,
   permissionPreferenceSchema,
@@ -242,6 +244,15 @@ export const ipcRequests = {
   ),
   /** 003 US5 — « Retirer le rôle d'orchestrateur » (FR-004). */
   'orchestrator:revoke': request(z.object({ agentId: z.uuid() }), none),
+  /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
+  'loop:decide': request(
+    z.object({
+      workspaceId: z.string(),
+      issueId: z.string().min(1),
+      decision: z.enum(['restart', 'take-over', 'abandon']),
+    }),
+    none,
+  ),
   /** 004 US1 — the role profiles of a workspace; a weaker test warns without blocking (FR-004). */
   'roles:setProfiles': request(
     z.object({
@@ -282,6 +293,19 @@ export const ipcEvents = {
   'workspace:integrationRequests': z.object({
     workspaceId: z.string(),
     requests: z.array(integrationRequestSchema),
+  }),
+  /** 004 US2 — the loops and issues of a workspace, for the tiles and À faire. */
+  'workspace:loops': z.object({
+    workspaceId: z.string(),
+    loops: z.array(loopSchema),
+    issues: z.array(issueSchema),
+  }),
+  /** 004 US2 — a report, a missing one, the end of a loop or files two agents change. */
+  'orchestrator:report': z.object({
+    workspaceId: z.string(),
+    agentId: z.uuid(),
+    kind: z.enum(['report', 'report-missing', 'loop', 'overlap']),
+    summary: z.string(),
   }),
 } as const;
 

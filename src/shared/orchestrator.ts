@@ -11,7 +11,18 @@ const isoDate = z.iso.datetime();
 export const orchestratorEventSchema = z.object({
   at: isoDate,
   agentId: z.uuid(),
-  kind: z.enum(['turn-finished', 'awaiting-answer', 'error', 'closed', 'integration']),
+  kind: z.enum([
+    'turn-finished',
+    'awaiting-answer',
+    'error',
+    'closed',
+    'integration',
+    // 004 US2 — reports, loops and files two agents change.
+    'report',
+    'report-missing',
+    'loop',
+    'overlap',
+  ]),
   state: agentStateSchema,
   summary: z.string(),
   integration: z
@@ -30,6 +41,8 @@ export const ORCHESTRATOR_ACTION_TOOLS = [
   'close_agent',
   'request_integration',
   'run_tests',
+  'start_loop',
+  'next_round',
 ] as const;
 
 export const orchestratorActionSchema = z.object({

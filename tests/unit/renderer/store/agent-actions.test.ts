@@ -104,6 +104,34 @@ describe('agent actions', () => {
     expect(second?.integrationRequests).toEqual([]);
   });
 
+  it('follows the loops and their reports, and sends the user’s decision (004 US2)', async () => {
+    const { store, invoke, emit } = await setup();
+    const issue = {
+      id: '0012-connexion',
+      title: 'Connexion',
+      path: '.pact/issues/0012-connexion.md',
+      state: 'escalated' as const,
+      remote: null,
+      trace: { branch: null, agents: [], pr: null },
+    };
+    emit('workspace:loops', { workspaceId: 'w1', loops: [], issues: [issue] });
+    const [first, second] = store.getState().workspaces;
+    expect(first?.issues).toEqual([issue]);
+    expect(second?.issues).toEqual([]);
+
+    for (const summary of ['un', 'deux']) {
+      emit('orchestrator:report', { workspaceId: 'w1', agentId: id, kind: 'report', summary });
+    }
+    expect(store.getState().loopReports.w1?.map((r) => r.summary)).toEqual(['un', 'deux']);
+
+    await store.getState().decideLoop('w1', '0012-connexion', 'restart');
+    expect(invoke).toHaveBeenCalledWith('loop:decide', {
+      workspaceId: 'w1',
+      issueId: '0012-connexion',
+      decision: 'restart',
+    });
+  });
+
   it('cancels the scheduled resume (FR-036)', async () => {
     const { store, invoke } = await setup();
     await store.getState().cancelAutoResume(id);
