@@ -12,6 +12,8 @@ export type TileActionHandlers = {
   onAlways?: (() => void) | undefined;
   /** « Revue → », given only for an agent with changes to review (002 FR-002). */
   onReview?: (() => void) | undefined;
+  /** « Répondre dans le terminal ↗ »: the Focus on the agent's terminal (FR-024a). */
+  onOpenTerminal?: (() => void) | undefined;
 };
 
 const GROUP = 'flex flex-none flex-wrap items-center justify-end gap-1.5';
@@ -29,8 +31,27 @@ export function TileActions({
   onCancelAutoResume,
   onAlways,
   onReview,
+  onOpenTerminal,
+  question = false,
   scheduledResume = null,
-}: TileActionHandlers & { state: AgentState; scheduledResume?: ScheduledResume | null }) {
+}: TileActionHandlers & {
+  state: AgentState;
+  /** The agent asks a question to choose from, not a permission (FR-024a). */
+  question?: boolean;
+  scheduledResume?: ScheduledResume | null;
+}) {
+  // A question is answered in the CLI: its options are its own, PACT types nothing (FR-024a).
+  if (state === 'awaiting-answer' && question) {
+    return (
+      <span className={GROUP}>
+        {onOpenTerminal && (
+          <Button variant="accept" onClick={onOpenTerminal}>
+            Répondre dans le terminal ↗
+          </Button>
+        )}
+      </span>
+    );
+  }
   if (state === 'awaiting-answer') {
     return (
       <span className={GROUP}>

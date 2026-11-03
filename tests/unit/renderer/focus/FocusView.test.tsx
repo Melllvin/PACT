@@ -168,6 +168,19 @@ describe('FocusView', () => {
     ]);
   });
 
+  // T162 — a question is answered in the agent's terminal (FR-024a).
+  it('opens the terminal tab for a question instead of answering it', async () => {
+    const user = userEvent.setup();
+    const { props } = setup(
+      team({ state: 'awaiting-answer', awaiting: 'question' }),
+      undefined,
+      'changes',
+    );
+    await user.click(screen.getByRole('button', { name: 'Répondre dans le terminal ↗' }));
+    expect(props.onTab).toHaveBeenCalledWith('terminal');
+    expect(props.onAnswer).not.toHaveBeenCalled();
+  });
+
   it('offers the recovery actions of an agent in error', async () => {
     const user = userEvent.setup();
     const { props } = setup(team({ state: 'error' }));
