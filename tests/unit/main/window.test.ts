@@ -45,6 +45,18 @@ describe('createMainWindow', () => {
     });
   });
 
+  it('shows the window, throttled in the background, by default', () => {
+    createMainWindow({});
+    expect(lastWindow().options.show).toBe(true);
+    expect(lastWindow().options.webPreferences?.backgroundThrottling).toBe(true);
+  });
+
+  it('keeps the window hidden and unthrottled for background e2e runs', () => {
+    createMainWindow({ PACT_TEST_BACKGROUND: '1' });
+    expect(lastWindow().options.show).toBe(false);
+    expect(lastWindow().options.webPreferences?.backgroundThrottling).toBe(false);
+  });
+
   it('uses the CommonJS preload build (sandboxed preloads cannot be ESM)', () => {
     createMainWindow({});
     expect(lastWindow().options.webPreferences?.preload).toMatch(/[\\/]preload[\\/]index\.cjs$/);

@@ -41,6 +41,8 @@ export async function launchApp({
       USERPROFILE: home,
       CLAUDE_CONFIG_DIR: join(home, '.claude'),
       CODEX_HOME: join(home, '.codex'),
+      // The app runs hidden, without a Dock icon; PACT_E2E_FOREGROUND=1 shows it to debug a test.
+      PACT_TEST_BACKGROUND: process.env.PACT_E2E_FOREGROUND === '1' ? '0' : '1',
       ...env,
       PACT_TEST_MODE: '1',
       PACT_USER_DATA_DIR: dir,
