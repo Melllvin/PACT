@@ -15,6 +15,7 @@ import {
   type UsageReading,
   type UsageState,
   type UsageWindow,
+  workspaceShares,
 } from '../../../src/shared/usage';
 
 // 005 T003 — the usage of a CLI account and what the gauge derives from it (data-model.md, R4, R6).
@@ -211,5 +212,46 @@ describe('launchWarning', () => {
     if (old.reading) old.reading.readAt = new Date('2026-11-03T12:30:00').toISOString();
     expect(launchWarning([old], 'claude-code', thresholds, NOW)).toBeNull();
     expect(levelNow(old, thresholds, NOW)).toBe('ok');
+  });
+});
+
+describe('workspaceShares (005 US3)', () => {
+  const share = (agentId: string, workspaceId: string, tokens: number, over = {}) => ({
+    agentId,
+    workspaceId,
+    label: agentId,
+    role: null,
+    tokens,
+    closed: false,
+    ...over,
+  });
+
+  it('gives the part of each agent of the workspace, the largest first, then the others', () => {
+    expect(
+      workspaceShares(
+        [
+          share('a', 'w1', 100),
+          share('b', 'w2', 300),
+          share('c', 'w1', 500, { role: 'dev', closed: true }),
+          share('d', 'w2', 100),
+        ],
+        'w1',
+      ),
+    ).toEqual({
+      agents: [
+        { agentId: 'c', label: 'c', role: 'dev', closed: true, percent: 50 },
+        { agentId: 'a', label: 'a', role: null, closed: false, percent: 10 },
+      ],
+      others: 40,
+    });
+  });
+
+  it('has no parts before any token is counted', () => {
+    expect(workspaceShares([share('a', 'w1', 0)], 'w1')).toBeNull();
+    expect(workspaceShares([], 'w1')).toBeNull();
+  });
+
+  it('has no others when every agent is of the workspace', () => {
+    expect(workspaceShares([share('a', 'w1', 10)], 'w1')?.others).toBe(0);
   });
 });

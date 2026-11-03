@@ -18,8 +18,8 @@ const source = (over: Partial<UsageSource> = {}): UsageSource => ({
   account: 'default',
   ...over,
 });
-const sample = (percent: number, tokens = 0): UsageSample => ({
-  windows: [{ id: 'five-hour', label: '5 h', usedPercent: percent, resetsAt: null, minutes: 300 }],
+const sample = (percent: number, tokens = 0, resetsAt: string | null = null): UsageSample => ({
+  windows: [{ id: 'five-hour', label: '5 h', usedPercent: percent, resetsAt, minutes: 300 }],
   tokens,
 });
 
@@ -63,7 +63,24 @@ describe('UsageService', () => {
         windows: sample(45).windows,
         readAt: '2026-11-03T14:01:00.000Z',
       },
-      shares: [],
+      shares: [
+        {
+          agentId: 'a1',
+          workspaceId: 'w1',
+          label: 'Claude Code 1',
+          role: null,
+          tokens: 0,
+          closed: false,
+        },
+        {
+          agentId: 'a2',
+          workspaceId: 'w2',
+          label: 'Claude Code 1',
+          role: null,
+          tokens: 0,
+          closed: false,
+        },
+      ],
       level: 'ok',
     });
   });
@@ -145,5 +162,62 @@ describe('UsageService', () => {
     expect(states.at(-1)?.level).toBe('ok');
     expect(usage.warning('claude-code')).toBeNull();
     expect(usage.warning('codex')).toBeNull();
+  });
+
+  describe('shares (US3)', () => {
+    const tokensOf = (usage: UsageService) =>
+      usage.list()[0]?.shares.map((share) => [share.agentId, share.tokens, share.closed]);
+
+    it('counts each agent from its first reading of the window, the largest first', () => {
+      const { usage } = service();
+      usage.record(source({ agentId: 'a1' }), sample(10, 1000));
+      usage.record(source({ agentId: 'a2', role: 'test' }), sample(11, 500));
+      usage.record(source({ agentId: 'a1' }), sample(12, 1300));
+      usage.record(source({ agentId: 'a2', role: 'test' }), sample(14, 1500));
+      expect(tokensOf(usage)).toEqual([
+        ['a2', 1000, false],
+        ['a1', 300, false],
+      ]);
+      expect(usage.list()[0]?.shares[0]?.role).toBe('test');
+    });
+
+    it('counts the tokens of a sample without limits, without an event', () => {
+      const { usage, states } = service();
+      usage.record(source(), sample(10, 100));
+      usage.record(source(), { windows: null, tokens: 400 });
+      expect(states).toHaveLength(1);
+      expect(tokensOf(usage)).toEqual([['a1', 300, false]]);
+    });
+
+    it('goes on counting across a new session of the same agent', () => {
+      const { usage } = service();
+      usage.record(source(), sample(10, 800));
+      usage.record(source(), sample(11, 1000));
+      usage.record(source(), sample(12, 150));
+      expect(tokensOf(usage)).toEqual([['a1', 350, false]]);
+    });
+
+    it('keeps a closed agent, marked, until the window resets', () => {
+      const { usage, states } = service();
+      const reset = '2026-11-03T16:00:00.000Z';
+      usage.record(source({ agentId: 'a1' }), sample(10, 0, reset));
+      usage.record(source({ agentId: 'a1' }), sample(20, 900, reset));
+      usage.record(source({ agentId: 'a2' }), sample(21, 0, reset));
+      usage.release('a1');
+      expect(states.at(-1)?.shares.map((share) => [share.agentId, share.closed])).toEqual([
+        ['a1', true],
+        ['a2', false],
+      ]);
+      usage.record(source({ agentId: 'a2' }), sample(2, 40, '2026-11-03T21:00:00.000Z'));
+      expect(tokensOf(usage)).toEqual([['a2', 0, false]]);
+    });
+
+    it('opens again an agent that reports after a restart', () => {
+      const { usage } = service();
+      usage.record(source(), sample(10, 100));
+      usage.release('a1');
+      usage.record(source(), sample(11, 30));
+      expect(tokensOf(usage)).toEqual([['a1', 30, false]]);
+    });
   });
 });

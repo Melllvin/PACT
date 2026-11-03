@@ -122,6 +122,45 @@ describe('UsageGauge', () => {
     render(<UsageGauge state={state()} cliName="Claude Code" now={NOW} />);
     expect(document.querySelector('.usage-gauge-short')?.textContent).toBe('62 %');
   });
+
+  it('shows the part of each agent of the workspace, the largest first, then the others', async () => {
+    const share = (agentId: string, workspaceId: string, tokens: number, over = {}) => ({
+      agentId,
+      workspaceId,
+      label: agentId,
+      role: null,
+      tokens,
+      closed: false,
+      ...over,
+    });
+    render(
+      <UsageGauge
+        state={state({
+          shares: [
+            share('Claude Code 1', 'w1', 100),
+            share('Claude Code 3', 'w2', 400),
+            share('Claude Code 2', 'w1', 500, { role: 'test', closed: true }),
+          ],
+        })}
+        cliName="Claude Code"
+        now={NOW}
+        workspaceId="w1"
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Claude Code 62 %/ }));
+    const parts = screen.getByRole('list', { name: 'Part des agents PACT' });
+    expect(
+      within(parts)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Claude Code 2 · Test · fermé50 %', 'Claude Code 110 %', 'autres40 %']);
+  });
+
+  it('shows no parts before any token is counted', async () => {
+    render(<UsageGauge state={state()} cliName="Claude Code" now={NOW} workspaceId="w1" />);
+    await userEvent.click(screen.getByRole('button', { name: /Claude Code 62 %/ }));
+    expect(screen.queryByRole('list', { name: 'Part des agents PACT' })).toBeNull();
+  });
 });
 
 describe('workspaceGauges', () => {
