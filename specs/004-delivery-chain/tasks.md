@@ -19,7 +19,7 @@ sont verts.
 
 - [X] T001 Ajouter la dépendance `marked` (version exacte, sans dépendance transitive) dans `package.json` ; vérifier `npm ls marked`.
 - [X] T002 [P] Créer `resources/skills/` (vide sauf `README.md` qui renvoie à contracts/skills.md) et l'ajouter aux `extraResources` du build comme le pont de hooks, dans `electron-builder.config.*` ; test de configuration dans `tests/unit/scripts/release-config.test.ts`.
-- [X] T003 [P] Étendre le faux CLI `tests/fixtures/fake-cli/fake-cli.mjs` : étapes `report` (appelle `submit_report` avec `PACT_AGENT_TOKEN` et l'URL `PACT_AGENT_MCP_URL`), `writeTests` / `writeProd` (fichiers sous `tests/` ou `src/`), `mockup` (écrit `design/mockups/<nom>.html`) ; documenter dans l'en-tête du fichier.
+- [X] T003 [P] Étendre le faux CLI `tests/fixtures/fake-cli/fake-cli.mjs` : étapes `report` (appelle `submit_report` avec `PACT_AGENT_MCP_TOKEN` (jamais le jeton des hooks) et l'URL `PACT_AGENT_MCP_URL`), `writeTests` / `writeProd` (fichiers sous `tests/` ou `src/`), `mockup` (écrit `design/mockups/<nom>.html`) ; documenter dans l'en-tête du fichier.
 
 ---
 

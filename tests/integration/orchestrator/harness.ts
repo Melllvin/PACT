@@ -55,6 +55,13 @@ export async function createHarness() {
   const workspaces = new WorkspaceService({ git: gitService, stores });
   const workspace = await workspaces.open(repo);
   const pty = new PtyManager();
+  /** The environment each agent was last started with (004: its agent MCP access). */
+  const envs = new Map<string, Record<string, string | undefined>>();
+  const start = pty.start.bind(pty);
+  pty.start = (id, spec) => {
+    envs.set(id, { ...spec.env });
+    start(id, spec);
+  };
   const hooks = new HookServer();
   await hooks.start();
   const adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: process.platform });
@@ -232,6 +239,7 @@ export async function createHarness() {
     waitForState,
     draft,
     launch,
+    launchedEnv: (agentId: string) => envs.get(agentId) ?? {},
     async dispose() {
       review.dispose();
       tests.dispose();

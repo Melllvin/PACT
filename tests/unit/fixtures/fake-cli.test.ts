@@ -301,10 +301,12 @@ describe('fake CLI', () => {
     }
   });
 
-  it('reports to PACT with its agent token, one report per turn, the last one repeated (004 R5)', async () => {
+  it('reports to PACT with its agent MCP token, never its hook token, one report per turn, the last one repeated (004 R5)', async () => {
     const mcp = await startMcp('Rapport reçu');
     try {
-      const fake = await runFake('role-report', { env: { PACT_AGENT_MCP_URL: mcp.url } });
+      const fake = await runFake('role-report', {
+        env: { PACT_AGENT_MCP_URL: mcp.url, PACT_AGENT_MCP_TOKEN: 'agent-mcp-token' },
+      });
       await fake.waitForPrompt(1);
       for (const turn of [1, 2, 3]) {
         fake.send('0012-connexion');
@@ -312,9 +314,9 @@ describe('fake CLI', () => {
       }
       expect(fake.output()).toContain('MCP submit_report : Rapport reçu');
       expect(mcp.calls.map((c) => c.token)).toEqual([
-        'secret-token',
-        'secret-token',
-        'secret-token',
+        'agent-mcp-token',
+        'agent-mcp-token',
+        'agent-mcp-token',
       ]);
       const reports = mcp.calls.map(
         (c) => c.body.params as { name: string; arguments: Record<string, unknown> },
