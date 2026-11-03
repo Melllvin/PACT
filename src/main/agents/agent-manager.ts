@@ -66,6 +66,8 @@ type Options = {
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
   onBranch?: (event: AgentBranchEvent) => void;
+  /** Agents were launched, whoever asked: the launcher or an orchestrator. */
+  onLaunched?: (workspaceId: string, agents: Agent[]) => void;
   /** Quiet time after which the output is read again for a question (generic adapter). */
   idleMs?: number;
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
@@ -147,6 +149,7 @@ export class AgentManager {
   private readonly isPortInUse: (port: number) => Promise<boolean>;
   private readonly onState: NonNullable<Options['onState']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
+  private readonly onLaunched: NonNullable<Options['onLaunched']>;
   private readonly branches: BranchWatcher;
   private readonly idleMs: number;
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
@@ -183,6 +186,7 @@ export class AgentManager {
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
+    this.onLaunched = options.onLaunched ?? (() => undefined);
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
     this.onClosing = options.onClosing ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
@@ -210,6 +214,12 @@ export class AgentManager {
   launch(request: LaunchRequest): Promise<Agent[]> {
     const run = this.queue.then(() => this.launchNow(request));
     this.queue = run.catch(() => undefined);
+    void run.then(
+      (agents) => {
+        if (agents.length > 0) this.onLaunched(request.workspaceId, agents);
+      },
+      () => undefined,
+    );
     return run;
   }
 

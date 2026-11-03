@@ -342,6 +342,15 @@ export function createAppStore(api: PactApi) {
           api.on('orchestrator:prompted', ({ agentId }) => {
             set({ orchestratorPrompted: { ...get().orchestratorPrompted, [agentId]: 'queued' } });
           }),
+          // 003 FR-015 — agents launched by an orchestrator: their tiles appear too.
+          api.on('workspace:agentsLaunched', () => {
+            void api
+              .invoke('app:getState')
+              .then(({ workspaces }) => {
+                set({ workspaces });
+              })
+              .catch(() => undefined);
+          }),
           api.on('agent:branch', ({ agentId, branch }) => {
             set({ workspaces: updateAgent(get().workspaces, agentId, (a) => ({ ...a, branch })) });
           }),

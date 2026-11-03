@@ -41,6 +41,7 @@ let events: AgentStateEvent[];
 let branches: IpcEvent<'agent:branch'>[];
 /** The agents let go before closing, and whether their worktree was still there then. */
 let closing: { id: string; worktree: boolean }[];
+let launchedIn: { workspaceId: string; ids: string[] }[] = [];
 let scenario: string;
 
 const createManager = async () => {
@@ -62,6 +63,8 @@ const createManager = async () => {
     isPortInUse: () => Promise.resolve(false),
     onState: (event) => events.push(event),
     onBranch: (event) => branches.push(event),
+    onLaunched: (workspaceId, agents) =>
+      launchedIn.push({ workspaceId, ids: agents.map((a) => a.id) }),
     onClosing: (id) =>
       closing.push({
         id,
@@ -153,6 +156,14 @@ afterEach(async () => {
 }, 30_000);
 
 // Spec edge case « dossier supprimé »: the agents of an unavailable workspace stop cleanly (T121).
+describe('AgentManager.launch', { timeout: 30_000 }, () => {
+  it('tells who launched agents, so their tiles appear (003 FR-015)', async () => {
+    launchedIn = [];
+    const agent = await launchOne();
+    expect(launchedIn).toEqual([{ workspaceId: workspace.id, ids: [agent.id] }]);
+  });
+});
+
 describe('AgentManager.suspend', { timeout: 30_000 }, () => {
   it('stops the agents of a workspace whose folder is gone, marked to resume', async () => {
     const agent = await launchOne();

@@ -25,6 +25,8 @@ export type HomeProps = {
   getPathForFile: (file: File) => string;
   /** Under « Autre dépôt », in the right column: the detected agents and the legend (1a). */
   aside?: ReactNode;
+  /** The running build, at the foot of the right column (« PACT 1.0.0 · 928bb75 »). */
+  build?: string;
 };
 
 const ROW =
@@ -232,6 +234,11 @@ export function Home(props: HomeProps) {
           </p>
         )}
         {props.aside}
+        {props.build !== undefined && (
+          <p aria-label="Version de PACT" className={`${META} m-0`}>
+            {props.build}
+          </p>
+        )}
       </aside>
 
       {cloning && (

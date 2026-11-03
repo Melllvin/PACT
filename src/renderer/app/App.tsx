@@ -18,6 +18,7 @@ import { RoleProfilesDialog } from '../settings/RoleProfiles';
 import { launchWarning } from '../../shared/usage';
 import { Button } from '@/components/ui/button';
 import { Legend } from './Legend';
+import { BUILD_INFO, formatBuildInfo } from '../../shared/build-info';
 import { TabBar } from './TabBar';
 
 type Props = {
@@ -261,6 +262,7 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               onPickCloneDestination={state.pickCloneDestination}
               onClone={(url, destination) => void state.startClone(url, destination)}
               getPathForFile={getPathForFile}
+              build={formatBuildInfo(BUILD_INFO)}
               aside={
                 <>
                   <DetectedClis
