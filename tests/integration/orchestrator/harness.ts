@@ -7,6 +7,7 @@ import { FakeAdapter } from '../../../src/main/agents/adapters/fake';
 import { AgentManager, type AgentStateEvent } from '../../../src/main/agents/agent-manager';
 import { CliRegistry } from '../../../src/main/agents/cli-registry';
 import { HookServer } from '../../../src/main/agents/hook-server';
+import { PermissionService } from '../../../src/main/agents/permission-service';
 import { GitService } from '../../../src/main/git/git-service';
 import { IntegrationRequests } from '../../../src/main/orchestrator/integration-requests';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
@@ -80,6 +81,8 @@ export async function createHarness() {
           tests,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
+          clis: () => registry.list(),
+          permissions,
         },
         orchestratorId,
       ),
@@ -111,8 +114,10 @@ export async function createHarness() {
     onChange: (_workspaceId, list) => announced.push(list),
   });
 
+  const permissions = new PermissionService({ stores, workspaces });
+  let registry: CliRegistry;
   const createManager = async () => {
-    const registry = new CliRegistry({
+    registry = new CliRegistry({
       adapters: [adapter],
       resolveEnv: () => Promise.resolve({}),
       stores,
@@ -206,6 +211,7 @@ export async function createHarness() {
     integrations,
     requests,
     announced,
+    permissions,
     get manager() {
       return manager;
     },

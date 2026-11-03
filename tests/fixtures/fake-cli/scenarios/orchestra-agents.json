@@ -1,0 +1,11 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "launch_agent",
+      "arguments": { "cli": "Faux CLI", "branch": "{{prompt.0}}", "prompt": "{{prompt.1}}" }
+    },
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 30 } },
+    { "tool": "close_agent", "arguments": { "agent": "Faux CLI 2" } }
+  ]
+}
