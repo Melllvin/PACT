@@ -127,9 +127,9 @@ en moins de 1 s.
 
 **Goal**: `.pact/recap.md` tenu par le skill recap, affiché dans l'Aperçu du chef (FR-029, FR-030).
 
-- [ ] T037 [P] [US5] Tests rouges : l'Aperçu du chef liste `.pact/recap.md` en premier (`tests/unit/renderer/focus/PreviewTab.test.tsx`) ; format de files.md vérifié par `tests/unit/main/orchestrator/recap-format.test.ts` sur un exemple.
-- [ ] T038 [US5] e2e `tests/e2e/us22-recap.spec.ts` : un faux agent recap écrit le recap, il s'affiche et se rafraîchit.
-- [ ] T039 [US5] Implémenter le classement du recap dans `src/main/preview/` et l'affichage dans le Focus du chef.
+- [X] T037 [P] [US5] Tests rouges : l'Aperçu du chef liste `.pact/recap.md` en premier (`tests/unit/renderer/focus/PreviewTab.test.tsx`) ; format de files.md vérifié par `tests/unit/main/orchestrator/recap-format.test.ts` sur un exemple.
+- [X] T038 [US5] e2e `tests/e2e/us22-recap.spec.ts` : un faux agent recap écrit le recap, il s'affiche et se rafraîchit.
+- [X] T039 [US5] Implémenter le classement du recap dans `src/main/preview/` et l'affichage dans le Focus du chef. (classement livré avec US4 : `ORDER` de `preview-service.ts` ; exemple du format dans `resources/skills/pact-recap/recap.md`).
 
 ---
 

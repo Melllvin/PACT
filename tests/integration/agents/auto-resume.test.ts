@@ -44,6 +44,11 @@ class TestClock implements Clock {
     return timer;
   };
 
+  /** Timers set and not run yet. */
+  get pending() {
+    return this.timers.size;
+  }
+
   clearTimeout = (timer: unknown) => {
     this.timers.delete(timer as { at: number; run: () => void });
   };
@@ -121,6 +126,13 @@ const waitForState = (id: string, state: AgentState) =>
 const waitForOutput = (id: string, text: string) =>
   waitFor(() => pty.history(id).includes(text), `« ${text} » never printed`, id);
 
+/**
+ * The process exited and its resume is armed: the manager arms it after saving the change, so the
+ * clock must not move before (a timer set after the move would wait for the next one).
+ */
+const exited = (id: string) =>
+  waitFor(() => current(id)?.lastError?.code === 1 && clock.pending > 0, 'no exit', id);
+
 /** Launches one agent and types a prompt that meets the rate limit of the scenario. */
 const limited = async () => {
   const [agent] = await manager.launch({
@@ -192,7 +204,7 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
 
   it('resumes the same session once the process has exited (buildResume)', async () => {
     const id = await limited();
-    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await exited(id);
     const sessionId = current(id)?.sessionId;
     clock.advanceTo(RESET);
     await waitForOutput(id, `Session reprise ${String(sessionId)}`);
@@ -285,7 +297,7 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
 
   it('keeps the resume of a closed workspace for the next time it opens', async () => {
     const id = await limited();
-    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await exited(id);
     await workspaces.close(workspace.id);
     clock.advanceTo(RESET);
     await new Promise((r) => setTimeout(r, 200));
@@ -299,7 +311,7 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
 
   it('drops the resume when the agent cannot start again at its time', async () => {
     const id = await limited();
-    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await exited(id);
     envError = new Error('shell gone');
     clock.advanceTo(RESET);
     await waitFor(() => current(id)?.scheduledResume === null, 'resume kept', id);
@@ -308,7 +320,7 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
 
   it('does not resume a saved resume whose error is no longer a rate limit', async () => {
     const id = await limited();
-    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await exited(id);
     await manager.dispose();
     await workspaces.update(workspace.id, (ws) => ({
       ...ws,
@@ -326,7 +338,7 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
 
   it('resumes after a restart of PACT a resume saved before it', async () => {
     const id = await limited();
-    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await exited(id);
     await manager.dispose();
     manager = await createManager();
     await manager.restore(workspace.id);
@@ -344,7 +356,7 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
       return updated;
     });
     const id = await limited();
-    await waitFor(() => current(id)?.lastError?.code === 1, 'no exit', id);
+    await exited(id);
     await manager.dispose();
     slow.mockRestore();
     await new Promise((r) => setTimeout(r, 200)); // the save under way ends

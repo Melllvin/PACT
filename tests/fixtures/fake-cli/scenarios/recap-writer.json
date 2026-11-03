@@ -1,0 +1,13 @@
+{
+  "echo": true,
+  "files": [
+    {
+      "write": ".pact/issues/0012-connexion.md",
+      "content": "# Connexion par e-mail\n\n## Critères d’acceptation\n- Given un compte, When il saisit son e-mail, Then il est connecté.\n"
+    },
+    {
+      "write": ".pact/recap.md",
+      "content": "# Recap — 3 novembre\n\n## 0012-connexion · Connexion par e-mail — terminée\n- Agents : Faux CLI 2 (dev, fake-1), Faux CLI 3 (test, fake-1)\n- Branche : pact/faux-cli-2 · PR : aucune\n- Tours : 1/3 · Tests PACT : npm test → 0\n### À tester à la main\n- Se connecter avec un vrai e-mail.\n\n## 0013-profil · Page profil — en cours\n- Agents : Faux CLI 4 (dev, fake-1)\n- Branche : pact/faux-cli-4 · PR : aucune\n- Tours : 0/3 · Tests PACT : npm test → 1\n### À tester à la main\n- Rien à tester à la main\n"
+    }
+  ]
+}
