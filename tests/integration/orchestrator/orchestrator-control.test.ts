@@ -49,6 +49,7 @@ describe('the journal of actions', () => {
     expect(actions[1]).toMatchObject({ agentId: workerId, reason: null });
     expect(actions[1]?.summary.length).toBeLessThanOrEqual(200);
     expect(h.actionsHeard.map((a) => a.orchestratorId)).toEqual([leadId, leadId]);
+    expect(h.orchestrator.actions(workerId)).toEqual([]);
   });
 
   it('keeps the 200 latest', async () => {
