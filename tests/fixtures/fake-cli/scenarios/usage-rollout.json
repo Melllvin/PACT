@@ -1,0 +1,6 @@
+{
+  "rollout": [
+    { "primary": 18, "secondary": 4, "resets_at": 1793721600, "tokens": 900 },
+    { "primary": 25, "tokens": 1400 }
+  ]
+}

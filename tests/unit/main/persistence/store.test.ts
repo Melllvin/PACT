@@ -101,7 +101,43 @@ describe('openStores', () => {
       recents: [],
       customClis: [],
       permission: null,
+      usageThresholds: { warn: 80, critical: 95 },
     });
+  });
+
+  // 005 T005 — the usage thresholds, read without migration from a state saved before 005.
+  it('reads the usage thresholds of a state saved before 005 as the defaults', async () => {
+    await writeFile(
+      join(dir, 'state.json'),
+      JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        data: { openWorkspaces: ['/a'], recents: [], customClis: [], permission: null },
+      }),
+    );
+    const state = await openStores(dir).state.read();
+    expect(state.openWorkspaces).toEqual(['/a']);
+    expect(state.usageThresholds).toEqual({ warn: 80, critical: 95 });
+  });
+
+  it('keeps usage thresholds that were set', async () => {
+    const stores = openStores(dir);
+    const state = await stores.state.read();
+    await stores.state.write({ ...state, usageThresholds: { warn: 70, critical: 90 } });
+    expect((await openStores(dir).state.read()).usageThresholds).toEqual({
+      warn: 70,
+      critical: 90,
+    });
+  });
+
+  it.each([
+    { warn: 95, critical: 80 },
+    { warn: 0, critical: 95 },
+    { warn: 80, critical: 101 },
+    { warn: 80.5, critical: 95 },
+  ])('refuses the usage thresholds %j', async (usageThresholds) => {
+    const stores = openStores(dir);
+    const state = await stores.state.read();
+    await expect(stores.state.write({ ...state, usageThresholds })).rejects.toThrow();
   });
 
   it.each(['../escape', 'a/b', '', 'UPPER'])('rejects the workspace id %j', (id) => {
