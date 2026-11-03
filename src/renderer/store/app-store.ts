@@ -80,6 +80,9 @@ export type AppState = {
   restartAgent: (agentId: string) => Promise<void>;
   /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
   cancelAutoResume: (agentId: string) => Promise<void>;
+  /** 003 US3 — the user's answer to an integration the orchestrator asks for (FR-018). */
+  confirmIntegrationRequest: (requestId: string, message: string) => Promise<void>;
+  refuseIntegrationRequest: (requestId: string) => Promise<void>;
   openLog: (agentId: string) => Promise<void>;
   closeLog: () => void;
   requestCloseAgent: (agentId: string) => void;
@@ -288,6 +291,13 @@ export function createAppStore(api: PactApi) {
               })),
             });
           }),
+          api.on('workspace:integrationRequests', ({ workspaceId, requests }) => {
+            set({
+              workspaces: get().workspaces.map((w) =>
+                w.id === workspaceId ? { ...w, integrationRequests: requests } : w,
+              ),
+            });
+          }),
           api.on('workspace:status', ({ id, status }) => {
             set({ workspaces: get().workspaces.map((w) => (w.id === id ? { ...w, status } : w)) });
           }),
@@ -459,6 +469,12 @@ export function createAppStore(api: PactApi) {
       resumeAgent: (agentId) => act(() => api.invoke('agent:resume', { agentId })),
       restartAgent: (agentId) => act(() => api.invoke('agent:restart', { agentId })),
       cancelAutoResume: (agentId) => act(() => api.invoke('agent:cancelAutoResume', { agentId })),
+
+      confirmIntegrationRequest: (requestId, message) =>
+        act(() => api.invoke('integrationRequest:confirm', { requestId, message })),
+
+      refuseIntegrationRequest: (requestId) =>
+        act(() => api.invoke('integrationRequest:refuse', { requestId })),
 
       openLog: (agentId) =>
         act(async () => {

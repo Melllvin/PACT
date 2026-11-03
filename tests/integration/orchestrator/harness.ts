@@ -8,15 +8,19 @@ import { AgentManager, type AgentStateEvent } from '../../../src/main/agents/age
 import { CliRegistry } from '../../../src/main/agents/cli-registry';
 import { HookServer } from '../../../src/main/agents/hook-server';
 import { GitService } from '../../../src/main/git/git-service';
+import { IntegrationRequests } from '../../../src/main/orchestrator/integration-requests';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
 import { createOrchestratorTools } from '../../../src/main/orchestrator/tools';
 import { openStores, type Stores } from '../../../src/main/persistence/store';
+import { IntegrationService } from '../../../src/main/review/integration-service';
 import { ReviewService } from '../../../src/main/review/review-service';
 import { TestRunner } from '../../../src/main/review/test-runner';
 import { PtyManager } from '../../../src/main/pty/pty-manager';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
 import type { AgentDraft } from '../../../src/shared/ipc';
 import type { AgentState } from '../../../src/shared/model';
+import type { IntegrationRequest } from '../../../src/shared/orchestrator';
+import type { Integration } from '../../../src/shared/review';
 import { FAKE_CLI, scenarioPath } from '../../fixtures/fake-cli/paths';
 
 // 003 — a workspace with fake agents, PACT's local server and the orchestrator service, as the
@@ -75,9 +79,36 @@ export async function createHarness() {
           review,
           tests,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
+          requests,
         },
         orchestratorId,
       ),
+  });
+
+  /** What `integration:state` and `workspace:integrationRequests` announced, in order. */
+  const integrations: Integration[] = [];
+  const announced: IntegrationRequest[][] = [];
+  // As the app wires them: the agents are read when an integration ends.
+  const integration = new IntegrationService({
+    git: gitService,
+    workspaces,
+    agents: { close: (id, options) => manager.close(id, options) },
+    prompts: { sendPrompt: (id, text) => manager.sendPrompt(id, text) },
+    integrationsDir: join(userData, 'integrations'),
+    conflictsDir: join(userData, 'conflicts'),
+    onState: (state) => {
+      integrations.push(state);
+      requests.integrationState(state);
+    },
+  });
+  const requests: IntegrationRequests = new IntegrationRequests({
+    workspaces,
+    integration,
+    git: gitService,
+    notify: (workspaceId, event) => {
+      orchestrator.push(workspaceId, event);
+    },
+    onChange: (_workspaceId, list) => announced.push(list),
   });
 
   const createManager = async () => {
@@ -104,6 +135,7 @@ export async function createHarness() {
       onState: (event) => {
         events.push(event);
         orchestrator.agentState(event);
+        requests.agentState(event);
       },
       onPromptTyped: (agentId, origin) => typed.push({ agentId, origin }),
       orchestrator,
@@ -170,6 +202,10 @@ export async function createHarness() {
     typed,
     review,
     tests,
+    integration,
+    integrations,
+    requests,
+    announced,
     get manager() {
       return manager;
     },

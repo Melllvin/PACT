@@ -73,6 +73,31 @@ describe('agent actions', () => {
     expect(store.getState().actionError).toBeNull();
   });
 
+  // 003 T036 — the user's answer to an integration the orchestrator asks for (FR-018).
+  it('confirms or refuses an integration request, and follows the list of the workspace', async () => {
+    const { store, invoke, emit } = await setup('integrationRequest:refuse');
+    const requestId = '00000000-0000-4000-8000-0000000000a1';
+    await store.getState().confirmIntegrationRequest(requestId, 'feat: relu');
+    expect(invoke).toHaveBeenCalledWith('integrationRequest:confirm', {
+      requestId,
+      message: 'feat: relu',
+    });
+    await store.getState().refuseIntegrationRequest(requestId);
+    expect(store.getState().actionError).toBe('Refusé');
+
+    const request = {
+      id: requestId,
+      agentId: id,
+      mode: 'squash' as const,
+      message: 'feat: relu',
+      requestedAt: '2026-11-03T00:00:00.000Z',
+    };
+    emit('workspace:integrationRequests', { workspaceId: 'w1', requests: [request] });
+    const [first, second] = store.getState().workspaces;
+    expect(first?.integrationRequests).toEqual([request]);
+    expect(second?.integrationRequests).toEqual([]);
+  });
+
   it('cancels the scheduled resume (FR-036)', async () => {
     const { store, invoke } = await setup();
     await store.getState().cancelAutoResume(id);

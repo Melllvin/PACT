@@ -206,5 +206,8 @@ export type TodoItem = {
   kind: TodoKind;
   title: string;
   actions: TileAction[];
+  /** 003 US3 — the integration the orchestrator asks for, for `integration-request`. */
+  request?: { id: string; message: string };
 };
-export type TodoKind = 'answer' | 'rate-limit' | 'review' | 'prompt' | 'info';
+export type TodoKind =
+  'answer' | 'integration-request' | 'rate-limit' | 'review' | 'prompt' | 'info';

@@ -167,4 +167,34 @@ describe('deriveTodos', () => {
     const todos = deriveTodos(workspace([agent(1, { state: 'awaiting-answer' })]), names, ['a1']);
     expect(todos.map((t) => t.id)).toEqual(['a1:answer']);
   });
+
+  it('asks to integrate what the orchestrator proposes, after answers and before reviews', () => {
+    const request = {
+      id: 'r1',
+      agentId: 'a2',
+      mode: 'squash' as const,
+      message: 'feat: connexion',
+      requestedAt: '2026-11-03T00:00:00.000Z',
+    };
+    const todos = deriveTodos(
+      {
+        ...workspace([
+          agent(1, { state: 'done' }),
+          agent(2, { state: 'done' }),
+          agent(3, { state: 'awaiting-answer' }),
+        ]),
+        // A request for an agent already gone gives nothing.
+        integrationRequests: [request, { ...request, id: 'r2', agentId: 'a9' }],
+      },
+      names,
+      ['a1'],
+    );
+    expect(todos.map((t) => t.id)).toEqual(['a3:answer', 'r1:integration-request', 'a1:review']);
+    expect(todos[1]).toMatchObject({
+      agentId: 'a2',
+      kind: 'integration-request',
+      title: '◎ Intégrer Claude Code 2 → main ?',
+      request: { id: 'r1', message: 'feat: connexion' },
+    });
+  });
 });

@@ -15,9 +15,11 @@ import { resolveShellEnv } from './env/shell-env';
 import { GitService } from './git/git-service';
 import { createAgentServices, forwardTerminalEvents } from './ipc/agent-handlers';
 import { createEventEmitter, registerHandlers } from './ipc/handlers';
+import { createOrchestratorServices } from './ipc/orchestrator-handlers';
 import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
+import { IntegrationRequests } from './orchestrator/integration-requests';
 import { OrchestratorService } from './orchestrator/orchestrator-service';
 import type { McpTool } from './orchestrator/mcp';
 import { createOrchestratorTools } from './orchestrator/tools';
@@ -97,6 +99,7 @@ void app.whenReady().then(async () => {
           review,
           tests,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
+          requests,
         },
         orchestratorId,
       ),
@@ -121,6 +124,7 @@ void app.whenReady().then(async () => {
       emit('agent:state', event);
       // 003 R5 — what the orchestrator of the workspace waits for.
       orchestrator.agentState(event);
+      requests.agentState(event);
       // 002 US1 — « Revue → » follows the agents that are done with changes (FR-002).
       const workspace = workspaces
         .list()
@@ -174,12 +178,25 @@ void app.whenReady().then(async () => {
     },
     onState: (state) => {
       emit('integration:state', state);
+      // 003 US3 — an integration the orchestrator asked for: its outcome is told back.
+      requests.integrationState(state);
       if (state.state !== 'integrated') return;
       // main moved: what is left to review changes with it.
       const workspace = workspaces
         .list()
         .find((ws) => ws.agents.some((a) => a.id === state.agentId));
       if (workspace) void review.updatePending(workspace.id);
+    },
+  });
+  const requests: IntegrationRequests = new IntegrationRequests({
+    workspaces,
+    integration,
+    git,
+    notify: (workspaceId, event) => {
+      orchestrator.push(workspaceId, event);
+    },
+    onChange: (workspaceId, list) => {
+      emit('workspace:integrationRequests', { workspaceId, requests: list });
     },
   });
   // Integrations in progress do not outlive the app (R9): neither do their editor copies.
@@ -241,6 +258,7 @@ void app.whenReady().then(async () => {
         pty,
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
+      ...createOrchestratorServices({ requests }),
     },
     {
       isTrustedSender: trustedSenderCheck({

@@ -36,6 +36,10 @@ export type AgentActions = {
   onClose: (agentId: string) => void;
   /** « Revue → »: opens the Changements tab of the agent (002 FR-002). */
   onReview?: (agentId: string) => void;
+  /** 003 US3 — « ✓ Intégrer » of a request of the orchestrator, with the message kept. */
+  onConfirmIntegration?: (requestId: string, message: string) => void;
+  /** 003 US3 — « Refuser » of a request of the orchestrator. */
+  onRefuseIntegration?: (requestId: string) => void;
   /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
   onOpenTerminal?: (agentId: string) => void;
 };

@@ -61,6 +61,71 @@ describe('TodoItem « Revue → »', () => {
   });
 });
 
+// 003 T031 — « ◎ Intégrer <agent> → <main> ? »: the message stays the user's to change (FR-018).
+describe('TodoItem of an integration the orchestrator asks for', () => {
+  /** The actions, without « Revue → » when asked. */
+  const without = <T extends { onReview: unknown }>(props: T, noReview: boolean) => {
+    const { onReview, ...rest } = props;
+    return noReview ? rest : { ...rest, onReview };
+  };
+  const setup = (overrides: { onReview?: boolean } = {}) => {
+    const props = {
+      ...actions(),
+      onConfirmIntegration: vi.fn(),
+      onRefuseIntegration: vi.fn(),
+    };
+    const done = agent(2, { state: 'done' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: 'r1:integration-request',
+            agentId: done.id,
+            kind: 'integration-request',
+            title: '◎ Intégrer Claude Code 2 → main ?',
+            actions: [],
+            request: { id: 'r1', message: 'feat: connexion' },
+          }}
+          agent={done}
+          {...without(props, overrides.onReview === false)}
+        />
+      </ul>,
+    );
+    return { props, done };
+  };
+
+  it('integrates with the message the user edited', async () => {
+    const user = userEvent.setup();
+    const { props } = setup();
+    expect(screen.getByText('◎ Intégrer Claude Code 2 → main ?')).toBeTruthy();
+    const message = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message de commit' });
+    expect(message.value).toBe('feat: connexion');
+    await user.clear(message);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '✓ Intégrer' }).disabled).toBe(
+      true,
+    );
+    await user.type(message, 'feat: connexion relue ');
+    await user.click(screen.getByRole('button', { name: '✓ Intégrer' }));
+    expect(props.onConfirmIntegration).toHaveBeenCalledWith('r1', 'feat: connexion relue');
+    // Not a tile action: no « Autoriser » nor « Relancer » here.
+    expect(screen.queryByRole('button', { name: /Autoriser|Relancer/ })).toBeNull();
+  });
+
+  it('refuses, or opens the review of the agent', async () => {
+    const user = userEvent.setup();
+    const { props, done } = setup();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+    expect(props.onRefuseIntegration).toHaveBeenCalledWith('r1');
+    await user.click(screen.getByRole('button', { name: 'Revue →' }));
+    expect(props.onReview).toHaveBeenCalledWith(done.id);
+  });
+
+  it('offers no review without one', () => {
+    setup({ onReview: false });
+    expect(screen.queryByRole('button', { name: 'Revue →' })).toBeNull();
+  });
+});
+
 // T162 — a question in À faire opens the agent's terminal (FR-024a).
 describe('TodoItem for a question', () => {
   it('opens the terminal of the agent of the item', async () => {

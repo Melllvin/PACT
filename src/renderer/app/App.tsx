@@ -109,6 +109,9 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
                 onLog: (id) => void state.openLog(id),
                 onCancelAutoResume: (id) => void state.cancelAutoResume(id),
                 onClose: state.requestCloseAgent,
+                onConfirmIntegration: (id, message) =>
+                  void state.confirmIntegrationRequest(id, message),
+                onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
               }}
               actionError={state.actionError}
               fromOrchestrator={state.orchestratorPrompted}

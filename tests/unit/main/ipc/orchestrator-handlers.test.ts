@@ -1,0 +1,39 @@
+import { describe, expect, it, vi } from 'vitest';
+import { createOrchestratorServices } from '../../../../src/main/ipc/orchestrator-handlers';
+import { IpcFailure } from '../../../../src/shared/ipc';
+
+// 003 T032 — integrationRequest:confirm and integrationRequest:refuse (contracts/ipc.md).
+
+const requestId = '00000000-0000-4000-8000-000000000001';
+
+const setup = () => {
+  const integration = { id: requestId, state: 'integrated' };
+  const requests = {
+    confirm: vi.fn(() => Promise.resolve(integration)),
+    refuse: vi.fn(() => Promise.resolve()),
+  };
+  return { requests, integration, services: createOrchestratorServices({ requests } as never) };
+};
+
+describe('integrationRequest channels', () => {
+  it('confirms a request with the message the user kept, and gives the integration', async () => {
+    const { requests, integration, services } = setup();
+    const input = { requestId, message: 'feat: édité', confirmWorking: true };
+    await expect(services['integrationRequest:confirm'](input)).resolves.toBe(integration);
+    expect(requests.confirm).toHaveBeenCalledWith(input);
+  });
+
+  it('refuses a request and gives nothing back', async () => {
+    const { requests, services } = setup();
+    await expect(services['integrationRequest:refuse']({ requestId })).resolves.toBeUndefined();
+    expect(requests.refuse).toHaveBeenCalledWith({ requestId });
+  });
+
+  it('passes on why a request cannot be confirmed', async () => {
+    const { requests, services } = setup();
+    requests.confirm.mockRejectedValueOnce(new IpcFailure('NOT_FOUND', 'Demande introuvable.'));
+    await expect(
+      services['integrationRequest:confirm']({ requestId, message: 'feat' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
