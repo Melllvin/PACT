@@ -8,6 +8,21 @@ const LIVE: readonly AgentState[] = ['starting', 'awaiting-prompt', 'awaiting-an
 
 /** Agent after `signal`; the very same object when nothing changes (no save, no event). */
 export function applySignal(agent: Agent, signal: AgentSignal): Agent {
+  const next = nextAgent(agent, signal);
+  if (!('awaiting' in next) || (next.state === 'awaiting-answer' && next.awaiting)) return next;
+  const answered = { ...next };
+  delete answered.awaiting;
+  return answered;
+}
+
+/** A question, or else a permission; a Notification without ruleKey keeps the question. */
+function awaitingOf(agent: Agent, signal: Extract<AgentSignal, { type: 'awaiting-answer' }>) {
+  if (signal.question) return 'question';
+  const asked = agent.state === 'awaiting-answer' && agent.awaiting === 'question';
+  return asked && signal.ruleKey === undefined ? 'question' : undefined;
+}
+
+function nextAgent(agent: Agent, signal: AgentSignal): Agent {
   if (agent.state === 'closed') return agent;
   switch (signal.type) {
     case 'session-started': {
@@ -27,7 +42,12 @@ export function applySignal(agent: Agent, signal: AgentSignal): Agent {
         initialPrompt: agent.initialPrompt ?? signal.prompt ?? null,
       });
     case 'awaiting-answer':
-      return change(agent, { state: 'awaiting-answer', lastError: null, scheduledResume: null });
+      return change(agent, {
+        state: 'awaiting-answer',
+        awaiting: awaitingOf(agent, signal),
+        lastError: null,
+        scheduledResume: null,
+      });
     case 'turn-finished': {
       const other =
         signal.sessionId !== undefined &&

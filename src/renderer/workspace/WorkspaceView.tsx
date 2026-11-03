@@ -40,6 +40,8 @@ export type AgentActions = {
   onConfirmIntegration?: (requestId: string, message: string) => void;
   /** 003 US3 — « Refuser » of a request of the orchestrator. */
   onRefuseIntegration?: (requestId: string) => void;
+  /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
+  onOpenTerminal?: (agentId: string) => void;
 };
 
 /** The review of the app (review-store and « vu » of app-store), for this workspace. */
@@ -194,7 +196,16 @@ export function WorkspaceView({
     setFocusedId(agentId);
     setFocusTab(review?.integrations[agentId] ? 'conflicts' : 'changes');
   };
-  const reviewActions: AgentActions = { ...actions, onReview: openReview };
+  const openTerminal = (agentId: string) => {
+    setReviewView(false);
+    setFocusedId(agentId);
+    setFocusTab('terminal');
+  };
+  const reviewActions: AgentActions = {
+    ...actions,
+    onReview: openReview,
+    onOpenTerminal: openTerminal,
+  };
   const backToTiles = () => {
     setFocusedId(null);
     setFocusTab('terminal');
@@ -246,6 +257,9 @@ export function WorkspaceView({
       }}
       onExpand={() => {
         setFocusedId(agent.id);
+      }}
+      onOpenTerminal={() => {
+        openTerminal(agent.id);
       }}
       onReview={
         review && pending.includes(agent.id)
