@@ -895,3 +895,63 @@ describe('the orchestrator’s actions (003 T043, US5)', () => {
     expect(screen.getByRole('tab', { name: 'Terminal', selected: true })).toBeDefined();
   });
 });
+
+// 004 T027 — « ◎ Rapports » in the Focus of the orchestrator (FR-006a).
+describe('the orchestrator’s reports in its Focus', () => {
+  const lead = agent(1, { role: 'orchestrator' });
+  const dev = agent(2, { role: 'dev' });
+  const loops = [
+    {
+      issueId: '0012-connexion',
+      devAgentId: dev.id,
+      testAgentId: agent(3).id,
+      round: 2,
+      rounds: [],
+      state: 'running' as const,
+      escalatedModel: null,
+    },
+  ];
+  const report = (summary: string, at: string) => ({
+    agentId: dev.id,
+    kind: 'report' as const,
+    summary,
+    at,
+  });
+
+  it('shows the latest report of each agent, with its issue and round', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: [lead, dev], loops })}
+        clis={clis}
+        loopReports={[
+          report('Premier tour', '2026-11-03T10:00:00.000Z'),
+          report('Tests verts', '2026-11-03T10:05:00.000Z'),
+        ]}
+      />,
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[0] ?? document.body);
+    await user.click(screen.getByRole('tab', { name: '◎ Rapports' }));
+    const reports = screen.getByRole('list', { name: 'Rapports' });
+    const items = within(reports).getAllByRole('listitem');
+    expect(items).toHaveLength(1);
+    expect(items[0]?.textContent).toContain('Claude Code 2');
+    expect(items[0]?.textContent).toContain('0012-connexion · tour 2/3');
+    expect(items[0]?.textContent).toContain('Tests verts');
+    expect(items[0]?.textContent).not.toContain('Premier tour');
+  });
+
+  it('is only the orchestrator’s, and goes back to the terminal once its role is gone', async () => {
+    const user = userEvent.setup();
+    const view = (first: Agent) => (
+      <WorkspaceView workspace={workspace({ agents: [first, dev], loops })} clis={clis} />
+    );
+    const { rerender } = render(view(lead));
+    await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[0] ?? document.body);
+    await user.click(screen.getByRole('tab', { name: '◎ Rapports' }));
+    expect(screen.getByText('Aucun rapport reçu pour l’instant.')).toBeDefined();
+    rerender(view(agent(1)));
+    expect(screen.queryByRole('tab', { name: '◎ Rapports' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Terminal', selected: true })).toBeDefined();
+  });
+});

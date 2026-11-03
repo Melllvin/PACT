@@ -5,6 +5,7 @@ import type { OrchestratorAction } from '../../shared/orchestrator';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
+import { ReportsTab, type Report } from '../focus/ReportsTab';
 import { ChangesTab } from '../review/ChangesTab';
 import { ConflictsTab } from '../review/ConflictsTab';
 import { DecisionColumn } from '../review/DecisionColumn';
@@ -13,6 +14,7 @@ import {
   seenBlob,
   type FileDiff,
   type Integration,
+  type Overlap,
   type ReviewSnapshot,
   type TestRun,
 } from '../../shared/review';
@@ -41,6 +43,8 @@ export type AgentActions = {
   onConfirmIntegration?: (requestId: string, message: string) => void;
   /** 003 US3 — « Refuser » of a request of the orchestrator. */
   onRefuseIntegration?: (requestId: string) => void;
+  /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
+  onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
   /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
   onOpenTerminal?: (agentId: string) => void;
 };
@@ -49,6 +53,8 @@ export type AgentActions = {
 export type ReviewBinding = {
   /** The agents of this workspace with changes to review. */
   pending: readonly string[];
+  /** 004 FR-021 — the files two agents of this workspace both change. */
+  overlaps?: readonly Overlap[] | undefined;
   snapshot: ReviewSnapshot | null;
   selected: string | null;
   diff: FileDiff | null;
@@ -114,6 +120,8 @@ type Props = {
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
   fromOrchestrator?: Readonly<Record<string, unknown>>;
+  /** 004 US2 — what the loops of this workspace told, for the orchestrator's « Rapports ». */
+  loopReports?: readonly Report[];
   /** 003 US5 — the journal « ◎ Actions » of the orchestrator and the withdrawal of its role. */
   orchestration?: OrchestrationBinding | undefined;
 };
@@ -137,6 +145,7 @@ export function WorkspaceView({
   toolbarSlot = null,
   review,
   fromOrchestrator = {},
+  loopReports = [],
   orchestration,
 }: Props) {
   const available = workspace.status === 'available';
@@ -149,7 +158,7 @@ export function WorkspaceView({
   const [todoOpen, setTodoOpen] = useState(true);
   // A closed agent may still be in the last review:pending: only the agents here count.
   const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
-  const todos = deriveTodos(workspace, cliName, pending);
+  const todos = deriveTodos(workspace, cliName, pending, review?.overlaps);
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
@@ -163,7 +172,13 @@ export function WorkspaceView({
   const focusedAgent = agents.find((agent) => agent.id === focused);
   const focusedLead = focusedAgent?.role === 'orchestrator' ? focusedAgent.id : null;
   // Back to the terminal once the role is gone: the journal belongs to an orchestrator.
-  if (focusTab === 'actions' && focusedLead === null && focused !== null) setFocusTab('terminal');
+  if (
+    (focusTab === 'actions' || focusTab === 'reports') &&
+    focusedLead === null &&
+    focused !== null
+  ) {
+    setFocusTab('terminal');
+  }
 
   const loader = useRef(orchestration?.load);
   useLayoutEffect(() => {
@@ -253,10 +268,17 @@ export function WorkspaceView({
 
   // 003 R10 — the orchestrator, if any, leads the tiles from the top.
   const lead = agents.find((agent) => agent.role === 'orchestrator');
+  // 004 US2 — « tour N/3 » on the dev and the test of a running loop.
+  const roundOf = (agentId: string) =>
+    workspace.loops.find(
+      (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
+    )?.round ?? null;
   const tileOf = (agent: Agent) => (
     <Tile
       key={agent.id}
       fromOrchestrator={fromOrchestrator[agent.id] !== undefined}
+      round={roundOf(agent.id)}
+      reports={loopReports}
       agent={agent}
       name={cliName(agent.cliId)}
       terminals={terminals}
@@ -361,6 +383,16 @@ export function WorkspaceView({
                       },
                     }
                   : undefined
+              }
+              reports={
+                focusedLead !== null ? (
+                  <ReportsTab
+                    reports={loopReports}
+                    agents={agents}
+                    loops={workspace.loops}
+                    name={cliName}
+                  />
+                ) : undefined
               }
               conflicts={
                 integration && review

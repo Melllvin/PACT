@@ -19,6 +19,14 @@ import type { OrchestratorAction } from '../../shared/orchestrator';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
 
+/** 004 US2 — a report, a missing one, the end of a loop, as the « Rapports » band shows it. */
+export type LoopReport = {
+  agentId: string;
+  kind: 'report' | 'report-missing' | 'loop' | 'overlap';
+  summary: string;
+  at: string;
+};
+
 export type ActiveTab = { kind: 'home' } | { kind: 'workspace'; id: string };
 export type View = 'tiles' | 'focus';
 /**
@@ -96,6 +104,14 @@ export type AppState = {
   loadOrchestratorActions: (agentId: string) => Promise<void>;
   /** « Retirer le rôle d'orchestrateur » (FR-004): the agent stays, as an ordinary one. */
   revokeOrchestrator: (agentId: string) => Promise<void>;
+  /** 004 US2 — what the loops told, by workspace, the latest last (« Rapports »). */
+  loopReports: Record<string, LoopReport[]>;
+  /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
+  decideLoop: (
+    workspaceId: string,
+    issueId: string,
+    decision: 'restart' | 'take-over' | 'abandon',
+  ) => Promise<void>;
   /** 004 US1 — the role profiles of a workspace, shown at once and saved (FR-003). */
   setRoleProfiles: (
     workspaceId: string,
@@ -129,6 +145,7 @@ export type CloneStatus =
 
 /** As the main process keeps them (FR-021). */
 const MAX_ACTIONS = 200;
+const MAX_LOOP_REPORTS = 50;
 
 const asIpcError = (error: unknown): IpcError => {
   const parsed = ipcErrorSchema.safeParse(error);
@@ -267,6 +284,7 @@ export function createAppStore(api: PactApi) {
       correcting: {},
       orchestratorPrompted: {},
       orchestratorActions: {},
+      loopReports: {},
 
       async load() {
         set({ status: 'loading', error: null });
@@ -327,6 +345,24 @@ export function createAppStore(api: PactApi) {
               workspaces: get().workspaces.map((w) =>
                 w.id === workspaceId ? { ...w, integrationRequests: requests } : w,
               ),
+            });
+          }),
+          api.on('workspace:loops', ({ workspaceId, loops, issues }) => {
+            set({
+              workspaces: get().workspaces.map((w) =>
+                w.id === workspaceId ? { ...w, loops, issues } : w,
+              ),
+            });
+          }),
+          api.on('orchestrator:report', ({ workspaceId, ...report }) => {
+            const list = get().loopReports[workspaceId] ?? [];
+            set({
+              loopReports: {
+                ...get().loopReports,
+                [workspaceId]: [...list, { ...report, at: new Date().toISOString() }].slice(
+                  -MAX_LOOP_REPORTS,
+                ),
+              },
             });
           }),
           api.on('workspace:status', ({ id, status }) => {
@@ -506,6 +542,9 @@ export function createAppStore(api: PactApi) {
 
       refuseIntegrationRequest: (requestId) =>
         act(() => api.invoke('integrationRequest:refuse', { requestId })),
+
+      decideLoop: (workspaceId, issueId, decision) =>
+        act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),
 
       loadOrchestratorActions: (agentId) =>
         act(async () => {

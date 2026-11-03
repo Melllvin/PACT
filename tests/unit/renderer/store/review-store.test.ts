@@ -151,8 +151,11 @@ describe('review store', () => {
     await store.getState().loadPending('w1');
     expect(invoke).toHaveBeenCalledWith('review:listPending', { workspaceId: 'w1' });
     expect(store.getState().pending).toEqual({ w1: [uuid(1)] });
-    emit('review:pending', { workspaceId: 'w2', agentIds: [uuid(2)] });
+    const overlap = { agents: [uuid(2), uuid(3)] as [string, string], files: ['a.ts'] };
+    emit('review:pending', { workspaceId: 'w2', agentIds: [uuid(2)], overlaps: [overlap] });
     expect(store.getState().pending).toEqual({ w1: [uuid(1)], w2: [uuid(2)] });
+    // 004 T026 — the files two agents both change, as the last computation found them.
+    expect(store.getState().overlaps).toEqual({ w2: [overlap] });
   });
 
   it('unsubscribes', () => {

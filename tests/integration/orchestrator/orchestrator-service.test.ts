@@ -107,3 +107,34 @@ describe('OrchestratorService, the session of an orchestrator', () => {
     expect((await callTool(h.hooks.mcpUrl(), tokens[0] ?? '', 'list_agents')).status).toBe(401);
   });
 });
+
+// 004 US2 — a notice tells the agent's state as it is now, even once it is gone.
+describe('OrchestratorService notices', () => {
+  it('gives the last state of a closed agent, and « closed » for one never seen', async () => {
+    const [lead, worker] = await h.launch([h.draft({ orchestrator: true }), h.draft()]);
+    const leadId = lead?.id ?? '';
+    const workerId = worker?.id ?? '';
+    await h.waitForState(workerId, 'awaiting-prompt');
+    await h.manager.close(workerId, { removeWorktree: false });
+    await h.orchestrator.wait(leadId, undefined, 50);
+    const unknown = '00000000-0000-4000-8000-0000000000ff';
+    for (const agentId of [workerId, unknown]) {
+      h.orchestrator.notice(h.workspace.id, { agentId, kind: 'overlap', summary: 'a.ts' });
+    }
+    const { events } = await h.orchestrator.wait(leadId, [workerId, unknown], 1000);
+    expect(events.map(({ agentId, kind, state }) => ({ agentId, kind, state }))).toEqual([
+      { agentId: workerId, kind: 'overlap', state: 'closed' },
+      { agentId: unknown, kind: 'overlap', state: 'closed' },
+    ]);
+  });
+
+  it('ignores the state of an agent of no workspace, and a wait with no session', async () => {
+    const unknown = '00000000-0000-4000-8000-0000000000fe';
+    h.orchestrator.agentState({ agentId: unknown, state: 'done', lastError: null });
+    expect(await h.orchestrator.wait(unknown, undefined, 10)).toEqual({
+      events: [],
+      timedOut: false,
+      replaced: true,
+    });
+  });
+});

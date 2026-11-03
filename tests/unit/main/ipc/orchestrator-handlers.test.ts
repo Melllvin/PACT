@@ -14,12 +14,27 @@ const setup = () => {
   };
   const orchestrator = { actions: vi.fn(() => []) };
   const agents = { revokeOrchestrator: vi.fn(() => Promise.resolve()) };
+  const workspaces = {
+    list: () => [{ id: 'w1', agents: [{ id: '00000000-0000-4000-8000-000000000002' }] }],
+    update: vi.fn(),
+  };
+  const loops = {
+    decide: vi.fn(() => Promise.resolve()),
+    closeAll: vi.fn(() => Promise.resolve()),
+  };
   return {
     requests,
     integration,
     orchestrator,
     agents,
-    services: createOrchestratorServices({ requests, orchestrator, agents } as never),
+    loops,
+    services: createOrchestratorServices({
+      requests,
+      orchestrator,
+      agents,
+      workspaces,
+      loops,
+    } as never),
   };
 };
 
@@ -56,10 +71,36 @@ describe('orchestrator channels', () => {
     expect(orchestrator.actions).toHaveBeenCalledWith(agentId);
   });
 
-  it('withdraws the role', async () => {
-    const { agents, services } = setup();
+  it('withdraws the role and closes its loops (004 FR-017)', async () => {
+    const { agents, loops, services } = setup();
     await services['orchestrator:revoke']({ agentId });
     expect(agents.revokeOrchestrator).toHaveBeenCalledWith(agentId);
+    expect(loops.closeAll).toHaveBeenCalledWith('w1');
+  });
+
+  it('closes no loop for an agent in no open workspace', async () => {
+    const { loops, services } = setup();
+    await services['orchestrator:revoke']({ agentId: '00000000-0000-4000-8000-000000000009' });
+    expect(loops.closeAll).not.toHaveBeenCalled();
+  });
+});
+
+describe('loop:decide (004 T027)', () => {
+  it('passes the user’s decision to the loop', async () => {
+    const { loops, services } = setup();
+    await services['loop:decide']({
+      workspaceId: 'w1',
+      issueId: '0012-connexion',
+      decision: 'abandon',
+    });
+    expect(loops.decide).toHaveBeenCalledWith('w1', '0012-connexion', 'abandon');
+  });
+
+  it('does nothing without loops', async () => {
+    const services = createOrchestratorServices({} as never);
+    await expect(
+      services['loop:decide']({ workspaceId: 'w1', issueId: 'x', decision: 'restart' }),
+    ).resolves.toBeUndefined();
   });
 });
 

@@ -141,9 +141,12 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
                 onConfirmIntegration: (id, message) =>
                   void state.confirmIntegrationRequest(id, message),
                 onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
+                onDecideLoop: (issueId, decision) =>
+                  void state.decideLoop(workspace.id, issueId, decision),
               }}
               actionError={state.actionError}
               fromOrchestrator={state.orchestratorPrompted}
+              loopReports={state.loopReports[workspace.id] ?? []}
               orchestration={{
                 actions: state.orchestratorActions,
                 load: (id) => void state.loadOrchestratorActions(id),
@@ -152,6 +155,7 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
               review={
                 review && {
                   pending: reviewState.pending[workspace.id] ?? [],
+                  overlaps: reviewState.overlaps[workspace.id],
                   snapshot: reviewState.snapshot,
                   selected: reviewState.selected,
                   diff: reviewState.diff,

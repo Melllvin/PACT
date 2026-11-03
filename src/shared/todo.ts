@@ -1,9 +1,14 @@
 import type { Agent, TileAction, TodoItem, TodoKind, Workspace } from './model';
 
+/** 004 FR-021 — two agents change the same files (`review:pending`). */
+type Overlap = { agents: readonly [string, string]; files: readonly string[] };
+
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
 const ORDER: TodoKind[] = [
   'answer',
   'integration-request',
+  'loop-escalated',
+  'overlap',
   'rate-limit',
   'review',
   'prompt',
@@ -42,10 +47,11 @@ const shellName = (path: string) => (path.split(/[\\/]/).pop() ?? path).replace(
 /** The À faire items of a workspace, derived and never stored (data-model TodoItem, FR-027). */
 export function deriveTodos(
   workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'mainBranch'> &
-    Partial<Pick<Workspace, 'integrationRequests'>>,
+    Partial<Pick<Workspace, 'integrationRequests' | 'loops'>>,
   names: (cliId: string) => string,
   /** The agents with changes to review (`review:pending`). */
   toReview: readonly string[] = [],
+  overlaps: readonly Overlap[] = [],
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   const todos = agents.flatMap(
@@ -68,6 +74,36 @@ export function deriveTodos(
       },
     ];
   });
+  // « ✕ Boucle arrêtée »: 3 rounds without the tests passing, the user decides (004 FR-018).
+  const loops = (workspace.loops ?? []).flatMap((loop): TodoItem[] =>
+    loop.state === 'escalated' && byId.has(loop.devAgentId)
+      ? [
+          {
+            id: `${loop.issueId}:loop-escalated`,
+            agentId: loop.devAgentId,
+            kind: 'loop-escalated',
+            title: `✕ Boucle arrêtée · ${loop.issueId} · 3 tours`,
+            actions: [],
+            loop: { issueId: loop.issueId },
+          },
+        ]
+      : [],
+  );
+  // « ⚠ Fichiers communs »: two agents change the same files (004 FR-021).
+  const common = overlaps.flatMap((overlap): TodoItem[] => {
+    const both = overlap.agents.flatMap((id) => byId.get(id) ?? []);
+    if (both.length < 2) return [];
+    const who = both.map((agent) => `${names(agent.cliId)} ${String(agent.position)}`);
+    return [
+      {
+        id: `${overlap.agents.join('+')}:overlap`,
+        agentId: overlap.agents[0],
+        kind: 'overlap',
+        title: `⚠ Fichiers communs · ${who.join(', ')} · ${overlap.files.join(', ')}`,
+        actions: [],
+      },
+    ];
+  });
   const terminals = workspace.freeTerminals.map((terminal): TodoItem => ({
     id: `${terminal.id}:info`,
     agentId: terminal.id,
@@ -76,7 +112,7 @@ export function deriveTodos(
     actions: [],
   }));
   // Array.prototype.sort is stable: the tile order holds within a kind.
-  return [...todos, ...requests, ...terminals].sort(
+  return [...todos, ...requests, ...loops, ...common, ...terminals].sort(
     (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind),
   );
 }

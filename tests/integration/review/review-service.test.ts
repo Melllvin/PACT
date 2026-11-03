@@ -318,7 +318,7 @@ describe('ReviewService pending reviews (FR-002, FR-003)', () => {
     expect(await service.updatePending(workspace.id)).toEqual([AGENT_ID]);
     await setState('working');
     expect(await service.updatePending(workspace.id)).toEqual([]);
-    expect(pending.at(-1)).toEqual({ workspaceId: workspace.id, agentIds: [] });
+    expect(pending.at(-1)).toEqual({ workspaceId: workspace.id, agentIds: [], overlaps: [] });
   });
 
   it('announces only the latest pending list when an older computation ends last', async () => {
@@ -337,7 +337,68 @@ describe('ReviewService pending reviews (FR-002, FR-003)', () => {
     await setState('working');
     await service.updatePending(workspace.id);
     await older;
-    expect(pending.at(-1)).toEqual({ workspaceId: workspace.id, agentIds: [] });
+    expect(pending.at(-1)).toEqual({ workspaceId: workspace.id, agentIds: [], overlaps: [] });
+  });
+});
+
+// 004 T026 — the files two agents both change, told once to the orchestrator (FR-021, R7).
+describe('ReviewService overlaps between agents', () => {
+  it('tells the files two agents both change, once while they stay the same', async () => {
+    const OTHER_ID = '00000000-0000-4000-8000-000000000002';
+    const other = join(repo, '.worktrees', 'codex-2');
+    git(repo, 'worktree', 'add', '-b', 'agent/codex-2', other, 'main');
+    await workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: [
+        ...ws.agents,
+        { ...agent(other), id: OTHER_ID, position: 2, branch: 'agent/codex-2', port: 3002 },
+      ],
+    }));
+    await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
+    await writeFile(join(worktree, 'b.txt'), 'b\n');
+    await writeFile(join(other, 'c.txt'), 'c\n');
+    // Changes apart: nothing in common.
+    await service.updatePending(workspace.id);
+    expect(pending.at(-1)?.overlaps).toEqual([]);
+    await writeFile(join(other, 'a.txt'), 'UN\ndeux\n');
+    // Without anyone to tell, the overlap is still announced with the pending reviews.
+    await service.updatePending(workspace.id);
+    expect(pending.at(-1)?.overlaps).toHaveLength(1);
+
+    const told: { workspaceId: string; agents: string[]; files: string[] }[] = [];
+    service.dispose();
+    service = createService({
+      onOverlap: (workspaceId, overlap) => told.push({ workspaceId, ...overlap }),
+    });
+
+    await service.updatePending(workspace.id);
+    const first = { agents: [AGENT_ID, OTHER_ID], files: ['a.txt'] };
+    expect(pending.at(-1)).toEqual({
+      workspaceId: workspace.id,
+      agentIds: [AGENT_ID, OTHER_ID],
+      overlaps: [first],
+    });
+    expect(told).toEqual([{ workspaceId: workspace.id, ...first }]);
+
+    await service.updatePending(workspace.id);
+    expect(told).toHaveLength(1);
+
+    await writeFile(join(other, 'b.txt'), 'B\n');
+    await service.updatePending(workspace.id);
+    expect(told.at(-1)).toEqual({
+      workspaceId: workspace.id,
+      agents: [AGENT_ID, OTHER_ID],
+      files: ['a.txt', 'b.txt'],
+    });
+
+    // An agent working again leaves the comparison until its turn ends.
+    await workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === OTHER_ID ? { ...a, state: 'working' } : a)),
+    }));
+    await service.updatePending(workspace.id);
+    expect(pending.at(-1)?.overlaps).toEqual([]);
+    expect(told).toHaveLength(2);
   });
 });
 

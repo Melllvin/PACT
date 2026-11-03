@@ -9,7 +9,9 @@ import { CliRegistry } from '../../../src/main/agents/cli-registry';
 import { HookServer } from '../../../src/main/agents/hook-server';
 import { PermissionService } from '../../../src/main/agents/permission-service';
 import { GitService } from '../../../src/main/git/git-service';
+import { createAgentTools } from '../../../src/main/orchestrator/agent-tools';
 import { IntegrationRequests } from '../../../src/main/orchestrator/integration-requests';
+import { LoopService } from '../../../src/main/orchestrator/loop-service';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
 import { createOrchestratorTools } from '../../../src/main/orchestrator/tools';
 import { openStores, type Stores } from '../../../src/main/persistence/store';
@@ -72,7 +74,14 @@ export async function createHarness() {
   const pending = { ids: [] as string[] };
   const typed: { agentId: string; origin: string }[] = [];
   const review = new ReviewService({ git: gitService, workspaces });
-  const tests = new TestRunner({ env: () => Promise.resolve(gitEnv), onUpdate: () => undefined });
+  /** What `orchestrator:report` announced, in order (004 US2). */
+  const reports: { workspaceId: string; agentId: string; kind: string; summary: string }[] = [];
+  const tests = new TestRunner({
+    env: () => Promise.resolve(gitEnv),
+    onUpdate: (run) => {
+      void loops.testRun(run);
+    },
+  });
   /** What `orchestrator:action` announced, in order (US5). */
   const actionsHeard: (OrchestratorAction & { orchestratorId: string })[] = [];
   const orchestrator: OrchestratorService = new OrchestratorService({
@@ -80,6 +89,11 @@ export async function createHarness() {
     workspaces,
     pluginsDir: join(userData, 'orchestrator'),
     onAction: (orchestratorId, action) => actionsHeard.push({ ...action, orchestratorId }),
+    agentTools: (agentId) =>
+      createAgentTools({ onReport: (id, report) => loops.report(id, report) }, agentId),
+    onTurnFinished: (agentId) => {
+      loops.turnFinished(agentId);
+    },
     tools: (orchestratorId) =>
       createOrchestratorTools(
         {
@@ -91,6 +105,7 @@ export async function createHarness() {
           tests,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
+          loops,
           clis: () => registry.list(),
           permissions,
           log: (entry) => {
@@ -125,6 +140,18 @@ export async function createHarness() {
       orchestrator.push(workspaceId, event);
     },
     onChange: (_workspaceId, list) => announced.push(list),
+  });
+
+  const loops: LoopService = new LoopService({
+    workspaces,
+    git: gitService,
+    review,
+    tests,
+    agents: { escalate: (id, model) => manager.escalate(id, model) },
+    notify: (workspaceId, notice) => {
+      orchestrator.notice(workspaceId, notice);
+      reports.push({ workspaceId, ...notice });
+    },
   });
 
   const permissions = new PermissionService({ stores, workspaces });
@@ -226,6 +253,8 @@ export async function createHarness() {
     announced,
     permissions,
     actionsHeard,
+    loops,
+    reports,
     get manager() {
       return manager;
     },

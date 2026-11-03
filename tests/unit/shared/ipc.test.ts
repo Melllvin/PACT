@@ -186,6 +186,13 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
   'integrationRequest:refuse': { valid: { requestId: integrationId }, invalid: [{}] },
   'orchestrator:actions': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
   'orchestrator:revoke': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
+  'loop:decide': {
+    valid: { workspaceId: 'w1', issueId: '0012-connexion', decision: 'restart' },
+    invalid: [
+      { workspaceId: 'w1', issueId: '', decision: 'restart' },
+      { workspaceId: 'w1', issueId: '0012-connexion', decision: 'retry' },
+    ],
+  },
   'roles:setProfiles': {
     valid: {
       workspaceId: 'w1',
@@ -255,20 +262,32 @@ describe('IPC event schemas', () => {
       'integration:state',
       'orchestrator:action',
       'orchestrator:prompted',
+      'orchestrator:report',
       'review:changed',
       'review:pending',
       'review:tests',
       'term:data',
       'term:exit',
       'workspace:integrationRequests',
+      'workspace:loops',
       'workspace:status',
     ]);
   });
 
   it('announce the agents to review per workspace (FR-002)', () => {
     const schema = ipcEvents['review:pending'];
-    expect(schema.safeParse({ workspaceId: 'w1', agentIds: [agentId] }).success).toBe(true);
-    expect(schema.safeParse({ workspaceId: 'w1', agentIds: ['x'] }).success).toBe(false);
+    const pending = (overlaps: unknown[]) => ({ workspaceId: 'w1', agentIds: [agentId], overlaps });
+    expect(schema.safeParse(pending([])).success).toBe(true);
+    expect(schema.safeParse({ ...pending([]), agentIds: ['x'] }).success).toBe(false);
+    // 004 FR-021 — two agents and at least one file in common.
+    const other = agentId.replace(/.$/, 'f');
+    expect(schema.safeParse(pending([{ agents: [agentId, other], files: ['a.ts'] }])).success).toBe(
+      true,
+    );
+    expect(schema.safeParse(pending([{ agents: [agentId, other], files: [] }])).success).toBe(
+      false,
+    );
+    expect(schema.safeParse(pending([{ agents: [agentId], files: ['a.ts'] }])).success).toBe(false);
   });
 
   it('accept progress and failure clone events', () => {

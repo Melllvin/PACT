@@ -327,6 +327,27 @@ describe('App launch flow (US2)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  // 004 US2 — the user decides on a loop stopped after 3 rounds, from À faire (FR-018).
+  it('sends the decision on a loop stopped after 3 rounds', async () => {
+    const dev = agent(2, { state: 'done', role: 'dev', workspaceId: 'w1' });
+    const loop = {
+      issueId: '0012-connexion',
+      devAgentId: dev.id,
+      testAgentId: agent(3).id,
+      round: 3,
+      rounds: [],
+      state: 'escalated' as const,
+      escalatedModel: null,
+    };
+    const invoke = setup([{ ...workspace('w1', 'w1'), agents: [dev], loops: [loop] }]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Abandonner' }));
+    expect(invoke).toHaveBeenCalledWith('loop:decide', {
+      workspaceId: 'w1',
+      issueId: '0012-connexion',
+      decision: 'abandon',
+    });
+  });
+
   it('describes the permission levels for the launched CLIs only', async () => {
     const codex: CliDefinition = { ...fake, id: 'codex', name: 'Codex', adapter: 'codex' };
     const claude: CliDefinition = {

@@ -4,8 +4,8 @@ import type { McpTool } from './mcp';
 // 004 R5 — what an agent with a role other than orchestrator reaches PACT for: its hand-off report.
 
 export type AgentToolDependencies = {
-  /** A valid report, for the loop of its issue and the orchestrator (US2). */
-  onReport?: (agentId: string, report: HandoffReport) => void;
+  /** A valid report, for the loop of its issue and the orchestrator (US2): why it is refused, or `null`. */
+  onReport?: (agentId: string, report: HandoffReport) => Promise<string | null>;
 };
 
 export function createAgentTools(deps: AgentToolDependencies, agentId: string): McpTool[] {
@@ -41,22 +41,23 @@ export function createAgentTools(deps: AgentToolDependencies, agentId: string): 
         },
         required: ['issue', 'status', 'summary', 'files', 'checks'],
       },
-      call: (args) => {
+      call: async (args) => {
         const parsed = handoffReportSchema.safeParse(args);
         if (!parsed.success) {
           const fields = missingFields(args).join(', ');
-          return Promise.resolve({
+          return {
             content: [{ type: 'text', text: `Rapport incomplet ou invalide : ${fields}.` }],
             isError: true,
-          });
+          };
         }
-        deps.onReport?.(agentId, parsed.data);
-        return Promise.resolve({
+        const refusal = (await deps.onReport?.(agentId, parsed.data)) ?? null;
+        if (refusal !== null) return { content: [{ type: 'text', text: refusal }], isError: true };
+        return {
           content: [
             { type: 'text', text: 'Rapport reçu.' },
             { type: 'text', text: JSON.stringify({ received: true }) },
           ],
-        });
+        };
       },
     },
   ];

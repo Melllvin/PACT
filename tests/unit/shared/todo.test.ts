@@ -198,4 +198,65 @@ describe('deriveTodos', () => {
       request: { id: 'r1', message: 'feat: connexion' },
     });
   });
+
+  // 004 T022 — « ✕ Boucle arrêtée »: after the integrations asked for, before the reviews.
+  it('asks the user to decide on a loop stopped after 3 rounds (FR-018)', () => {
+    const loop = (issueId: string, state: 'running' | 'escalated', devAgentId = 'a2') => ({
+      issueId,
+      devAgentId,
+      testAgentId: 'a3',
+      round: 3,
+      rounds: [],
+      state,
+      escalatedModel: null,
+    });
+    const todos = deriveTodos(
+      {
+        ...workspace([
+          agent(1, { state: 'done' }),
+          agent(2, { state: 'done' }),
+          agent(3, { state: 'awaiting-answer' }),
+        ]),
+        loops: [
+          loop('0012-connexion', 'escalated'),
+          loop('0013-panier', 'running'),
+          // A loop whose dev is gone gives nothing.
+          loop('0014-paiement', 'escalated', 'a9'),
+        ],
+      },
+      names,
+      ['a1'],
+    );
+    expect(todos.map((t) => t.id)).toEqual([
+      'a3:answer',
+      '0012-connexion:loop-escalated',
+      'a1:review',
+    ]);
+    expect(todos.find((t) => t.kind === 'loop-escalated')).toMatchObject({
+      agentId: 'a2',
+      title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
+      loop: { issueId: '0012-connexion' },
+    });
+  });
+
+  // 004 T026 — two agents change the same files (FR-021).
+  it('warns about the files two agents both change, before the reviews', () => {
+    const todos = deriveTodos(
+      workspace([agent(1, { state: 'done' }), agent(2, { state: 'done' })]),
+      names,
+      ['a1'],
+      [
+        { agents: ['a1', 'a2'] as const, files: ['src/a.ts', 'src/b.ts'] },
+        // An agent gone meanwhile gives nothing.
+        { agents: ['a1', 'a9'] as const, files: ['src/a.ts'] },
+      ],
+    );
+    expect(todos.map((t) => t.id)).toEqual(['a1+a2:overlap', 'a1:review']);
+    expect(todos[0]).toMatchObject({
+      agentId: 'a1',
+      kind: 'overlap',
+      title: '⚠ Fichiers communs · Claude Code 1, Claude Code 2 · src/a.ts, src/b.ts',
+      actions: [],
+    });
+  });
 });

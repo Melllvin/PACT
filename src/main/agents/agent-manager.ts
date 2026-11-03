@@ -310,6 +310,22 @@ export class AgentManager {
   }
 
   /**
+   * 004 FR-007 — the third round of a loop on the role's ceiling: the same session again, on
+   * `model`, so the agent keeps what it learnt in the first two rounds.
+   */
+  async escalate(id: string, model: string): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    if (agent.model === model) return;
+    await this.stop(id);
+    const escalated = { ...agent, model };
+    await this.workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === id ? { ...a, model } : a)),
+    }));
+    await this.startAgain(workspace, escalated, agent.sessionId);
+  }
+
+  /**
    * 002 R7 — a prompt typed once the agent awaits one or is done, never while it works or waits
    * for an answer. Multi-line text goes as a bracketed paste, so it stays one prompt.
    */
