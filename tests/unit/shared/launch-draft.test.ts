@@ -15,6 +15,7 @@ import {
   setCommon,
   setOrchestrator,
   setOverride,
+  setRole,
   toAgentDrafts,
   withCount,
   type LaunchDraft,
@@ -255,5 +256,38 @@ describe('orchestrator in the draft (003 T010)', () => {
     expect(toAgentDrafts(removed, 'always-allow', () => []).some((d) => d.orchestrator)).toBe(
       false,
     );
+  });
+});
+
+describe('setRole (004 T011)', () => {
+  const profile = {
+    cliId: 'claude-code',
+    model: 'sonnet',
+    effort: 'high',
+    maxModel: 'opus',
+    escalate: false,
+  } as const;
+
+  it('takes the profile’s CLI, model and effort, and launches with the role', () => {
+    const draft = setRole(draftFromCounts({ codex: 1 }, 0), 0, 'test', profile);
+    expect(draft.agents[0]).toMatchObject({
+      cliId: 'claude-code',
+      role: 'test',
+      effort: 'high',
+      overrides: { model: 'sonnet' },
+    });
+    expect(toAgentDrafts(draft, 'ask-sensitive', () => ['sonnet'])[0]).toMatchObject({
+      cliId: 'claude-code',
+      model: 'sonnet',
+      role: 'test',
+      effort: 'high',
+    });
+  });
+
+  it('goes back to an ordinary agent with no role, keeping its settings', () => {
+    const withRole = setRole(draftFromCounts({ codex: 1 }, 0), 0, 'dev', profile);
+    const draft = setRole(withRole, 0, null, undefined);
+    expect(draft.agents[0]).toMatchObject({ cliId: 'claude-code', role: null });
+    expect(toAgentDrafts(draft, 'ask-sensitive', () => [])[0]).toMatchObject({ role: null });
   });
 });

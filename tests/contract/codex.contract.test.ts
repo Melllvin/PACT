@@ -296,3 +296,23 @@ describe('Codex as an orchestrator (003 T008)', () => {
     expect(create().supportsOrchestrator).toBe(false);
   });
 });
+
+describe('Codex model tiers and effort (004 T009)', () => {
+  it('has no tiers until the CLI lists its models', () => {
+    expect(create().modelTiers()).toEqual([]);
+  });
+
+  it('passes the effort as model_reasoning_effort, capped at high', () => {
+    expect(create().supportsEffort).toBe(true);
+    const effortOf = (effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max') =>
+      configs(create().buildLaunch({ ...input, effort }).args).filter((c) =>
+        c.startsWith('model_reasoning_effort='),
+      );
+    expect(effortOf('low')).toEqual(['model_reasoning_effort=low']);
+    expect(effortOf('medium')).toEqual(['model_reasoning_effort=medium']);
+    expect(effortOf('max')).toEqual(['model_reasoning_effort=high']);
+    expect(configs(create().buildLaunch(input).args).join(' ')).not.toContain(
+      'model_reasoning_effort',
+    );
+  });
+});

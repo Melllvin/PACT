@@ -328,3 +328,40 @@ describe('DetailedLaunch, the orchestrator (003 T010)', () => {
     expect(box()).toBeNull();
   });
 });
+
+describe('DetailedLaunch and the roles (004 T011, FR-003)', () => {
+  const profiles = {
+    dev: {
+      cliId: 'claude-code',
+      model: 'sonnet',
+      effort: 'high',
+      maxModel: 'opus',
+      escalate: false,
+    },
+  } as const;
+
+  it('fills CLI, model and effort from the role’s profile, still editable for this launch', async () => {
+    const { user, draft } = setup({ profiles });
+    await user.click(agent(2));
+    await user.selectOptions(within(inspector()).getByRole('combobox', { name: 'Rôle' }), 'dev');
+    expect(draft()?.agents[2]).toMatchObject({
+      cliId: 'claude-code',
+      role: 'dev',
+      effort: 'high',
+      overrides: { model: 'sonnet' },
+    });
+    await user.selectOptions(within(inspector()).getByRole('combobox', { name: 'Modèle' }), 'opus');
+    expect(draft()?.agents[2]).toMatchObject({ role: 'dev', overrides: { model: 'opus' } });
+  });
+
+  it('offers no orchestrator in the roles: the ◎ box chooses it', async () => {
+    const { user } = setup({ profiles });
+    await user.click(agent(0));
+    const roles = within(inspector()).getByRole('combobox', { name: 'Rôle' });
+    expect(
+      within(roles)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['Aucun', 'Spec', 'Design', 'Dev', 'Test', 'Recap']);
+  });
+});

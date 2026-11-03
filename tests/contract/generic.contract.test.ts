@@ -148,6 +148,24 @@ describe('generic adapter specifics', () => {
     );
     expect(adapter.parseRateLimitReset('Rate limit reached')).toBeNull();
   });
+
+  it('has no tiers and ignores the effort (004 T009)', () => {
+    expect(adapter.modelTiers()).toEqual([]);
+    expect(adapter.supportsEffort).toBe(false);
+    const launch = (effort: 'high' | null) =>
+      adapter.buildLaunch({
+        agentId: '00000000-0000-4000-8000-000000000001',
+        executablePath: '/usr/local/bin/aider',
+        repoPath: '/r',
+        cwd: '/w',
+        model: null,
+        effort,
+        permissionLevel: 'always-allow',
+        port: 3001,
+        hook: { url: 'http://127.0.0.1:1', token: 't' },
+      }).args;
+    expect(launch('high')).toEqual(launch(null));
+  });
 });
 
 describe('generic CLI as an orchestrator (003 T008)', () => {
