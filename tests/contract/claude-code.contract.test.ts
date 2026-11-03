@@ -329,6 +329,21 @@ describe('Claude Code hook payloads (captured in T049)', () => {
         message: 'Claude needs your input',
       }),
     ).toEqual({ type: 'awaiting-answer', summary: 'Claude needs your input', question: true });
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'Notification',
+        notification_type: 'elicitation_dialog',
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Claude pose une question', question: true });
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'AskUserQuestion',
+        tool_input: { questions: [] },
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Claude pose une question', question: true });
   });
 
   it('allows a request from the PermissionRequest hook reply (« Toujours pour ce worktree »)', () => {
