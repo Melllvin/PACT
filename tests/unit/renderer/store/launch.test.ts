@@ -21,6 +21,7 @@ const cli = (id: 'claude-code' | 'codex'): CliDefinition => ({
   version: '1.0.0',
   origin: 'detected',
   status: 'installed',
+  modelTiers: [],
   models: [],
 });
 

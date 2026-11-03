@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CliRegistry } from '../../../src/main/agents/cli-registry';
 import type { RoleProfile } from '../../../src/shared/model';
 import { callTool, createHarness, type Harness } from './harness';
 
@@ -24,6 +25,7 @@ beforeEach(async () => {
 }, 30_000);
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await h.dispose();
 });
 
@@ -80,6 +82,20 @@ describe('launch_agent by role', () => {
     expect(text).toBe('Le CLI « custom-absent » du rôle dev n’est pas installé.');
   });
 
+  it('takes the profile of the role on the CLI named, when it is that CLI', async () => {
+    await setProfiles({ dev });
+    const { json } = await tool('launch_agent', { role: 'dev', cli: 'Fake' });
+    expect(saved((json as Launched).agent.id)).toMatchObject({ role: 'dev', model: 'fake-small' });
+  });
+
+  it('asks for the CLI or the role, and refuses a role with no CLI installed', async () => {
+    const neither = await tool('launch_agent');
+    expect(neither).toMatchObject({ isError: true, text: 'Donne le CLI ou le rôle de l’agent.' });
+    vi.spyOn(CliRegistry.prototype, 'list').mockReturnValue([]);
+    const none = await tool('launch_agent', { role: 'dev' });
+    expect(none).toMatchObject({ isError: true, text: 'Aucun CLI installé pour le rôle dev.' });
+  });
+
   it('refuses a second orchestrator', async () => {
     const { isError } = await tool('launch_agent', { role: 'orchestrator' });
     expect(isError).toBe(true);
@@ -97,5 +113,32 @@ describe('list_agents with roles', () => {
       { role: null, loop: null },
     ]);
     expect(agents.some((a) => (a as { id?: string }).id === orchestratorId)).toBe(false);
+  });
+
+  it('gives the running loop of its dev and of its test', async () => {
+    const launched = async (role: string) =>
+      ((await tool('launch_agent', { role })).json as Launched).agent.id;
+    const devId = await launched('dev');
+    const testId = await launched('test');
+    await h.workspaces.update(h.workspace.id, (ws) => ({
+      ...ws,
+      loops: [
+        {
+          issueId: 'T001',
+          devAgentId: devId,
+          testAgentId: testId,
+          round: 2,
+          rounds: [],
+          state: 'running',
+          escalatedModel: null,
+        },
+      ],
+    }));
+    const { json } = await tool('list_agents');
+    const { agents } = json as { agents: { loop: unknown }[] };
+    expect(agents.map(({ loop }) => loop)).toEqual([
+      { issueId: 'T001', round: 2 },
+      { issueId: 'T001', round: 2 },
+    ]);
   });
 });

@@ -73,6 +73,7 @@ export class CliRegistry {
       command,
       resolvedPath: null,
       version: null,
+      modelTiers: [],
       origin: 'custom',
       status: 'missing',
       models: [],

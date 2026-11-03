@@ -137,6 +137,7 @@ describe('CliRegistry', () => {
       version: null,
       origin: 'custom',
       status: 'installed',
+      modelTiers: [],
       models: [],
     };
     await stores.state.write({ ...(await stores.state.read()), customClis: [custom] });

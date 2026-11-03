@@ -20,6 +20,7 @@ const cli = (id: string, name: string, models: string[]): CliDefinition => ({
   version: '1.0.0',
   origin: 'detected',
   status: 'installed',
+  modelTiers: [],
   models,
   orchestrator: id === 'claude-code',
 });
@@ -352,6 +353,24 @@ describe('DetailedLaunch and the roles (004 T011, FR-003)', () => {
     });
     await user.selectOptions(within(inspector()).getByRole('combobox', { name: 'Modèle' }), 'opus');
     expect(draft()?.agents[2]).toMatchObject({ role: 'dev', overrides: { model: 'opus' } });
+  });
+
+  it('sets the effort of a CLI that takes one, and goes back to no role', async () => {
+    const withEffort = clis.map((c) => ({ ...c, supportsEffort: c.id === 'claude-code' }));
+    const { user, draft } = setup({ profiles, clis: withEffort });
+    await user.click(agent(2));
+    expect(within(inspector()).queryByRole('combobox', { name: 'Effort' })).toBeNull();
+    await user.click(agent(0));
+    const effort = within(inspector()).getByRole('combobox', { name: 'Effort' });
+    await user.selectOptions(effort, 'high');
+    expect(draft()?.agents[0]?.effort).toBe('high');
+    await user.selectOptions(effort, '');
+    expect(draft()?.agents[0]?.effort).toBeNull();
+
+    const role = within(inspector()).getByRole('combobox', { name: 'Rôle' });
+    await user.selectOptions(role, 'dev');
+    await user.selectOptions(role, '');
+    expect(draft()?.agents[0]).toMatchObject({ role: null, effort: 'high' });
   });
 
   it('offers no orchestrator in the roles: the ◎ box chooses it', async () => {

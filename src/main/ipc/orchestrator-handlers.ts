@@ -39,8 +39,8 @@ export function createOrchestratorServices({
     'roles:setProfiles': async ({ workspaceId, ...input }: IpcInput<'roles:setProfiles'>) => {
       const profiles = z.partialRecord(roleSchema, roleProfileSchema).parse(input.profiles);
       await workspaces.update(workspaceId, (ws) => ({ ...ws, roleProfiles: profiles }));
-      const tiered = clis().map((cli) => ({ ...cli, modelTiers: cli.modelTiers ?? [] }));
-      return { warnings: profileWarnings(profilesOf(profiles, tiered), tiered) };
+      const installed = clis();
+      return { warnings: profileWarnings(profilesOf(profiles, installed), installed) };
     },
   };
 }

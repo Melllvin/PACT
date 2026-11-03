@@ -262,7 +262,7 @@ export const cliDefinitionSchema = z.object({
   /** 003 — its adapter can make it the orchestrator of a workspace (R8). */
   orchestrator: z.boolean().optional(),
   /** 004 R2 — its models by tier, smallest first; absent or empty: order unknown. */
-  modelTiers: z.array(z.array(z.string())).optional(),
+  modelTiers: z.array(z.array(z.string())).default([]),
   /** 004 R2 — it takes a reasoning effort. */
   supportsEffort: z.boolean().optional(),
 });

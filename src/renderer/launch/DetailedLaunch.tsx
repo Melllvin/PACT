@@ -109,10 +109,7 @@ export function DetailedLaunch({
             running={running}
             index={index === -1 ? null : index}
             canOrchestrate={canOrchestrate}
-            profiles={profilesOf(
-              profiles,
-              installed.map((cli) => ({ ...cli, modelTiers: cli.modelTiers ?? [] })),
-            )}
+            profiles={profilesOf(profiles, installed)}
             onDuplicate={() => {
               onChange(duplicate(draft, index));
             }}

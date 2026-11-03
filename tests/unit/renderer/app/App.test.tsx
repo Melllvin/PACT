@@ -275,6 +275,7 @@ describe('App launch flow (US2)', () => {
     version: 'v24.0.0',
     origin: 'detected',
     status: 'installed',
+    modelTiers: [],
     models: [],
   };
   const setup = (workspaces: Workspace[], clis: CliDefinition[] = [fake]) => {
@@ -307,6 +308,22 @@ describe('App launch flow (US2)', () => {
       'agents:launch',
       expect.objectContaining({ workspaceId: 'w1', freeTerminals: 0 }),
     );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // 004 US1 — the role profiles of the workspace, from « Rôles » (FR-002).
+  it('opens the role profiles of the workspace, saves a change and closes them', async () => {
+    const tiered = { ...fake, models: ['petit', 'grand'], modelTiers: [['petit'], ['grand']] };
+    const invoke = setup([workspace('w1', 'w1')], [tiered]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Rôles' }));
+    const dialog = screen.getByRole('dialog', { name: 'Profils de rôle' });
+    await userEvent.selectOptions(
+      within(dialog).getByRole('combobox', { name: 'Modèle · Dev' }),
+      'grand',
+    );
+    const saved = invoke.mock.calls.find(([channel]) => channel === 'roles:setProfiles')?.[1];
+    expect(saved).toMatchObject({ workspaceId: 'w1', profiles: { dev: { model: 'grand' } } });
+    await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

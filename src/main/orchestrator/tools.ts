@@ -192,13 +192,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
   /** The CLI of a launch: the one named, else the role's; and the role's profile on that CLI. */
   const launchCli = (ws: Workspace, role: Agent['role'], named: string | null) => {
     const clis = deps.clis();
-    const profile =
-      role === null
-        ? undefined
-        : profilesOf(
-            ws.roleProfiles,
-            clis.map((c) => ({ ...c, modelTiers: c.modelTiers ?? [] })),
-          )[role];
+    const profile = role === null ? undefined : profilesOf(ws.roleProfiles, clis)[role];
     if (named !== null) {
       const wanted = named.trim().toLowerCase();
       const cli = clis.find(
@@ -374,11 +368,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const role = roleSchema.nullable().catch(null).parse(optionalString(args, 'role'));
         const { cli, profile } = launchCli(ws, role, optionalString(args, 'cli'));
         const model = optionalString(args, 'model') ?? profile?.model ?? null;
-        if (
-          role !== null &&
-          profile &&
-          beyondCeiling(model, profile.maxModel, cli.modelTiers ?? [])
-        ) {
+        if (role !== null && profile && beyondCeiling(model, profile.maxModel, cli.modelTiers)) {
           throw new Refusal(
             `Modèle au-delà du plafond du rôle ${role} (${profile.maxModel ?? ''})`,
           );

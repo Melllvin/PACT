@@ -98,6 +98,7 @@ describe('app:getState with CLI detection', () => {
         version: '0.156.1',
         origin: 'detected',
         status: 'installed',
+        modelTiers: [],
         models: [],
       },
     ];

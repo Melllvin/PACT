@@ -44,8 +44,8 @@ type Options = {
   workspaces: WorkspaceAccess;
   registry: {
     get(id: string): RegisteredCli | undefined;
-    /** 004 — every CLI, for the default role profiles; without it, only the user's profiles. */
-    list?(): CliDefinition[];
+    /** 004 — every CLI, for the default role profiles. */
+    list(): CliDefinition[];
   };
   git: Pick<GitService, 'addWorktree' | 'branchExists' | 'currentBranch' | 'removeWorktree'>;
   pty: PtyManager;
@@ -569,11 +569,7 @@ export class AgentManager {
 
   /** The user's profile of a role, else its default one (004 R2). */
   private profileOf(workspace: Workspace, role: NonNullable<Agent['role']>) {
-    const clis = (this.registry.list?.() ?? []).map((cli) => ({
-      ...cli,
-      modelTiers: cli.modelTiers ?? [],
-    }));
-    return profilesOf(workspace.roleProfiles, clis)[role];
+    return profilesOf(workspace.roleProfiles, this.registry.list())[role];
   }
 
   private installedCli(cliId: string): InstalledCli {
