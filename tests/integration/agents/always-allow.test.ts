@@ -244,3 +244,23 @@ describe('« Toujours pour ce worktree »', { timeout: 30_000 }, () => {
     expect(workspaces.get(workspace.id)?.agents.flatMap((a) => a.alwaysAllowRules)).toEqual([]);
   });
 });
+
+// T162 — a question is answered in the terminal: PACT types nothing for it (FR-024a).
+describe('A question from the CLI', { timeout: 30_000 }, () => {
+  beforeEach(() => {
+    scenario = 'ask-question';
+  });
+
+  it('is kept as a question, and no answer keys are typed for it', async () => {
+    const agent = await launchOne();
+    pty.write(agent.id, 'Choisis une base\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    expect(current(agent.id)?.awaiting).toBe('question');
+    const write = vi.spyOn(pty, 'write');
+    await expect(manager.answer(agent.id, 'allow')).rejects.toThrow(
+      'Répondez à cette question dans le terminal de l’agent.',
+    );
+    expect(write).not.toHaveBeenCalled();
+    expect(current(agent.id)?.state).toBe('awaiting-answer');
+  });
+});

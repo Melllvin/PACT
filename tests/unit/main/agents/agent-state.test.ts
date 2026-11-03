@@ -136,6 +136,32 @@ describe('applySignal', () => {
     ).toMatchObject({ state: 'error', scheduledResume: null });
   });
 
+  // T162 — what the agent waits on: a permission or a question (FR-024a).
+  it('tells a question from a permission, and forgets it once answered', () => {
+    const asked = applySignal(agent({ state: 'working' }), {
+      type: 'awaiting-answer',
+      summary: 'Quelle base ?',
+      question: true,
+    });
+    expect(asked).toMatchObject({ state: 'awaiting-answer', awaiting: 'question' });
+    // The Notification that follows the PermissionRequest has no ruleKey: still the question.
+    expect(
+      applySignal(asked, { type: 'awaiting-answer', summary: 'Claude needs your input' }),
+    ).toMatchObject({ awaiting: 'question' });
+    expect(applySignal(asked, { type: 'prompt-submitted' }).awaiting).toBeUndefined();
+    expect(applySignal(asked, { type: 'turn-finished' }).awaiting).toBeUndefined();
+    const permission = applySignal(agent({ state: 'working' }), {
+      type: 'awaiting-answer',
+      summary: 'rm x',
+      ruleKey: 'Bash(rm x)',
+    });
+    expect(permission.awaiting).toBe('permission');
+    expect(
+      applySignal(asked, { type: 'awaiting-answer', summary: 'rm x', ruleKey: 'Bash(rm x)' })
+        .awaiting,
+    ).toBe('permission');
+  });
+
   it('returns the same agent when nothing changes', () => {
     const done = agent({ state: 'done', sessionId: 's1' });
     expect(applySignal(done, { type: 'turn-finished', sessionId: 's1' })).toBe(done);
