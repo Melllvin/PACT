@@ -37,6 +37,7 @@ import { createPreviewHandler } from './preview/preview-protocol';
 import { PreviewService } from './preview/preview-service';
 import { ReviewService, watchRecursive } from './review/review-service';
 import { TestRunner } from './review/test-runner';
+import { BUILD_INFO } from '../shared/build-info';
 import { applyTestMode, isBackgroundTest, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
 import { CloneJobs } from './workspace/clone-job';
@@ -45,6 +46,13 @@ import { WorkspaceService } from './workspace/workspace-service';
 const AVAILABILITY_CHECK_MS = 3000;
 
 applyTestMode(app, process.env);
+
+// « À propos de PACT » (macOS app menu): which build is running.
+app.setAboutPanelOptions({
+  applicationName: 'PACT',
+  applicationVersion: BUILD_INFO.version,
+  version: BUILD_INFO.commit,
+});
 
 // 004 US4 — the Aperçu's own scheme, declared before the app is ready (research R9).
 protocol.registerSchemesAsPrivileged([
