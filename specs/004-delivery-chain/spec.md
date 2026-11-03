@@ -271,9 +271,9 @@ configuration globale n'est modifié ; lancer un orchestrateur sous un faux CLI 
   l'Aperçu indique « ressource externe bloquée ».
 - Le recap ou une maquette est très gros, ou n'est pas du HTML ou du Markdown valide : l'Aperçu
   affiche le texte brut, sans planter.
-- Le fichier d'instructions de repli existe déjà dans le dépôt (un `AGENTS.md` de l'utilisateur) : PACT
-  ne l'écrase pas ; il ajoute ses instructions sans toucher au contenu existant, et les retire à la
-  fermeture de l'agent.
+- Le dépôt a déjà son propre fichier d'instructions (un `AGENTS.md` de l'utilisateur) : PACT n'y touche
+  pas ; il écrit ses instructions dans un fichier à lui, exclu de Git, et le retire à la fermeture de
+  l'agent (research R3).
 - L'orchestrateur est retiré de son rôle en pleine boucle : les boucles s'arrêtent, les agents
   continuent comme agents ordinaires ; le recap reste.
 - Chemins avec espaces et accents, sur macOS et Windows, pour les skills, maquettes et recap.
