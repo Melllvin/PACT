@@ -84,10 +84,10 @@ Claude Code needs no approval: PACT passes its hooks as session settings.
 
 ## Orchestrator
 
-Tick « Orchestrateur » when launching a Claude Code agent and it leads the others of the
-workspace. Its tile sits on top, larger than the rest. PACT gives it a `pact` MCP server and a
-`pact-orchestrator` skill, for this session only; your own Claude Code configuration is never
-touched.
+Tick « Orchestrateur » when launching a Claude Code or Codex agent and it leads the others of the
+workspace. Its tile is always the largest, so its reports stay easy to read. PACT gives it a `pact`
+MCP server and the `pact-orchestrator` skill, for this session only; your own Claude Code and Codex
+configurations are never touched.
 
 - **Tools.** `list_agents`, `get_changes`, `get_file_diff`, `run_tests`, `send_prompt` (a prompt
   waits in a queue while the agent works or waits for an answer, and is marked « ◎ » in its
@@ -105,6 +105,32 @@ touched.
   closings, integration requests), the latest first, with what PACT refused and why. « Retirer le
   rôle d’orchestrateur » revokes its token at once, cancels the prompts it queued, and leaves the
   agent open as an ordinary one.
+
+## Delivery chain
+
+The orchestrator can carry a feature from the idea to a reviewed branch: it frames it with you,
+then hands it to agents with a role, each started with the skills of its role.
+
+- **Roles and profiles.** `spec`, `design`, `dev`, `test` and `recap`. Each role has a profile in
+  the settings (CLI, model, effort, and a model ceiling the orchestrator cannot exceed), so the
+  cheaper models can do the development while a stronger one leads. Choose a role in the detailed
+  launcher, or let the orchestrator launch the agent with `launch_agent`.
+- **Issues.** `register_issue` writes an issue in `.pact/issues/`, with its acceptance criteria;
+  `publish_issues` only asks « ◎ Créer N issues ? » in « À faire »: nothing reaches GitHub without
+  you.
+- **Test and dev loop.** `start_loop` on a ready issue: the test agent writes the acceptance tests,
+  the dev agent makes them pass, and PACT runs the tests itself between rounds (`next_round`,
+  `submit_report`, `get_loop`). Three rounds at most; then the decision is yours (« ✕ Boucle
+  arrêtée »).
+- **Aperçu.** The Focus of an agent shows its mockups (`design/mockups/`), issues and recap,
+  rendered in isolation with no network access, and refreshed within 2 s. « ✓ Valider » or a
+  comment on a mockup goes back to the orchestrator.
+- **Recap.** `.pact/recap.md` lists each issue with its agents and models, branch and PR, rounds,
+  the PACT test run, and what is left to test by hand; it opens first in the orchestrator's Aperçu.
+- **Skills on every CLI.** The `pact-*` skills and their common contract are copied per agent
+  under PACT's data folder: a session plugin for Claude Code, `developer_instructions` and the
+  `pact` MCP server for Codex, and for any other CLI a `.pact/ROLE.md` in its worktree, kept out of
+  Git, which PACT asks it to read first.
 
 ## Agent teams in Claude Code
 

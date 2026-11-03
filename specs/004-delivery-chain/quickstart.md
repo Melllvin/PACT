@@ -22,14 +22,16 @@ npm run test:e2e     # dont us18…us23 (004)
 | US3 cadrage | `register_issue` refuse « prête » sans critères ; `start_loop` refusé sur une issue non prête ; `publish_issues` → élément « ◎ Créer N issues ? », aucun `gh` lancé avant confirmation (faux `gh` dans le PATH) |
 | US4 design | maquette du faux agent dans l'Aperçu, police et script distants bloqués, zéro requête réseau ; « ✓ Valider » + commentaire → événement `mockup` |
 | US5 recap | `.pact/recap.md` écrit par le faux agent, rafraîchi en < 2 s dans l'Aperçu, position de lecture gardée |
-| US6 universalité | même contenu de skill par la voie native et `.pact/ROLE.md` ; `HOME` temporaire inchangé ; orchestrateur sous faux CLI MCP non Claude |
+| US6 universalité | skills par rôle copiées hors de la configuration (`skills-delivery`), contrats Claude Code (`--plugin-dir`) et Codex (`developer_instructions`, serveur `pact`) ; CLI générique : `.pact/ROLE.md` exclu de Git et lu au démarrage (`us23-skills`) |
+| FR-032 | `paths.spec.ts` : skills, maquette et recap avec dépôt et données de PACT sous des chemins à espaces et accents |
+| SC-007 | chaque fichier de test (Vitest) et chaque lancement e2e a son propre `HOME` ; échec si un `.claude` ou `.codex` y est écrit |
 | FR-006a | grille « chef » à 1, 3 et 5 agents, fenêtre 1280×800 et 2560×1440 : aire de la tuile du chef > aire de chaque autre |
 
 ## Manuel (consigné dans la PR)
 
 1. Régler les profils : orchestrateur Claude Code `opus`/high, dev Codex modèle moyen, test Claude
    `sonnet`, recap `haiku`.
-2. Lancer un orchestrateur, taper `/pact-orchestrator` et décrire une petite fonctionnalité avec une
+2. Lancer un orchestrateur, taper `/pact:pact-orchestrator` (Claude Code) et décrire une petite fonctionnalité avec une
    interface.
 3. Vérifier : questions, issues dans `.pact/issues/`, « ◎ Créer N issues ? » ; confirmer ; issues sur
    GitHub.
