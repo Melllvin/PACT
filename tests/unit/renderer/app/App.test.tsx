@@ -348,6 +348,25 @@ describe('App launch flow (US2)', () => {
     });
   });
 
+  // 004 US3 — the user creates or refuses the issues the orchestrator asks to publish (FR-023).
+  it('sends the answer to a request to publish issues', async () => {
+    const lead = agent(1, { state: 'working', role: 'orchestrator', workspaceId: 'w1' });
+    const requestId = '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b';
+    const invoke = setup([
+      {
+        ...workspace('w1', 'w1'),
+        agents: [lead],
+        publishRequests: [
+          { id: requestId, issueIds: ['0012-connexion'], requestedAt: '2026-11-03T10:00:00.000Z' },
+        ],
+      },
+    ]);
+    await userEvent.click(await screen.findByRole('button', { name: '✓ Créer' }));
+    expect(invoke).toHaveBeenCalledWith('publishRequest:confirm', { requestId });
+    await userEvent.click(screen.getByRole('button', { name: 'Refuser' }));
+    expect(invoke).toHaveBeenCalledWith('publishRequest:refuse', { requestId });
+  });
+
   it('describes the permission levels for the launched CLIs only', async () => {
     const codex: CliDefinition = { ...fake, id: 'codex', name: 'Codex', adapter: 'codex' };
     const claude: CliDefinition = {

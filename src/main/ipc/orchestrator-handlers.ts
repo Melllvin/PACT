@@ -4,6 +4,7 @@ import { roleProfileSchema, roleSchema, type CliDefinition } from '../../shared/
 import { profileWarnings, profilesOf } from '../../shared/roles';
 import type { AgentManager } from '../agents/agent-manager';
 import type { IntegrationRequests } from '../orchestrator/integration-requests';
+import type { IssueService } from '../orchestrator/issues';
 import type { LoopService } from '../orchestrator/loop-service';
 import type { OrchestratorService } from '../orchestrator/orchestrator-service';
 import type { WorkspaceService } from '../workspace/workspace-service';
@@ -20,6 +21,8 @@ type Dependencies = {
   clis: () => CliDefinition[];
   /** 004 US2 — the loops: the user's decision, and closed with the orchestrator's role. */
   loops?: Pick<LoopService, 'decide' | 'closeAll'>;
+  /** 004 US3 — the publication of issues the orchestrator asked for. */
+  issues?: Pick<IssueService, 'confirm' | 'refuse'>;
 };
 
 export function createOrchestratorServices({
@@ -29,6 +32,7 @@ export function createOrchestratorServices({
   workspaces,
   clis,
   loops,
+  issues,
 }: Dependencies) {
   return {
     'integrationRequest:confirm': (input: IpcInput<'integrationRequest:confirm'>) =>
@@ -47,6 +51,13 @@ export function createOrchestratorServices({
     'loop:decide': async ({ workspaceId, issueId, decision }: IpcInput<'loop:decide'>) => {
       if (!loops) return;
       await loops.decide(workspaceId, issueId, decision);
+    },
+    'publishRequest:confirm': async ({ requestId }: IpcInput<'publishRequest:confirm'>) => {
+      if (!issues) return { issues: [] };
+      return issues.confirm(requestId);
+    },
+    'publishRequest:refuse': async ({ requestId }: IpcInput<'publishRequest:refuse'>) => {
+      await issues?.refuse(requestId);
     },
     'roles:setProfiles': async ({ workspaceId, ...input }: IpcInput<'roles:setProfiles'>) => {
       const profiles = z.partialRecord(roleSchema, roleProfileSchema).parse(input.profiles);

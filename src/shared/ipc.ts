@@ -8,6 +8,7 @@ import {
   integrationRequestSchema,
   issueSchema,
   loopSchema,
+  publishRequestSchema,
   MAX_AGENTS,
   permissionLevelSchema,
   permissionPreferenceSchema,
@@ -255,6 +256,12 @@ export const ipcRequests = {
     none,
   ),
   /** 004 US1 — the role profiles of a workspace; a weaker test warns without blocking (FR-004). */
+  /** 004 US3 — « ◎ Créer N issues ? »: publish with gh, or keep them local (FR-023). */
+  'publishRequest:confirm': request(
+    z.object({ requestId: z.uuid() }),
+    z.object({ issues: z.array(z.object({ id: z.string(), url: z.string() })) }),
+  ),
+  'publishRequest:refuse': request(z.object({ requestId: z.uuid() }), none),
   'roles:setProfiles': request(
     z.object({
       workspaceId: z.string().min(1),
@@ -308,11 +315,17 @@ export const ipcEvents = {
     loops: z.array(loopSchema),
     issues: z.array(issueSchema),
   }),
+  /** 004 US3 — the issues of a workspace and the publication waiting for the user. */
+  'workspace:issues': z.object({
+    workspaceId: z.string(),
+    issues: z.array(issueSchema),
+    publishRequests: z.array(publishRequestSchema),
+  }),
   /** 004 US2 — a report, a missing one, the end of a loop or files two agents change. */
   'orchestrator:report': z.object({
     workspaceId: z.string(),
     agentId: z.uuid(),
-    kind: z.enum(['report', 'report-missing', 'loop', 'overlap']),
+    kind: z.enum(['report', 'report-missing', 'loop', 'overlap', 'publish']),
     summary: z.string(),
   }),
 } as const;

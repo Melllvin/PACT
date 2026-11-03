@@ -3,7 +3,7 @@ import type { Agent, Loop } from '../../shared/model';
 /** What a loop told the orchestrator (`orchestrator:report`). */
 export type Report = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'overlap';
+  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish';
   summary: string;
   at: string;
 };
@@ -13,6 +13,7 @@ const KIND_LABELS: Record<Report['kind'], string> = {
   'report-missing': 'Rapport manquant',
   loop: 'Boucle',
   overlap: 'Fichiers communs',
+  publish: 'Publication',
 };
 
 const TIME = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });

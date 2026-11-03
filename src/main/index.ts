@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { IpcFailure } from '../shared/ipc';
 import { createAdapters } from './agents/adapters';
@@ -25,6 +27,7 @@ import type { McpTool } from './orchestrator/mcp';
 import { createOrchestratorTools } from './orchestrator/tools';
 import { createAgentTools } from './orchestrator/agent-tools';
 import { LoopService } from './orchestrator/loop-service';
+import { IssueService, ghCommand } from './orchestrator/issues';
 import { IntegrationService } from './review/integration-service';
 import { ReviewService } from './review/review-service';
 import { TestRunner } from './review/test-runner';
@@ -112,6 +115,7 @@ void app.whenReady().then(async () => {
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
           loops,
+          issues,
           clis: () => registry.list(),
           permissions,
           log: (entry) => {
@@ -213,6 +217,25 @@ void app.whenReady().then(async () => {
       emit('workspace:loops', { workspaceId, ...change });
     },
   });
+  // 004 US3 — the issues, published with gh once the user confirms (R8).
+  const issues = new IssueService({
+    workspaces,
+    gh: async (args, cwd) => {
+      const command = ghCommand(process.env);
+      if (!command) throw new Error('gh absent');
+      const run = promisify(execFile);
+      const env = await resolveShellEnv();
+      return (await run(command.file, [...command.args, ...args], { cwd, env, encoding: 'utf8' }))
+        .stdout;
+    },
+    notify: (workspaceId, notice) => {
+      orchestrator.notice(workspaceId, notice);
+      emit('orchestrator:report', { workspaceId, ...notice });
+    },
+    onChange: (workspaceId, change) => {
+      emit('workspace:issues', { workspaceId, ...change });
+    },
+  });
   const integration = new IntegrationService({
     git,
     workspaces,
@@ -312,6 +335,7 @@ void app.whenReady().then(async () => {
         agents,
         workspaces,
         loops,
+        issues,
         clis: () => registry.list(),
       }),
     },

@@ -143,6 +143,8 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
                 onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
                 onDecideLoop: (issueId, decision) =>
                   void state.decideLoop(workspace.id, issueId, decision),
+                onConfirmPublish: (id) => void state.confirmPublish(id),
+                onRefusePublish: (id) => void state.refusePublish(id),
               }}
               actionError={state.actionError}
               fromOrchestrator={state.orchestratorPrompted}

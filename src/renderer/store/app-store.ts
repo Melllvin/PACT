@@ -22,7 +22,7 @@ import type { OrchestratorAction } from '../../shared/orchestrator';
 /** 004 US2 — a report, a missing one, the end of a loop, as the « Rapports » band shows it. */
 export type LoopReport = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'overlap';
+  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish';
   summary: string;
   at: string;
 };
@@ -112,6 +112,9 @@ export type AppState = {
     issueId: string,
     decision: 'restart' | 'take-over' | 'abandon',
   ) => Promise<void>;
+  /** 004 FR-023 — « Créer » / « Refuser » of the issues the orchestrator asks to publish. */
+  confirmPublish: (requestId: string) => Promise<void>;
+  refusePublish: (requestId: string) => Promise<void>;
   /** 004 US1 — the role profiles of a workspace, shown at once and saved (FR-003). */
   setRoleProfiles: (
     workspaceId: string,
@@ -354,6 +357,13 @@ export function createAppStore(api: PactApi) {
               ),
             });
           }),
+          api.on('workspace:issues', ({ workspaceId, issues, publishRequests }) => {
+            set({
+              workspaces: get().workspaces.map((w) =>
+                w.id === workspaceId ? { ...w, issues, publishRequests } : w,
+              ),
+            });
+          }),
           api.on('orchestrator:report', ({ workspaceId, ...report }) => {
             const list = get().loopReports[workspaceId] ?? [];
             set({
@@ -545,6 +555,10 @@ export function createAppStore(api: PactApi) {
 
       decideLoop: (workspaceId, issueId, decision) =>
         act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),
+
+      confirmPublish: (requestId) => act(() => api.invoke('publishRequest:confirm', { requestId })),
+
+      refusePublish: (requestId) => act(() => api.invoke('publishRequest:refuse', { requestId })),
 
       loadOrchestratorActions: (agentId) =>
         act(async () => {

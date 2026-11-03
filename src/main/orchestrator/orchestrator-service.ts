@@ -31,7 +31,7 @@ type Options = {
 /** 004 US2 — what a loop tells the orchestrator: a report, a missing one, its end, an overlap. */
 export type Notice = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'overlap';
+  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish';
   summary: string;
 };
 
@@ -104,10 +104,14 @@ export class OrchestratorService {
     this.push(workspaceId, { at: new Date().toISOString(), agentId, kind, state, summary });
   }
 
-  /** Tells the orchestrators of a workspace, never about themselves. */
+  /**
+   * Tells the orchestrators of a workspace, never about themselves, save the user's answer to
+   * their own request to publish issues (004 FR-023).
+   */
   push(workspaceId: string, event: OrchestratorEvent): void {
     for (const [orchestratorId, session] of this.sessions) {
-      if (orchestratorId !== event.agentId && session.workspaceId === workspaceId) {
+      const about = orchestratorId === event.agentId && event.kind !== 'publish';
+      if (!about && session.workspaceId === workspaceId) {
         session.events.push(event);
       }
     }

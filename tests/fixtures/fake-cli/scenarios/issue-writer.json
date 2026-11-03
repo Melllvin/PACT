@@ -1,0 +1,15 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "{{prompt.0}}",
+      "json": "{{prompt.1}}"
+    }
+  ],
+  "files": [
+    {
+      "write": ".pact/issues/0012-connexion.md",
+      "content": "# Connexion par e-mail\n\n## Critères d’acceptation\n- Given un compte, When il saisit son e-mail, Then il est connecté.\n\n## Questions ouvertes\n"
+    }
+  ]
+}

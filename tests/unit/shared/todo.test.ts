@@ -259,4 +259,54 @@ describe('deriveTodos', () => {
       actions: [],
     });
   });
+
+  // 004 T029 — « ◎ Créer N issues ? »: the orchestrator asks, the user decides (FR-023).
+  it('asks the user to publish the issues of the orchestrator, after the integrations', () => {
+    const issue = (id: string, title: string) => ({
+      id,
+      title,
+      path: `.pact/issues/${id}.md`,
+      state: 'ready' as const,
+      remote: null,
+      trace: { branch: null, agents: [], pr: null },
+    });
+    const request = (id: string, issueIds: string[]) => ({
+      id,
+      issueIds,
+      requestedAt: '2026-11-03T10:00:00.000Z',
+    });
+    const lead = agent(1, { state: 'working', role: 'orchestrator' });
+    const todos = deriveTodos(
+      {
+        ...workspace([lead, agent(2, { state: 'awaiting-answer' })]),
+        issues: [issue('0012-connexion', 'Connexion'), issue('0013-export', 'Export CSV')],
+        // An issue no longer known is named by its id.
+        publishRequests: [request('r1', ['0012-connexion', '0013-export', '0099'])],
+      },
+      names,
+    );
+    expect(todos.map((t) => t.id)).toEqual(['a2:answer', 'r1:publish-issues']);
+    expect(todos[1]).toEqual({
+      id: 'r1:publish-issues',
+      agentId: 'a1',
+      kind: 'publish-issues',
+      title: '◎ Créer 3 issues ? · Claude Code 1 · Connexion, Export CSV, 0099',
+      actions: [],
+      publish: { requestId: 'r1' },
+    });
+
+    const one = deriveTodos(
+      { ...workspace([lead]), publishRequests: [request('r2', ['0012-connexion'])] },
+      names,
+    );
+    expect(one[0]?.title).toBe('◎ Créer 1 issue ? · Claude Code 1 · 0012-connexion');
+    expect(deriveTodos(workspace([lead]), names)).toEqual([]);
+    // Without an orchestrator, nobody asks.
+    expect(
+      deriveTodos(
+        { ...workspace([agent(1)]), publishRequests: [request('r3', ['0012-connexion'])] },
+        names,
+      ),
+    ).toEqual([]);
+  });
 });
