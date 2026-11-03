@@ -8,6 +8,7 @@ import {
 import type { Agent, CliDefinition, Workspace } from '../../../../src/shared/model';
 import { conflicted, diff, snapshot } from '../review/fixtures';
 import { rateLimited, scheduledResume } from '../tiles/fixtures';
+import { DEFAULT_TEST_PATHS } from '../../../../src/shared/model';
 
 // T068, T069, T079 — the tiles of the agents and free terminals, in the grid.
 
@@ -32,6 +33,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  effort: null,
   ...overrides,
 });
 
@@ -46,6 +48,11 @@ const workspace = (overrides: Partial<Workspace> = {}): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
   ...overrides,

@@ -1,12 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { IpcFailure, type AgentDraft, type IpcEvent } from '../../shared/ipc';
+import { draftRole, IpcFailure, type AgentDraft, type IpcEvent } from '../../shared/ipc';
 import { freeColors, freePositions } from '../../shared/launch-draft';
 import { MAX_AGENTS, type Agent, type ScheduledResume, type Workspace } from '../../shared/model';
 import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
 import type { PtyManager } from '../pty/pty-manager';
 import { IDLE_QUESTION_MS } from './adapters/generic';
-import type { AgentSignal, CliAdapter, OrchestratorLaunch, ResolvedEnv } from './adapters/types';
+import type {
+  AgentMcpLaunch,
+  AgentSignal,
+  CliAdapter,
+  OrchestratorLaunch,
+  ResolvedEnv,
+} from './adapters/types';
 import { applyExit, applySignal } from './agent-state';
 import { AutoResume, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
@@ -54,6 +60,8 @@ type Options = {
   /** 003 — the session plugin and token of an orchestrator, prepared before each start (R2). */
   orchestrator?: {
     prepare(agent: Agent): Promise<OrchestratorLaunch>;
+    /** 004 R5 — the MCP access of an agent with another role. */
+    prepareAgent?(agent: Agent): AgentMcpLaunch;
     release(agentId: string): void;
   };
 };
@@ -523,7 +531,8 @@ export class AgentManager {
         lastError: null,
         scheduledResume: null,
         review: { seen: {}, comments: [] },
-        role: draft.orchestrator === true ? 'orchestrator' : null,
+        role: draftRole(draft),
+        effort: draft.effort ?? null,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
@@ -570,7 +579,7 @@ export class AgentManager {
   /** Starts the agent's CLI; a known `sessionId` resumes that session (R6). */
   /** 003 — at most one orchestrator per workspace, of a CLI that can be one (FR-001, R8). */
   private validateOrchestrator(workspace: Workspace, drafts: AgentDraft[], clis: InstalledCli[]) {
-    const asked = drafts.filter((draft) => draft.orchestrator === true).length;
+    const asked = drafts.filter((draft) => draftRole(draft) === 'orchestrator').length;
     if (asked === 0) return;
     if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
     if (asked + workspace.agents.filter((agent) => agent.role === 'orchestrator').length > 1) {
@@ -578,7 +587,7 @@ export class AgentManager {
     }
     if (
       drafts.some(
-        (draft, i) => draft.orchestrator === true && !clis[i]?.adapter.supportsOrchestrator,
+        (draft, i) => draftRole(draft) === 'orchestrator' && !clis[i]?.adapter.supportsOrchestrator,
       )
     ) {
       throw new IpcFailure('INVALID_INPUT', 'Ce CLI ne peut pas être orchestrateur.');
@@ -597,6 +606,10 @@ export class AgentManager {
     env: ResolvedEnv,
     orchestrator: OrchestratorLaunch | null = null,
   ) {
+    const agentMcp =
+      agent.role !== null && agent.role !== 'orchestrator'
+        ? (this.orchestrator?.prepareAgent?.(agent) ?? null)
+        : null;
     const { adapter } = cli;
     const token = this.hooks.register(agent.id, (payload) => {
       const signal = adapter.mapHookEvent(payload);
@@ -619,6 +632,7 @@ export class AgentManager {
       port: agent.port,
       hook: { url: this.hookUrl(), token },
       orchestrator,
+      agentMcp,
     };
     const spec =
       agent.sessionId === null

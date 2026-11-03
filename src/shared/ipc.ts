@@ -15,6 +15,7 @@ import {
   scheduledResumeSchema,
   workspaceSchema,
 } from './model';
+import { effortSchema, roleSchema, type Role } from './primitives';
 import {
   conflictFileSchema,
   fileDiffSchema,
@@ -100,10 +101,17 @@ export const agentDraftSchema = z.object({
   branch: z.string().nullable(),
   port: port.nullable(),
   startCommand: z.string().nullable(),
-  /** 003 — the orchestrator of the workspace (FR-001). */
+  /** 003 — the orchestrator of the workspace (FR-001); 004 says it with `role`. */
   orchestrator: z.boolean().optional(),
+  /** 004 FR-003 — `null` or absent: no role. */
+  role: roleSchema.nullable().optional(),
+  effort: effortSchema.nullable().optional(),
 });
 export type AgentDraft = z.infer<typeof agentDraftSchema>;
+
+/** The role of a draft: 003's `orchestrator: true` is the orchestrator role. */
+export const draftRole = (draft: AgentDraft): Role | null =>
+  draft.role ?? (draft.orchestrator === true ? 'orchestrator' : null);
 
 const request = <I extends z.ZodType, O extends z.ZodType>(input: I, output: O) => ({
   input,

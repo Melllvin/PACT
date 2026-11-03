@@ -8,6 +8,7 @@ import type { PactApi } from '../../../../src/shared/ipc';
 import type { CliDefinition, Workspace } from '../../../../src/shared/model';
 import { conflicted, diff, snapshot } from '../review/fixtures';
 import { agent } from '../tiles/fixtures';
+import { DEFAULT_TEST_PATHS } from '../../../../src/shared/model';
 
 const workspace = (id: string, name: string): Workspace => ({
   id,
@@ -20,6 +21,11 @@ const workspace = (id: string, name: string): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 });

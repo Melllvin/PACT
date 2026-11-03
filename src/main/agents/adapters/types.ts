@@ -25,9 +25,12 @@ export type LaunchInput = {
   hook: { url: string; token: string };
   /** 003 — set for the orchestrator of the workspace: its session plugin, URL and token (R2). */
   orchestrator?: OrchestratorLaunch | null | undefined;
+  /** 004 R5 — set for an agent with another role: its own MCP access, submit_report only. */
+  agentMcp?: AgentMcpLaunch | null | undefined;
 };
 
 export type OrchestratorLaunch = { pluginDir: string; url: string; token: string };
+export type AgentMcpLaunch = { url: string; token: string };
 
 export type LaunchSpec = {
   file: string;

@@ -25,6 +25,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  effort: null,
   ...overrides,
 });
 

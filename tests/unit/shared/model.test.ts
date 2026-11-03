@@ -18,6 +18,7 @@ import {
   type Workspace,
 } from '../../../src/shared/model';
 import { agentDraftSchema, draftRole } from '../../../src/shared/ipc';
+import { DEFAULT_TEST_PATHS } from '../../../src/shared/model';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const now = '2026-09-24T10:00:00.000Z';
@@ -43,6 +44,7 @@ const agent = (position: number, overrides: Partial<Agent> = {}): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  effort: null,
   ...overrides,
 });
 
@@ -57,6 +59,11 @@ const workspace = (agents: Agent[]): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: now,
   status: 'available',
 });
@@ -327,6 +334,11 @@ describe('delivery chain (004 T004)', () => {
     permissionOverride: null,
     testCommand: null,
     integrationRequests: [],
+    roleProfiles: {},
+    issues: [],
+    loops: [],
+    testPaths: [...DEFAULT_TEST_PATHS],
+    publishRequests: [],
     lastOpenedAt: now,
     status: 'available',
   });

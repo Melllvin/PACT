@@ -3,6 +3,7 @@ import { createAppStore } from '../../../../src/renderer/store/app-store';
 import type { IpcEvent, IpcEventChannel, PactApi } from '../../../../src/shared/ipc';
 import type { Workspace } from '../../../../src/shared/model';
 import { agent } from '../tiles/fixtures';
+import { DEFAULT_TEST_PATHS } from '../../../../src/shared/model';
 
 // US3 — the tile actions in the store: answer, resume, restart, « Journal », closing (T074, T078).
 
@@ -19,6 +20,11 @@ const workspace: Workspace = {
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 };

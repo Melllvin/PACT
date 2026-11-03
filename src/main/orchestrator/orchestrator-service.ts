@@ -2,9 +2,10 @@ import { join } from 'node:path';
 import type { Agent, AgentState, Workspace } from '../../shared/model';
 import { randomUUID } from 'node:crypto';
 import type { OrchestratorAction, OrchestratorEvent } from '../../shared/orchestrator';
-import type { OrchestratorLaunch } from '../agents/adapters/types';
+import type { AgentMcpLaunch, OrchestratorLaunch } from '../agents/adapters/types';
 import type { AgentStateEvent } from '../agents/agent-manager';
 import type { HookServer } from '../agents/hook-server';
+import { createAgentTools } from './agent-tools';
 import { EventQueue, type WaitResult } from './events';
 import { handleMcp, type McpTool } from './mcp';
 import { writeOrchestratorPlugin } from './plugin';
@@ -19,6 +20,8 @@ type Options = {
   pluginsDir: string;
   /** The tools an orchestrator gets, for its own id. */
   tools?: (orchestratorId: string) => readonly McpTool[];
+  /** 004 R5 — the tools of an agent with another role: submit_report by default. */
+  agentTools?: (agentId: string) => readonly McpTool[];
   /** Each new entry of a journal (`orchestrator:action`, US5). */
   onAction?: (orchestratorId: string, action: OrchestratorAction) => void;
 };
@@ -47,6 +50,15 @@ export class OrchestratorService {
     this.sessions.get(agent.id)?.events.close();
     this.sessions.set(agent.id, { workspaceId: agent.workspaceId, events: new EventQueue() });
     return { pluginDir, url, token };
+  }
+
+  /** 004 R5 — a token of its own for an agent with a role: it opens submit_report only. */
+  prepareAgent(agent: Pick<Agent, 'id'>): AgentMcpLaunch {
+    const { hooks, agentTools = (id: string) => createAgentTools({}, id) } = this.options;
+    const token = hooks.registerMcp(agent.id, (payload) =>
+      handleMcp(payload, agentTools(agent.id), { refusal: 'Outil réservé à l’orchestrateur.' }),
+    );
+    return { url: hooks.mcpUrl(), token };
   }
 
   /** What the orchestrator waits for (R5); refused once its session is gone. */
