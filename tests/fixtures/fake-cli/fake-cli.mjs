@@ -29,14 +29,28 @@
 //   writeTests: string[]            writes `tests/<name>.test.ts` for each name (004)
 //   writeProd: string[]             writes `src/<name>.ts` for each name (004)
 //   mockup: string                  writes `design/mockups/<name>.html` (004)
+//   usage: object | object[]        { five_hour, seven_day, resets_at, tokens } (005 R9): runs the
+//                                   statusLine command of its --settings with the payload Claude
+//                                   Code would send (no rate_limits without five_hour/seven_day),
+//                                   and prints `Statut : <its output>`; an array gives one per turn
+//   rollout: object | object[]      { primary, secondary, resets_at, tokens } (005 R9): appends a
+//                                   Codex token_count to $CODEX_HOME/sessions/AAAA/MM/JJ/
+//                                   rollout-<time>-<session>.jsonl; an array gives one per turn
 //   signal: object                  final hook payload (default { type: 'turn-finished' })
 //   exitCode: number                exits with this code after the turn
 //
 // A bracketed paste (ESC[200~ … ESC[201~) is one prompt, its line breaks included, as in the
 // real CLIs (002 R7).
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { execFileSync, execSync } from 'node:child_process';
+import {
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const argValue = (name) => {
@@ -158,6 +172,68 @@ function writeRoleFiles() {
   }
 }
 
+/** The step of this turn: an array gives one per turn, its last one repeated. */
+const ofTurn = (steps) => {
+  const all = [steps ?? []].flat();
+  return all[Math.min(turn, all.length - 1)];
+};
+
+/** Claude Code's statusLine, run as it would run it (005 R1, R9). */
+function reportUsage(usage) {
+  const settings = argValue('--settings');
+  const command = settings ? JSON.parse(settings).statusLine?.command : undefined;
+  if (!command) return;
+  const resetsAt = usage.resets_at ?? Math.floor(Date.now() / 1000) + 2 * 3600;
+  const limits = {};
+  if (usage.five_hour !== undefined) {
+    limits.five_hour = { used_percentage: usage.five_hour, resets_at: resetsAt };
+  }
+  if (usage.seven_day !== undefined) {
+    limits.seven_day = { used_percentage: usage.seven_day, resets_at: resetsAt + 5 * 86_400 };
+  }
+  const payload = {
+    session_id: sessionId,
+    model: { id: 'fake', display_name: 'Faux' },
+    context_window: { total_input_tokens: usage.tokens ?? 0, total_output_tokens: 0 },
+    ...(Object.keys(limits).length > 0 ? { rate_limits: limits } : {}),
+  };
+  try {
+    const output = execSync(command, { input: JSON.stringify(payload), encoding: 'utf8' });
+    console.log(`Statut : ${output.trim()}`);
+  } catch {
+    // Like Claude Code: a statusLine that fails leaves the line empty.
+  }
+}
+
+/** Codex's rollout of this session (005 R2, R9). */
+function writeRollout(rollout) {
+  const home = process.env.CODEX_HOME;
+  if (!home) return;
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10).split('-');
+  const dir = join(home, 'sessions', ...day);
+  mkdirSync(dir, { recursive: true });
+  const stamp = now.toISOString().slice(0, 19).replaceAll(':', '-');
+  const resetsAt = rollout.resets_at ?? Math.floor(now.getTime() / 1000) + 2 * 3600;
+  const limit = (used_percent, window_minutes) =>
+    used_percent === undefined ? undefined : { used_percent, window_minutes, resets_at: resetsAt };
+  const line = {
+    timestamp: now.toISOString(),
+    type: 'event_msg',
+    payload: {
+      type: 'token_count',
+      info: { total_token_usage: { input_tokens: rollout.tokens ?? 0, output_tokens: 0 } },
+      rate_limits: {
+        primary: limit(rollout.primary, 300),
+        secondary: limit(rollout.secondary, 10_080),
+      },
+    },
+  };
+  rolloutFile ??= join(dir, `rollout-${stamp}-${sessionId}.jsonl`);
+  appendFileSync(rolloutFile, `${JSON.stringify(line)}\n`);
+}
+let rolloutFile;
+
 let turn = 0;
 
 function editFiles(steps) {
@@ -231,6 +307,10 @@ async function runTurn(line) {
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);
   writeRoleFiles();
+  const usage = ofTurn(scenario.usage);
+  if (usage) reportUsage(usage);
+  const rollout = ofTurn(scenario.rollout);
+  if (rollout) writeRollout(rollout);
   const reports = [scenario.report ?? []].flat();
   if (process.env.PACT_AGENT_MCP_URL && reports.length > 0) {
     const report = reports[Math.min(turn, reports.length - 1)];

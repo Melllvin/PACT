@@ -1,0 +1,31 @@
+{
+  "hook_event_name": "Status",
+  "session_id": "00000000-0000-4000-8000-000000000002",
+  "transcript_path": "/home/user/.claude/projects/-work/00000000-0000-4000-8000-000000000001.jsonl",
+  "cwd": "/work",
+  "model": {
+    "id": "claude-opus-4-5",
+    "display_name": "Opus"
+  },
+  "workspace": {
+    "current_dir": "/work",
+    "project_dir": "/work"
+  },
+  "version": "2.1.316",
+  "output_style": {
+    "name": "default"
+  },
+  "cost": {
+    "total_cost_usd": 0.42,
+    "total_duration_ms": 120000,
+    "total_api_duration_ms": 45000,
+    "total_lines_added": 12,
+    "total_lines_removed": 3
+  },
+  "context_window": {
+    "total_input_tokens": 15234,
+    "total_output_tokens": 4521,
+    "context_window_size": 200000
+  },
+  "exceeds_200k_tokens": false
+}

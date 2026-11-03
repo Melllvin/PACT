@@ -1,6 +1,6 @@
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -357,5 +357,77 @@ describe('fake CLI', () => {
       'utf8',
     );
     expect(mockup).toContain('<h1>écran de connexion</h1>');
+  });
+
+  it('runs the statusLine of its settings with Claude Code’s payload, one per turn (005 R9)', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'pact-fake-'));
+    const script = join(tmp, 'status.mjs');
+    await writeFile(
+      script,
+      `import { appendFileSync, readFileSync } from 'node:fs';
+appendFileSync(${JSON.stringify(join(tmp, 'payloads'))}, readFileSync(0, 'utf8') + '\\n');
+console.log('PACT · 5 h 62 %');`,
+    );
+    const settings = {
+      statusLine: { type: 'command', command: `"${process.execPath}" "${script}"` },
+    };
+    const fake = await runFake('usage-report', {
+      args: ['--session-id', 's-1', '--settings', JSON.stringify(settings)],
+    });
+    await fake.waitForPrompt(1);
+    fake.send('un');
+    await fake.waitFor('Statut : PACT · 5 h 62 %');
+    await fake.waitForPrompt(2);
+    fake.send('deux');
+    await fake.waitForPrompt(3);
+    const payloads = (await readFile(join(tmp, 'payloads'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(payloads[0]).toMatchObject({
+      session_id: 's-1',
+      context_window: { total_input_tokens: 1200, total_output_tokens: 0 },
+      rate_limits: {
+        five_hour: { used_percentage: 62, resets_at: 1793721600 },
+        seven_day: { used_percentage: 18, resets_at: 1793721600 + 5 * 86_400 },
+      },
+    });
+    // Before a first answer, with an API key: no rate_limits at all.
+    expect(payloads[1]).not.toHaveProperty('rate_limits');
+    expect(payloads[1]).toMatchObject({ context_window: { total_input_tokens: 1500 } });
+  });
+
+  it('appends Codex token counts to the rollout of its session (005 R9)', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'pact-fake-'));
+    const fake = await runFake('usage-rollout', {
+      args: ['--session-id', 's-2'],
+      env: { CODEX_HOME: tmp },
+    });
+    await fake.waitForPrompt(1);
+    fake.send('un');
+    await fake.waitForPrompt(2);
+    fake.send('deux');
+    await fake.waitForPrompt(3);
+    const [year] = await readdir(join(tmp, 'sessions'));
+    const [month] = await readdir(join(tmp, 'sessions', year ?? ''));
+    const [day] = await readdir(join(tmp, 'sessions', year ?? '', month ?? ''));
+    const dir = join(tmp, 'sessions', year ?? '', month ?? '', day ?? '');
+    const files = await readdir(dir);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^rollout-.+-s-2\.jsonl$/);
+    const lines = (await readFile(join(dir, files[0] ?? ''), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { payload: Record<string, unknown> });
+    expect(lines[0]?.payload).toMatchObject({
+      type: 'token_count',
+      info: { total_token_usage: { input_tokens: 900 } },
+      rate_limits: {
+        primary: { used_percent: 18, window_minutes: 300, resets_at: 1793721600 },
+        secondary: { used_percent: 4, window_minutes: 10_080 },
+      },
+    });
+    expect(lines[1]?.payload).toMatchObject({ rate_limits: { primary: { used_percent: 25 } } });
+    expect(lines[1]?.payload.rate_limits).not.toHaveProperty('secondary');
   });
 });

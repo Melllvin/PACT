@@ -18,6 +18,7 @@
 | `label` | string | « 5 h », « semaine », « semaine · Opus » |
 | `usedPercent` | number | ≥ 0, peut dépasser 100 |
 | `resetsAt` | date ISO \| null | |
+| `minutes` | entier \| null | durée de la fenêtre (300, 10080…), `null` inconnue ; départage « la plus courte » (R4) |
 
 ### UsageReading
 

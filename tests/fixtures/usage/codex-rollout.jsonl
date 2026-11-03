@@ -1,0 +1,6 @@
+{"timestamp": "2026-11-03T13:58:00.000Z", "type": "session_meta", "payload": {"id": "00000000-0000-4000-8000-000000000003", "cwd": "/work", "cli_version": "0.163.0"}}
+{"timestamp": "2026-11-03T13:58:05.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": null, "rate_limits": null}}
+{"timestamp": "2026-11-03T13:59:00.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {"input_tokens": 8000, "cached_input_tokens": 2000, "output_tokens": 1500, "reasoning_output_tokens": 300, "total_tokens": 9500}}, "rate_limits": {"primary": {"used_percent": 12, "window_minutes": 300, "resets_at": 1793721600}, "secondary": {"used_percent": 3, "window_minutes": 10080, "resets_at": 1794067200}}}}
+{"type": "event_msg", "payload": {coupée
+{"timestamp": "2026-11-03T14:00:00.000Z", "type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {"input_tokens": 12000, "cached_input_tokens": 3000, "output_tokens": 2500, "reasoning_output_tokens": 500, "total_tokens": 14500}}, "rate_limits": {"primary": {"used_percent": 18, "window_minutes": 300, "resets_at": 1793721600}, "secondary": {"used_percent": 4, "window_minutes": 10080, "resets_at": 1794067200}}}}
+{"timestamp":"2026-11-03T14:00:01.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[]}}
