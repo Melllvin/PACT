@@ -222,17 +222,17 @@ fermé, la tuile disparaît et le worktree et la branche restent.
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T037 [P] [US4] Tests de `launch_agent` et `close_agent` dans `tests/integration/orchestrator/tools-agents.test.ts` :
+- [X] T037 [P] [US4] Tests de `launch_agent` et `close_agent` dans `tests/integration/orchestrator/tools-agents.test.ts` :
   - même refus que le lanceur (limite de 6, CLI absent, branche existante) ;
   - niveau d'autorisation de `PermissionService.resolve`, refus « Choisissez d'abord les autorisations dans PACT » sans niveau ;
   - consigne initiale ;
   - fermeture sans suppression du worktree ni de la branche ;
   - l'orchestrateur ne peut pas se fermer lui-même.
-- [ ] T038 [US4] Test e2e : lancement et fermeture d'un agent par le faux orchestrateur, worktree conservé, dans `tests/e2e/us16-orchestrator-agents.spec.ts`.
+- [X] T038 [US4] Test e2e : lancement et fermeture d'un agent par le faux orchestrateur, worktree conservé, dans `tests/e2e/us16-orchestrator-agents.spec.ts`.
 
 ### Implementation for User Story 4
 
-- [ ] T039 [US4] Implémenter `launch_agent` et `close_agent` dans `src/main/orchestrator/tools.ts`.
+- [X] T039 [US4] Implémenter `launch_agent` et `close_agent` dans `src/main/orchestrator/tools.ts`.
 
 **Checkpoint**: US1–US4.
 
