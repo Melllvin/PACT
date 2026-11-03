@@ -53,7 +53,8 @@ afterEach(() => {
 describe('UsageGauge', () => {
   it('shows the CLI, the percentage and the window used the most', () => {
     render(<UsageGauge state={state()} cliName="Claude Code" now={NOW} />);
-    expect(screen.getByRole('button', { name: /Claude Code 62 % · 5 h/ })).toBeTruthy();
+    // The same name whether the bar shows the long or the short form (narrow windows).
+    expect(screen.getByRole('button', { name: 'Claude Code 62 % · 5 h' })).toBeTruthy();
     const meter = screen.getByRole('meter', { name: 'Limite d’usage Claude Code' });
     expect(meter.getAttribute('aria-valuenow')).toBe('62');
     expect(meter.getAttribute('aria-valuetext')).toBe('62 % de la fenêtre 5 h');
@@ -108,6 +109,7 @@ describe('UsageGauge', () => {
     );
     const button = screen.getByRole('button');
     expect(button.textContent).toContain('lu il y a 20 min');
+    expect(button.getAttribute('aria-label')).toBe('Claude Code 62 % · 5 h, lu il y a 20 min');
     expect(button.className).toContain('opacity-50');
   });
 
