@@ -104,6 +104,30 @@ describe('loop:decide (004 T027)', () => {
   });
 });
 
+describe('publishRequest channels (004 T031)', () => {
+  it('creates the issues the user confirmed, or publishes nothing once refused', async () => {
+    const issues = {
+      confirm: vi.fn(() => Promise.resolve({ issues: [{ id: '0012', url: 'u' }] })),
+      refuse: vi.fn(() => Promise.resolve()),
+    };
+    const services = createOrchestratorServices({ issues } as never);
+    await expect(services['publishRequest:confirm']({ requestId })).resolves.toEqual({
+      issues: [{ id: '0012', url: 'u' }],
+    });
+    await services['publishRequest:refuse']({ requestId });
+    expect(issues.confirm).toHaveBeenCalledWith(requestId);
+    expect(issues.refuse).toHaveBeenCalledWith(requestId);
+  });
+
+  it('publishes nothing without the issue service', async () => {
+    const services = createOrchestratorServices({} as never);
+    await expect(services['publishRequest:confirm']({ requestId })).resolves.toEqual({
+      issues: [],
+    });
+    await expect(services['publishRequest:refuse']({ requestId })).resolves.toBeUndefined();
+  });
+});
+
 describe('roles:setProfiles (004 T016)', () => {
   it('saves the profiles and warns when the test is weaker than the dev', async () => {
     let saved: unknown;

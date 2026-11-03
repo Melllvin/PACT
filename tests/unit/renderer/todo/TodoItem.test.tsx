@@ -212,3 +212,37 @@ describe('TodoItem for a question', () => {
     expect(props.onOpenTerminal).toHaveBeenCalledWith(asking.id);
   });
 });
+
+// 004 T029 — « ◎ Créer N issues ? »: nothing is published before the user says so (FR-023).
+describe('TodoItem of issues to publish', () => {
+  it.each([
+    ['✓ Créer', 'onConfirmPublish'],
+    ['Refuser', 'onRefusePublish'],
+  ] as const)('« %s » answers the request', async (label, handler) => {
+    const user = userEvent.setup();
+    const callbacks = { onConfirmPublish: vi.fn(), onRefusePublish: vi.fn() };
+    const lead = agent(1, { state: 'working', role: 'orchestrator' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: 'r1:publish-issues',
+            agentId: lead.id,
+            kind: 'publish-issues',
+            title: '◎ Créer 2 issues ? · Claude Code 1 · Connexion, Export CSV',
+            actions: [],
+            publish: { requestId: 'r1' },
+          }}
+          agent={lead}
+          {...actions()}
+          {...callbacks}
+        />
+      </ul>,
+    );
+    expect(screen.getByText('◎ Créer 2 issues ?')).toBeTruthy();
+    expect(screen.getByText('Connexion, Export CSV')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Revue →' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: label }));
+    expect(callbacks[handler]).toHaveBeenCalledWith('r1');
+  });
+});

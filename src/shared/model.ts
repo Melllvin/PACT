@@ -279,6 +279,7 @@ export type FreeTerminal = z.infer<typeof freeTerminalSchema>;
 export type Workspace = z.infer<typeof workspaceSchema>;
 export type RoleProfile = z.infer<typeof roleProfileSchema>;
 export type Issue = z.infer<typeof issueSchema>;
+export type PublishRequest = z.infer<typeof publishRequestSchema>;
 export type Loop = z.infer<typeof loopSchema>;
 export type RecentProject = z.infer<typeof recentProjectSchema>;
 export type CliDefinition = z.infer<typeof cliDefinitionSchema>;
@@ -309,10 +310,13 @@ export type TodoItem = {
   request?: { id: string; message: string };
   /** 004 FR-018 — the loop stopped after 3 rounds, for `loop-escalated`. */
   loop?: { issueId: string };
+  /** 004 FR-023 — the issues the orchestrator asks to publish, for `publish-issues`. */
+  publish?: { requestId: string };
 };
 export type TodoKind =
   | 'answer'
   | 'integration-request'
+  | 'publish-issues'
   | 'loop-escalated'
   | 'overlap'
   | 'rate-limit'

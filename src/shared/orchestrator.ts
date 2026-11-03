@@ -22,6 +22,8 @@ export const orchestratorEventSchema = z.object({
     'report-missing',
     'loop',
     'overlap',
+    // 004 US3 — the issues published, or not.
+    'publish',
   ]),
   state: agentStateSchema,
   summary: z.string(),
@@ -43,6 +45,7 @@ export const ORCHESTRATOR_ACTION_TOOLS = [
   'run_tests',
   'start_loop',
   'next_round',
+  'publish_issues',
 ] as const;
 
 export const orchestratorActionSchema = z.object({

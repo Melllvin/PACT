@@ -180,6 +180,21 @@ describe('agent actions', () => {
     });
   });
 
+  it('follows the issues and answers a request to publish them (004 US3)', async () => {
+    const { store, invoke, emit } = await setup();
+    const requestId = '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b';
+    const request = { id: requestId, issueIds: ['0012'], requestedAt: '2026-11-03T00:00:00.000Z' };
+    emit('workspace:issues', { workspaceId: 'w1', issues: [], publishRequests: [request] });
+    const [first, second] = store.getState().workspaces;
+    expect(first?.publishRequests).toEqual([request]);
+    expect(second?.publishRequests).toEqual([]);
+
+    await store.getState().confirmPublish(requestId);
+    expect(invoke).toHaveBeenCalledWith('publishRequest:confirm', { requestId });
+    await store.getState().refusePublish(requestId);
+    expect(invoke).toHaveBeenCalledWith('publishRequest:refuse', { requestId });
+  });
+
   it('cancels the scheduled resume (FR-036)', async () => {
     const { store, invoke } = await setup();
     await store.getState().cancelAutoResume(id);

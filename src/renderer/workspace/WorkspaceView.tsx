@@ -45,6 +45,9 @@ export type AgentActions = {
   onRefuseIntegration?: (requestId: string) => void;
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
   onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
+  /** 004 FR-023 — « Créer » / « Refuser » of the issues the orchestrator asks to publish. */
+  onConfirmPublish?: (requestId: string) => void;
+  onRefusePublish?: (requestId: string) => void;
   /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
   onOpenTerminal?: (agentId: string) => void;
 };

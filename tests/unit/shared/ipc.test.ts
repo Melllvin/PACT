@@ -193,6 +193,14 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       { workspaceId: 'w1', issueId: '0012-connexion', decision: 'retry' },
     ],
   },
+  'publishRequest:confirm': {
+    valid: { requestId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b' },
+    invalid: [{ requestId: 'r1' }, {}],
+  },
+  'publishRequest:refuse': {
+    valid: { requestId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b' },
+    invalid: [{ requestId: 'r1' }, {}],
+  },
   'roles:setProfiles': {
     valid: {
       workspaceId: 'w1',
@@ -269,6 +277,7 @@ describe('IPC event schemas', () => {
       'term:data',
       'term:exit',
       'workspace:integrationRequests',
+      'workspace:issues',
       'workspace:loops',
       'workspace:status',
     ]);

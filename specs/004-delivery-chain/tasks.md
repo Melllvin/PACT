@@ -99,10 +99,10 @@ après un run PACT à 0 sur le tree courant.
 `register_issue` → `ready` et `proposed` ; `publish_issues` → À faire « ◎ Créer N issues ? », rien
 publié avant confirmation.
 
-- [ ] T028 [P] [US3] Tests rouges `tests/integration/orchestrator/issues.test.ts` : `register_issue { path }` relatif à `.pact/issues/` (chemin hors du dossier refusé), `id` = nom sans `.md`, `title` = premier `# `, `ready` si critères Given/When/Then et aucune question ouverte sinon `proposed` avec ce qui manque ; `list_issues` ; `publish_issues` refusé sans dépôt distant ou sans `gh` connecté, sinon demande (une seule par workspace, la nouvelle remplace) ; confirmation → `gh issue create` (commande simulée), `remote { number, url }`, événement `publish` ; trace (FR-024) : `pr` renseigné quand l'intégration de la branche ouvre une PR ; refus → `publish` `refused`.
-- [ ] T029 [P] [US3] Tests renderer : `publish-issues` « ◎ Créer N issues ? » avec les titres, Créer / Refuser, dans `tests/unit/shared/todo.test.ts` et `TodoItem.test.tsx`.
-- [ ] T030 [US3] e2e `tests/e2e/us20-issues.spec.ts`.
-- [ ] T031 [US3] Implémenter `register_issue`, `list_issues`, `publish_issues` (`src/main/orchestrator/tools.ts`, service `src/main/orchestrator/issues.ts`), IPC `publishRequest:confirm` / `refuse`, À faire.
+- [X] T028 [P] [US3] Tests rouges `tests/integration/orchestrator/issues.test.ts` : `register_issue { path }` relatif à `.pact/issues/` (chemin hors du dossier refusé), `id` = nom sans `.md`, `title` = premier `# `, `ready` si critères Given/When/Then et aucune question ouverte sinon `proposed` avec ce qui manque ; `list_issues` ; `publish_issues` refusé sans dépôt distant ou sans `gh` connecté, sinon demande (une seule par workspace, la nouvelle remplace) ; confirmation → `gh issue create` (commande simulée), `remote { number, url }`, événement `publish` ; trace (FR-024) : `pr` renseigné quand l'intégration de la branche ouvre une PR ; refus → `publish` `refused`.
+- [X] T029 [P] [US3] Tests renderer : `publish-issues` « ◎ Créer N issues ? » avec les titres, Créer / Refuser, dans `tests/unit/shared/todo.test.ts` et `TodoItem.test.tsx`.
+- [X] T030 [US3] e2e `tests/e2e/us20-issues.spec.ts`.
+- [X] T031 [US3] Implémenter `register_issue`, `list_issues`, `publish_issues` (`src/main/orchestrator/tools.ts`, service `src/main/orchestrator/issues.ts`), IPC `publishRequest:confirm` / `refuse`, À faire.
 
 ---
 

@@ -7,6 +7,7 @@ type Overlap = { agents: readonly [string, string]; files: readonly string[] };
 const ORDER: TodoKind[] = [
   'answer',
   'integration-request',
+  'publish-issues',
   'loop-escalated',
   'overlap',
   'rate-limit',
@@ -47,7 +48,7 @@ const shellName = (path: string) => (path.split(/[\\/]/).pop() ?? path).replace(
 /** The À faire items of a workspace, derived and never stored (data-model TodoItem, FR-027). */
 export function deriveTodos(
   workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'mainBranch'> &
-    Partial<Pick<Workspace, 'integrationRequests' | 'loops'>>,
+    Partial<Pick<Workspace, 'integrationRequests' | 'loops' | 'issues' | 'publishRequests'>>,
   names: (cliId: string) => string,
   /** The agents with changes to review (`review:pending`). */
   toReview: readonly string[] = [],
@@ -74,6 +75,25 @@ export function deriveTodos(
       },
     ];
   });
+  // « ◎ Créer N issues ? »: nothing leaves the machine before the user says so (004 FR-023).
+  const lead = agents.find((agent) => agent.role === 'orchestrator');
+  const publish = lead
+    ? (workspace.publishRequests ?? []).map((request): TodoItem => {
+        const titles = request.issueIds.map(
+          (id) => (workspace.issues ?? []).find((issue) => issue.id === id)?.title ?? id,
+        );
+        const count = request.issueIds.length;
+        const name = `${names(lead.cliId)} ${String(lead.position)}`;
+        return {
+          id: `${request.id}:publish-issues`,
+          agentId: lead.id,
+          kind: 'publish-issues',
+          title: `◎ Créer ${String(count)} issue${count > 1 ? 's' : ''} ? · ${name} · ${titles.join(', ')}`,
+          actions: [],
+          publish: { requestId: request.id },
+        };
+      })
+    : [];
   // « ✕ Boucle arrêtée »: 3 rounds without the tests passing, the user decides (004 FR-018).
   const loops = (workspace.loops ?? []).flatMap((loop): TodoItem[] =>
     loop.state === 'escalated' && byId.has(loop.devAgentId)
@@ -112,7 +132,7 @@ export function deriveTodos(
     actions: [],
   }));
   // Array.prototype.sort is stable: the tile order holds within a kind.
-  return [...todos, ...requests, ...loops, ...common, ...terminals].sort(
+  return [...todos, ...requests, ...publish, ...loops, ...common, ...terminals].sort(
     (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind),
   );
 }

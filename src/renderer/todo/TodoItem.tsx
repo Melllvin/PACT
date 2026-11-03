@@ -29,11 +29,13 @@ export function TodoItem({
   onConfirmIntegration,
   onRefuseIntegration,
   onDecideLoop,
+  onConfirmPublish,
+  onRefusePublish,
   onOpenTerminal,
 }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
-  const { request, loop } = todo;
+  const { request, loop, publish } = todo;
   const separator = <span className="sr-only">{SEPARATOR}</span>;
 
   if (todo.kind === 'info') {
@@ -54,7 +56,8 @@ export function TodoItem({
       className={cn(
         'flex origin-top animate-unfold flex-col gap-2.5 overflow-hidden rounded-xl border border-white/6 bg-surface p-3 motion-reduce:animate-none',
         todo.kind === 'answer' && 'border-waiting/30 bg-waiting/6',
-        todo.kind === 'integration-request' && 'border-primary/30 bg-primary/6',
+        (todo.kind === 'integration-request' || todo.kind === 'publish-issues') &&
+          'border-primary/30 bg-primary/6',
         (todo.kind === 'rate-limit' || todo.kind === 'loop-escalated') &&
           'border-destructive/30 bg-destructive/6',
         todo.kind === 'overlap' && 'border-waiting/30 bg-waiting/6',
@@ -119,7 +122,26 @@ export function TodoItem({
           </Button>
         </div>
       )}
-      {agent && !request && !loop && todo.kind !== 'overlap' && (
+      {publish && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            variant="accept"
+            onClick={() => {
+              onConfirmPublish?.(publish.requestId);
+            }}
+          >
+            ✓ Créer
+          </Button>
+          <Button
+            onClick={() => {
+              onRefusePublish?.(publish.requestId);
+            }}
+          >
+            Refuser
+          </Button>
+        </div>
+      )}
+      {agent && !request && !loop && !publish && todo.kind !== 'overlap' && (
         <TileActions
           state={agent.state}
           question={todo.actions.includes('open-terminal')}

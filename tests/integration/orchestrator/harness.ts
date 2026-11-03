@@ -11,6 +11,7 @@ import { PermissionService } from '../../../src/main/agents/permission-service';
 import { GitService } from '../../../src/main/git/git-service';
 import { createAgentTools } from '../../../src/main/orchestrator/agent-tools';
 import { IntegrationRequests } from '../../../src/main/orchestrator/integration-requests';
+import { IssueService } from '../../../src/main/orchestrator/issues';
 import { LoopService } from '../../../src/main/orchestrator/loop-service';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
 import { createOrchestratorTools } from '../../../src/main/orchestrator/tools';
@@ -106,6 +107,7 @@ export async function createHarness() {
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
           loops,
+          issues,
           clis: () => registry.list(),
           permissions,
           log: (entry) => {
@@ -152,6 +154,29 @@ export async function createHarness() {
       orchestrator.notice(workspaceId, notice);
       reports.push({ workspaceId, ...notice });
     },
+  });
+
+  /** `gh` as a suite fakes it (004 US3): each call, and what answers it. */
+  const gh = {
+    calls: [] as { args: string[]; cwd: string }[],
+    answer: (args: string[]): Promise<string> =>
+      args[0] === 'issue'
+        ? Promise.resolve(`https://github.com/pact/test/issues/${String(gh.calls.length)}\n`)
+        : Promise.resolve('{"url":"https://github.com/pact/test"}'),
+  };
+  /** What `workspace:issues` announced, in order. */
+  const issueChanges: { workspaceId: string; issues: unknown[]; publishRequests: unknown[] }[] = [];
+  const issues = new IssueService({
+    workspaces,
+    gh: (args, cwd) => {
+      gh.calls.push({ args, cwd });
+      return gh.answer(args);
+    },
+    notify: (workspaceId, notice) => {
+      orchestrator.notice(workspaceId, notice);
+      reports.push({ workspaceId, ...notice });
+    },
+    onChange: (workspaceId, change) => issueChanges.push({ workspaceId, ...change }),
   });
 
   const permissions = new PermissionService({ stores, workspaces });
@@ -255,6 +280,9 @@ export async function createHarness() {
     actionsHeard,
     loops,
     reports,
+    issues,
+    gh,
+    issueChanges,
     get manager() {
       return manager;
     },

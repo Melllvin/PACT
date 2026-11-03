@@ -22,6 +22,7 @@ import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
 import type { WaitResult } from './events';
 import type { IntegrationRequests } from './integration-requests';
+import type { IssueService } from './issues';
 import type { LoopService } from './loop-service';
 import type { McpTool, ToolResult } from './mcp';
 
@@ -47,6 +48,8 @@ export type ToolDependencies = {
   requests: Pick<IntegrationRequests, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
   loops: Pick<LoopService, 'start' | 'next' | 'get'>;
+  /** 004 US3 — the issues of the workspace, published once the user confirms. */
+  issues: Pick<IssueService, 'register' | 'list' | 'requestPublish'>;
   /** The journal « ◎ Actions »: each action, done or refused (US5, FR-021). */
   log?: (entry: ActionEntry) => void;
 };
@@ -511,6 +514,66 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       },
     ),
     tool(
+      'register_issue',
+      'Enregistre une issue écrite dans .pact/issues/ de ton worktree : PACT la lit et dit si elle est prête (critères Given/When/Then, aucune question ouverte).',
+      {
+        path: {
+          type: 'string',
+          minLength: 1,
+          description: 'Relatif à .pact/issues/, ex. 0012-connexion.md.',
+        },
+      },
+      ['path'],
+      async (args) => {
+        const { issue, missing } = await loopRefusal(() =>
+          deps.issues.register(orchestratorId, stringArg(args, 'path')),
+        );
+        const view = { id: issue.id, title: issue.title, state: issue.state };
+        return reply(
+          missing.length === 0
+            ? `${issue.id} : ${issue.state}.`
+            : `${issue.id} : ${issue.state}. Manque : ${missing.join(' ')}`,
+          { issue: view, missing },
+        );
+      },
+    ),
+    tool(
+      'list_issues',
+      'Liste les issues du workspace : état, publication, branche, agents et PR.',
+      {},
+      [],
+      () => {
+        const issues = deps.issues.list(orchestratorId);
+        return Promise.resolve(
+          reply(
+            issues.map((i) => `${i.id} · ${i.title} · ${i.state}`).join('\n') || 'Aucune issue.',
+            {
+              issues,
+            },
+          ),
+        );
+      },
+    ),
+    tool(
+      'publish_issues',
+      'Demande à l’utilisateur de publier des issues prêtes sur le dépôt distant ; rien n’est publié avant sa confirmation. Le résultat arrive par wait_for_agents (événement publish).',
+      {
+        ids: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 20 },
+      },
+      ['ids'],
+      async (args) => {
+        const ids = (args as { ids?: unknown }).ids;
+        if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) {
+          throw new Refusal('Argument « ids » : liste d’identifiants attendue.');
+        }
+        const request = await loopRefusal(() => deps.issues.requestPublish(orchestratorId, ids));
+        return reply(`Demande envoyée à l’utilisateur : ${request.issueIds.join(', ')}.`, {
+          requestId: request.id,
+          status: 'waiting-user',
+        });
+      },
+    ),
+    tool(
       'start_loop',
       'Démarre la boucle dev ↔ test d’une issue prête (3 tours au plus) : PACT compte les tours, valide le verdict du test et fait la preuve par ses propres tests.',
       { issue: { type: 'string', minLength: 1 }, dev: agentArgument, test: agentArgument },
@@ -575,6 +638,8 @@ function describe(event: OrchestratorEvent, name: string): string {
     case 'loop':
     case 'overlap':
       return `${name} : ${event.summary}`;
+    case 'publish':
+      return event.summary;
   }
 }
 
