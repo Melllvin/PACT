@@ -5,14 +5,20 @@ import {
   agentStateSchema,
   cliDefinitionSchema,
   freeTerminalSchema,
+  issueSchema,
+  loopSchema,
   permissionPreferenceSchema,
+  publishRequestSchema,
   recentProjectsSchema,
   reviewCommentSchema,
+  roleProfileSchema,
   scheduledResumeSchema,
   workspaceSchema,
   type Agent,
   type Workspace,
 } from '../../../src/shared/model';
+import { agentDraftSchema, draftRole } from '../../../src/shared/ipc';
+import { DEFAULT_TEST_PATHS } from '../../../src/shared/model';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const now = '2026-09-24T10:00:00.000Z';
@@ -38,6 +44,7 @@ const agent = (position: number, overrides: Partial<Agent> = {}): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  effort: null,
   ...overrides,
 });
 
@@ -52,6 +59,11 @@ const workspace = (agents: Agent[]): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: now,
   status: 'available',
 });
@@ -307,5 +319,153 @@ describe('orchestrator (003 T002)', () => {
         workspace([agent(1, { role: 'orchestrator' }), agent(2, { role: 'orchestrator' })]),
       ).success,
     ).toBe(false);
+  });
+});
+
+describe('delivery chain (004 T004)', () => {
+  const from003 = (agents: unknown[] = []): unknown => ({
+    id: 'w1',
+    path: '/repo',
+    name: 'repo',
+    mainBranch: 'main',
+    agents,
+    freeTerminals: [],
+    quickLaunchCounters: { freeTerminal: 0 },
+    permissionOverride: null,
+    testCommand: null,
+    integrationRequests: [],
+    roleProfiles: {},
+    issues: [],
+    loops: [],
+    testPaths: [...DEFAULT_TEST_PATHS],
+    publishRequests: [],
+    lastOpenedAt: now,
+    status: 'available',
+  });
+
+  it('reads a workspace file of 003 without a migration', () => {
+    const old: Partial<Agent> = agent(1, { role: 'orchestrator' });
+    delete old.effort;
+    const ws = workspaceSchema.parse(from003([old]));
+    expect(ws).toMatchObject({
+      roleProfiles: {},
+      issues: [],
+      loops: [],
+      publishRequests: [],
+      testPaths: ['**/*.test.*', '**/*.spec.*', 'tests/**', 'test/**', '**/__tests__/**'],
+    });
+    expect(ws.agents[0]).toMatchObject({ role: 'orchestrator', effort: null });
+  });
+
+  it.each(['orchestrator', 'spec', 'design', 'dev', 'test', 'recap', null])(
+    'accepts the role %s',
+    (role) => {
+      expect(agentSchema.parse({ ...agent(1), role }).role).toBe(role);
+    },
+  );
+
+  it('refuses another role or effort', () => {
+    expect(agentSchema.safeParse({ ...agent(1), role: 'chef' }).success).toBe(false);
+    expect(agentSchema.safeParse({ ...agent(1), effort: 'énorme' }).success).toBe(false);
+    for (const effort of ['low', 'medium', 'high', 'xhigh', 'max', null]) {
+      expect(agentSchema.parse({ ...agent(1), effort }).effort).toBe(effort);
+    }
+  });
+
+  it('describes a role profile, escalation off by default', () => {
+    expect(
+      roleProfileSchema.parse({ cliId: 'claude-code', model: null, effort: null, maxModel: null }),
+    ).toEqual({
+      cliId: 'claude-code',
+      model: null,
+      effort: null,
+      maxModel: null,
+      escalate: false,
+    });
+    const ws = workspaceSchema.parse({
+      ...(from003() as object),
+      roleProfiles: { dev: { cliId: 'codex', model: 'gpt-5.5', effort: 'medium', maxModel: null } },
+    });
+    expect(ws.roleProfiles.dev?.escalate).toBe(false);
+    expect(
+      workspaceSchema.safeParse({
+        ...(from003() as object),
+        roleProfiles: { chef: { cliId: 'codex', model: null, effort: null, maxModel: null } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('describes an issue, with no remote and an empty trace by default', () => {
+    const issue = issueSchema.parse({
+      id: '0012-connexion',
+      title: 'Connexion',
+      path: '.pact/issues/0012-connexion.md',
+      state: 'proposed',
+    });
+    expect(issue).toMatchObject({ remote: null, trace: { branch: null, agents: [], pr: null } });
+    for (const state of ['proposed', 'ready', 'in-progress', 'done', 'escalated', 'abandoned']) {
+      expect(issueSchema.safeParse({ ...issue, state }).success).toBe(true);
+    }
+    expect(issueSchema.safeParse({ ...issue, state: 'fini' }).success).toBe(false);
+    expect(issueSchema.safeParse({ ...issue, path: '../hors.md' }).success).toBe(false);
+  });
+
+  it('keeps a loop to 3 rounds, with two different agents', () => {
+    const loop = {
+      issueId: '0012-connexion',
+      devAgentId: uuid(1),
+      testAgentId: uuid(2),
+      round: 1,
+      rounds: [{ n: 1, startedAt: now }],
+      state: 'running',
+    };
+    const parsed = loopSchema.parse(loop);
+    expect(parsed.escalatedModel).toBeNull();
+    expect(parsed.rounds[0]).toEqual({
+      n: 1,
+      startedAt: now,
+      reports: [],
+      proof: null,
+      testerTouched: [],
+    });
+    expect(loopSchema.safeParse({ ...loop, round: 4 }).success).toBe(false);
+    expect(loopSchema.safeParse({ ...loop, round: 0 }).success).toBe(false);
+    expect(loopSchema.safeParse({ ...loop, testAgentId: uuid(1) }).success).toBe(false);
+    expect(
+      loopSchema.safeParse({
+        ...loop,
+        rounds: [{ n: 1, startedAt: now, proof: { tree: 'a'.repeat(40), exitCode: 0, at: now } }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('asks to publish 1 to 20 issues, one request per workspace', () => {
+    const request = (issueIds: string[]) => ({ id: uuid(9), issueIds, requestedAt: now });
+    expect(publishRequestSchema.safeParse(request(['0012'])).success).toBe(true);
+    expect(publishRequestSchema.safeParse(request([])).success).toBe(false);
+    const many = Array.from({ length: 21 }, (_, i) => String(i));
+    expect(publishRequestSchema.safeParse(request(many)).success).toBe(false);
+    expect(
+      workspaceSchema.safeParse({
+        ...(from003() as object),
+        publishRequests: [request(['a']), { ...request(['b']), id: uuid(8) }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('reads a draft of 003 with « orchestrator: true » as the orchestrator role', () => {
+    const base = {
+      cliId: 'claude-code',
+      model: null,
+      permissionLevel: 'always-allow',
+      baseBranch: null,
+      branch: null,
+      port: null,
+      startCommand: null,
+    };
+    expect(draftRole(agentDraftSchema.parse({ ...base, orchestrator: true }))).toBe('orchestrator');
+    expect(draftRole(agentDraftSchema.parse({ ...base, role: 'dev', effort: 'high' }))).toBe('dev');
+    expect(draftRole(agentDraftSchema.parse(base))).toBeNull();
+    expect(agentDraftSchema.safeParse({ ...base, role: 'chef' }).success).toBe(false);
   });
 });

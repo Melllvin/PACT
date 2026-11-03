@@ -1,4 +1,17 @@
 import { z } from 'zod';
+import { effortSchema, gitIdSchema, isoDate, repoPathSchema, roleSchema } from './primitives';
+import { storedReportSchema } from './report';
+
+export {
+  EFFORTS,
+  ROLES,
+  effortSchema,
+  gitIdSchema,
+  repoPathSchema,
+  roleSchema,
+  type Effort,
+  type Role,
+} from './primitives';
 
 /** Agent colors, assigned in this order at creation and never reassigned (FR-016). */
 export const AGENT_COLORS = ['purple', 'cyan', 'green', 'magenta', 'yellow', 'slate'] as const;
@@ -26,8 +39,6 @@ export const WORKING_STATES: readonly z.infer<typeof agentStateSchema>[] = [
 
 export const permissionLevelSchema = z.enum(['always-allow', 'ask-sensitive', 'always-ask']);
 
-const isoDate = z.iso.datetime();
-
 export const scheduledResumeSchema = z.object({
   agentId: z.string(),
   at: isoDate,
@@ -45,16 +56,6 @@ export const agentErrorSchema = z.object({
   kind: z.enum(['crash', 'rate-limit']),
   message: z.string(),
 });
-
-/** A path inside the repository, `/`-separated, never absolute nor escaping it (002). */
-export const repoPathSchema = z
-  .string()
-  .min(1)
-  .refine((path) => !path.startsWith('/') && !/(^|\/)\.\.(\/|$)/.test(path), {
-    message: 'chemin relatif au dépôt attendu',
-  });
-
-export const gitIdSchema = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/);
 
 export const reviewCommentSchema = z.object({
   id: z.uuid(),
@@ -94,9 +95,93 @@ export const agentSchema = z.object({
   review: agentReviewSchema.default(() => ({ seen: {}, comments: [] })),
   /** Set while an `awaiting-answer` agent asks a question, not a permission (FR-024a). */
   awaiting: z.enum(['question']).optional(),
-  /** 003 — the orchestrator of its workspace, at most one (R8). */
-  role: z.enum(['orchestrator']).nullable().default(null),
+  /** 003 — the orchestrator of its workspace, at most one (R8); 004 — or another role (FR-001). */
+  role: roleSchema.nullable().default(null),
+  /** 004 R2 — `null`: the CLI's own. */
+  effort: effortSchema.nullable().default(null),
 });
+
+/** 004 R2 — what an agent of a role is launched with; `null` model: the CLI's own. */
+export const roleProfileSchema = z.object({
+  cliId: z.string().min(1),
+  model: z.string().nullable(),
+  effort: effortSchema.nullable(),
+  /** The ceiling of the role; `null`: none (FR-002). */
+  maxModel: z.string().nullable(),
+  /** FR-007 — the third round goes to `maxModel`. */
+  escalate: z.boolean().default(false),
+});
+
+export const issueStateSchema = z.enum([
+  'proposed',
+  'ready',
+  'in-progress',
+  'done',
+  'escalated',
+  'abandoned',
+]);
+
+/** 004 — a file of `.pact/issues/` and where its work went (FR-022…FR-024). */
+export const issueSchema = z.object({
+  /** The file's name without `.md`, unique in the workspace. */
+  id: z.string().min(1),
+  title: z.string(),
+  /** Relative to the orchestrator's worktree, under `.pact/issues/`. */
+  path: repoPathSchema,
+  state: issueStateSchema,
+  remote: z.object({ number: z.int().positive(), url: z.url() }).nullable().default(null),
+  trace: z
+    .object({
+      branch: z.string().nullable(),
+      agents: z.array(z.uuid()),
+      pr: z.string().nullable(),
+    })
+    .default(() => ({ branch: null, agents: [], pr: null })),
+});
+
+const roundNumber = z.int().min(1).max(3);
+
+/** 004 R6 — one round of a loop: its reports and PACT's own run of the tests. */
+export const roundSchema = z.object({
+  n: roundNumber,
+  startedAt: isoDate,
+  reports: z.array(storedReportSchema).default([]),
+  proof: z.object({ tree: gitIdSchema, exitCode: z.int(), at: isoDate }).nullable().default(null),
+  /** Files outside the test paths the test agent changed in this round (FR-020). */
+  testerTouched: z.array(repoPathSchema).default([]),
+});
+
+/** 004 FR-017 — the dev ↔ test loop of an issue, 3 rounds at most (FR-018). */
+export const loopSchema = z
+  .object({
+    issueId: z.string().min(1),
+    devAgentId: z.uuid(),
+    testAgentId: z.uuid(),
+    round: roundNumber,
+    rounds: z.array(roundSchema).max(3),
+    state: z.enum(['running', 'passed', 'escalated', 'closed']),
+    escalatedModel: z.string().nullable().default(null),
+  })
+  .refine((loop) => loop.devAgentId !== loop.testAgentId, {
+    message: 'deux agents différents',
+    path: ['testAgentId'],
+  });
+
+/** 004 FR-023 — issues to create on the remote, waiting for the user. */
+export const publishRequestSchema = z.object({
+  id: z.uuid(),
+  issueIds: z.array(z.string().min(1)).min(1).max(20),
+  requestedAt: isoDate,
+});
+
+/** 004 R6 — what a test agent may change; the rest is the dev's. */
+export const DEFAULT_TEST_PATHS = [
+  '**/*.test.*',
+  '**/*.spec.*',
+  'tests/**',
+  'test/**',
+  '**/__tests__/**',
+];
 
 /** 003 — an integration the orchestrator asks for, waiting for the user (FR-017, FR-020). */
 export const integrationRequestSchema = z.object({
@@ -132,6 +217,13 @@ export const workspaceSchema = z
     testCommand: z.string().trim().min(1).nullable().default(null),
     /** 003 — integrations the orchestrator asked for, waiting for the user (R6). */
     integrationRequests: z.array(integrationRequestSchema).default([]),
+    /** 004 — absent roles take the default profile (R2). */
+    roleProfiles: z.partialRecord(roleSchema, roleProfileSchema).default({}),
+    issues: z.array(issueSchema).default([]),
+    loops: z.array(loopSchema).default([]),
+    testPaths: z.array(z.string().min(1)).default(() => [...DEFAULT_TEST_PATHS]),
+    /** At most one: a new one replaces the old one. */
+    publishRequests: z.array(publishRequestSchema).max(1).default([]),
     lastOpenedAt: isoDate,
     status: z.enum(['available', 'unavailable']),
   })

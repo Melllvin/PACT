@@ -100,6 +100,10 @@ export class FakeAdapter implements CliAdapter {
               PACT_ORCHESTRATOR_TOKEN: input.orchestrator.token,
             }
           : {}),
+        // 004 R5: the fake agent of a role reports with submit_report itself.
+        ...(input.agentMcp
+          ? { PACT_AGENT_MCP_URL: input.agentMcp.url, PACT_AGENT_MCP_TOKEN: input.agentMcp.token }
+          : {}),
       },
     };
   }

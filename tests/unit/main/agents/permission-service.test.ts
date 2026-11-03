@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PermissionService } from '../../../../src/main/agents/permission-service';
 import { openStores, type Stores } from '../../../../src/main/persistence/store';
 import type { Workspace } from '../../../../src/shared/model';
+import { DEFAULT_TEST_PATHS } from '../../../../src/shared/model';
 
 // FR-012, FR-035 — screen 1m choice: project > global > ask (show 1m).
 
@@ -19,6 +20,11 @@ const workspace: Workspace = {
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 };

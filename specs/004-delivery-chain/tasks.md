@@ -19,16 +19,16 @@ sont verts.
 
 - [X] T001 Ajouter la dépendance `marked` (version exacte, sans dépendance transitive) dans `package.json` ; vérifier `npm ls marked`.
 - [X] T002 [P] Créer `resources/skills/` (vide sauf `README.md` qui renvoie à contracts/skills.md) et l'ajouter aux `extraResources` du build comme le pont de hooks, dans `electron-builder.config.*` ; test de configuration dans `tests/unit/scripts/release-config.test.ts`.
-- [X] T003 [P] Étendre le faux CLI `tests/fixtures/fake-cli/fake-cli.mjs` : étapes `report` (appelle `submit_report` avec `PACT_AGENT_TOKEN` et l'URL `PACT_AGENT_MCP_URL`), `writeTests` / `writeProd` (fichiers sous `tests/` ou `src/`), `mockup` (écrit `design/mockups/<nom>.html`) ; documenter dans l'en-tête du fichier.
+- [X] T003 [P] Étendre le faux CLI `tests/fixtures/fake-cli/fake-cli.mjs` : étapes `report` (appelle `submit_report` avec `PACT_AGENT_MCP_TOKEN` (jamais le jeton des hooks) et l'URL `PACT_AGENT_MCP_URL`), `writeTests` / `writeProd` (fichiers sous `tests/` ou `src/`), `mockup` (écrit `design/mockups/<nom>.html`) ; documenter dans l'en-tête du fichier.
 
 ---
 
 ## Phase 2: Foundational (bloque toutes les stories)
 
-- [ ] T004 Tests rouges des schémas dans `tests/unit/shared/model.test.ts` : un fichier de workspace de 003 se lit sans migration avec `roleProfiles: {}`, `issues: []`, `loops: []`, `publishRequests: []`, `testPaths` par défaut `['**/*.test.*', '**/*.spec.*', 'tests/**', 'test/**', '**/__tests__/**']` ; `Agent.role` ∈ `'orchestrator' | 'spec' | 'design' | 'dev' | 'test' | 'recap' | null` (défaut `null`) ; `Agent.effort` ∈ `'low' | 'medium' | 'high' | 'xhigh' | 'max' | null` ; brouillon avec `orchestrator: true` vaut `role: 'orchestrator'`.
-- [ ] T005 Étendre `src/shared/model.ts` et `src/shared/ipc.ts` (brouillon `role`, `effort`) selon data-model.md : `RoleProfile { cliId, model: string | null, effort, maxModel: string | null, escalate: boolean (défaut false) }`, `Issue`, `Loop`, `Round`, `PublishRequest` ; `round` 1…3 ; `issueIds` 1 à 20.
-- [ ] T006 [P] Tests rouges puis `src/shared/report.ts` : schéma zod du rapport de relais (contracts/handoff-report.md), liste des champs manquants en français ; tests dans `tests/unit/shared/report.test.ts`.
-- [ ] T007 Jeton d'agent (R5) : tests rouges dans `tests/integration/orchestrator/agent-token.test.ts` (un agent avec rôle autre qu'orchestrateur reçoit un jeton qui n'ouvre que `submit_report` ; tout autre outil → `isError` « Outil réservé à l'orchestrateur » ; jeton révoqué à la fermeture), puis implémentation dans `src/main/orchestrator/orchestrator-service.ts` et `src/main/agents/agent-manager.ts`.
+- [X] T004 Tests rouges des schémas dans `tests/unit/shared/model.test.ts` : un fichier de workspace de 003 se lit sans migration avec `roleProfiles: {}`, `issues: []`, `loops: []`, `publishRequests: []`, `testPaths` par défaut `['**/*.test.*', '**/*.spec.*', 'tests/**', 'test/**', '**/__tests__/**']` ; `Agent.role` ∈ `'orchestrator' | 'spec' | 'design' | 'dev' | 'test' | 'recap' | null` (défaut `null`) ; `Agent.effort` ∈ `'low' | 'medium' | 'high' | 'xhigh' | 'max' | null` ; brouillon avec `orchestrator: true` vaut `role: 'orchestrator'`.
+- [X] T005 Étendre `src/shared/model.ts` et `src/shared/ipc.ts` (brouillon `role`, `effort`) selon data-model.md : `RoleProfile { cliId, model: string | null, effort, maxModel: string | null, escalate: boolean (défaut false) }`, `Issue`, `Loop`, `Round`, `PublishRequest` ; `round` 1…3 ; `issueIds` 1 à 20.
+- [X] T006 [P] Tests rouges puis `src/shared/report.ts` : schéma zod du rapport de relais (contracts/handoff-report.md), liste des champs manquants en français ; tests dans `tests/unit/shared/report.test.ts`.
+- [X] T007 Jeton d'agent (R5) : tests rouges dans `tests/integration/orchestrator/agent-token.test.ts` (un agent avec rôle autre qu'orchestrateur reçoit un jeton qui n'ouvre que `submit_report` ; tout autre outil → `isError` « Outil réservé à l'orchestrateur » ; jeton révoqué à la fermeture), puis implémentation dans `src/main/orchestrator/orchestrator-service.ts` et `src/main/agents/agent-manager.ts`.
 
 **Checkpoint**: schémas et jeton d'agent prêts ; 001–003 inchangés (suite complète verte).
 

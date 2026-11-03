@@ -71,6 +71,7 @@ const agent = (): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  effort: null,
 });
 
 type Options = ConstructorParameters<typeof IntegrationService>[0];

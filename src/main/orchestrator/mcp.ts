@@ -39,7 +39,12 @@ const param = (params: unknown, key: string): unknown =>
     ? (params as Record<string, unknown>)[key]
     : undefined;
 
-export async function handleMcp(body: unknown, tools: readonly McpTool[]): Promise<McpReply> {
+/** `refusal`: the answer to a tool this token does not open, instead of « Outil inconnu » (004 R5). */
+export async function handleMcp(
+  body: unknown,
+  tools: readonly McpTool[],
+  { refusal }: { refusal?: string } = {},
+): Promise<McpReply> {
   if (!isRequest(body)) return failure(null, -32600, 'Requête JSON-RPC 2.0 attendue');
   const { id, method, params } = body;
   // A notification gets no answer (MCP streamable HTTP).
@@ -65,6 +70,9 @@ export async function handleMcp(body: unknown, tools: readonly McpTool[]): Promi
       });
     case 'tools/call': {
       const tool = tools.find((t) => t.name === param(params, 'name'));
+      if (!tool && refusal !== undefined) {
+        return result(id, { content: [{ type: 'text', text: refusal }], isError: true });
+      }
       if (!tool) return failure(id, -32602, `Outil inconnu : ${String(param(params, 'name'))}`);
       try {
         return result(id, await tool.call(param(params, 'arguments') ?? {}));

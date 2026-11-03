@@ -21,7 +21,7 @@ le contrat, rien d'autre (FR-009).
 | CLI | Voie | Vérifiable |
 |-----|------|-----------|
 | Claude Code | plugin de session `--plugin-dir userData/roles/<agentId>/plugin` : `skills/<nom>/SKILL.md`, `.mcp.json` (jeton d'agent ou d'orchestrateur) | arguments du contrat d'adaptateur |
-| Codex | `-c developer_instructions="Tu es l'agent <rôle> de PACT. Lis et applique <chemin>/SKILL.md et <chemin>/pact-contract.md."` + `-c mcp_servers.pact.url=…` + `-c mcp_servers.pact.env_http_headers={ "X-Pact-Token" = "PACT_AGENT_TOKEN" }` | arguments du contrat d'adaptateur |
+| Codex | `-c developer_instructions="Tu es l'agent <rôle> de PACT. Lis et applique <chemin>/SKILL.md et <chemin>/pact-contract.md."` + `-c mcp_servers.pact.url=…` + `-c mcp_servers.pact.env_http_headers={ "X-Pact-Token" = "PACT_AGENT_MCP_TOKEN" }` | arguments du contrat d'adaptateur |
 | Générique | `.pact/ROLE.md` (concaténation skill + contrat), `/.pact/ROLE.md` dans `.git/info/exclude`, consigne « Lis .pact/ROLE.md » avant la première consigne | fichier, exclusion, `git status` propre |
 
 Aucune voie n'écrit dans `~/.claude`, `~/.codex` ni dans un fichier suivi du dépôt (FR-014, SC-007).

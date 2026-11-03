@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { IpcEvent, IpcEventChannel, IpcOutput, PactApi } from '../../../../src/shared/ipc';
 import type { Agent, Workspace } from '../../../../src/shared/model';
 import { createAppStore } from '../../../../src/renderer/store/app-store';
+import { DEFAULT_TEST_PATHS } from '../../../../src/shared/model';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
@@ -26,6 +27,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  effort: null,
   ...overrides,
 });
 
@@ -40,6 +42,11 @@ const workspace = (id: string, agents: Agent[] = []): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 });

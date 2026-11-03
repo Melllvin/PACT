@@ -21,7 +21,7 @@
 //                                   `MCP <tool> : <text>`. In string arguments, `{{prompt}}` is the
 //                                   prompt typed and `{{prompt.N}}` its N-th `|`-separated part
 //   report: object | object[]       calls `submit_report` with it on PACT_AGENT_MCP_URL, with the
-//                                   agent's PACT_AGENT_TOKEN (004 R5), and prints
+//                                   agent's PACT_AGENT_MCP_TOKEN (004 R5), and prints
 //                                   `MCP submit_report : <text>`; an array gives one report per
 //                                   turn, the last one repeated. `{{prompt}}` is filled as for `mcp`
 //   writeTests: string[]            writes `tests/<name>.test.ts` for each name (004)
@@ -233,7 +233,7 @@ async function runTurn(line) {
       'submit_report',
       fillDeep(report, line),
       process.env.PACT_AGENT_MCP_URL,
-      process.env.PACT_AGENT_TOKEN,
+      process.env.PACT_AGENT_MCP_TOKEN,
     );
     console.log(`MCP submit_report : ${text}`);
   }

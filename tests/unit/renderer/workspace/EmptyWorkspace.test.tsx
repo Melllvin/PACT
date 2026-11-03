@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceView } from '../../../../src/renderer/workspace/WorkspaceView';
 import type { Workspace } from '../../../../src/shared/model';
+import { DEFAULT_TEST_PATHS } from '../../../../src/shared/model';
 
 const workspace = (overrides: Partial<Workspace> = {}): Workspace => ({
   id: 'w1',
@@ -15,6 +16,11 @@ const workspace = (overrides: Partial<Workspace> = {}): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  roleProfiles: {},
+  issues: [],
+  loops: [],
+  testPaths: [...DEFAULT_TEST_PATHS],
+  publishRequests: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
   ...overrides,
