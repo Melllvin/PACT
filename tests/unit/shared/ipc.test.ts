@@ -201,6 +201,22 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
     valid: { requestId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b' },
     invalid: [{ requestId: 'r1' }, {}],
   },
+  'preview:list': {
+    valid: { agentId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b' },
+    invalid: [{ agentId: 'a1' }, {}],
+  },
+  'preview:decide': {
+    valid: {
+      agentId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b',
+      path: 'design/mockups/a.html',
+      decision: 'validated',
+      comment: 'Bien',
+    },
+    invalid: [
+      { agentId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b', path: '../a.html', decision: 'validated' },
+      { agentId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b', path: 'a.html', decision: 'maybe' },
+    ],
+  },
   'roles:setProfiles': {
     valid: {
       workspaceId: 'w1',
@@ -271,6 +287,7 @@ describe('IPC event schemas', () => {
       'orchestrator:action',
       'orchestrator:prompted',
       'orchestrator:report',
+      'preview:changed',
       'review:changed',
       'review:pending',
       'review:tests',

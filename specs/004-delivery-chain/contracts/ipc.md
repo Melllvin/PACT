@@ -24,7 +24,7 @@
 |-------|--------|-------|
 | `orchestrator:report` | `HandoffReport & { orchestratorId }` | bande « Rapports », onglet « ◎ Rapports » (FR-006a) |
 | `preview:changed` | `{ agentId, path }` | rafraîchir l'Aperçu (FR-027) |
-| `preview:blocked` | `{ agentId, url }` | « ressource externe bloquée » (FR-026) |
+| ~~`preview:blocked`~~ | — | remplacé à l'implémentation : le script que PACT ajoute à la page envoie `{ pactPreview, type: 'blocked', url }` par `postMessage` à l'onglet Aperçu (aucun aller-retour par le main) (FR-026) |
 
 Les listes du workspace (`issues`, `loops`, `publishRequests`) arrivent par l'événement de workspace
 existant, comme `integrationRequests` de 003.

@@ -24,6 +24,8 @@ export const orchestratorEventSchema = z.object({
     'overlap',
     // 004 US3 — the issues published, or not.
     'publish',
+    // 004 US4 — the user's decision on a mockup.
+    'mockup',
   ]),
   state: agentStateSchema,
   summary: z.string(),

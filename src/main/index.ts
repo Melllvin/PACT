@@ -3,8 +3,9 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron';
 import { IpcFailure } from '../shared/ipc';
+import { PREVIEW_SCHEME } from '../shared/preview';
 import { createAdapters } from './agents/adapters';
 import { AgentManager } from './agents/agent-manager';
 import { CliRegistry } from './agents/cli-registry';
@@ -18,6 +19,7 @@ import { GitService } from './git/git-service';
 import { createAgentServices, forwardTerminalEvents } from './ipc/agent-handlers';
 import { createEventEmitter, registerHandlers } from './ipc/handlers';
 import { createOrchestratorServices } from './ipc/orchestrator-handlers';
+import { createPreviewServices } from './ipc/preview-handlers';
 import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
@@ -29,7 +31,9 @@ import { createAgentTools } from './orchestrator/agent-tools';
 import { LoopService } from './orchestrator/loop-service';
 import { IssueService, ghCommand } from './orchestrator/issues';
 import { IntegrationService } from './review/integration-service';
-import { ReviewService } from './review/review-service';
+import { createPreviewHandler } from './preview/preview-protocol';
+import { PreviewService } from './preview/preview-service';
+import { ReviewService, watchRecursive } from './review/review-service';
 import { TestRunner } from './review/test-runner';
 import { applyTestMode, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
@@ -39,6 +43,11 @@ import { WorkspaceService } from './workspace/workspace-service';
 const AVAILABILITY_CHECK_MS = 3000;
 
 applyTestMode(app, process.env);
+
+// 004 US4 — the Aperçu's own scheme, declared before the app is ready (research R9).
+protocol.registerSchemesAsPrivileged([
+  { scheme: PREVIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 
 void app.whenReady().then(async () => {
   const rendererUrl = devServerUrl(app, process.env);
@@ -217,6 +226,22 @@ void app.whenReady().then(async () => {
       emit('workspace:loops', { workspaceId, ...change });
     },
   });
+  // 004 US4 — the Aperçu: an agent's worktree only, refreshed as its files change.
+  const preview = new PreviewService({
+    workspaces,
+    watch: watchRecursive,
+    onChanged: (agentId, path) => {
+      emit('preview:changed', { agentId, path });
+    },
+    notify: (workspaceId, notice) => {
+      orchestrator.notice(workspaceId, notice);
+      emit('orchestrator:report', { workspaceId, ...notice });
+    },
+  });
+  protocol.handle(
+    PREVIEW_SCHEME,
+    createPreviewHandler((agentId) => preview.worktreeOf(agentId)),
+  );
   // 004 US3 — the issues, published with gh once the user confirms (R8).
   const issues = new IssueService({
     workspaces,
@@ -329,6 +354,7 @@ void app.whenReady().then(async () => {
         pty,
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
+      ...createPreviewServices({ preview }),
       ...createOrchestratorServices({
         requests,
         orchestrator,
@@ -366,6 +392,7 @@ void app.whenReady().then(async () => {
     shutdown: async () => {
       workspaces.dispose();
       review.dispose();
+      preview.dispose();
       tests.dispose();
       integration.dispose();
       orchestrator.dispose();

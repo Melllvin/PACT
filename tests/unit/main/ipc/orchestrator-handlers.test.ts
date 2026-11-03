@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createOrchestratorServices } from '../../../../src/main/ipc/orchestrator-handlers';
+import { createPreviewServices } from '../../../../src/main/ipc/preview-handlers';
 import { IpcFailure } from '../../../../src/shared/ipc';
 
 // 003 T032 — integrationRequest:confirm and integrationRequest:refuse (contracts/ipc.md).
@@ -153,5 +154,29 @@ describe('roles:setProfiles (004 T016)', () => {
       warnings: ['Le profil test (haiku) est plus faible que le profil dev (sonnet).'],
     });
     expect(saved).toEqual({ id: 'w1', roleProfiles: profiles });
+  });
+});
+
+describe('preview channels (004 T035)', () => {
+  it('lists the files of the Aperçu and passes on a decision', async () => {
+    const preview = {
+      list: vi.fn(() => Promise.resolve([{ path: '.pact/recap.md', kind: 'recap' as const }])),
+      decide: vi.fn(),
+    };
+    const services = createPreviewServices({ preview });
+    await expect(services['preview:list']({ agentId: requestId })).resolves.toEqual({
+      files: [{ path: '.pact/recap.md', kind: 'recap' }],
+    });
+    await services['preview:decide']({
+      agentId: requestId,
+      path: 'design/mockups/a.html',
+      decision: 'refused',
+    });
+    expect(preview.decide).toHaveBeenCalledWith(
+      requestId,
+      'design/mockups/a.html',
+      'refused',
+      undefined,
+    );
   });
 });

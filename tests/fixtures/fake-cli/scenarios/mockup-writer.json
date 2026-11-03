@@ -1,0 +1,15 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "{{prompt.0}}",
+      "json": "{{prompt.1}}"
+    }
+  ],
+  "files": [
+    {
+      "write": "design/mockups/accueil.html",
+      "content": "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>Accueil</title></head>\n<body style=\"height: 4000px\"><h1>Accueil v1</h1><img alt=\"distante\" src=\"https://example.invalid/a.png\"></body></html>\n"
+    }
+  ]
+}

@@ -955,3 +955,25 @@ describe('the orchestrator’s reports in its Focus', () => {
     expect(screen.getByRole('tab', { name: 'Terminal', selected: true })).toBeDefined();
   });
 });
+
+// 004 T036 — the Aperçu of the agent in Focus (FR-025).
+describe('the Aperçu in the Focus', () => {
+  it('shows the files of the agent in Focus', async () => {
+    const user = userEvent.setup();
+    const design = agent(1, { role: 'design' });
+    const preview = {
+      list: vi.fn(() =>
+        Promise.resolve([{ path: 'design/mockups/a.html', kind: 'mockup' as const }]),
+      ),
+      decide: vi.fn(() => Promise.resolve()),
+      onChanged: vi.fn(() => () => undefined),
+    };
+    render(
+      <WorkspaceView workspace={workspace({ agents: [design] })} clis={clis} preview={preview} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Agrandir' }));
+    await user.click(screen.getByRole('tab', { name: 'Aperçu' }));
+    expect(await screen.findByTitle('Aperçu : design/mockups/a.html')).toBeDefined();
+    expect(preview.list).toHaveBeenCalledWith(design.id);
+  });
+});

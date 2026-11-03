@@ -7,6 +7,7 @@ import { PermissionsDialog } from '../launch/PermissionsDialog';
 import { LaunchPanel } from '../launch/LaunchPanel';
 import type { Agent } from '../../shared/model';
 import type { AppStore } from '../store/app-store';
+import type { PreviewApi } from '../focus/PreviewTab';
 import { idleReviewStore, type ReviewStore } from '../store/review-store';
 import { CloseAgentDialog } from '../tiles/CloseAgentDialog';
 import { LogPanel } from '../tiles/LogPanel';
@@ -26,9 +27,11 @@ type Props = {
   terminals?: TerminalRegistry | undefined;
   /** The review of the Changements tab (002); without it, no review is offered. */
   review?: ReviewStore | undefined;
+  /** 004 US4 — the Aperçu of the Focus; without it, the tab stays disabled. */
+  preview?: PreviewApi | undefined;
 };
 
-export function App({ store, getPathForFile, terminals, review }: Props) {
+export function App({ store, getPathForFile, terminals, review, preview }: Props) {
   const state = useStore(store);
   const reviewState = useStore(review ?? idleReviewStore);
   const { status, error, workspaces, activeTab, launcher } = state;
@@ -149,6 +152,7 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
               actionError={state.actionError}
               fromOrchestrator={state.orchestratorPrompted}
               loopReports={state.loopReports[workspace.id] ?? []}
+              preview={preview}
               orchestration={{
                 actions: state.orchestratorActions,
                 load: (id) => void state.loadOrchestratorActions(id),

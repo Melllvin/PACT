@@ -26,6 +26,10 @@ export function createMainWindow(env: NodeJS.ProcessEnv): BrowserWindow {
   win.webContents.on('will-navigate', (event) => {
     event.preventDefault();
   });
+  // 004 FR-026 — the Aperçu's frame never leaves its own scheme.
+  win.webContents.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame && !event.url.startsWith('pact-preview://')) event.preventDefault();
+  });
 
   const devServerUrl = env.ELECTRON_RENDERER_URL;
   if (devServerUrl) void win.loadURL(devServerUrl);

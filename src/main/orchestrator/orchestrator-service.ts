@@ -31,7 +31,7 @@ type Options = {
 /** 004 US2 — what a loop tells the orchestrator: a report, a missing one, its end, an overlap. */
 export type Notice = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish';
+  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish' | 'mockup';
   summary: string;
 };
 

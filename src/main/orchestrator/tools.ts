@@ -640,6 +640,8 @@ function describe(event: OrchestratorEvent, name: string): string {
       return `${name} : ${event.summary}`;
     case 'publish':
       return event.summary;
+    case 'mockup':
+      return `${name} : ${event.summary}`;
   }
 }
 

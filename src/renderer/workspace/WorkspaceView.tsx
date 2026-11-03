@@ -6,6 +6,7 @@ import { deriveTodos } from '../../shared/todo';
 import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
 import { ReportsTab, type Report } from '../focus/ReportsTab';
+import { PreviewTab, type PreviewApi } from '../focus/PreviewTab';
 import { ChangesTab } from '../review/ChangesTab';
 import { ConflictsTab } from '../review/ConflictsTab';
 import { DecisionColumn } from '../review/DecisionColumn';
@@ -127,6 +128,8 @@ type Props = {
   loopReports?: readonly Report[];
   /** 003 US5 — the journal « ◎ Actions » of the orchestrator and the withdrawal of its role. */
   orchestration?: OrchestrationBinding | undefined;
+  /** 004 US4 — the Aperçu of the agent in Focus; without it, the tab stays disabled. */
+  preview?: PreviewApi | undefined;
 };
 
 export type OrchestrationBinding = {
@@ -150,6 +153,7 @@ export function WorkspaceView({
   fromOrchestrator = {},
   loopReports = [],
   orchestration,
+  preview,
 }: Props) {
   const available = workspace.status === 'available';
   const launch = available ? onAddAgents : undefined;
@@ -386,6 +390,9 @@ export function WorkspaceView({
                       },
                     }
                   : undefined
+              }
+              preview={
+                preview ? <PreviewTab key={focused} agentId={focused} api={preview} /> : undefined
               }
               reports={
                 focusedLead !== null ? (
