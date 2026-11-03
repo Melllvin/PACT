@@ -167,6 +167,35 @@ envoie la consigne de reprise au seul agent qui travaillait.
 
 ---
 
+### User Story 5 - Faire d'un agent l'orchestrateur (Priority: P2)
+
+L'utilisateur a lancé un agent sans rôle d'orchestrateur et veut qu'il pilote le workspace. Il le
+désigne orchestrateur depuis la tuile ou le Focus, sans perdre sa conversation.
+
+**Why this priority**: aujourd'hui le rôle ne se choisit qu'au lancement ; il faut relancer un agent et
+perdre son contexte pour en faire un orchestrateur.
+
+**Independent Test**: un agent sans rôle ; « Faire orchestrateur » → l'agent redémarre sur la même
+session avec l'accès orchestrateur, sa tuile passe en haut, il peut lancer un agent.
+
+**Acceptance Scenarios**:
+
+1. **Given** un workspace sans orchestrateur et un agent (sans rôle ou avec un autre rôle), **When**
+   l'utilisateur choisit « Faire orchestrateur » dans le menu de la tuile ou du Focus et confirme,
+   **Then** l'agent devient l'orchestrateur, redémarre en reprenant sa session, et ses outils
+   d'orchestrateur sont disponibles.
+2. **Given** un workspace qui a déjà un orchestrateur, **When** l'utilisateur ouvre le menu d'un autre
+   agent, **Then** « Faire orchestrateur » est indisponible, avec la raison (« Claude Code 1 est déjà
+   l'orchestrateur »).
+3. **Given** un CLI qui ne sait pas être orchestrateur, **When** l'utilisateur ouvre le menu, **Then**
+   l'option est indisponible, avec la raison.
+4. **Given** l'agent devenu orchestrateur, **When** il lance des agents, **Then** ils sont liés à lui
+   (FR-011) comme pour un orchestrateur lancé comme tel.
+5. **Given** un agent qui travaille, **When** l'utilisateur confirme, **Then** la confirmation prévient
+   que l'agent redémarre et que la tâche en cours est interrompue.
+
+---
+
 ### Edge Cases
 
 - Un agent lancé par l'utilisateur dans un workspace qui a un orchestrateur : il apparaît dans la
@@ -261,6 +290,15 @@ envoie la consigne de reprise au seul agent qui travaillait.
   worktrees gardés, avec leur rôle et leur lien.
 - **FR-026**: La relance MUST proposer « Reprendre le travail » (coché par défaut) : chaque agent qui
   travaillait à la fermeture reçoit une consigne de reprise ; les autres restent en attente.
+
+**Devenir orchestrateur**
+
+- **FR-027**: Le menu d'un agent (tuile et Focus) MUST proposer « Faire orchestrateur » quand le
+  workspace n'a pas d'orchestrateur et que son CLI peut l'être ; sinon l'option MUST être
+  indisponible avec sa raison.
+- **FR-028**: Après confirmation, l'agent MUST prendre le rôle d'orchestrateur et redémarrer en
+  reprenant sa session, avec l'accès d'orchestrateur ; la confirmation MUST prévenir de
+  l'interruption s'il travaille.
 
 - **FR-020**: Tout ce qui précède MUST fonctionner à l'identique sur macOS et Windows.
 

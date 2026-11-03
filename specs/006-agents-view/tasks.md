@@ -127,7 +127,20 @@ avec « Reprendre le travail » relance les trois et envoie la consigne au seul 
 
 ---
 
-## Phase 7: Polish
+## Phase 7: User Story 5 — Faire d'un agent l'orchestrateur (P2)
+
+**Test indépendant** : un agent sans rôle → « Faire orchestrateur » → il redémarre sur sa session avec
+l'accès orchestrateur, sa tuile passe en haut, il lance un agent lié à lui.
+
+- [ ] T038 [P] [US5] Tests : `promoteToOrchestrator(agentId)` refuse s'il existe déjà un orchestrateur ou si le CLI ne peut pas l'être (raison renvoyée) ; sinon pose `role: 'orchestrator'`, prépare l'accès orchestrateur (plugin + jeton, comme au lancement) et redémarre en reprenant `sessionId`, dans `tests/integration/orchestrator/promote.test.ts`
+- [ ] T039 [P] [US5] Tests composant : « Faire orchestrateur » dans le menu ⋮ de la tuile et du Focus, indisponible avec sa raison ; confirmation qui prévient de l'interruption si l'agent travaille, dans `tests/unit/renderer/tiles/TileActions.test.tsx`
+- [ ] T040 [US5] E2E : faux CLI, un agent devient orchestrateur, sa tuile passe en haut, `launch_agent` crée un agent `launchedBy` = lui, dans `tests/e2e/us32-promote-orchestrator.spec.ts`
+- [ ] T041 [US5] Canal `orchestrator:promote` `{ agentId }` dans `src/shared/ipc.ts` ; implémentation dans `src/main/agents/agent-manager.ts` en réutilisant la préparation orchestrateur du lancement (003 R2) et `restart` avec reprise de session
+- [ ] T042 [US5] Option de menu et confirmation dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/focus/FocusView.tsx`
+
+---
+
+## Phase 8: Polish
 
 - [ ] T030 [P] Documenter colonne « Agents » et vue « Graphe » dans `README.md` (section d'utilisation)
 - [ ] T031 [P] Vérifier la couverture (non décroissante) et l'absence de code mort lié à l'ancienne colonne (`rg "À faire|TodoColumn" src tests`)
