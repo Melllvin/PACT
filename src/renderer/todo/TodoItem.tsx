@@ -29,6 +29,7 @@ export function TodoItem({
   onConfirmIntegration,
   onRefuseIntegration,
   onDecideLoop,
+  onOpenTerminal,
 }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
@@ -121,10 +122,18 @@ export function TodoItem({
       {agent && !request && !loop && todo.kind !== 'overlap' && (
         <TileActions
           state={agent.state}
+          question={todo.actions.includes('open-terminal')}
           scheduledResume={agent.scheduledResume}
           onAnswer={(answer) => {
             onAnswer(agent.id, answer);
           }}
+          onOpenTerminal={
+            onOpenTerminal
+              ? () => {
+                  onOpenTerminal(agent.id);
+                }
+              : undefined
+          }
           onResume={() => {
             onResume(agent.id);
           }}

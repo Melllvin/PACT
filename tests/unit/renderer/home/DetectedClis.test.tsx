@@ -15,6 +15,7 @@ const cli = (overrides: Partial<CliDefinition>): CliDefinition => ({
   version: '2.1.281',
   origin: 'detected',
   status: 'installed',
+  modelTiers: [],
   models: [],
   ...overrides,
 });

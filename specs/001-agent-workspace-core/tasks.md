@@ -500,3 +500,11 @@ Revue, Réglages, Workflows, notifications ni raccourcis ; le nom reste PACT ; m
 ## Phase 22: Convergence
 
 - [X] T161 Faire tourner `tests/integration/agents/free-terminals.test.ts` aussi sous Windows : retirer `describe.skipIf(isWindows)`, ouvrir le shell que `freeTerminalShell` choisit (pwsh / powershell.exe) au lieu de `/bin/sh` forcé, et vérifier ouverture, commande tapée, sortie du shell, réouverture et suspension avec ConPTY per FR-025, Constitution II (partial)
+
+## Phase 23: Correctif — question à choix (ajout manuel)
+
+Retour d'usage du 2026-11-03 : une question `AskUserQuestion` de Claude Code s'affichait comme une
+autorisation, et « ✓ Autoriser » tapait `1`, donc choisissait la première option à l'aveugle.
+
+- [X] T162 Tests d'abord puis distinguer une question d'une autorisation : `PermissionRequest` de l'outil `AskUserQuestion` et notification `elicitation_dialog` ⇒ signal `awaiting-answer` avec `question: true` dans `src/main/agents/adapters/claude-code.ts` ; `Agent.awaiting` (`question`, absent pour une autorisation, sans migration) tenu par `applySignal` et porté par l'événement `agent:state` dans `src/main/agents/agent-state.ts`, une notification suivante sans `ruleKey` gardant la question ; `answer` refusé pour une question dans `src/main/agents/agent-manager.ts` ; action `open-terminal` « Répondre dans le terminal ↗ » au lieu d'Autoriser / Refuser dans `src/shared/todo.ts`, `src/renderer/tiles/TileActions.tsx` et `src/renderer/todo/TodoItem.tsx`, qui ouvre le Focus sur Terminal, per FR-024a
+

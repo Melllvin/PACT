@@ -185,3 +185,30 @@ describe('TodoItem of files two agents change', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 });
+
+// T162 — a question in À faire opens the agent's terminal (FR-024a).
+describe('TodoItem for a question', () => {
+  it('opens the terminal of the agent of the item', async () => {
+    const user = userEvent.setup();
+    const props = { ...actions(), onOpenTerminal: vi.fn() };
+    const asking = agent(1, { state: 'awaiting-answer', awaiting: 'question' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: `${asking.id}:answer`,
+            agentId: asking.id,
+            kind: 'answer',
+            title: '◆ Répondre',
+            actions: ['open-terminal'],
+          }}
+          agent={asking}
+          {...props}
+        />
+      </ul>,
+    );
+    expect(screen.queryByRole('button', { name: '✓ Autoriser' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Répondre dans le terminal ↗' }));
+    expect(props.onOpenTerminal).toHaveBeenCalledWith(asking.id);
+  });
+});

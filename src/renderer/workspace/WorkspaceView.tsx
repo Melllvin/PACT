@@ -45,6 +45,8 @@ export type AgentActions = {
   onRefuseIntegration?: (requestId: string) => void;
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
   onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
+  /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
+  onOpenTerminal?: (agentId: string) => void;
 };
 
 /** The review of the app (review-store and « vu » of app-store), for this workspace. */
@@ -232,7 +234,16 @@ export function WorkspaceView({
     setFocusedId(agentId);
     setFocusTab(review?.integrations[agentId] ? 'conflicts' : 'changes');
   };
-  const reviewActions: AgentActions = { ...actions, onReview: openReview };
+  const openTerminal = (agentId: string) => {
+    setReviewView(false);
+    setFocusedId(agentId);
+    setFocusTab('terminal');
+  };
+  const reviewActions: AgentActions = {
+    ...actions,
+    onReview: openReview,
+    onOpenTerminal: openTerminal,
+  };
   const backToTiles = () => {
     setFocusedId(null);
     setFocusTab('terminal');
@@ -291,6 +302,9 @@ export function WorkspaceView({
       }}
       onExpand={() => {
         setFocusedId(agent.id);
+      }}
+      onOpenTerminal={() => {
+        openTerminal(agent.id);
       }}
       onReview={
         review && pending.includes(agent.id)

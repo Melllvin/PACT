@@ -135,10 +135,6 @@ export class OrchestratorService {
     this.sessions.get(agentId)?.events.close();
     this.sessions.delete(agentId);
   }
-
-  isActive(agentId: string): boolean {
-    return this.sessions.has(agentId);
-  }
 }
 
 /** The changes of state an orchestrator waits for; the others say nothing (R5). */

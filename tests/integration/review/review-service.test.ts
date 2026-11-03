@@ -354,15 +354,22 @@ describe('ReviewService overlaps between agents', () => {
         { ...agent(other), id: OTHER_ID, position: 2, branch: 'agent/codex-2', port: 3002 },
       ],
     }));
+    await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
+    await writeFile(join(worktree, 'b.txt'), 'b\n');
+    await writeFile(join(other, 'c.txt'), 'c\n');
+    // Changes apart: nothing in common.
+    await service.updatePending(workspace.id);
+    expect(pending.at(-1)?.overlaps).toEqual([]);
+    await writeFile(join(other, 'a.txt'), 'UN\ndeux\n');
+    // Without anyone to tell, the overlap is still announced with the pending reviews.
+    await service.updatePending(workspace.id);
+    expect(pending.at(-1)?.overlaps).toHaveLength(1);
+
     const told: { workspaceId: string; agents: string[]; files: string[] }[] = [];
     service.dispose();
     service = createService({
       onOverlap: (workspaceId, overlap) => told.push({ workspaceId, ...overlap }),
     });
-    await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
-    await writeFile(join(worktree, 'b.txt'), 'b\n');
-    await writeFile(join(other, 'a.txt'), 'UN\ndeux\n');
-    await writeFile(join(other, 'c.txt'), 'c\n');
 
     await service.updatePending(workspace.id);
     const first = { agents: [AGENT_ID, OTHER_ID], files: ['a.txt'] };

@@ -24,7 +24,10 @@ function agentTodo(agent: Agent, cli: string, toReview: boolean): TodoItem | nul
     title,
     actions,
   });
-  if (agent.state === 'awaiting-answer') return item('answer', '◆ Répondre', ['allow', 'deny']);
+  if (agent.state === 'awaiting-answer') {
+    const question = agent.awaiting === 'question';
+    return item('answer', '◆ Répondre', question ? ['open-terminal'] : ['allow', 'deny']);
+  }
   if (agent.state === 'error' && agent.lastError?.kind === 'rate-limit') {
     return item('rate-limit', `✕ Limite de débit · ${cli}`, ['log', 'restart', 'resume']);
   }

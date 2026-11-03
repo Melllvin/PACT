@@ -68,6 +68,54 @@ const setup = async (fail?: string) => {
 const id = agent(1).id;
 
 describe('agent actions', () => {
+  // 003 T040–T044 — the journal of the orchestrator's actions and withdrawing its role.
+  it('follows the orchestrator’s journal, and withdraws its role from the agent', async () => {
+    const { store, invoke, emit } = await setup();
+    const action = {
+      id: '00000000-0000-4000-8000-0000000000b1',
+      at: '2026-09-24T10:00:00.000Z',
+      tool: 'send_prompt' as const,
+      agentId: agent(2).id,
+      summary: 'Écris la fonction',
+      outcome: 'ok' as const,
+      reason: null,
+    };
+    emit('orchestrator:action', { orchestratorId: id, ...action });
+    emit('orchestrator:action', {
+      orchestratorId: id,
+      ...action,
+      id: action.id.replace('b1', 'b2'),
+    });
+    expect(store.getState().orchestratorActions[id]?.map((a) => a.id)).toEqual([
+      action.id.replace('b1', 'b2'),
+      action.id,
+    ]);
+
+    invoke.mockResolvedValueOnce([action]);
+    await store.getState().loadOrchestratorActions(id);
+    expect(invoke).toHaveBeenCalledWith('orchestrator:actions', { agentId: id });
+    expect(store.getState().orchestratorActions[id]).toEqual([action]);
+
+    await store.getState().revokeOrchestrator(id);
+    expect(invoke).toHaveBeenCalledWith('orchestrator:revoke', { agentId: id });
+    const [first, second] = store.getState().workspaces[0]?.agents ?? [];
+    expect(first?.role).toBeNull();
+    expect(second).toEqual(workspace.agents[1]);
+  });
+
+  // 004 T016 — the role profiles of one workspace, the others untouched.
+  it('sets the role profiles of its workspace alone', async () => {
+    const { store, invoke } = await setup();
+    const profiles = {
+      dev: { cliId: 'claude-code', model: 'grand', effort: null, maxModel: null, escalate: false },
+    };
+    await store.getState().setRoleProfiles('w2', profiles);
+    expect(invoke).toHaveBeenCalledWith('roles:setProfiles', { workspaceId: 'w2', profiles });
+    const [first, second] = store.getState().workspaces;
+    expect(first?.roleProfiles).toEqual({});
+    expect(second?.roleProfiles).toEqual(profiles);
+  });
+
   it('sends the answer, « Reprendre » and « Relancer » to the main process', async () => {
     const { store, invoke } = await setup();
     await store.getState().answerAgent(id, 'allow');

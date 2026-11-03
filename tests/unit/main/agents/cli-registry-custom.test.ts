@@ -50,6 +50,7 @@ describe.skipIf(process.platform === 'win32')('CliRegistry.add', () => {
       origin: 'custom',
       status: 'installed',
       models: [],
+      modelTiers: [],
     });
     expect((await stores.state.read()).customClis.map((cli) => cli.id)).toEqual(['custom-aider']);
   });

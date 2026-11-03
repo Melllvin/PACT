@@ -13,6 +13,7 @@ import {
   remove,
   setAgent,
   setCommon,
+  setEffort,
   setOrchestrator,
   setOverride,
   setRole,
@@ -289,5 +290,24 @@ describe('setRole (004 T011)', () => {
     const draft = setRole(withRole, 0, null, undefined);
     expect(draft.agents[0]).toMatchObject({ cliId: 'claude-code', role: null });
     expect(toAgentDrafts(draft, 'ask-sensitive', () => [])[0]).toMatchObject({ role: null });
+  });
+
+  it('drops the model chosen for the agent when the profile keeps the CLI’s own', () => {
+    let draft = setOverride(draftFromCounts({ codex: 1 }, 0), 0, 'model', 'gpt-5');
+    draft = setOverride(draft, 0, 'startCommand', 'npm run dev');
+    draft = setRole(draft, 0, 'dev', { ...profile, model: null });
+    expect(draft.agents[0]?.overrides).toEqual({ startCommand: 'npm run dev' });
+  });
+
+  it('keeps the role without a profile, and sets the effort of one agent alone', () => {
+    const draft = setEffort(
+      setRole(draftFromCounts({ codex: 2 }, 0), 0, 'recap', undefined),
+      1,
+      'low',
+    );
+    expect(draft.agents.map((a) => [a.role ?? null, a.effort ?? null])).toEqual([
+      ['recap', null],
+      [null, 'low'],
+    ]);
   });
 });

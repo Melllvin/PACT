@@ -275,6 +275,7 @@ describe('App launch flow (US2)', () => {
     version: 'v24.0.0',
     origin: 'detected',
     status: 'installed',
+    modelTiers: [],
     models: [],
   };
   const setup = (workspaces: Workspace[], clis: CliDefinition[] = [fake]) => {
@@ -308,6 +309,43 @@ describe('App launch flow (US2)', () => {
       expect.objectContaining({ workspaceId: 'w1', freeTerminals: 0 }),
     );
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // 004 US1 — the role profiles of the workspace, from « Rôles » (FR-002).
+  it('opens the role profiles of the workspace, saves a change and closes them', async () => {
+    const tiered = { ...fake, models: ['petit', 'grand'], modelTiers: [['petit'], ['grand']] };
+    const invoke = setup([workspace('w1', 'w1')], [tiered]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Rôles' }));
+    const dialog = screen.getByRole('dialog', { name: 'Profils de rôle' });
+    await userEvent.selectOptions(
+      within(dialog).getByRole('combobox', { name: 'Modèle · Dev' }),
+      'grand',
+    );
+    const saved = invoke.mock.calls.find(([channel]) => channel === 'roles:setProfiles')?.[1];
+    expect(saved).toMatchObject({ workspaceId: 'w1', profiles: { dev: { model: 'grand' } } });
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  // 004 US2 — the user decides on a loop stopped after 3 rounds, from À faire (FR-018).
+  it('sends the decision on a loop stopped after 3 rounds', async () => {
+    const dev = agent(2, { state: 'done', role: 'dev', workspaceId: 'w1' });
+    const loop = {
+      issueId: '0012-connexion',
+      devAgentId: dev.id,
+      testAgentId: agent(3).id,
+      round: 3,
+      rounds: [],
+      state: 'escalated' as const,
+      escalatedModel: null,
+    };
+    const invoke = setup([{ ...workspace('w1', 'w1'), agents: [dev], loops: [loop] }]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Abandonner' }));
+    expect(invoke).toHaveBeenCalledWith('loop:decide', {
+      workspaceId: 'w1',
+      issueId: '0012-connexion',
+      decision: 'abandon',
+    });
   });
 
   it('describes the permission levels for the launched CLIs only', async () => {
@@ -399,6 +437,41 @@ describe('App tile actions (US3)', () => {
     const tiles = await screen.findByRole('region', { name: 'Tuiles' });
     await userEvent.click(within(tiles).getByRole('button', { name: 'Annuler' }));
     expect(invoke).toHaveBeenCalledWith('agent:cancelAutoResume', { agentId: failed.id });
+  });
+
+  // 003 US3 — the integration the orchestrator asks for, decided in À faire (FR-018).
+  it('confirms and refuses an integration request from À faire', async () => {
+    const worker = { ...failed, state: 'done' as const };
+    const requestId = '7f9c2a4e-1b3d-4c5e-8f6a-0b1c2d3e4f5a';
+    const request = {
+      id: requestId,
+      agentId: worker.id,
+      mode: 'squash' as const,
+      message: 'feat: la fonction',
+      requestedAt: '2026-11-03T03:00:00.000Z',
+    };
+    const invoke = vi.fn<Invoke>((channel) =>
+      channel === 'app:getState'
+        ? Promise.resolve({
+            workspaces: [
+              { ...workspace('w1', 'w1'), agents: [worker], integrationRequests: [request] },
+            ],
+            recents: [],
+            clis: [],
+            permission: null,
+          })
+        : Promise.resolve(undefined),
+    );
+    const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} />);
+    const column = await screen.findByRole('complementary', { name: 'À faire' });
+    await userEvent.click(within(column).getByRole('button', { name: '✓ Intégrer' }));
+    expect(invoke).toHaveBeenCalledWith('integrationRequest:confirm', {
+      requestId,
+      message: 'feat: la fonction',
+    });
+    await userEvent.click(within(column).getByRole('button', { name: 'Refuser' }));
+    expect(invoke).toHaveBeenCalledWith('integrationRequest:refuse', { requestId });
   });
 
   it('answers an agent from its tile', async () => {

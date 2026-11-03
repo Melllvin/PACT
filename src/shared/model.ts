@@ -93,6 +93,8 @@ export const agentSchema = z.object({
   scheduledResume: scheduledResumeSchema.nullable(),
   /** 002 — defaulted so that workspace files from 001 load without a migration (R9). */
   review: agentReviewSchema.default(() => ({ seen: {}, comments: [] })),
+  /** Set while an `awaiting-answer` agent asks a question, not a permission (FR-024a). */
+  awaiting: z.enum(['question']).optional(),
   /** 003 — the orchestrator of its workspace, at most one (R8); 004 — or another role (FR-001). */
   role: roleSchema.nullable().default(null),
   /** 004 R2 — `null`: the CLI's own. */
@@ -260,7 +262,7 @@ export const cliDefinitionSchema = z.object({
   /** 003 — its adapter can make it the orchestrator of a workspace (R8). */
   orchestrator: z.boolean().optional(),
   /** 004 R2 — its models by tier, smallest first; absent or empty: order unknown. */
-  modelTiers: z.array(z.array(z.string())).optional(),
+  modelTiers: z.array(z.array(z.string())).default([]),
   /** 004 R2 — it takes a reasoning effort. */
   supportsEffort: z.boolean().optional(),
 });
@@ -292,7 +294,9 @@ export type TileAction =
   | 'resume'
   | 'cancel-resume'
   /** « Revue → »: opens the Changements tab (002 FR-002). */
-  | 'review';
+  | 'review'
+  /** « Répondre dans le terminal ↗ »: a question is answered there (FR-024a). */
+  | 'open-terminal';
 
 /** Derived from agent state, never persisted (data-model TodoItem). */
 export type TodoItem = {

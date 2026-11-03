@@ -31,12 +31,9 @@ type Props = {
 const CONTROL =
   'w-full min-w-0 rounded-[10px] border border-white/8 bg-white/2 px-[9px] py-1.5 text-[12.5px] text-foreground disabled:opacity-50';
 
-const tiered = (clis: CliDefinition[]) =>
-  clis.map((cli) => ({ ...cli, modelTiers: cli.modelTiers ?? [] }));
-
 export function RoleProfiles({ clis, stored, onChange }: Props) {
-  const profiles = profilesOf(stored, tiered(clis));
-  const warnings = profileWarnings(profiles, tiered(clis));
+  const profiles = profilesOf(stored, clis);
+  const warnings = profileWarnings(profiles, clis);
   const installed = clis.filter((cli) => cli.status === 'installed');
 
   const set = (role: Role, change: Partial<RoleProfile>) => {

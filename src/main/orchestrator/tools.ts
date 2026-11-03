@@ -46,7 +46,7 @@ export type ToolDependencies = {
   /** The integrations waiting for the user (US3). */
   requests: Pick<IntegrationRequests, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
-  loops?: Pick<LoopService, 'start' | 'next' | 'get'>;
+  loops: Pick<LoopService, 'start' | 'next' | 'get'>;
   /** The journal « ◎ Actions »: each action, done or refused (US5, FR-021). */
   log?: (entry: ActionEntry) => void;
 };
@@ -102,7 +102,8 @@ const loopRefusal = async <T>(run: () => Promise<T>): Promise<T> => {
   try {
     return await run();
   } catch (error) {
-    throw new Refusal(error instanceof Error ? error.message : String(error));
+    // LoopService refuses with an Error and its reason.
+    throw new Refusal((error as Error).message);
   }
 };
 
@@ -134,11 +135,6 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     if (!found) throw new Refusal('L’orchestrateur n’est plus dans un workspace ouvert.');
     if (found.status !== 'available') throw new Refusal('Le dossier du workspace est introuvable.');
     return found;
-  };
-
-  const loopsOf = () => {
-    if (!deps.loops) throw new Refusal('Les boucles ne sont pas disponibles.');
-    return deps.loops;
   };
 
   /** By id or by displayed name, case ignored; never the orchestrator itself (FR-008). */
@@ -209,13 +205,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
   /** The CLI of a launch: the one named, else the role's; and the role's profile on that CLI. */
   const launchCli = (ws: Workspace, role: Agent['role'], named: string | null) => {
     const clis = deps.clis();
-    const profile =
-      role === null
-        ? undefined
-        : profilesOf(
-            ws.roleProfiles,
-            clis.map((c) => ({ ...c, modelTiers: c.modelTiers ?? [] })),
-          )[role];
+    const profile = role === null ? undefined : profilesOf(ws.roleProfiles, clis)[role];
     if (named !== null) {
       const wanted = named.trim().toLowerCase();
       const cli = clis.find(
@@ -391,11 +381,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const role = roleSchema.nullable().catch(null).parse(optionalString(args, 'role'));
         const { cli, profile } = launchCli(ws, role, optionalString(args, 'cli'));
         const model = optionalString(args, 'model') ?? profile?.model ?? null;
-        if (
-          role !== null &&
-          profile &&
-          beyondCeiling(model, profile.maxModel, cli.modelTiers ?? [])
-        ) {
+        if (role !== null && profile && beyondCeiling(model, profile.maxModel, cli.modelTiers)) {
           throw new Refusal(
             `Modèle au-delà du plafond du rôle ${role} (${profile.maxModel ?? ''})`,
           );
@@ -530,7 +516,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       { issue: { type: 'string', minLength: 1 }, dev: agentArgument, test: agentArgument },
       ['issue', 'dev', 'test'],
       async (args) => {
-        const loops = loopsOf();
+        const loops = deps.loops;
         const dev = resolve(stringArg(args, 'dev'));
         const test = resolve(stringArg(args, 'test'));
         const issue = stringArg(args, 'issue');
@@ -546,7 +532,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       { issue: { type: 'string', minLength: 1 } },
       ['issue'],
       async (args) => {
-        const loops = loopsOf();
+        const loops = deps.loops;
         const issue = stringArg(args, 'issue');
         const loop = await loopRefusal(() => loops.next(workspace().id, issue));
         return reply(`${issue} : tour ${String(loop.round)}/3.`, { loop });
@@ -559,7 +545,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       ['issue'],
       (args) => {
         const issue = stringArg(args, 'issue');
-        const loop = loopsOf().get(workspace().id, issue);
+        const loop = deps.loops.get(workspace().id, issue);
         if (!loop) throw new Refusal(`Aucune boucle pour ${issue}.`);
         return Promise.resolve(
           reply(`${issue} : tour ${String(loop.round)}/3, ${loop.state}.`, { loop }),

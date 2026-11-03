@@ -93,6 +93,7 @@ const createManager = async ({
   ptyManager = pty,
   service = workspaces,
   idleMs = undefined as number | undefined,
+  orchestrator = undefined as ConstructorParameters<typeof AgentManager>[0]['orchestrator'],
 } = {}) => {
   const registry = new CliRegistry({
     adapters: [adapter],
@@ -111,6 +112,7 @@ const createManager = async ({
     isPortInUse: (port) => Promise.resolve(portsInUse.has(port)),
     onState: (event) => events.push(event),
     ...(idleMs === undefined ? {} : { idleMs }),
+    ...(orchestrator === undefined ? {} : { orchestrator }),
   });
   managers.push(manager);
   return manager;
@@ -273,6 +275,18 @@ describe('AgentManager.launch', { timeout: 30_000 }, () => {
     expect(git(join(repo, '.worktrees', 'fake-1'), 'branch', '--show-current')).toBe(
       'feature/login',
     );
+  });
+
+  // 004 R5 — without a way to open its MCP access, an agent with a role still starts, without it.
+  it('starts an agent with a role and its effort, with no MCP access to give it', async () => {
+    const orchestrator = { prepare: vi.fn(), release: vi.fn() };
+    for (const manager of [await createManager(), await createManager({ orchestrator })]) {
+      const [agent] = await launch(manager, [draft({ role: 'dev', effort: 'high' })]);
+      expect(agent).toMatchObject({ role: 'dev', effort: 'high' });
+      await waitForState(agent?.id ?? '', 'awaiting-prompt');
+      await manager.close(agent?.id ?? '', { removeWorktree: true });
+    }
+    expect(orchestrator.prepare).not.toHaveBeenCalled();
   });
 
   it('remembers the quick-launch counters of the workspace (FR-010)', async () => {
