@@ -35,8 +35,9 @@ const exists = (path: string) =>
     () => false,
   );
 
-const skillsOf = (agentId: string) =>
-  readdir(join(h.userData, 'roles', agentId, 'plugin', 'skills'));
+/** Sorted: Windows does not list a folder in the order macOS does. */
+const skillsOf = async (agentId: string) =>
+  (await readdir(join(h.userData, 'roles', agentId, 'plugin', 'skills'))).sort();
 
 describe('the skills of the roles', () => {
   it('gives each agent its own skills and the contract, and removes them at closing', async () => {
@@ -50,7 +51,7 @@ describe('the skills of the roles', () => {
     expect(await skillsOf(ids[1] ?? '')).toEqual(['pact-design-system', 'pact-mockup']);
     expect(await skillsOf(ids[2] ?? '')).toEqual(['pact-dev']);
     const contract = join(h.userData, 'roles', ids[2] ?? '', 'plugin', 'skills', 'pact-dev');
-    expect(await readdir(contract)).toEqual(['SKILL.md', 'pact-contract.md']);
+    expect((await readdir(contract)).sort()).toEqual(['SKILL.md', 'pact-contract.md']);
 
     for (const id of ids) await h.manager.close(id, { removeWorktree: false });
     await h.waitFor(() => ids.every((id) => !h.current(id)), 'agents still open');

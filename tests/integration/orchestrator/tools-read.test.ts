@@ -129,6 +129,17 @@ describe('wait_for_agents', () => {
     });
   });
 
+  it('tells the user’s decision on a mockup (004 FR-028)', async () => {
+    h.orchestrator.notice(h.workspace.id, {
+      agentId: worker,
+      kind: 'mockup',
+      summary: 'maquette design/mockups/a.html validée par l’utilisateur.',
+    });
+    expect((await tool('wait_for_agents', { timeoutSeconds: 1 })).text).toBe(
+      'Faux CLI 2 : maquette design/mockups/a.html validée par l’utilisateur.',
+    );
+  });
+
   it('tells a question and a closing too', async () => {
     const [asker = ''] = (await h.launch([h.draft()], 'ask-permission')).map((a) => a.id);
     h.pty.write(asker, 'Supprime\r');
