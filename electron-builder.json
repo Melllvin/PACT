@@ -7,6 +7,7 @@
   "directories": { "output": "dist", "buildResources": "build" },
   "files": ["out/**", "package.json"],
   "asarUnpack": ["node_modules/node-pty/**"],
+  "extraResources": [{ "from": "resources/skills", "to": "skills" }],
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
   "publish": { "provider": "github", "owner": "Melllvin", "repo": "PACT", "releaseType": "draft" },
   "mac": {
