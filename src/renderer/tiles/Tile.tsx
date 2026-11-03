@@ -138,7 +138,12 @@ export function Tile({
               {agent.lastError.message}
             </span>
           )}
-          <TileActions state={agent.state} scheduledResume={agent.scheduledResume} {...actions} />
+          <TileActions
+            state={agent.state}
+            question={agent.awaiting === 'question'}
+            scheduledResume={agent.scheduledResume}
+            {...actions}
+          />
         </div>
       )}
     </article>

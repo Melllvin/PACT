@@ -77,6 +77,14 @@ describe('deriveTodos', () => {
     expect(todos.map((t) => t.agentId)).toEqual(['a1', 'a2']);
   });
 
+  it('sends a question to the terminal instead of offering Autoriser / Refuser (T162)', () => {
+    const [todo] = deriveTodos(
+      workspace([agent(1, { state: 'awaiting-answer', awaiting: 'question' })]),
+      names,
+    );
+    expect(todo).toMatchObject({ kind: 'answer', title: '◆ Répondre', actions: ['open-terminal'] });
+  });
+
   it('offers the same actions as the tile (FR-028)', () => {
     const [answer, limit] = deriveTodos(
       workspace([

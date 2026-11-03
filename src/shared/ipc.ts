@@ -260,6 +260,8 @@ export const ipcEvents = {
     state: agentStateSchema,
     lastError: agentErrorSchema.nullable().optional(),
     scheduledResume: scheduledResumeSchema.nullable().optional(),
+    /** Sent with an `awaiting-answer` state when the agent asks a question (FR-024a). */
+    awaiting: z.enum(['question']).optional(),
   }),
   'agent:branch': z.object({ agentId: z.uuid(), branch: z.string() }),
   'workspace:status': z.object({ id: z.string(), status: z.enum(['available', 'unavailable']) }),

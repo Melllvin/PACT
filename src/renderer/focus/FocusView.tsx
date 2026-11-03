@@ -177,7 +177,11 @@ export function FocusView({
         )}
         <TileActions
           state={agent.state}
+          question={agent.awaiting === 'question'}
           scheduledResume={agent.scheduledResume}
+          onOpenTerminal={() => {
+            onTab?.('terminal');
+          }}
           onAnswer={(answer) => {
             onAnswer(agent.id, answer);
           }}
