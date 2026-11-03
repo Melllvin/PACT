@@ -296,6 +296,56 @@ describe('Claude Code hook payloads (captured in T049)', () => {
     ).toEqual({ type: 'awaiting-answer', summary: 'WebFetch', ruleKey: 'WebFetch' });
   });
 
+  // T162 — a question is not a permission: PACT never answers it with « 1 » (FR-024a).
+  it('PermissionRequest of AskUserQuestion → a question, summarised by its text, never keyed', () => {
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'AskUserQuestion',
+        tool_input: {
+          questions: [
+            { question: 'Quelle base de données ?', options: [{ label: 'Postgres' }] },
+            { question: 'Quel ORM ?', options: [{ label: 'Drizzle' }] },
+          ],
+        },
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Quelle base de données ?', question: true });
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'AskUserQuestion',
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Claude pose une question', question: true });
+  });
+
+  it('Notification elicitation_dialog → a question', () => {
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'Notification',
+        notification_type: 'elicitation_dialog',
+        message: 'Claude needs your input',
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Claude needs your input', question: true });
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'Notification',
+        notification_type: 'elicitation_dialog',
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Claude pose une question', question: true });
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'AskUserQuestion',
+        tool_input: { questions: [] },
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Claude pose une question', question: true });
+  });
+
   it('allows a request from the PermissionRequest hook reply (« Toujours pour ce worktree »)', () => {
     expect(adapter.permissionDecision('allow')).toEqual({
       hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
