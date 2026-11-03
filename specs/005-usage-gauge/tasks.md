@@ -17,14 +17,14 @@ par phase.
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] Fixtures `tests/fixtures/usage/` : `claude-statusline.json` (charge réelle de Claude Code 2.1.316 sans `session_id` réel, avec `rate_limits.five_hour` et `seven_day`), `claude-statusline-apikey.json` (sans `rate_limits`), `codex-rollout.jsonl` (lignes réelles de Codex 0.163.0 dont un `token_count` avec `rate_limits.primary` 300 min et `secondary` 10080 min, une ligne illisible).
-- [ ] T002 [P] Faux CLI `tests/fixtures/fake-cli/fake-cli.mjs` : étape `usage { five_hour, seven_day, tokens }` qui exécute la commande `statusLine` reçue dans `--settings` avec la charge construite ; étape `rollout { primary, secondary, tokens }` qui écrit un `token_count` dans `$CODEX_HOME/sessions/AAAA/MM/JJ/rollout-<horodatage>-<session>.jsonl` (R9).
+- [X] T001 [P] Fixtures `tests/fixtures/usage/` : `claude-statusline.json` (charge réelle de Claude Code 2.1.316 sans `session_id` réel, avec `rate_limits.five_hour` et `seven_day`), `claude-statusline-apikey.json` (sans `rate_limits`), `codex-rollout.jsonl` (lignes réelles de Codex 0.163.0 dont un `token_count` avec `rate_limits.primary` 300 min et `secondary` 10080 min, une ligne illisible).
+- [X] T002 [P] Faux CLI `tests/fixtures/fake-cli/fake-cli.mjs` : étape `usage { five_hour, seven_day, tokens }` qui exécute la commande `statusLine` reçue dans `--settings` avec la charge construite ; étape `rollout { primary, secondary, tokens }` qui écrit un `token_count` dans `$CODEX_HOME/sessions/AAAA/MM/JJ/rollout-<horodatage>-<session>.jsonl` (R9).
 
 ## Phase 2: Foundational
 
-- [ ] T003 Tests rouges `tests/unit/shared/usage.test.ts` : schémas `UsageWindow`, `UsageReading`, `AgentShare`, `UsageState` (data-model.md) ; fenêtre affichée = plus grand `usedPercent`, la plus courte à égalité ; niveau `ok | warn | critical` selon `{ warn, critical }` ; âge `stale` > 15 min, masquée > 60 min ; `resetsAt` passée → « réinitialisée » et 0 % ; pourcentage > 100 accepté.
-- [ ] T004 Implémenter `src/shared/usage.ts` (pur).
-- [ ] T005 Tests rouges puis `AppState.usageThresholds` (défaut `{ warn: 80, critical: 95 }`, entiers 1…100, `warn < critical`, lu sans migration) dans `src/main/persistence/store.ts` et `tests/unit/main/persistence/store.test.ts`.
+- [X] T003 Tests rouges `tests/unit/shared/usage.test.ts` : schémas `UsageWindow`, `UsageReading`, `AgentShare`, `UsageState` (data-model.md) ; fenêtre affichée = plus grand `usedPercent`, la plus courte à égalité ; niveau `ok | warn | critical` selon `{ warn, critical }` ; âge `stale` > 15 min, masquée > 60 min ; `resetsAt` passée → « réinitialisée » et 0 % ; pourcentage > 100 accepté.
+- [X] T004 Implémenter `src/shared/usage.ts` (pur).
+- [X] T005 Tests rouges puis `AppState.usageThresholds` (défaut `{ warn: 80, critical: 95 }`, entiers 1…100, `warn < critical`, lu sans migration) dans `src/main/persistence/store.ts` et `tests/unit/main/persistence/store.test.ts`.
 
 ---
 

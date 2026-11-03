@@ -7,6 +7,7 @@ import {
   recentProjectsSchema,
   workspaceSchema,
 } from '../../shared/model';
+import { DEFAULT_USAGE_THRESHOLDS, usageThresholdsSchema } from '../../shared/usage';
 
 // research.md R9 — JSON files in userData, validated by zod, written atomically.
 
@@ -102,6 +103,8 @@ export const appStateSchema = z.object({
   customClis: z.array(cliDefinitionSchema),
   /** Permission preference with the « Tous les projets » scope (FR-012, FR-035). */
   permission: permissionPreferenceSchema.nullable(),
+  /** 005 FR-012 — the alert thresholds of the usage gauges; absent before 005. */
+  usageThresholds: usageThresholdsSchema.default(DEFAULT_USAGE_THRESHOLDS),
 });
 export type AppState = z.infer<typeof appStateSchema>;
 
@@ -110,6 +113,7 @@ const emptyAppState = (): AppState => ({
   recents: [],
   customClis: [],
   permission: null,
+  usageThresholds: DEFAULT_USAGE_THRESHOLDS,
 });
 
 /** Workspace ids are hashes of the repository path: anything else could escape the folder. */
