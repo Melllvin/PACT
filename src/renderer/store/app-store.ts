@@ -8,6 +8,7 @@ import {
 } from '../../shared/ipc';
 import { countsOf, toAgentDrafts, type LaunchDraft } from '../../shared/launch-draft';
 import type { Agent, PermissionLevel, PermissionPreference, Workspace } from '../../shared/model';
+import type { OrchestratorAction } from '../../shared/orchestrator';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
 
@@ -83,6 +84,11 @@ export type AppState = {
   /** 003 US3 — the user's answer to an integration the orchestrator asks for (FR-018). */
   confirmIntegrationRequest: (requestId: string, message: string) => Promise<void>;
   refuseIntegrationRequest: (requestId: string) => Promise<void>;
+  /** 003 US5 — the journal « ◎ Actions » of an orchestrator, the latest first (FR-021). */
+  orchestratorActions: Record<string, OrchestratorAction[]>;
+  loadOrchestratorActions: (agentId: string) => Promise<void>;
+  /** « Retirer le rôle d'orchestrateur » (FR-004): the agent stays, as an ordinary one. */
+  revokeOrchestrator: (agentId: string) => Promise<void>;
   openLog: (agentId: string) => Promise<void>;
   closeLog: () => void;
   requestCloseAgent: (agentId: string) => void;
@@ -108,6 +114,9 @@ export type ReviewSendKind = 'fix-comments' | 'failing-tests' | 'conflict' | 're
 
 export type CloneStatus =
   { status: 'running'; percent: number; phase: string } | { status: 'failed'; message: string };
+
+/** As the main process keeps them (FR-021). */
+const MAX_ACTIONS = 200;
 
 const asIpcError = (error: unknown): IpcError => {
   const parsed = ipcErrorSchema.safeParse(error);
@@ -245,6 +254,7 @@ export function createAppStore(api: PactApi) {
       closingAgentId: null,
       correcting: {},
       orchestratorPrompted: {},
+      orchestratorActions: {},
 
       async load() {
         set({ status: 'loading', error: null });
@@ -289,6 +299,15 @@ export function createAppStore(api: PactApi) {
                 ...w,
                 freeTerminals: w.freeTerminals.filter((t) => t.id !== termId),
               })),
+            });
+          }),
+          api.on('orchestrator:action', ({ orchestratorId, ...action }) => {
+            const journal = get().orchestratorActions[orchestratorId] ?? [];
+            set({
+              orchestratorActions: {
+                ...get().orchestratorActions,
+                [orchestratorId]: [action, ...journal].slice(0, MAX_ACTIONS),
+              },
             });
           }),
           api.on('workspace:integrationRequests', ({ workspaceId, requests }) => {
@@ -475,6 +494,23 @@ export function createAppStore(api: PactApi) {
 
       refuseIntegrationRequest: (requestId) =>
         act(() => api.invoke('integrationRequest:refuse', { requestId })),
+
+      loadOrchestratorActions: (agentId) =>
+        act(async () => {
+          const actions = await api.invoke('orchestrator:actions', { agentId });
+          set({ orchestratorActions: { ...get().orchestratorActions, [agentId]: actions } });
+        }),
+
+      revokeOrchestrator: (agentId) =>
+        act(async () => {
+          await api.invoke('orchestrator:revoke', { agentId });
+          set({
+            workspaces: get().workspaces.map((w) => ({
+              ...w,
+              agents: w.agents.map((a) => (a.id === agentId ? { ...a, role: null } : a)),
+            })),
+          });
+        }),
 
       openLog: (agentId) =>
         act(async () => {

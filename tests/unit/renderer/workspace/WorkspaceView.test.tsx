@@ -817,3 +817,73 @@ describe('WorkspaceView with an orchestrator (003 T019)', () => {
     expect(others[0]?.textContent).toContain('◎ de l’orchestrateur');
   });
 });
+
+describe('the orchestrator’s actions (003 T043, US5)', () => {
+  const lead = agent(1, { role: 'orchestrator' });
+  const action = {
+    id: '00000000-0000-4000-8000-0000000000a1',
+    at: '2026-11-03T10:00:00.000Z',
+    tool: 'send_prompt' as const,
+    agentId: agent(2).id,
+    summary: 'Corrige le test',
+    outcome: 'ok' as const,
+    reason: null,
+  };
+  const binding = () => ({
+    actions: { [lead.id]: [action] },
+    load: vi.fn(),
+    revoke: vi.fn(),
+  });
+
+  it('loads and shows the journal of the orchestrator, and withdraws its role', async () => {
+    const user = userEvent.setup();
+    const orchestration = binding();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: [lead, agent(2)] })}
+        clis={clis}
+        orchestration={orchestration}
+      />,
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[0] ?? document.body);
+    await user.click(screen.getByRole('tab', { name: '◎ Actions' }));
+    expect(orchestration.load).toHaveBeenCalledWith(lead.id);
+    const journal = screen.getByRole('list', { name: 'Actions de l’orchestrateur' });
+    expect(within(journal).getByText('Corrige le test')).toBeDefined();
+    expect(within(journal).getByText('Claude Code 2')).toBeDefined();
+    await user.click(screen.getByRole('button', { name: 'Retirer le rôle d’orchestrateur' }));
+    await user.click(screen.getByRole('button', { name: 'Retirer' }));
+    expect(orchestration.revoke).toHaveBeenCalledWith(lead.id);
+  });
+
+  it('has no Actions tab for an agent that is not the orchestrator', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkspaceView
+        workspace={workspace({ agents: [lead, agent(2)] })}
+        clis={clis}
+        orchestration={binding()}
+      />,
+    );
+    await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[1] ?? document.body);
+    expect(screen.queryByRole('tab', { name: '◎ Actions' })).toBeNull();
+  });
+
+  it('goes back to the terminal once the role is gone', async () => {
+    const user = userEvent.setup();
+    const orchestration = binding();
+    const view = (first: Agent) => (
+      <WorkspaceView
+        workspace={workspace({ agents: [first, agent(2)] })}
+        clis={clis}
+        orchestration={orchestration}
+      />
+    );
+    const { rerender } = render(view(lead));
+    await user.click(screen.getAllByRole('button', { name: 'Agrandir' })[0] ?? document.body);
+    await user.click(screen.getByRole('tab', { name: '◎ Actions' }));
+    rerender(view(agent(1)));
+    expect(screen.queryByRole('tab', { name: '◎ Actions' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Terminal', selected: true })).toBeDefined();
+  });
+});

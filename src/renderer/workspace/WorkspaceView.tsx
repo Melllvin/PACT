@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
+import type { OrchestratorAction } from '../../shared/orchestrator';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
@@ -113,6 +114,14 @@ type Props = {
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
   fromOrchestrator?: Readonly<Record<string, unknown>>;
+  /** 003 US5 — the journal « ◎ Actions » of the orchestrator and the withdrawal of its role. */
+  orchestration?: OrchestrationBinding | undefined;
+};
+
+export type OrchestrationBinding = {
+  actions: Readonly<Record<string, OrchestratorAction[]>>;
+  load: (agentId: string) => void;
+  revoke: (agentId: string) => void;
 };
 
 const ALERT =
@@ -128,6 +137,7 @@ export function WorkspaceView({
   toolbarSlot = null,
   review,
   fromOrchestrator = {},
+  orchestration,
 }: Props) {
   const available = workspace.status === 'available';
   const launch = available ? onAddAgents : undefined;
@@ -149,7 +159,20 @@ export function WorkspaceView({
   // Screen 1q of the agent in Focus, while its integration is stopped on a conflict (FR-027).
   const integration = (focused !== null && review?.integrations[focused]) || null;
   const tab = focusTab === 'conflicts' && !integration ? 'changes' : focusTab;
-  const reviewed = focused !== null && tab !== 'terminal' ? focused : null;
+  const reviewed = focused !== null && (tab === 'changes' || tab === 'conflicts') ? focused : null;
+  const focusedAgent = agents.find((agent) => agent.id === focused);
+  const focusedLead = focusedAgent?.role === 'orchestrator' ? focusedAgent.id : null;
+  // Back to the terminal once the role is gone: the journal belongs to an orchestrator.
+  if (focusTab === 'actions' && focusedLead === null && focused !== null) setFocusTab('terminal');
+
+  const loader = useRef(orchestration?.load);
+  useLayoutEffect(() => {
+    loader.current = orchestration?.load;
+  });
+  const journalOf = tab === 'actions' ? focusedLead : null;
+  useEffect(() => {
+    if (journalOf !== null) loader.current?.(journalOf);
+  }, [journalOf]);
   const reviewedAgent = agents.find((agent) => agent.id === reviewed);
 
   // The conflict screen opens by itself once « Intégrer » meets a conflict.
@@ -329,6 +352,16 @@ export function WorkspaceView({
               onBack={backToTiles}
               tab={tab}
               onTab={setFocusTab}
+              orchestration={
+                focusedLead !== null && orchestration
+                  ? {
+                      actions: orchestration.actions[focusedLead] ?? [],
+                      onRevoke: () => {
+                        orchestration.revoke(focusedLead);
+                      },
+                    }
+                  : undefined
+              }
               conflicts={
                 integration && review
                   ? {

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { Agent, AgentState, Workspace } from '../../shared/model';
-import type { OrchestratorEvent } from '../../shared/orchestrator';
+import { randomUUID } from 'node:crypto';
+import type { OrchestratorAction, OrchestratorEvent } from '../../shared/orchestrator';
 import type { OrchestratorLaunch } from '../agents/adapters/types';
 import type { AgentStateEvent } from '../agents/agent-manager';
 import type { HookServer } from '../agents/hook-server';
@@ -18,7 +19,12 @@ type Options = {
   pluginsDir: string;
   /** The tools an orchestrator gets, for its own id. */
   tools?: (orchestratorId: string) => readonly McpTool[];
+  /** Each new entry of a journal (`orchestrator:action`, US5). */
+  onAction?: (orchestratorId: string, action: OrchestratorAction) => void;
 };
+
+/** The journal keeps the latest actions only (FR-021). */
+const MAX_ACTIONS = 200;
 
 type Session = { workspaceId: string; events: EventQueue };
 
@@ -26,6 +32,8 @@ export class OrchestratorService {
   private readonly sessions = new Map<string, Session>();
   /** The last state and workspace of each agent: a closed agent has left its workspace. */
   private readonly lastStates = new Map<string, { state: AgentState; workspaceId: string }>();
+  /** By orchestrator, the latest first. */
+  private readonly journals = new Map<string, OrchestratorAction[]>();
 
   constructor(private readonly options: Options) {}
 
@@ -73,6 +81,18 @@ export class OrchestratorService {
     }
   }
 
+  /** An action of the orchestrator, done or refused (FR-021). */
+  record(orchestratorId: string, entry: Omit<OrchestratorAction, 'id' | 'at'>): void {
+    const action: OrchestratorAction = { id: randomUUID(), at: new Date().toISOString(), ...entry };
+    const journal = [action, ...(this.journals.get(orchestratorId) ?? [])].slice(0, MAX_ACTIONS);
+    this.journals.set(orchestratorId, journal);
+    this.options.onAction?.(orchestratorId, action);
+  }
+
+  actions(orchestratorId: string): OrchestratorAction[] {
+    return this.journals.get(orchestratorId) ?? [];
+  }
+
   dispose(): void {
     for (const agentId of [...this.sessions.keys()]) this.release(agentId);
   }
@@ -82,10 +102,6 @@ export class OrchestratorService {
     this.options.hooks.revokeMcp(agentId);
     this.sessions.get(agentId)?.events.close();
     this.sessions.delete(agentId);
-  }
-
-  isActive(agentId: string): boolean {
-    return this.sessions.has(agentId);
   }
 }
 
