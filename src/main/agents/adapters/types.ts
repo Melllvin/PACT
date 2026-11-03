@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AdapterId, PermissionLevel } from '../../../shared/model';
+import type { AdapterId, Effort, PermissionLevel } from '../../../shared/model';
 
 // contracts/cli-adapter.md
 
@@ -19,6 +19,8 @@ export type LaunchInput = {
   repoPath: string;
   cwd: string;
   model: string | null;
+  /** 004 R2 — the reasoning effort; ignored by the CLIs that take none. */
+  effort?: Effort | null | undefined;
   permissionLevel: PermissionLevel;
   sessionId?: string;
   port: number;
@@ -76,8 +78,12 @@ export interface CliAdapter {
   readonly id: AdapterId;
   /** 003 R8 — whether this CLI can be the orchestrator of its workspace. */
   readonly supportsOrchestrator: boolean;
+  /** 004 R2 — whether `LaunchInput.effort` reaches the CLI. */
+  readonly supportsEffort: boolean;
   detect(env: ResolvedEnv): Promise<DetectionResult>;
   listModels(): Promise<string[]>;
+  /** 004 R2 — its models by tier, smallest first; empty when the order is unknown. */
+  modelTiers(): string[][];
   buildLaunch(input: LaunchInput): LaunchSpec;
   buildResume(input: LaunchInput & { sessionId: string }): LaunchSpec;
   mapHookEvent(payload: unknown): AgentSignal | null;

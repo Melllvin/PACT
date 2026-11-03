@@ -56,6 +56,12 @@ export class GenericAdapter implements CliAdapter {
     return { resolvedPath, version: null, status: resolvedPath ? 'installed' : 'missing' };
   }
 
+  readonly supportsEffort = false;
+
+  modelTiers(): string[][] {
+    return [];
+  }
+
   listModels(): Promise<string[]> {
     return Promise.resolve([]);
   }

@@ -94,8 +94,15 @@ export class ClaudeCodeAdapter implements CliAdapter {
     return result;
   }
 
+  readonly supportsEffort = true;
+
   listModels(): Promise<string[]> {
     return Promise.resolve([]);
+  }
+
+  /** The aliases `--model` takes, whatever the current version behind each. */
+  modelTiers(): string[][] {
+    return [['haiku'], ['sonnet'], ['opus']];
   }
 
   buildLaunch(input: LaunchInput): LaunchSpec {
@@ -145,6 +152,7 @@ export class ClaudeCodeAdapter implements CliAdapter {
       '--settings',
       JSON.stringify(this.settings(input, level)),
       ...(input.model ? ['--model', input.model] : []),
+      ...(input.effort ? ['--effort', input.effort] : []),
       ...(input.orchestrator
         ? [
             '--plugin-dir',

@@ -44,20 +44,20 @@ modèle, effort, rôle affiché, avertissement test < dev, et la grille.
 
 ### Tests (rouges d'abord)
 
-- [ ] T008 [P] [US1] `tests/unit/shared/roles.test.ts` : profils par défaut (orchestrateur, spec, design = palier fort ; dev = moyen ; test ≥ dev ; recap = petit), premier CLI installé qui a des paliers sinon premier installé avec modèles `null`, plafond `maxModel`, avertissement si `palier(test.model) < palier(dev.model)`.
-- [ ] T009 [P] [US1] Contrats d'adaptateur `tests/contract/claude-code.contract.test.ts` et `tests/contract/codex.contract.test.ts` : `modelTiers()`, `--effort <e>` pour Claude Code, `-c model_reasoning_effort=<e>` pour Codex, rien pour le générique.
-- [ ] T010 [P] [US1] `tests/integration/orchestrator/tools-roles.test.ts` : `launch_agent { role }` prend CLI, modèle et effort du profil ; profil vers un CLI désinstallé → refus « Le CLI « X » du rôle <rôle> n’est pas installé. » ; `model` au-delà de `maxModel` refusé avec « Modèle au-delà du plafond du rôle <rôle> (<maxModel>) » ; `list_agents` renvoie `role` et `loop`.
-- [ ] T011 [P] [US1] Renderer : `tests/unit/renderer/settings/RoleProfiles.test.tsx` (édition, avertissement non bloquant, CLI désinstallé signalé avec « Revenir au profil par défaut »), `tests/unit/renderer/launch/*.test.tsx` (choix du rôle pré-remplit CLI/modèle/effort), `tests/unit/renderer/tiles/TileGrid.test.tsx` (FR-006a : chef sur toute la largeur, 3/5 de la hauteur ; les autres en 2/5 ; sans chef, grille de 001 inchangée), `Tile.test.tsx` (rôle affiché).
-- [ ] T012 [US1] e2e `tests/e2e/us18-roles.spec.ts` : régler les profils, lancer un orchestrateur, un dev et un test ; rôles sur les tuiles, chef le plus grand.
+- [X] T008 [P] [US1] `tests/unit/shared/roles.test.ts` : profils par défaut (orchestrateur, spec, design = palier fort ; dev = moyen ; test ≥ dev ; recap = petit), premier CLI installé qui a des paliers sinon premier installé avec modèles `null`, plafond `maxModel`, avertissement si `palier(test.model) < palier(dev.model)`.
+- [X] T009 [P] [US1] Contrats d'adaptateur `tests/contract/claude-code.contract.test.ts` et `tests/contract/codex.contract.test.ts` : `modelTiers()`, `--effort <e>` pour Claude Code, `-c model_reasoning_effort=<e>` pour Codex, rien pour le générique.
+- [X] T010 [P] [US1] `tests/integration/orchestrator/tools-roles.test.ts` : `launch_agent { role }` prend CLI, modèle et effort du profil ; profil vers un CLI désinstallé → refus « Le CLI « X » du rôle <rôle> n’est pas installé. » ; `model` au-delà de `maxModel` refusé avec « Modèle au-delà du plafond du rôle <rôle> (<maxModel>) » ; `list_agents` renvoie `role` et `loop`.
+- [X] T011 [P] [US1] Renderer : `tests/unit/renderer/settings/RoleProfiles.test.tsx` (édition, avertissement non bloquant, CLI désinstallé signalé avec « Revenir au profil par défaut »), `tests/unit/renderer/launch/*.test.tsx` (choix du rôle pré-remplit CLI/modèle/effort), `tests/unit/renderer/tiles/TileGrid.test.tsx` (FR-006a : chef sur toute la largeur, 3/5 de la hauteur ; les autres en 2/5 ; sans chef, grille de 001 inchangée), `Tile.test.tsx` (rôle affiché).
+- [X] T012 [US1] e2e `tests/e2e/us18-roles.spec.ts` : régler les profils, lancer un orchestrateur, un dev et un test ; rôles sur les tuiles, chef le plus grand.
 
 ### Implementation
 
-- [ ] T013 [US1] `src/shared/roles.ts` (pur) : profils par défaut, paliers, plafond, avertissement.
-- [ ] T014 [US1] Adaptateurs : `modelTiers()` et `supportsEffort` dans `src/main/agents/adapters/types.ts`, `claude-code.ts`, `codex.ts`, `generic.ts`, `fake.ts` ; `LaunchInput.role` et `effort`.
-- [ ] T015 [US1] `AgentManager` : rôle et effort au lancement, profil du rôle quand le brouillon laisse `null`, dans `src/main/agents/agent-manager.ts`.
-- [ ] T016 [US1] IPC `roles:setProfiles` → `{ warnings }` dans `src/main/ipc/orchestrator-handlers.ts` et `src/shared/ipc.ts` ; `app:getState` expose `modelTiers` et `supportsEffort`.
-- [ ] T017 [US1] `launch_agent` étendu et `list_agents` (rôle, boucle) dans `src/main/orchestrator/tools.ts`.
-- [ ] T018 [US1] Renderer : `src/renderer/settings/RoleProfiles.tsx`, choix du rôle dans `src/renderer/launch/`, rôle sur `src/renderer/tiles/Tile.tsx` et dans le Focus, règle de grille dans `src/renderer/tiles/TileGrid.tsx` (suppression du `max-w-[1100px]` du chef), store `src/renderer/store/app-store.ts`.
+- [X] T013 [US1] `src/shared/roles.ts` (pur) : profils par défaut, paliers, plafond, avertissement.
+- [X] T014 [US1] Adaptateurs : `modelTiers()` et `supportsEffort` dans `src/main/agents/adapters/types.ts`, `claude-code.ts`, `codex.ts`, `generic.ts`, `fake.ts` ; `LaunchInput.role` et `effort`.
+- [X] T015 [US1] `AgentManager` : rôle et effort au lancement, profil du rôle quand le brouillon laisse `null`, dans `src/main/agents/agent-manager.ts`.
+- [X] T016 [US1] IPC `roles:setProfiles` → `{ warnings }` dans `src/main/ipc/orchestrator-handlers.ts` et `src/shared/ipc.ts` ; `app:getState` expose `modelTiers` et `supportsEffort`.
+- [X] T017 [US1] `launch_agent` étendu et `list_agents` (rôle, boucle) dans `src/main/orchestrator/tools.ts`.
+- [X] T018 [US1] Renderer : `src/renderer/settings/RoleProfiles.tsx`, choix du rôle dans `src/renderer/launch/`, rôle sur `src/renderer/tiles/Tile.tsx` et dans le Focus, règle de grille dans `src/renderer/tiles/TileGrid.tsx` (suppression du `max-w-[1100px]` du chef), store `src/renderer/store/app-store.ts`.
 
 **Checkpoint**: US1 livrable seule (PR « 004 Phase 3 »).
 

@@ -7,7 +7,14 @@ import {
   type PactApi,
 } from '../../shared/ipc';
 import { countsOf, toAgentDrafts, type LaunchDraft } from '../../shared/launch-draft';
-import type { Agent, PermissionLevel, PermissionPreference, Workspace } from '../../shared/model';
+import type {
+  Agent,
+  PermissionLevel,
+  PermissionPreference,
+  Role,
+  RoleProfile,
+  Workspace,
+} from '../../shared/model';
 import type { OrchestratorAction } from '../../shared/orchestrator';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
@@ -89,6 +96,11 @@ export type AppState = {
   loadOrchestratorActions: (agentId: string) => Promise<void>;
   /** « Retirer le rôle d'orchestrateur » (FR-004): the agent stays, as an ordinary one. */
   revokeOrchestrator: (agentId: string) => Promise<void>;
+  /** 004 US1 — the role profiles of a workspace, shown at once and saved (FR-003). */
+  setRoleProfiles: (
+    workspaceId: string,
+    profiles: Partial<Record<Role, RoleProfile>>,
+  ) => Promise<void>;
   openLog: (agentId: string) => Promise<void>;
   closeLog: () => void;
   requestCloseAgent: (agentId: string) => void;
@@ -497,6 +509,16 @@ export function createAppStore(api: PactApi) {
         act(async () => {
           const actions = await api.invoke('orchestrator:actions', { agentId });
           set({ orchestratorActions: { ...get().orchestratorActions, [agentId]: actions } });
+        }),
+
+      setRoleProfiles: (workspaceId, profiles) =>
+        act(async () => {
+          set({
+            workspaces: get().workspaces.map((w) =>
+              w.id === workspaceId ? { ...w, roleProfiles: profiles } : w,
+            ),
+          });
+          await api.invoke('roles:setProfiles', { workspaceId, profiles });
         }),
 
       revokeOrchestrator: (agentId) =>

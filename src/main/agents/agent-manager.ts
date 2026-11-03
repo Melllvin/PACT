@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { draftRole, IpcFailure, type AgentDraft, type IpcEvent } from '../../shared/ipc';
 import { freeColors, freePositions } from '../../shared/launch-draft';
-import { MAX_AGENTS, type Agent, type ScheduledResume, type Workspace } from '../../shared/model';
+import {
+  MAX_AGENTS,
+  type Agent,
+  type CliDefinition,
+  type ScheduledResume,
+  type Workspace,
+} from '../../shared/model';
+import { profilesOf } from '../../shared/roles';
 import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
 import type { PtyManager } from '../pty/pty-manager';
@@ -35,7 +42,11 @@ type WorkspaceAccess = {
 
 type Options = {
   workspaces: WorkspaceAccess;
-  registry: { get(id: string): RegisteredCli | undefined };
+  registry: {
+    get(id: string): RegisteredCli | undefined;
+    /** 004 — every CLI, for the default role profiles; without it, only the user's profiles. */
+    list?(): CliDefinition[];
+  };
   git: Pick<GitService, 'addWorktree' | 'branchExists' | 'currentBranch' | 'removeWorktree'>;
   pty: PtyManager;
   hooks: Pick<HookServer, 'register' | 'unregister'>;
@@ -511,13 +522,17 @@ export class AgentManager {
         base: baseBranch,
         ...(draft.branch === null ? {} : { branch: draft.branch }),
       });
+      const role = draftRole(draft);
+      // FR-003: what the draft leaves to the default comes from the role's profile, same CLI.
+      const profile = role === null ? undefined : this.profileOf(workspace, role);
+      const fromProfile = profile?.cliId === draft.cliId ? profile : undefined;
       const agent: Agent = {
         id: randomUUID(),
         workspaceId,
         position,
         color: colors[index] ?? 'slate',
         cliId: draft.cliId,
-        model: draft.model,
+        model: draft.model ?? fromProfile?.model ?? null,
         permissionLevel: draft.permissionLevel,
         baseBranch,
         branch: worktree.branch,
@@ -531,8 +546,8 @@ export class AgentManager {
         lastError: null,
         scheduledResume: null,
         review: { seen: {}, comments: [] },
-        role: draftRole(draft),
-        effort: draft.effort ?? null,
+        role,
+        effort: draft.effort ?? fromProfile?.effort ?? null,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
@@ -543,6 +558,15 @@ export class AgentManager {
     }
     await this.workspaces.update(workspaceId, (ws) => ({ ...ws, quickLaunchCounters: counters }));
     return launched;
+  }
+
+  /** The user's profile of a role, else its default one (004 R2). */
+  private profileOf(workspace: Workspace, role: NonNullable<Agent['role']>) {
+    const clis = (this.registry.list?.() ?? []).map((cli) => ({
+      ...cli,
+      modelTiers: cli.modelTiers ?? [],
+    }));
+    return profilesOf(workspace.roleProfiles, clis)[role];
   }
 
   private installedCli(cliId: string): InstalledCli {
@@ -628,6 +652,7 @@ export class AgentManager {
       repoPath,
       cwd: agent.worktreePath,
       model: agent.model,
+      effort: agent.effort,
       permissionLevel: agent.permissionLevel,
       port: agent.port,
       hook: { url: this.hookUrl(), token },

@@ -62,3 +62,31 @@ describe('orchestrator channels', () => {
     expect(agents.revokeOrchestrator).toHaveBeenCalledWith(agentId);
   });
 });
+
+describe('roles:setProfiles (004 T016)', () => {
+  it('saves the profiles and warns when the test is weaker than the dev', async () => {
+    let saved: unknown;
+    const workspaces = {
+      update: vi.fn((_id: string, change: (ws: object) => object) => {
+        saved = change({ id: 'w1' });
+        return Promise.resolve(saved);
+      }),
+    };
+    const clis = () => [
+      { id: 'claude-code', status: 'installed', modelTiers: [['haiku'], ['sonnet']] },
+    ];
+    const services = createOrchestratorServices({ workspaces, clis } as never);
+    const profile = (model: string) => ({
+      cliId: 'claude-code',
+      model,
+      effort: null,
+      maxModel: null,
+      escalate: false,
+    });
+    const profiles = { dev: profile('sonnet'), test: profile('haiku') };
+    await expect(services['roles:setProfiles']({ workspaceId: 'w1', profiles })).resolves.toEqual({
+      warnings: ['Le profil test (haiku) est plus faible que le profil dev (sonnet).'],
+    });
+    expect(saved).toEqual({ id: 'w1', roleProfiles: profiles });
+  });
+});

@@ -259,6 +259,10 @@ export const cliDefinitionSchema = z.object({
   models: z.array(z.string()),
   /** 003 — its adapter can make it the orchestrator of a workspace (R8). */
   orchestrator: z.boolean().optional(),
+  /** 004 R2 — its models by tier, smallest first; absent or empty: order unknown. */
+  modelTiers: z.array(z.array(z.string())).optional(),
+  /** 004 R2 — it takes a reasoning effort. */
+  supportsEffort: z.boolean().optional(),
 });
 
 export type AgentColor = z.infer<typeof agentColorSchema>;
@@ -271,6 +275,9 @@ export type AgentReview = z.infer<typeof agentReviewSchema>;
 export type ReviewComment = z.infer<typeof reviewCommentSchema>;
 export type FreeTerminal = z.infer<typeof freeTerminalSchema>;
 export type Workspace = z.infer<typeof workspaceSchema>;
+export type RoleProfile = z.infer<typeof roleProfileSchema>;
+export type Issue = z.infer<typeof issueSchema>;
+export type Loop = z.infer<typeof loopSchema>;
 export type RecentProject = z.infer<typeof recentProjectSchema>;
 export type CliDefinition = z.infer<typeof cliDefinitionSchema>;
 export type AdapterId = z.infer<typeof adapterIdSchema>;

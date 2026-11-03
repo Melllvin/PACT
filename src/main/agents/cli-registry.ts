@@ -103,10 +103,11 @@ export class CliRegistry {
   }
 
   private definition(
-    { id, supportsOrchestrator }: CliAdapter,
+    adapter: CliAdapter,
     result: DetectionResult,
     models: string[],
   ): CliDefinition {
+    const { id, supportsOrchestrator, supportsEffort } = adapter;
     if (id === 'generic') throw new Error('Generic CLIs are user-defined, never detected');
     return {
       id,
@@ -116,8 +117,11 @@ export class CliRegistry {
       version: result.version,
       origin: 'detected',
       status: result.status,
-      models,
+      // The tiers' names can be chosen even when the CLI lists none (Claude Code).
+      models: [...new Set([...models, ...adapter.modelTiers().flat()])],
       orchestrator: supportsOrchestrator,
+      modelTiers: adapter.modelTiers(),
+      supportsEffort,
     };
   }
 }

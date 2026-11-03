@@ -10,6 +10,7 @@ import {
   permissionLevelSchema,
   permissionPreferenceSchema,
   recentProjectsSchema,
+  roleProfileSchema,
   repoPathSchema,
   reviewCommentSchema,
   scheduledResumeSchema,
@@ -241,6 +242,14 @@ export const ipcRequests = {
   ),
   /** 003 US5 — « Retirer le rôle d'orchestrateur » (FR-004). */
   'orchestrator:revoke': request(z.object({ agentId: z.uuid() }), none),
+  /** 004 US1 — the role profiles of a workspace; a weaker test warns without blocking (FR-004). */
+  'roles:setProfiles': request(
+    z.object({
+      workspaceId: z.string().min(1),
+      profiles: z.partialRecord(roleSchema, roleProfileSchema),
+    }),
+    z.object({ warnings: z.array(z.string()) }),
+  ),
 } as const;
 
 export const ipcEvents = {

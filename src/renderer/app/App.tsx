@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from 'zustand';
 import { DetectedClis } from '../home/DetectedClis';
 import { Home } from '../home/Home';
@@ -12,6 +13,8 @@ import { LogPanel } from '../tiles/LogPanel';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { AmbientCanvas } from '../effects/AmbientCanvas';
 import { WorkspaceView } from '../workspace/WorkspaceView';
+import { RoleProfilesDialog } from '../settings/RoleProfiles';
+import { Button } from '@/components/ui/button';
 import { Legend } from './Legend';
 import { TabBar } from './TabBar';
 
@@ -31,6 +34,8 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
   const { status, error, workspaces, activeTab, launcher } = state;
   const [now] = useState(() => new Date());
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null);
+  /** 004 US1 — the role profiles of the active workspace, open from « Rôles ». */
+  const [rolesOpen, setRolesOpen] = useState(false);
 
   useEffect(() => {
     const disconnect = store.getState().connect();
@@ -92,6 +97,30 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
             <p role="alert" className="m-4 text-destructive">
               {error}
             </p>
+          )}
+          {status === 'ready' &&
+            workspace &&
+            toolbarSlot &&
+            createPortal(
+              <Button
+                className="h-8 rounded-[9px] px-3 text-[12.5px]"
+                onClick={() => {
+                  setRolesOpen(true);
+                }}
+              >
+                Rôles
+              </Button>,
+              toolbarSlot,
+            )}
+          {rolesOpen && workspace && (
+            <RoleProfilesDialog
+              clis={state.clis}
+              stored={workspace.roleProfiles}
+              onChange={(profiles) => void state.setRoleProfiles(workspace.id, profiles)}
+              onClose={() => {
+                setRolesOpen(false);
+              }}
+            />
           )}
           {status === 'ready' && workspace && (
             <WorkspaceView
@@ -186,6 +215,7 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
               initialDraft={launcher.draft ?? null}
               error={launcher.error ?? null}
               localChanges={launcher.localChanges ?? false}
+              profiles={launching.roleProfiles}
               onLaunch={(draft) => void state.requestLaunch(draft)}
               onClose={state.closeLauncher}
             />

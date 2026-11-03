@@ -16,8 +16,10 @@ const adapter = (
 ): CliAdapter => ({
   id,
   supportsOrchestrator: id === 'claude-code',
+  supportsEffort: false,
   detect,
   listModels: () => Promise.resolve(models),
+  modelTiers: () => [],
   buildLaunch: vi.fn(),
   buildResume: vi.fn(),
   mapHookEvent: () => null,
@@ -89,6 +91,8 @@ describe('CliRegistry', () => {
         status: 'installed',
         models: ['opus'],
         orchestrator: true,
+        modelTiers: [],
+        supportsEffort: false,
       },
       {
         id: 'codex',
@@ -101,6 +105,8 @@ describe('CliRegistry', () => {
         status: 'unsupported-version',
         models: [],
         orchestrator: false,
+        modelTiers: [],
+        supportsEffort: false,
       },
     ]);
   });

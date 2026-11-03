@@ -15,6 +15,7 @@ import type { TerminalRegistry } from '../tiles/terminal-registry';
 import type { AgentActions } from '../workspace/WorkspaceView';
 import { AgentPills } from './AgentPills';
 import { cn } from '@/lib/utils';
+import { ROLE_LABELS } from '../../shared/roles';
 
 export type FocusTab = 'terminal' | 'changes' | 'conflicts' | 'actions';
 
@@ -136,6 +137,15 @@ export function FocusView({
           </TabsList>
         </Tabs>
         <span className="flex-1" />
+        {agent.role !== null && (
+          // 004 FR-006: the role, as on the tile.
+          <span
+            aria-label="Rôle"
+            className="rounded-md border border-(--agent-color)/40 px-1.5 py-0.5 text-[11px] text-(--agent-color)"
+          >
+            {ROLE_LABELS[agent.role]}
+          </span>
+        )}
         <span className="font-mono text-[11px] text-dim">
           ⎇ {agent.branch} · :{agent.port}
         </span>

@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { RoleProfiles } from '../../../../src/renderer/settings/RoleProfiles';
 import type { CliDefinition, Role, RoleProfile } from '../../../../src/shared/model';
@@ -33,9 +34,24 @@ const codex: CliDefinition = {
 
 type Stored = Partial<Record<Role, RoleProfile>>;
 
+/** The profiles live above the table (the store); this keeps them the same way. */
+function Harness({ initial, onChange }: { initial: Stored; onChange: (p: Stored) => void }) {
+  const [stored, setStored] = useState(initial);
+  return (
+    <RoleProfiles
+      clis={[claude, codex]}
+      stored={stored}
+      onChange={(next) => {
+        setStored(next);
+        onChange(next);
+      }}
+    />
+  );
+}
+
 const setup = (stored: Stored = {}) => {
   const onChange = vi.fn<(profiles: Stored) => void>();
-  render(<RoleProfiles clis={[claude, codex]} stored={stored} onChange={onChange} />);
+  render(<Harness initial={stored} onChange={onChange} />);
   return { user: userEvent.setup(), onChange };
 };
 

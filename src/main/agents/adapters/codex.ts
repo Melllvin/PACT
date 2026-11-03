@@ -82,6 +82,13 @@ export class CodexAdapter implements CliAdapter {
     return hooks ? result : { ...result, status: 'unsupported-version' };
   }
 
+  readonly supportsEffort = true;
+
+  /** No order known until the CLI lists its models (R2). */
+  modelTiers(): string[][] {
+    return [];
+  }
+
   listModels(): Promise<string[]> {
     return Promise.resolve([]);
   }
@@ -179,6 +186,12 @@ export class CodexAdapter implements CliAdapter {
       // No /usr/bin/env on Windows, where notify was not characterized: heuristic only there.
       ...(this.platform === 'win32' ? [] : config(`notify=[${notify.map(toml).join(',')}]`)),
       ...(input.model ? ['-m', input.model] : []),
+      // Codex takes low, medium and high: the higher efforts get its highest.
+      ...(input.effort
+        ? config(
+            `model_reasoning_effort=${input.effort === 'low' || input.effort === 'medium' ? input.effort : 'high'}`,
+          )
+        : []),
     ];
     return {
       ...toSpawnCommand(input.executablePath, args, this.platform, process.env),
