@@ -4,6 +4,7 @@ import {
   agentSchema,
   agentStateSchema,
   cliDefinitionSchema,
+  integrationRequestSchema,
   MAX_AGENTS,
   permissionLevelSchema,
   permissionPreferenceSchema,
@@ -214,6 +215,16 @@ export const ipcRequests = {
   'integration:askAgent': request(integrationRef, integrationSchema),
   'integration:finish': request(integrationRef, integrationSchema),
   'integration:cancel': request(integrationRef, none),
+  /** 003 US3 — the integrations the orchestrator asks for (FR-018, FR-019). */
+  'integrationRequest:confirm': request(
+    z.object({
+      requestId: z.uuid(),
+      message: z.string().trim().min(1).max(4000),
+      confirmWorking: z.boolean().optional(),
+    }),
+    integrationSchema,
+  ),
+  'integrationRequest:refuse': request(z.object({ requestId: z.uuid() }), none),
 } as const;
 
 export const ipcEvents = {
@@ -240,6 +251,11 @@ export const ipcEvents = {
   'integration:state': integrationSchema,
   /** 003 FR-010 — a prompt of the orchestrator was typed into this agent. */
   'orchestrator:prompted': z.object({ agentId: z.uuid() }),
+  /** 003 FR-017 — the integrations waiting for the user, for À faire. */
+  'workspace:integrationRequests': z.object({
+    workspaceId: z.string(),
+    requests: z.array(integrationRequestSchema),
+  }),
 } as const;
 
 export type IpcRequestChannel = keyof typeof ipcRequests;

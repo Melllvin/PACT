@@ -188,7 +188,7 @@ commit y est et l'orchestrateur reçoit l'événement `integrated`.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T030 [P] [US3] Tests des demandes dans `tests/integration/orchestrator/integration-requests.test.ts` :
+- [X] T030 [P] [US3] Tests des demandes dans `tests/integration/orchestrator/integration-requests.test.ts` :
   - `request_integration` enregistre une demande persistée, branche principale inchangée ;
   - une nouvelle demande pour le même agent remplace l'ancienne ;
   - `integrationRequest:confirm` intègre via `IntegrationService` et produit l'événement `integrated` avec le commit ;
@@ -197,17 +197,17 @@ commit y est et l'orchestrateur reçoit l'événement `integrated`.
   - un échec produit `failed` avec l'erreur ;
   - la fermeture de l'agent retire sa demande ;
   - les demandes reviennent après un redémarrage.
-- [ ] T031 [P] [US3] Tests d'À faire dans `tests/unit/shared/todo.test.ts` et `tests/unit/renderer/todo/TodoItem.test.tsx` :
+- [X] T031 [P] [US3] Tests d'À faire dans `tests/unit/shared/todo.test.ts` et `tests/unit/renderer/todo/TodoItem.test.tsx` :
   - élément « ◎ Intégrer <agent> → <main> ? » avec le message, placé après les réponses et avant les revues ;
   - « ✓ Intégrer » (message modifiable), « Refuser », « Revue → ».
-- [ ] T032 [P] [US3] Tests des canaux `integrationRequest:confirm` et `integrationRequest:refuse` dans `tests/unit/main/ipc/orchestrator-handlers.test.ts`.
-- [ ] T033 [US3] Test e2e : demande dans À faire, branche principale inchangée, confirmation, commit, puis événement `integrated` reçu par l'attente du faux orchestrateur, dans `tests/e2e/us15-orchestrator-integrate.spec.ts`.
+- [X] T032 [P] [US3] Tests des canaux `integrationRequest:confirm` et `integrationRequest:refuse` dans `tests/unit/main/ipc/orchestrator-handlers.test.ts`.
+- [X] T033 [US3] Test e2e : demande dans À faire, branche principale inchangée, confirmation, commit, puis événement `integrated` reçu par l'attente du faux orchestrateur, dans `tests/e2e/us15-orchestrator-integrate.spec.ts`.
 
 ### Implementation for User Story 3
 
-- [ ] T034 [US3] Implémenter `request_integration`, les demandes persistées et leur issue dans `src/main/orchestrator/orchestrator-service.ts` et `src/main/orchestrator/tools.ts`.
-- [ ] T035 [US3] Brancher `integrationRequest:confirm` et `integrationRequest:refuse`, et émettre `workspace:integrationRequests`, dans `src/main/ipc/orchestrator-handlers.ts`, `src/shared/ipc.ts` et `src/main/index.ts`.
-- [ ] T036 [US3] Ajouter l'élément `integration-request` dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx`, et ses actions dans `src/renderer/store/app-store.ts` et `src/renderer/app/App.tsx`.
+- [X] T034 [US3] Implémenter `request_integration`, les demandes persistées et leur issue dans `src/main/orchestrator/orchestrator-service.ts` et `src/main/orchestrator/tools.ts`.
+- [X] T035 [US3] Brancher `integrationRequest:confirm` et `integrationRequest:refuse`, et émettre `workspace:integrationRequests`, dans `src/main/ipc/orchestrator-handlers.ts`, `src/shared/ipc.ts` et `src/main/index.ts`.
+- [X] T036 [US3] Ajouter l'élément `integration-request` dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx`, et ses actions dans `src/renderer/store/app-store.ts` et `src/renderer/app/App.tsx`.
 
 **Checkpoint**: US1–US3.
 

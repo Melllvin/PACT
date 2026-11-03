@@ -61,9 +61,13 @@ export class OrchestratorService {
     const previous = this.lastStates.get(agentId)?.state;
     this.lastStates.set(agentId, { state, workspaceId });
     const event = eventOf(agentId, state, previous, lastError?.message ?? '');
-    if (!event) return;
+    if (event) this.push(workspaceId, event);
+  }
+
+  /** Tells the orchestrators of a workspace, never about themselves. */
+  push(workspaceId: string, event: OrchestratorEvent): void {
     for (const [orchestratorId, session] of this.sessions) {
-      if (orchestratorId !== agentId && session.workspaceId === workspaceId) {
+      if (orchestratorId !== event.agentId && session.workspaceId === workspaceId) {
         session.events.push(event);
       }
     }

@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import type { Agent, TodoItem as Todo } from '../../shared/model';
 import { TileActions } from '../tiles/TileActions';
+import { Button } from '@/components/ui/button';
 import type { AgentActions } from '../workspace/WorkspaceView';
 import { cn } from '@/lib/utils';
 
@@ -25,9 +26,12 @@ export function TodoItem({
   onLog,
   onCancelAutoResume,
   onReview,
+  onConfirmIntegration,
+  onRefuseIntegration,
 }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
+  const { request } = todo;
   const separator = <span className="sr-only">{SEPARATOR}</span>;
 
   if (todo.kind === 'info') {
@@ -48,6 +52,7 @@ export function TodoItem({
       className={cn(
         'flex origin-top animate-unfold flex-col gap-2.5 overflow-hidden rounded-xl border border-white/6 bg-surface p-3 motion-reduce:animate-none',
         todo.kind === 'answer' && 'border-waiting/30 bg-waiting/6',
+        todo.kind === 'integration-request' && 'border-primary/30 bg-primary/6',
         todo.kind === 'rate-limit' && 'border-destructive/30 bg-destructive/6',
       )}
     >
@@ -67,7 +72,24 @@ export function TodoItem({
           <span>{hints.join(SEPARATOR)}</span>
         </span>
       )}
-      {agent && (
+      {request && agent && (
+        <IntegrationRequest
+          request={request}
+          onConfirm={(message) => {
+            onConfirmIntegration?.(request.id, message);
+          }}
+          onRefuse={() => {
+            onRefuseIntegration?.(request.id);
+          }}
+          onReview={
+            onReview &&
+            (() => {
+              onReview(agent.id);
+            })
+          }
+        />
+      )}
+      {agent && !request && (
         <TileActions
           state={agent.state}
           scheduledResume={agent.scheduledResume}
@@ -96,5 +118,52 @@ export function TodoItem({
         />
       )}
     </li>
+  );
+}
+
+/** « ◎ Intégrer <agent> → <main> ? »: the message stays the user's to change (003 FR-018). */
+function IntegrationRequest({
+  request,
+  onConfirm,
+  onRefuse,
+  onReview,
+}: {
+  request: { id: string; message: string };
+  onConfirm: (message: string) => void;
+  onRefuse: () => void;
+  onReview: (() => void) | undefined;
+}) {
+  const [message, setMessage] = useState(request.message);
+  return (
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onConfirm(message.trim());
+      }}
+    >
+      <textarea
+        aria-label="Message de commit"
+        rows={2}
+        value={message}
+        onChange={(event) => {
+          setMessage(event.target.value);
+        }}
+        className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/50"
+      />
+      <div className="flex flex-wrap gap-1.5">
+        <Button type="submit" variant="accept" disabled={message.trim() === ''}>
+          ✓ Intégrer
+        </Button>
+        <Button type="button" onClick={onRefuse}>
+          Refuser
+        </Button>
+        {onReview && (
+          <Button type="button" variant="ghost" onClick={onReview}>
+            Revue →
+          </Button>
+        )}
+      </div>
+    </form>
   );
 }

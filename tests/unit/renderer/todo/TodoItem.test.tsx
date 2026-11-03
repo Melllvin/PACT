@@ -63,6 +63,11 @@ describe('TodoItem « Revue → »', () => {
 
 // 003 T031 — « ◎ Intégrer <agent> → <main> ? »: the message stays the user's to change (FR-018).
 describe('TodoItem of an integration the orchestrator asks for', () => {
+  /** The actions, without « Revue → » when asked. */
+  const without = <T extends { onReview: unknown }>(props: T, noReview: boolean) => {
+    const { onReview, ...rest } = props;
+    return noReview ? rest : { ...rest, onReview };
+  };
   const setup = (overrides: { onReview?: boolean } = {}) => {
     const props = {
       ...actions(),
@@ -82,8 +87,7 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
             request: { id: 'r1', message: 'feat: connexion' },
           }}
           agent={done}
-          {...props}
-          onReview={overrides.onReview === false ? undefined : props.onReview}
+          {...without(props, overrides.onReview === false)}
         />
       </ul>,
     );

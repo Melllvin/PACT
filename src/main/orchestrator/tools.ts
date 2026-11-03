@@ -5,6 +5,7 @@ import type { AgentManager } from '../agents/agent-manager';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
 import type { WaitResult } from './events';
+import type { IntegrationRequests } from './integration-requests';
 import type { McpTool, ToolResult } from './mcp';
 
 // 003 contracts/mcp-tools.md — the tools of the pact MCP server, for one orchestrator. A refusal
@@ -21,12 +22,16 @@ export type ToolDependencies = {
   tests: Pick<TestRunner, 'run' | 'latest'>;
   /** The next events of these agents (all when undefined), or none after `timeoutMs` (R5). */
   wait: (agentIds: readonly string[] | undefined, timeoutMs: number) => Promise<WaitResult>;
+  /** The integrations waiting for the user (US3). */
+  requests: Pick<IntegrationRequests, 'request'>;
 };
 
 const DEFAULT_WAIT_S = 300;
 const MAX_WAIT_S = 600;
 
 const MAX_PROMPT = 8000;
+const MAX_MESSAGE = 4000;
+const MODES = ['squash', 'keep-commits'] as const;
 
 /** Refused with its reason: the orchestrator reads it and adapts. */
 class Refusal extends Error {}
@@ -223,6 +228,36 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         }
         await deps.tests.run(target, command, tree);
         return reply(`Tests lancés pour ${nameOf(agent)} : ${command}`, { status: 'running' });
+      },
+    ),
+    tool(
+      'request_integration',
+      'Demande à l’utilisateur d’intégrer le travail d’un agent dans la branche principale, avec un message de commit. Rien n’est intégré sans sa confirmation ; l’issue arrive par wait_for_agents. Lis get_changes et les tests avant.',
+      {
+        agent: agentArgument,
+        message: { type: 'string', minLength: 1, maxLength: MAX_MESSAGE },
+        mode: { type: 'string', enum: [...MODES] },
+      },
+      ['agent', 'message'],
+      async (args) => {
+        const agent = resolve(stringArg(args, 'agent'));
+        const message = stringArg(args, 'message');
+        if (message.trim() === '' || message.length > MAX_MESSAGE) {
+          throw new Refusal(`Message de 1 à ${String(MAX_MESSAGE)} caractères attendu.`);
+        }
+        const mode = argument(args, 'mode') ?? 'squash';
+        if (mode !== 'squash' && mode !== 'keep-commits') {
+          throw new Refusal('Mode « squash » ou « keep-commits » attendu.');
+        }
+        const request = await deps.requests.request(workspace().id, {
+          agentId: agent.id,
+          message,
+          mode,
+        });
+        return reply(`Demande d’intégration de ${nameOf(agent)} proposée à l’utilisateur.`, {
+          requestId: request.id,
+          status: 'waiting-user',
+        });
       },
     ),
     tool(
