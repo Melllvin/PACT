@@ -1,5 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { Agent } from '../../shared/model';
+import type { OrchestratorAction } from '../../shared/orchestrator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TerminalView } from '../tiles/TerminalView';
 import { TileActions } from '../tiles/TileActions';
@@ -8,7 +16,7 @@ import type { AgentActions } from '../workspace/WorkspaceView';
 import { AgentPills } from './AgentPills';
 import { cn } from '@/lib/utils';
 
-export type FocusTab = 'terminal' | 'changes' | 'conflicts';
+export type FocusTab = 'terminal' | 'changes' | 'conflicts' | 'actions';
 
 type Props = Omit<AgentActions, 'onClose'> & {
   tab?: FocusTab;
@@ -17,6 +25,8 @@ type Props = Omit<AgentActions, 'onClose'> & {
   changes?: ReactNode;
   /** The Conflits tab of screen 1q, while an integration is stopped on a conflict (002 US4). */
   conflicts?: { count: number; content: ReactNode } | undefined;
+  /** 003 US5 — the orchestrator's journal « ◎ Actions » and the withdrawal of its role. */
+  orchestration?: { actions: OrchestratorAction[]; onRevoke: () => void } | undefined;
   /** Every agent of the workspace, in position order. */
   agents: Agent[];
   /** The agents offered as pills; all of them by default, those to review in the Revue view. */
@@ -43,6 +53,7 @@ export function FocusView({
   onTab,
   changes,
   conflicts,
+  orchestration,
   agents,
   pills = agents,
   agentId,
@@ -117,6 +128,11 @@ export function FocusView({
                 Conflits · {conflicts.count}
               </TabsTrigger>
             )}
+            {orchestration && (
+              <TabsTrigger value="actions" className={TAB}>
+                ◎ Actions
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
         <span className="flex-1" />
@@ -127,6 +143,9 @@ export function FocusView({
       <div className="flex min-h-0 flex-1 flex-col">
         {tab === 'changes' && changes}
         {tab === 'conflicts' && conflicts?.content}
+        {tab === 'actions' && orchestration && (
+          <ActionsJournal {...orchestration} name={(id) => nameOf(agents, id, name)} />
+        )}
         {/* Same place in the tree on both tabs: the terminal stays attached, its session kept. */}
         <div
           ref={terminalBox}
@@ -170,5 +189,86 @@ export function FocusView({
         />
       </footer>
     </section>
+  );
+}
+
+const nameOf = (agents: Agent[], id: string | null, name: (cliId: string) => string) => {
+  const agent = agents.find((a) => a.id === id);
+  return agent ? `${name(agent.cliId)} ${String(agent.position)}` : null;
+};
+
+const TIME = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+
+/** « ◎ Actions » (FR-021): what the orchestrator did, the latest first; its role can go (FR-004). */
+function ActionsJournal({
+  actions,
+  onRevoke,
+  name,
+}: {
+  actions: OrchestratorAction[];
+  onRevoke: () => void;
+  name: (agentId: string | null) => string | null;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ul
+        aria-label="Actions de l’orchestrateur"
+        className="min-h-0 flex-1 overflow-y-auto px-3.5 py-2 text-[12.5px]"
+      >
+        {actions.length === 0 && <li className="text-dim">Aucune action pour l’instant.</li>}
+        {actions.map((action) => (
+          <li key={action.id} className="flex gap-3 border-b border-white/4 py-1.5">
+            <span className="font-mono text-[11px] text-dim">
+              {TIME.format(new Date(action.at))}
+            </span>
+            <span className="font-mono text-[11px]">{action.tool}</span>
+            {name(action.agentId) && (
+              <span className="text-muted-foreground">{name(action.agentId)}</span>
+            )}
+            <span className="flex-1">{action.summary}</span>
+            {action.outcome === 'refused' && (
+              <span className="text-[#f2a0a0]">refusé : {action.reason}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-none items-center justify-end gap-2 border-t border-white/6 px-3.5 py-2 text-[12.5px]">
+        {confirming ? (
+          <>
+            <span className="mr-auto text-muted-foreground">
+              L’agent reste ouvert ; ses consignes en attente sont annulées et PACT refuse ses
+              prochaines demandes.
+            </span>
+            <button
+              onClick={() => {
+                setConfirming(false);
+              }}
+              className="h-7 cursor-pointer rounded-lg border border-white/8 px-2.5"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={() => {
+                setConfirming(false);
+                onRevoke();
+              }}
+              className="h-7 cursor-pointer rounded-lg border border-[#f2a0a0]/40 px-2.5 text-[#f2a0a0]"
+            >
+              Retirer
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => {
+              setConfirming(true);
+            }}
+            className="h-7 cursor-pointer rounded-lg border border-white/8 px-2.5 text-muted-foreground hover:text-foreground"
+          >
+            Retirer le rôle d’orchestrateur
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

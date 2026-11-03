@@ -44,10 +44,8 @@ describe('the journal of actions', () => {
       ['send_prompt', 'refused'],
       ['send_prompt', 'ok'],
     ]);
-    expect(actions[0]).toMatchObject({
-      agentId: null,
-      reason: expect.stringContaining('Faux CLI 9'),
-    });
+    expect(actions[0]?.agentId).toBeNull();
+    expect(actions[0]?.reason).toContain('Faux CLI 9');
     expect(actions[1]).toMatchObject({ agentId: workerId, reason: null });
     expect(actions[1]?.summary.length).toBeLessThanOrEqual(200);
     expect(h.actionsHeard.map((a) => a.orchestratorId)).toEqual([leadId, leadId]);

@@ -309,6 +309,20 @@ export class AgentManager {
     else this.prompts.set(id, kept);
   }
 
+  /**
+   * 003 FR-004 — « Retirer le rôle d'orchestrateur »: its token refused at once, its wait ended,
+   * its prompts not typed yet dropped; the agent stays, as an ordinary one.
+   */
+  async revokeOrchestrator(id: string): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    if (agent.role !== 'orchestrator') {
+      throw new IpcFailure('INVALID_INPUT', 'Cet agent n’est pas l’orchestrateur.');
+    }
+    this.orchestrator?.release(id);
+    for (const other of workspace.agents) this.cancelPrompts(other.id, 'orchestrator');
+    await this.change(workspace.id, id, (a) => ({ ...a, role: null }));
+  }
+
   /** 003 FR-011 — what the agent asks, while it waits for an answer. */
   questionOf(id: string): string | null {
     return this.questions.get(id) ?? null;

@@ -1,7 +1,11 @@
 import { unifiedText } from '../../shared/diff';
 import { IpcFailure } from '../../shared/ipc';
 import { repoPathSchema, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
-import type { OrchestratorEvent } from '../../shared/orchestrator';
+import {
+  ORCHESTRATOR_ACTION_TOOLS,
+  type OrchestratorAction,
+  type OrchestratorEvent,
+} from '../../shared/orchestrator';
 import type { AgentManager } from '../agents/agent-manager';
 import type { PermissionService } from '../agents/permission-service';
 import type { ReviewService } from '../review/review-service';
@@ -30,7 +34,14 @@ export type ToolDependencies = {
   wait: (agentIds: readonly string[] | undefined, timeoutMs: number) => Promise<WaitResult>;
   /** The integrations waiting for the user (US3). */
   requests: Pick<IntegrationRequests, 'request'>;
+  /** The journal « ◎ Actions »: each action, done or refused (US5, FR-021). */
+  log?: (entry: ActionEntry) => void;
 };
+
+export type ActionEntry = Omit<OrchestratorAction, 'id' | 'at'>;
+
+const ACTIONS: readonly string[] = ORCHESTRATOR_ACTION_TOOLS;
+const MAX_SUMMARY = 200;
 
 const DEFAULT_WAIT_S = 300;
 const MAX_WAIT_S = 600;
@@ -127,14 +138,46 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     description,
     inputSchema: { type: 'object', properties, required, additionalProperties: false },
     call: async (args) => {
+      let result: ToolResult;
       try {
-        return await run(args);
+        result = await run(args);
       } catch (error) {
-        if (error instanceof Refusal) return refused(error.message);
-        throw error;
+        if (!(error instanceof Refusal)) throw error;
+        result = refused(error.message);
       }
+      if (ACTIONS.includes(name)) deps.log?.(entryOf(name, args, result));
+      return result;
     },
   });
+
+  /** The agent an action was about: the one launched, or the one named, when it exists. */
+  const subjectOf = (name: string, args: unknown, result: ToolResult): string | null => {
+    if (name === 'launch_agent' && result.isError !== true) {
+      const json = result.content[1]?.text;
+      const launched =
+        json === undefined ? undefined : (JSON.parse(json) as Partial<{ agent: { id: string } }>);
+      return launched?.agent?.id ?? null;
+    }
+    const reference = argument(args, 'agent');
+    if (typeof reference !== 'string') return null;
+    try {
+      return resolve(reference).id;
+    } catch {
+      return null;
+    }
+  };
+
+  const entryOf = (name: string, args: unknown, result: ToolResult): ActionEntry => {
+    const text = result.content[0]?.text ?? '';
+    const refusedHere = result.isError === true;
+    return {
+      tool: name as ActionEntry['tool'],
+      agentId: subjectOf(name, args, result),
+      summary: text.length > MAX_SUMMARY ? `${text.slice(0, MAX_SUMMARY - 1)}…` : text,
+      outcome: refusedHere ? 'refused' : 'ok',
+      reason: refusedHere ? text : null,
+    };
+  };
 
   return [
     tool(

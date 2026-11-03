@@ -87,6 +87,9 @@ void app.whenReady().then(async () => {
   const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
     workspaces,
+    onAction: (orchestratorId, action) => {
+      emit('orchestrator:action', { ...action, orchestratorId });
+    },
     pluginsDir: join(app.getPath('userData'), 'orchestrator'),
     // Read when the orchestrator calls: the services below exist by then.
     tools: (orchestratorId): McpTool[] =>
@@ -102,6 +105,9 @@ void app.whenReady().then(async () => {
           requests,
           clis: () => registry.list(),
           permissions,
+          log: (entry) => {
+            orchestrator.record(orchestratorId, entry);
+          },
         },
         orchestratorId,
       ),
@@ -260,7 +266,7 @@ void app.whenReady().then(async () => {
         pty,
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
-      ...createOrchestratorServices({ requests }),
+      ...createOrchestratorServices({ requests, orchestrator, agents }),
     },
     {
       isTrustedSender: trustedSenderCheck({

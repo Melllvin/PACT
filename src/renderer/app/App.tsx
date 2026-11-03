@@ -115,6 +115,11 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
               }}
               actionError={state.actionError}
               fromOrchestrator={state.orchestratorPrompted}
+              orchestration={{
+                actions: state.orchestratorActions,
+                load: (id) => void state.loadOrchestratorActions(id),
+                revoke: (id) => void state.revokeOrchestrator(id),
+              }}
               review={
                 review && {
                   pending: reviewState.pending[workspace.id] ?? [],

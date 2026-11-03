@@ -247,17 +247,17 @@ grille du socle revient.
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T040 [P] [US5] Tests du journal et du retrait dans `tests/integration/orchestrator/orchestrator-service.test.ts` :
+- [X] T040 [P] [US5] Tests du journal et du retrait dans `tests/integration/orchestrator/orchestrator-control.test.ts` :
   - chaque outil d'action ajoute une entrée, la plus récente en premier, au plus 200 ;
   - lectures et attentes absentes ;
   - après `orchestrator:revoke` : jeton refusé (`401`), consignes d'origine `orchestrator` retirées, attente en cours terminée, `role: null`.
-- [ ] T041 [P] [US5] Tests du Focus dans `tests/unit/renderer/focus/FocusView.test.tsx` : onglet « ◎ Actions » pour l'orchestrateur seulement ; « Retirer le rôle d'orchestrateur » demande confirmation.
-- [ ] T042 [US5] Test e2e : journal, retrait du rôle, retour à la grille, refus suivant reçu par le faux orchestrateur, dans `tests/e2e/us17-orchestrator-control.spec.ts`.
+- [X] T041 [P] [US5] Tests du Focus dans `tests/unit/renderer/focus/FocusView.test.tsx` : onglet « ◎ Actions » pour l'orchestrateur seulement ; « Retirer le rôle d'orchestrateur » demande confirmation.
+- [X] T042 [US5] Test e2e : journal, retrait du rôle, retour à la grille, refus suivant reçu par le faux orchestrateur, dans `tests/e2e/us17-orchestrator-control.spec.ts`.
 
 ### Implementation for User Story 5
 
-- [ ] T043 [US5] Implémenter le journal et `revoke` dans `src/main/orchestrator/orchestrator-service.ts`, et les canaux `orchestrator:actions`, `orchestrator:revoke` et `orchestrator:action` dans `src/main/ipc/orchestrator-handlers.ts` et `src/shared/ipc.ts`.
-- [ ] T044 [US5] Ajouter l'onglet « ◎ Actions » et « Retirer le rôle » dans `src/renderer/focus/FocusView.tsx`, avec l'état dans `src/renderer/store/app-store.ts`.
+- [X] T043 [US5] Implémenter le journal et `revoke` dans `src/main/orchestrator/orchestrator-service.ts`, et les canaux `orchestrator:actions`, `orchestrator:revoke` et `orchestrator:action` dans `src/main/ipc/orchestrator-handlers.ts` et `src/shared/ipc.ts`.
+- [X] T044 [US5] Ajouter l'onglet « ◎ Actions » et « Retirer le rôle » dans `src/renderer/focus/FocusView.tsx`, avec l'état dans `src/renderer/store/app-store.ts`.
 
 **Checkpoint**: toutes les stories testées séparément.
 

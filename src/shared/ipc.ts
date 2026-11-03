@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { orchestratorActionSchema } from './orchestrator';
 import {
   agentErrorSchema,
   agentSchema,
@@ -225,6 +226,13 @@ export const ipcRequests = {
     integrationSchema,
   ),
   'integrationRequest:refuse': request(z.object({ requestId: z.uuid() }), none),
+  /** 003 US5 — the journal « ◎ Actions », the latest first (FR-021). */
+  'orchestrator:actions': request(
+    z.object({ agentId: z.uuid() }),
+    z.array(orchestratorActionSchema),
+  ),
+  /** 003 US5 — « Retirer le rôle d'orchestrateur » (FR-004). */
+  'orchestrator:revoke': request(z.object({ agentId: z.uuid() }), none),
 } as const;
 
 export const ipcEvents = {
@@ -251,6 +259,8 @@ export const ipcEvents = {
   'integration:state': integrationSchema,
   /** 003 FR-010 — a prompt of the orchestrator was typed into this agent. */
   'orchestrator:prompted': z.object({ agentId: z.uuid() }),
+  /** 003 FR-021 — a new entry of an orchestrator's journal. */
+  'orchestrator:action': orchestratorActionSchema.extend({ orchestratorId: z.uuid() }),
   /** 003 FR-017 — the integrations waiting for the user, for À faire. */
   'workspace:integrationRequests': z.object({
     workspaceId: z.string(),
