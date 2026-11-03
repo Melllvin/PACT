@@ -22,7 +22,7 @@ import type { OrchestratorAction } from '../../shared/orchestrator';
 /** 004 US2 — a report, a missing one, the end of a loop, as the « Rapports » band shows it. */
 export type LoopReport = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish';
+  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish' | 'mockup';
   summary: string;
   at: string;
 };

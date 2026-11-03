@@ -87,7 +87,7 @@ const overlapsOf = (changes: { agentId: string; paths: Set<string> }[]): Overlap
   );
 
 /** `fs.watch` recursive, without the `.git` folder or file (R3). */
-const watchRecursive: Watch = (dir, onChange) => {
+export const watchRecursive: Watch = (dir, onChange) => {
   try {
     const watcher = fsWatch(dir, { recursive: true }, (_event, file) => {
       const name = file?.toString().replaceAll('\\', '/') ?? null;

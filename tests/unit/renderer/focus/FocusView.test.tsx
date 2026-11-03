@@ -74,6 +74,32 @@ describe('FocusView', () => {
     expect(props.onTab).toHaveBeenCalledWith('changes');
   });
 
+  // 004 US4 — the Aperçu, once given, is a tab like the others (FR-025).
+  it('enables Aperçu once given and shows it on its tab', async () => {
+    const user = userEvent.setup();
+    const onTab = vi.fn();
+    const names = (cliId: string) => cliId;
+    const props = {
+      agents: team(),
+      agentId: agent(1).id,
+      name: names,
+      terminals: { attach: vi.fn(() => () => undefined) },
+      onTab,
+      onSelect: vi.fn(),
+      onBack: vi.fn(),
+      onAnswer: vi.fn(),
+      onResume: vi.fn(),
+      onRestart: vi.fn(),
+      onLog: vi.fn(),
+      onCancelAutoResume: vi.fn(),
+    };
+    const { rerender } = render(<FocusView {...props} preview={<p>Maquettes</p>} />);
+    await user.click(screen.getByRole('tab', { name: 'Aperçu' }));
+    expect(onTab).toHaveBeenCalledWith('preview');
+    rerender(<FocusView {...props} tab="preview" preview={<p>Maquettes</p>} />);
+    expect(screen.getByText('Maquettes')).toBeDefined();
+  });
+
   it('shows the changes above the same terminal on the Changements tab (screen 1h)', () => {
     const { terminals } = setup(team(), agent(1).id, 'changes');
     expect(screen.getByRole('tab', { name: 'Changements' }).getAttribute('aria-selected')).toBe(

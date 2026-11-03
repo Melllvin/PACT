@@ -17,7 +17,7 @@ import { AgentPills } from './AgentPills';
 import { cn } from '@/lib/utils';
 import { ROLE_LABELS } from '../../shared/roles';
 
-export type FocusTab = 'terminal' | 'changes' | 'conflicts' | 'actions' | 'reports';
+export type FocusTab = 'terminal' | 'changes' | 'conflicts' | 'actions' | 'reports' | 'preview';
 
 type Props = Omit<AgentActions, 'onClose'> & {
   tab?: FocusTab;
@@ -30,6 +30,8 @@ type Props = Omit<AgentActions, 'onClose'> & {
   orchestration?: { actions: OrchestratorAction[]; onRevoke: () => void } | undefined;
   /** 004 FR-006a — « ◎ Rapports » of the orchestrator: the latest report of each agent. */
   reports?: ReactNode;
+  /** 004 US4 — the Aperçu of the agent; without it, the tab stays disabled (001 FR-033). */
+  preview?: ReactNode;
   /** Every agent of the workspace, in position order. */
   agents: Agent[];
   /** The agents offered as pills; all of them by default, those to review in the Revue view. */
@@ -48,7 +50,7 @@ const TAB =
 
 /**
  * Focus (screen 1p): one agent large, opened by ⤢ or « Revue → ». Terminal and Changements
- * (screen 1h) are active, Aperçu stays disabled (002 FR-001). « ‹ Tuiles » or Escape outside the
+ * (screen 1h) are active, and Aperçu once given (004 FR-025). « ‹ Tuiles » or Escape outside the
  * terminal goes back to the grid (US5).
  */
 export function FocusView({
@@ -58,6 +60,7 @@ export function FocusView({
   conflicts,
   orchestration,
   reports,
+  preview,
   agents,
   pills = agents,
   agentId,
@@ -114,14 +117,14 @@ export function FocusView({
         <span aria-hidden className="h-[18px] w-px bg-white/8" />
         <Tabs
           value={tab}
-          // Only the tabs below can be chosen, Aperçu being disabled.
+          // Only the tabs below can be chosen.
           onValueChange={(value) => onTab?.(value as FocusTab)}
         >
           <TabsList variant="line" className="h-auto gap-4 p-0">
             <TabsTrigger value="terminal" className={TAB}>
               Terminal
             </TabsTrigger>
-            <TabsTrigger value="preview" disabled className={TAB}>
+            <TabsTrigger value="preview" disabled={preview === undefined} className={TAB}>
               Aperçu
             </TabsTrigger>
             <TabsTrigger value="changes" className={TAB}>
@@ -165,6 +168,7 @@ export function FocusView({
           <ActionsJournal {...orchestration} name={(id) => nameOf(agents, id, name)} />
         )}
         {tab === 'reports' && reports}
+        {tab === 'preview' && preview}
         {/* Same place in the tree on both tabs: the terminal stays attached, its session kept. */}
         <div
           ref={terminalBox}

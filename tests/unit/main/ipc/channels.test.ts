@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createAppServices } from '../../../../src/main/app-services';
 import { createAgentServices } from '../../../../src/main/ipc/agent-handlers';
 import { createOrchestratorServices } from '../../../../src/main/ipc/orchestrator-handlers';
+import { createPreviewServices } from '../../../../src/main/ipc/preview-handlers';
 import { createReviewServices } from '../../../../src/main/ipc/review-handlers';
 import { ipcRequests } from '../../../../src/shared/ipc';
 
@@ -27,6 +28,7 @@ describe('IPC channels', () => {
       ...Object.keys(createAgentServices({} as never)),
       ...Object.keys(createReviewServices({} as never)),
       ...Object.keys(createOrchestratorServices({} as never)),
+      ...Object.keys(createPreviewServices({} as never)),
     ]);
     const channels = Object.keys(ipcRequests);
     expect(channels.filter((channel) => !served.has(channel) && !pending.has(channel))).toEqual([]);

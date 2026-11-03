@@ -2,6 +2,7 @@ import './zod-config';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
+import { createPreviewApi } from './focus/preview-api';
 import { createAppStore } from './store/app-store';
 import { createReviewStore } from './store/review-store';
 import { terminalFontReady } from './theme/fonts';
@@ -24,6 +25,7 @@ void terminalFontReady().then(() => {
         getPathForFile={(file) => window.pact.pathForFile(file)}
         terminals={terminals}
         review={createReviewStore(window.pact)}
+        preview={createPreviewApi(window.pact)}
       />
     </StrictMode>,
   );

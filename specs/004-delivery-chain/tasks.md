@@ -115,11 +115,11 @@ publié avant confirmation.
 l'Aperçu l'affiche sans requête réseau et signale le blocage ; « ✓ Valider » arrive à l'orchestrateur
 en moins de 1 s.
 
-- [ ] T032 [P] [US4] Tests rouges `tests/integration/preview/preview-protocol.test.ts` : ne sert que les fichiers du worktree de l'agent (`..` et liens hors worktree refusés), CSP stricte, toute requête réseau bloquée et signalée (`preview:blocked`), rendu Markdown via `marked` sans HTML brut exécutable.
-- [ ] T033 [P] [US4] Tests renderer `tests/unit/renderer/focus/PreviewTab.test.tsx` : liste (`mockup`, `recap`, `issue`, `other`), iframe `sandbox` sans `allow-same-origin`, rafraîchissement sur `preview:changed` en gardant le défilement, Valider / Refuser avec commentaire ; « ressource externe bloquée » sur `preview:blocked` ; fichier trop gros ou invalide → texte brut.
-- [ ] T034 [US4] e2e `tests/e2e/us21-preview.spec.ts` : décision sur maquette reçue par l'orchestrateur en moins de 1 s (SC-004), Aperçu rafraîchi en moins de 2 s.
-- [ ] T035 [US4] `src/main/preview/preview-protocol.ts`, suivi des fichiers (réutiliser le suivi du worktree de 002), IPC `preview:list`, `preview:decide`, événements `preview:changed`, `preview:blocked`, événement orchestrateur `mockup`.
-- [ ] T036 [US4] `src/renderer/focus/PreviewTab.tsx` (l'onglet grisé de 001 devient actif) et store.
+- [X] T032 [P] [US4] Tests rouges `tests/integration/preview/preview-protocol.test.ts` : ne sert que les fichiers du worktree de l'agent (`..` et liens hors worktree refusés), CSP stricte, toute requête réseau bloquée et signalée (`preview:blocked`), rendu Markdown via `marked` sans HTML brut exécutable.
+- [X] T033 [P] [US4] Tests renderer `tests/unit/renderer/focus/PreviewTab.test.tsx` : liste (`mockup`, `recap`, `issue`, `other`), iframe `sandbox` sans `allow-same-origin`, rafraîchissement sur `preview:changed` en gardant le défilement, Valider / Refuser avec commentaire ; « ressource externe bloquée » sur `preview:blocked` ; fichier trop gros ou invalide → texte brut.
+- [X] T034 [US4] e2e `tests/e2e/us21-preview.spec.ts` : décision sur maquette reçue par l'orchestrateur en moins de 1 s (SC-004), Aperçu rafraîchi en moins de 2 s.
+- [X] T035 [US4] `src/main/preview/preview-protocol.ts`, suivi des fichiers (réutiliser le suivi du worktree de 002), IPC `preview:list`, `preview:decide`, événements `preview:changed`, `preview:blocked`, événement orchestrateur `mockup`.
+- [X] T036 [US4] `src/renderer/focus/PreviewTab.tsx` (l'onglet grisé de 001 devient actif) et store.
 
 ---
 

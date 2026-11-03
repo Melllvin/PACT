@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { orchestratorActionSchema } from './orchestrator';
+import { previewFileSchema } from './preview';
 import {
   agentErrorSchema,
   agentSchema,
@@ -262,6 +263,19 @@ export const ipcRequests = {
     z.object({ issues: z.array(z.object({ id: z.string(), url: z.string() })) }),
   ),
   'publishRequest:refuse': request(z.object({ requestId: z.uuid() }), none),
+  'preview:list': request(
+    z.object({ agentId: z.uuid() }),
+    z.object({ files: z.array(previewFileSchema) }),
+  ),
+  'preview:decide': request(
+    z.object({
+      agentId: z.uuid(),
+      path: repoPathSchema,
+      decision: z.enum(['validated', 'refused']),
+      comment: z.string().max(2000).optional(),
+    }),
+    none,
+  ),
   'roles:setProfiles': request(
     z.object({
       workspaceId: z.string().min(1),
@@ -315,6 +329,8 @@ export const ipcEvents = {
     loops: z.array(loopSchema),
     issues: z.array(issueSchema),
   }),
+  /** 004 US4 — a file the Aperçu of the agent lists changed (FR-027). */
+  'preview:changed': z.object({ agentId: z.uuid(), path: repoPathSchema }),
   /** 004 US3 — the issues of a workspace and the publication waiting for the user. */
   'workspace:issues': z.object({
     workspaceId: z.string(),
@@ -325,7 +341,7 @@ export const ipcEvents = {
   'orchestrator:report': z.object({
     workspaceId: z.string(),
     agentId: z.uuid(),
-    kind: z.enum(['report', 'report-missing', 'loop', 'overlap', 'publish']),
+    kind: z.enum(['report', 'report-missing', 'loop', 'overlap', 'publish', 'mockup']),
     summary: z.string(),
   }),
 } as const;
