@@ -88,7 +88,8 @@ export async function createHarness() {
   const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
     workspaces,
-    pluginsDir: join(userData, 'orchestrator'),
+    rolesDir: join(userData, 'roles'),
+    skillsDir: 'resources/skills',
     onAction: (orchestratorId, action) => actionsHeard.push({ ...action, orchestratorId }),
     agentTools: (agentId) =>
       createAgentTools({ onReport: (id, report) => loops.report(id, report) }, agentId),
@@ -285,6 +286,9 @@ export async function createHarness() {
     issueChanges,
     get manager() {
       return manager;
+    },
+    get registry() {
+      return registry;
     },
     async restart() {
       await manager.dispose();

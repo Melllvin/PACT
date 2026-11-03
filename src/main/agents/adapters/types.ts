@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AdapterId, Effort, PermissionLevel } from '../../../shared/model';
+import type { RoleSkills } from '../../orchestrator/role-skills';
 
 // contracts/cli-adapter.md
 
@@ -29,10 +30,17 @@ export type LaunchInput = {
   orchestrator?: OrchestratorLaunch | null | undefined;
   /** 004 R5 — set for an agent with another role: its own MCP access, submit_report only. */
   agentMcp?: AgentMcpLaunch | null | undefined;
+  /** 004 R3 — set for an agent with a role: where its skills and the contract are. */
+  skills?: RoleSkills | null | undefined;
 };
 
-export type OrchestratorLaunch = { pluginDir: string; url: string; token: string };
-export type AgentMcpLaunch = { url: string; token: string };
+export type OrchestratorLaunch = {
+  pluginDir: string;
+  url: string;
+  token: string;
+  skills: RoleSkills;
+};
+export type AgentMcpLaunch = { url: string; token: string; skills: RoleSkills };
 
 export type LaunchSpec = {
   file: string;

@@ -104,7 +104,11 @@ void app.whenReady().then(async () => {
     onAction: (orchestratorId, action) => {
       emit('orchestrator:action', { ...action, orchestratorId });
     },
-    pluginsDir: join(app.getPath('userData'), 'orchestrator'),
+    rolesDir: join(app.getPath('userData'), 'roles'),
+    // 004 R3 — the suite of skills ships beside the app (extraResources).
+    skillsDir: app.isPackaged
+      ? join(process.resourcesPath, 'skills')
+      : join(app.getAppPath(), 'resources', 'skills'),
     // 004 US2 — the hand-off reports of the agents with a role go to their loop.
     agentTools: (agentId) =>
       createAgentTools({ onReport: (id, report) => loops.report(id, report) }, agentId),

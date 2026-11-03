@@ -137,7 +137,12 @@ describe('fake adapter as an orchestrator (003 T008)', () => {
       permissionLevel: 'always-allow',
       port: 3001,
       hook: { url: 'http://127.0.0.1:4567', token: 'f'.repeat(64) },
-      orchestrator: { pluginDir: '/p', url: 'http://127.0.0.1:4567/mcp', token: 'e'.repeat(64) },
+      orchestrator: {
+        pluginDir: '/p',
+        url: 'http://127.0.0.1:4567/mcp',
+        token: 'e'.repeat(64),
+        skills: { role: 'orchestrator', pluginDir: '/p', skills: [], contract: '/p/c.md' },
+      },
     });
     expect(spec.env).toMatchObject({
       PACT_ORCHESTRATOR_URL: 'http://127.0.0.1:4567/mcp',

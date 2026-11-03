@@ -138,12 +138,12 @@ en moins de 1 s.
 **Goal**: suite de skills et livraison par CLI sans toucher à la configuration personnelle
 (FR-008…FR-014, FR-031).
 
-- [ ] T040 [US6] Après T041 (rouge), rédiger la suite dans `resources/skills/` : `pact-contract.md`, `pact-orchestrator`, `pact-spec`, `pact-design-system`, `pact-mockup`, `pact-dev`, `pact-test`, `pact-recap` (`SKILL.md` avec front matter `name`, `description`), contenu exigé par contracts/skills.md ; renvois spec-kit quand `.specify/` existe (FR-010).
-- [ ] T041 [P] [US6] Tests rouges `tests/unit/main/orchestrator/skills-content.test.ts` : chaque skill contient les règles exigées (contracts/skills.md, colonne « Doit dire »).
-- [ ] T042 [P] [US6] Tests rouges `tests/unit/main/orchestrator/role-skills.test.ts` et `tests/integration/orchestrator/skills-delivery.test.ts` : copie dans `userData/roles/<agentId>/`, le rôle `design` reçoit `pact-design-system` et `pact-mockup`, chaque agent ne reçoit que ses skills et le contrat ; Claude Code `--plugin-dir` ; Codex `-c developer_instructions=…`, `-c mcp_servers.pact.url=…`, `env_http_headers` ; générique `.pact/ROLE.md` + `/.pact/ROLE.md` dans `.git/info/exclude`, `git status` propre ; tout retiré à la fermeture ; rien écrit dans `~/.claude` ni `~/.codex` (HOME temporaire comparé avant/après).
-- [ ] T043 [P] [US6] Contrat Codex orchestrateur (R4) dans `tests/contract/codex.contract.test.ts` ; option « Orchestrateur » proposée pour Codex (FR-031) dans `tests/unit/renderer/launch/`.
-- [ ] T044 [US6] e2e `tests/e2e/us23-skills.spec.ts` : un agent générique reçoit `.pact/ROLE.md` et la consigne de le lire.
-- [ ] T045 [US6] `src/main/orchestrator/role-skills.ts`, plugin généralisé dans `src/main/orchestrator/plugin.ts` (le skill d'orchestrateur de 003 devient `pact-orchestrator`), voies dans les adaptateurs, `supportsOrchestrator` de Codex.
+- [X] T040 [US6] Après T041 (rouge), rédiger la suite dans `resources/skills/` : `pact-contract.md`, `pact-orchestrator`, `pact-spec`, `pact-design-system`, `pact-mockup`, `pact-dev`, `pact-test`, `pact-recap` (`SKILL.md` avec front matter `name`, `description`), contenu exigé par contracts/skills.md ; renvois spec-kit quand `.specify/` existe (FR-010).
+- [X] T041 [P] [US6] Tests rouges `tests/unit/main/orchestrator/skills-content.test.ts` : chaque skill contient les règles exigées (contracts/skills.md, colonne « Doit dire »).
+- [X] T042 [P] [US6] Tests rouges `tests/unit/main/orchestrator/role-skills.test.ts` et `tests/integration/orchestrator/skills-delivery.test.ts` : copie dans `userData/roles/<agentId>/`, le rôle `design` reçoit `pact-design-system` et `pact-mockup`, chaque agent ne reçoit que ses skills et le contrat ; Claude Code `--plugin-dir` ; Codex `-c developer_instructions=…`, `-c mcp_servers.pact.url=…`, `env_http_headers` ; générique `.pact/ROLE.md` + `/.pact/ROLE.md` dans `.git/info/exclude`, `git status` propre ; tout retiré à la fermeture ; rien écrit dans `~/.claude` ni `~/.codex` (HOME temporaire comparé avant/après).
+- [X] T043 [P] [US6] Contrat Codex orchestrateur (R4) dans `tests/contract/codex.contract.test.ts` ; option « Orchestrateur » proposée pour Codex (FR-031) dans `tests/unit/renderer/launch/`.
+- [X] T044 [US6] e2e `tests/e2e/us23-skills.spec.ts` : un agent générique reçoit `.pact/ROLE.md` et la consigne de le lire.
+- [X] T045 [US6] `src/main/orchestrator/role-skills.ts`, plugin généralisé dans `src/main/orchestrator/plugin.ts` (le skill d'orchestrateur de 003 devient `pact-orchestrator`), voies dans les adaptateurs, `supportsOrchestrator` de Codex.
 
 ---
 

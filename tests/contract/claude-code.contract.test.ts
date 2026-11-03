@@ -208,6 +208,12 @@ describe('Claude Code as an orchestrator (003 T007)', () => {
     pluginDir: '/Users/me/Library/Application Support/PACT/orchestrator/a 1/plugin',
     url: 'http://127.0.0.1:4567/mcp',
     token: 'e'.repeat(64),
+    skills: {
+      role: 'orchestrator' as const,
+      pluginDir: '/Users/me/Library/Application Support/PACT/roles/a 1/plugin',
+      skills: [{ name: 'pact-orchestrator', file: '/s/pact-orchestrator/SKILL.md' }],
+      contract: '/s/pact-orchestrator/pact-contract.md',
+    },
   };
   const launch = (permissionLevel: LaunchInput['permissionLevel'] = 'always-allow') =>
     create().buildLaunch({ ...input, permissionLevel, orchestrator });
@@ -219,7 +225,7 @@ describe('Claude Code as an orchestrator (003 T007)', () => {
   it('loads the session plugin and is told its role', () => {
     const { args } = launch();
     expect(valueAfter(args, '--plugin-dir')).toBe(orchestrator.pluginDir);
-    expect(valueAfter(args, '--append-system-prompt')).toContain('pact:orchestrateur');
+    expect(valueAfter(args, '--append-system-prompt')).toContain('pact:pact-orchestrator');
   });
 
   it('allows the PACT tools without a prompt, keeping the asks of « actions sensibles »', () => {
@@ -242,6 +248,36 @@ describe('Claude Code as an orchestrator (003 T007)', () => {
     expect(spec.args).not.toContain('--append-system-prompt');
     expect(settingsOf(spec.args).permissions).toBeUndefined();
     expect(spec.env.PACT_ORCHESTRATOR_TOKEN).toBeUndefined();
+  });
+});
+
+describe('Claude Code with another role (004 T042)', () => {
+  const pluginDir = '/Users/me/Library/Application Support/PACT/roles/a 2/plugin';
+  const skills = {
+    role: 'design' as const,
+    pluginDir,
+    skills: [
+      { name: 'pact-design-system', file: `${pluginDir}/skills/pact-design-system/SKILL.md` },
+      { name: 'pact-mockup', file: `${pluginDir}/skills/pact-mockup/SKILL.md` },
+    ],
+    contract: `${pluginDir}/skills/pact-design-system/pact-contract.md`,
+  };
+  const agentMcp = { url: 'http://127.0.0.1:4567/mcp', token: 'a'.repeat(64), skills };
+  const spec = create().buildLaunch({ ...input, agentMcp, skills });
+
+  it('loads the plugin of its role and is sent to its skills', () => {
+    expect(valueAfter(spec.args, '--plugin-dir')).toBe(pluginDir);
+    const prompt = valueAfter(spec.args, '--append-system-prompt') ?? '';
+    expect(prompt).toContain('agent design');
+    expect(prompt).toContain('pact:pact-design-system');
+    expect(prompt).toContain('pact:pact-mockup');
+    expect(prompt).toContain('pact-contract.md');
+  });
+
+  it('gets its own MCP token from its environment, never its arguments', () => {
+    expect(spec.env.PACT_AGENT_MCP_TOKEN).toBe(agentMcp.token);
+    expect(spec.env.PACT_ORCHESTRATOR_TOKEN).toBeUndefined();
+    expect(spec.args.join(' ')).not.toContain(agentMcp.token);
   });
 });
 

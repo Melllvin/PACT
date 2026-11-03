@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { PermissionLevel } from '../../../shared/model';
 import { toSpawnCommand } from '../../env/resolve-command';
-import { SKILL_NAME } from '../../orchestrator/plugin';
+import { pluginSkill, SKILL_NAME } from '../../orchestrator/plugin';
+import { CONTRACT, type RoleSkills } from '../../orchestrator/role-skills';
+import { ROLE_LABELS } from '../../../shared/roles';
 import { bridgeCommand, detectCommand, nextClockTime, tryRun } from './shared';
 import {
   pactEnv,
@@ -38,6 +40,10 @@ const PACT_TOOLS = 'mcp__plugin_pact_pact__*';
 const MCP_TOOL_TIMEOUT_MS = '660000';
 
 const ORCHESTRATOR_PROMPT = `Tu es l'orchestrateur de ce workspace PACT : tu diriges les autres agents avec le skill ${SKILL_NAME} et les outils du serveur MCP « pact ».`;
+
+/** 004 R3 — an agent with another role is sent to the skills of its role in the plugin. */
+const rolePrompt = ({ role, skills }: RoleSkills) =>
+  `Tu es l'agent ${ROLE_LABELS[role].toLowerCase()} de PACT : applique ${skills.map((s) => `le skill ${pluginSkill(s.name)}`).join(' et ')}, avec le contrat ${CONTRACT} de son dossier, et rends ton rapport avec l'outil submit_report du serveur MCP « pact ».`;
 
 /** A permission dialog waits for the user; ten minutes before Claude Code gives up the hook. */
 const PERMISSION_HOOK_TIMEOUT_S = 600;
@@ -166,7 +172,14 @@ export class ClaudeCodeAdapter implements CliAdapter {
             '--append-system-prompt',
             ORCHESTRATOR_PROMPT,
           ]
-        : []),
+        : input.skills
+          ? [
+              '--plugin-dir',
+              input.skills.pluginDir,
+              '--append-system-prompt',
+              rolePrompt(input.skills),
+            ]
+          : []),
     ];
     return {
       ...toSpawnCommand(input.executablePath, args, this.platform, process.env),
@@ -180,6 +193,8 @@ export class ClaudeCodeAdapter implements CliAdapter {
               MCP_TOOL_TIMEOUT: MCP_TOOL_TIMEOUT_MS,
             }
           : {}),
+        // 004 R5: the plugin of another role reads the agent's own token.
+        ...(input.agentMcp ? { PACT_AGENT_MCP_TOKEN: input.agentMcp.token } : {}),
       },
     };
   }
