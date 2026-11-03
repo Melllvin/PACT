@@ -1,0 +1,4 @@
+{
+  "output": ["Quelle base de données ? 1. Postgres 2. SQLite"],
+  "signal": { "type": "awaiting-answer", "summary": "Quelle base de données ?", "question": true }
+}

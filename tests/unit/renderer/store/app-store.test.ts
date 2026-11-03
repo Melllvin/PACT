@@ -162,6 +162,18 @@ describe('app store', () => {
     expect(ws?.agents[0]?.state).toBe('starting');
   });
 
+  it('keeps whether an agent asks a question, until it no longer does', async () => {
+    const { api, emit } = fakeApi({ workspaces: [workspace('w1', [agent(1)])] });
+    const store = createAppStore(api);
+    await store.getState().load();
+    store.getState().connect();
+
+    emit('agent:state', { agentId: uuid(1), state: 'awaiting-answer', awaiting: 'question' });
+    expect(store.getState().workspaces[0]?.agents[0]?.awaiting).toBe('question');
+    emit('agent:state', { agentId: uuid(1), state: 'working' });
+    expect(store.getState().workspaces[0]?.agents[0]).not.toHaveProperty('awaiting');
+  });
+
   it('removes a free terminal whose shell has exited, and nothing for an agent', async () => {
     const shell = { id: uuid(7), workspaceId: 'w1', cwd: '/w1', shell: '/bin/zsh' };
     const { api, emit } = fakeApi({
