@@ -175,6 +175,15 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
   'integration:askAgent': { valid: { integrationId }, invalid: [{}] },
   'integration:finish': { valid: { integrationId }, invalid: [{ integrationId: 'x' }] },
   'integration:cancel': { valid: { integrationId }, invalid: [{}] },
+  'integrationRequest:confirm': {
+    valid: { requestId: integrationId, message: 'feat: x', confirmWorking: true },
+    invalid: [
+      { requestId: integrationId },
+      { requestId: 'x', message: 'feat' },
+      { requestId: integrationId, message: '  ' },
+    ],
+  },
+  'integrationRequest:refuse': { valid: { requestId: integrationId }, invalid: [{}] },
 };
 
 describe('IPC request schemas', () => {
@@ -234,6 +243,7 @@ describe('IPC event schemas', () => {
       'review:tests',
       'term:data',
       'term:exit',
+      'workspace:integrationRequests',
       'workspace:status',
     ]);
   });
