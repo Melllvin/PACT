@@ -256,6 +256,8 @@ describe('A question from the CLI', { timeout: 30_000 }, () => {
     pty.write(agent.id, 'Choisis une base\r');
     await waitForState(agent.id, 'awaiting-answer');
     expect(current(agent.id)?.awaiting).toBe('question');
+    // The renderer learns it from the event, not only from the saved workspace.
+    expect(events.at(-1)).toMatchObject({ agentId: agent.id, awaiting: 'question' });
     const write = vi.spyOn(pty, 'write');
     await expect(manager.answer(agent.id, 'allow')).rejects.toThrow(
       'Répondez à cette question dans le terminal de l’agent.',

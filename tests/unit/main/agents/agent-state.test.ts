@@ -155,11 +155,11 @@ describe('applySignal', () => {
       summary: 'rm x',
       ruleKey: 'Bash(rm x)',
     });
-    expect(permission.awaiting).toBe('permission');
+    expect(permission.awaiting).toBeUndefined();
     expect(
       applySignal(asked, { type: 'awaiting-answer', summary: 'rm x', ruleKey: 'Bash(rm x)' })
         .awaiting,
-    ).toBe('permission');
+    ).toBeUndefined();
   });
 
   it('returns the same agent when nothing changes', () => {
