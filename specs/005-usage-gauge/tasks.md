@@ -75,9 +75,9 @@ limites → aucune jauge.
 
 **Goal**: part de chaque agent (jetons), rôle, agents fermés, autres workspaces (FR-013, FR-014).
 
-- [ ] T024 [P] [US3] Tests rouges `tests/unit/main/usage/usage-service.test.ts` : delta par agent depuis son premier relevé dans la fenêtre, remise à zéro au changement de `resetsAt`, agent fermé gardé et marqué `closed` ; `tests/unit/renderer/workspace/UsageGauge.test.tsx` : tri décroissant, rôle affiché, « autres » pour les autres workspaces, texte « des agents PACT ».
-- [ ] T025 [US3] e2e `tests/e2e/us26-usage-shares.spec.ts` : trois faux agents aux jetons connus.
-- [ ] T026 [US3] Implémenter les parts dans `src/main/usage/usage-service.ts` et le détail dans `UsageGauge.tsx`.
+- [X] T024 [P] [US3] Tests rouges `tests/unit/main/usage/usage-service.test.ts` : delta par agent depuis son premier relevé dans la fenêtre, remise à zéro au changement de `resetsAt`, agent fermé gardé et marqué `closed` ; `tests/unit/renderer/workspace/UsageGauge.test.tsx` : tri décroissant, rôle affiché, « autres » pour les autres workspaces, texte « des agents PACT ».
+- [X] T025 [US3] e2e `tests/e2e/us26-usage-shares.spec.ts` : trois faux agents aux jetons connus.
+- [X] T026 [US3] Implémenter les parts dans `src/main/usage/usage-service.ts` et le détail dans `UsageGauge.tsx`.
 
 ---
 

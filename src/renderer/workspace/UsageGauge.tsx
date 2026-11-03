@@ -7,10 +7,12 @@ import {
   levelNow,
   readingAge,
   shownWindow,
+  workspaceShares,
   type UsageReading,
   type UsageState,
   type UsageThresholds,
 } from '../../shared/usage';
+import { ROLE_LABELS } from '../../shared/roles';
 import { UsageThresholdsDialog } from '../settings/UsageThresholds';
 import { cn } from '@/lib/utils';
 
@@ -84,6 +86,8 @@ type Props = {
   onPinnedChange?: (pinned: boolean) => void;
   /** « Seuils d’alerte… » in its detail (FR-010). */
   onThresholds?: () => void;
+  /** The workspace whose agents' parts the detail shows, the others as « autres » (FR-013). */
+  workspaceId?: string;
 };
 
 export function UsageGauge({
@@ -94,6 +98,7 @@ export function UsageGauge({
   pinned: shownPinned,
   onPinnedChange,
   onThresholds,
+  workspaceId,
 }: Props) {
   // Open while hovered or focused; a click keeps it open until another one, Échap or a blur.
   const [hovered, setHovered] = useState(false);
@@ -118,6 +123,7 @@ export function UsageGauge({
   const age = readingAge(reading, now);
   const value = Math.round(shown.usedPercent);
   const label = `${cliName} ${percent(shown.usedPercent)} · ${shown.label}`;
+  const parts = workspaceId === undefined ? null : workspaceShares(state.shares, workspaceId);
   return (
     <div
       className="relative"
@@ -201,6 +207,32 @@ export function UsageGauge({
             })}
           </ul>
           <p className="mb-0 mt-2 text-muted-foreground">Lu à {time(reading.readAt)}</p>
+          {parts && (
+            <>
+              <h3 className="mb-1 mt-3 text-[12px] font-medium">Part des agents PACT</h3>
+              <ul
+                aria-label="Part des agents PACT"
+                className="m-0 flex list-none flex-col gap-1 p-0"
+              >
+                {parts.agents.map((part) => (
+                  <li key={part.agentId} className="flex justify-between gap-2">
+                    <span className={cn(part.closed && 'text-muted-foreground')}>
+                      {part.label}
+                      {part.role && ` · ${ROLE_LABELS[part.role]}`}
+                      {part.closed && ' · fermé'}
+                    </span>
+                    <span className="font-mono">{percent(part.percent)}</span>
+                  </li>
+                ))}
+                {parts.others > 0 && (
+                  <li className="flex justify-between gap-2 text-muted-foreground">
+                    <span>autres</span>
+                    <span className="font-mono">{percent(parts.others)}</span>
+                  </li>
+                )}
+              </ul>
+            </>
+          )}
           {onThresholds && (
             <button
               type="button"
@@ -227,7 +259,7 @@ export function UsageGauges({
   onDetail,
   onThresholds,
 }: {
-  workspace: Pick<Workspace, 'agents'>;
+  workspace: Pick<Workspace, 'agents'> & Partial<Pick<Workspace, 'id'>>;
   usage: readonly UsageState[];
   clis: readonly Pick<CliDefinition, 'id' | 'name'>[];
   now: Date;
@@ -251,6 +283,7 @@ export function UsageGauges({
             cliName={clis.find((cli) => cli.id === state.cliId)?.name ?? state.cliId}
             now={now}
             thresholds={thresholds}
+            {...(workspace.id !== undefined && { workspaceId: workspace.id })}
             {...(onDetail && {
               pinned: detail === key,
               onPinnedChange: (pinned: boolean) => {

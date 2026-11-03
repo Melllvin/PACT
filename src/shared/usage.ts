@@ -134,3 +134,38 @@ export function launchWarning(
   const until = window.resetsAt === null ? 'sa réinitialisation' : clockTime(window.resetsAt);
   return `Limite ${window.label} à ${String(percent)} % : ces agents risquent de s’arrêter avant ${until}`;
 }
+
+/** One row of the parts of a workspace (FR-013): an agent and its percentage of PACT's tokens. */
+export type WorkspaceShare = Pick<AgentShare, 'agentId' | 'label' | 'role' | 'closed'> & {
+  percent: number;
+};
+
+/**
+ * 005 FR-013, R5 — the part of each agent of `workspaceId` in the tokens PACT counted for the
+ * account, the largest first; the agents of the other workspaces are « autres ». Null before any
+ * token is counted.
+ */
+export function workspaceShares(
+  shares: readonly AgentShare[],
+  workspaceId: string,
+): { agents: WorkspaceShare[]; others: number } | null {
+  const total = shares.reduce((sum, share) => sum + share.tokens, 0);
+  if (total === 0) return null;
+  const part = (tokens: number) => Math.round((tokens / total) * 100);
+  const own = shares.filter((share) => share.workspaceId === workspaceId);
+  const others = shares
+    .filter((share) => share.workspaceId !== workspaceId)
+    .reduce((sum, share) => sum + share.tokens, 0);
+  return {
+    agents: [...own]
+      .sort((a, b) => b.tokens - a.tokens)
+      .map(({ agentId, label, role, closed, tokens }) => ({
+        agentId,
+        label,
+        role,
+        closed,
+        percent: part(tokens),
+      })),
+    others: part(others),
+  };
+}

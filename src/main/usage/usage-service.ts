@@ -7,6 +7,7 @@ import {
   type UsageReading,
   type UsageState,
   type UsageThresholds,
+  type UsageWindow,
 } from '../../shared/usage';
 import { parseStatusline } from './claude-statusline';
 import { CodexRollout } from './codex-rollout';
@@ -33,7 +34,27 @@ type FollowRollout = (options: {
   onSample: (sample: UsageSample) => void;
 }) => Follower;
 
-type Account = { cliId: string; account: string; reading: UsageReading | null };
+/** What PACT counted for one agent in the current window (R5). */
+type Share = { source: UsageSource; tokens: number; last: number; closed: boolean };
+
+type Account = {
+  cliId: string;
+  account: string;
+  reading: UsageReading | null;
+  /** By agent, in the order they first reported. */
+  shares: Map<string, Share>;
+};
+
+/** A later reset by more than this is a new window, not the drift of a CLI's clock. */
+const RESET_DRIFT_MS = 10 * 60_000;
+
+/** The reset of the shortest window of a reading: the one whose change starts the count again. */
+function firstReset(windows: readonly UsageWindow[]): string | null {
+  const [first] = [...windows].sort(
+    (a, b) => (a.minutes ?? Number.POSITIVE_INFINITY) - (b.minutes ?? Number.POSITIVE_INFINITY),
+  );
+  return first?.resetsAt ?? null;
+}
 
 /** The account of a CLI: the folder its configuration is read from, or `default` (R3). */
 export const accountOf = (folder: string | undefined) =>
@@ -80,10 +101,18 @@ export class UsageService {
     return launchWarning(this.list(), cliId, this.thresholds, this.now());
   }
 
-  /** What a sample tells; a sample without limits keeps the last reading (FR-007). */
+  /**
+   * What a sample tells; a sample without limits keeps the last reading (FR-007) and only counts
+   * the agent's tokens, without an event.
+   */
   record(source: UsageSource, sample: UsageSample): void {
-    if (!sample.windows) return;
     const key = `${source.cliId}\u0000${source.account}`;
+    const known = this.accounts.get(key);
+    if (!sample.windows) {
+      if (known) this.count(known, source, sample.tokens);
+      return;
+    }
+    const now = this.now();
     const account: Account = {
       cliId: source.cliId,
       account: source.account,
@@ -91,11 +120,38 @@ export class UsageService {
         cliId: source.cliId,
         account: source.account,
         windows: sample.windows,
-        readAt: this.now().toISOString(),
+        readAt: now.toISOString(),
       },
+      shares:
+        known?.reading && !this.isNewWindow(known.reading, sample.windows, now)
+          ? known.shares
+          : new Map<string, Share>(),
     };
+    this.count(account, source, sample.tokens);
     this.accounts.set(key, account);
     this.onState(this.stateOf(account));
+  }
+
+  /** R5 — the window reset since the last reading: every part starts again (FR-014). */
+  private isNewWindow(previous: UsageReading, windows: UsageWindow[], now: Date): boolean {
+    const before = firstReset(previous.windows);
+    const after = firstReset(windows);
+    if (before === null) return false;
+    if (Date.parse(before) <= now.getTime()) return true;
+    return after !== null && Date.parse(after) - Date.parse(before) > RESET_DRIFT_MS;
+  }
+
+  /** R5 — the agent's tokens since its first reading of the window; a new session goes on. */
+  private count(account: Account, source: UsageSource, tokens: number): void {
+    const share = account.shares.get(source.agentId);
+    if (!share) {
+      account.shares.set(source.agentId, { source, tokens: 0, last: tokens, closed: false });
+      return;
+    }
+    share.tokens += tokens >= share.last ? tokens - share.last : tokens;
+    share.last = tokens;
+    share.source = source;
+    share.closed = false;
   }
 
   /**
@@ -113,7 +169,7 @@ export class UsageService {
 
   /** 005 R2 — follows the rollout of a Codex session until the agent stops. */
   follow(source: UsageSource, { codexHome, sessionId }: { codexHome: string; sessionId: string }) {
-    this.release(source.agentId);
+    this.unfollow(source.agentId);
     const follower = this.followRollout({
       codexHome,
       sessionId,
@@ -125,19 +181,45 @@ export class UsageService {
     follower.start();
   }
 
+  /** The agent stopped: its part stays, marked closed, until the window resets (FR-014). */
   release(agentId: string): void {
+    this.unfollow(agentId);
+    for (const account of this.accounts.values()) {
+      const share = account.shares.get(agentId);
+      if (!share || share.closed) continue;
+      share.closed = true;
+      this.onState(this.stateOf(account));
+    }
+  }
+
+  stop(): void {
+    for (const id of [...this.followers.keys()]) this.unfollow(id);
+  }
+
+  private unfollow(agentId: string): void {
     this.followers.get(agentId)?.stop();
     this.followers.delete(agentId);
   }
 
-  stop(): void {
-    for (const id of [...this.followers.keys()]) this.release(id);
-  }
-
-  private stateOf({ cliId, account, reading }: Account): UsageState {
+  private stateOf({ cliId, account, reading, shares }: Account): UsageState {
     const level = reading
       ? usageLevel(shownWindow(reading, this.now()).usedPercent, this.thresholds)
       : 'ok';
-    return { cliId, account, reading, shares: [], level };
+    return {
+      cliId,
+      account,
+      reading,
+      shares: [...shares.entries()]
+        .map(([agentId, { source, tokens, closed }]) => ({
+          agentId,
+          workspaceId: source.workspaceId,
+          label: source.label,
+          role: source.role,
+          tokens,
+          closed,
+        }))
+        .sort((a, b) => b.tokens - a.tokens),
+      level,
+    };
   }
 }
