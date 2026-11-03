@@ -122,6 +122,34 @@ describe('launch_agent', () => {
   });
 });
 
+// 006 T006 — which orchestrator launched an agent (data-model « Agent.launchedBy »).
+describe('launch_agent: launchedBy', () => {
+  it('records the orchestrator that launched each agent, and survives a reload of the state', async () => {
+    const first = await tool('launch_agent', { cli: 'Faux CLI', branch: 'feat/a' });
+    const second = await tool('launch_agent', { cli: 'Faux CLI', branch: 'feat/b' });
+    const ids = [first, second].map((r) => (r.json as Launched).agent.id);
+    expect(others().map((a) => a.launchedBy)).toEqual([orchestratorId, orchestratorId]);
+
+    const saved = await h.stores.workspace(h.workspace.id).read();
+    expect(saved?.agents.filter((a) => ids.includes(a.id)).map((a) => a.launchedBy)).toEqual([
+      orchestratorId,
+      orchestratorId,
+    ]);
+
+    await h.restart();
+    const reloaded = (h.workspaces.get(h.workspace.id)?.agents ?? []).filter((a) =>
+      ids.includes(a.id),
+    );
+    expect(reloaded.map((a) => a.launchedBy)).toEqual([orchestratorId, orchestratorId]);
+  }, 30_000);
+
+  it('leaves null on an agent launched from the interface, orchestrator included', async () => {
+    const [byUser] = await h.launch([h.draft()]);
+    expect(h.current(byUser?.id ?? '')?.launchedBy).toBeNull();
+    expect(h.current(orchestratorId)?.launchedBy).toBeNull();
+  }, 30_000);
+});
+
 describe('close_agent', () => {
   it('closes the tile and keeps the worktree and the branch', async () => {
     const { json } = await tool('launch_agent', { cli: 'Faux CLI', branch: 'feat/garde' });

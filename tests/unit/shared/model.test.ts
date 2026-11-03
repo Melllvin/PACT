@@ -469,3 +469,32 @@ describe('delivery chain (004 T004)', () => {
     expect(agentDraftSchema.safeParse({ ...base, role: 'chef' }).success).toBe(false);
   });
 });
+
+// 006 T003 — which orchestrator launched an agent (data-model « Agent »).
+describe('Agent.launchedBy (006)', () => {
+  it('reads null for an agent saved without the field', () => {
+    const parsed = agentSchema.safeParse(agent(1));
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toMatchObject({ launchedBy: null });
+  });
+
+  it('accepts the uuid of the orchestrator that launched it', () => {
+    const parsed = agentSchema.safeParse({ ...agent(2), launchedBy: uuid(1) });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toMatchObject({ launchedBy: uuid(1) });
+  });
+
+  it('refuses a number', () => {
+    expect(agentSchema.safeParse({ ...agent(2), launchedBy: 1 }).success).toBe(false);
+  });
+
+  it('is kept in a workspace read back from the state', () => {
+    const parsed = workspaceSchema.safeParse(
+      workspace([agent(1, { role: 'orchestrator' }), { ...agent(2), launchedBy: uuid(1) }]),
+    );
+    expect(parsed.data?.agents.map((a) => (a as { launchedBy?: unknown }).launchedBy)).toEqual([
+      null,
+      uuid(1),
+    ]);
+  });
+});
