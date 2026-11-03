@@ -90,6 +90,8 @@ type Options = {
     statusLine(source: UsageSource, payload: unknown): string;
     follow(source: UsageSource, rollout: { codexHome: string; sessionId: string }): void;
     release(agentId: string): void;
+    /** 005 R8 — the reset the gauge knows, for a rate limit whose message gives none. */
+    resetAt?(cliId: string, account: string): Date | undefined;
   };
 };
 
@@ -853,7 +855,11 @@ export class AgentManager {
         sessionId: signal.sessionId,
       });
     }
-    const resetAt = signal.type === 'failed' ? signal.resetAt : undefined;
+    const source = running.usage?.source;
+    const resetAt =
+      signal.type !== 'failed'
+        ? undefined
+        : (signal.resetAt ?? (source && this.usage?.resetAt?.(source.cliId, source.account)));
     const schedule =
       signal.type === 'failed' &&
       signal.kind === 'rate-limit' &&

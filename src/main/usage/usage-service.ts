@@ -102,6 +102,20 @@ export class UsageService {
   }
 
   /**
+   * 005 FR-015, R8 — when the account can work again: the reset of its window at the limit, else
+   * of its highest; undefined without a reading or without its time.
+   */
+  resetAt(cliId: string, account: string): Date | undefined {
+    const windows = this.accounts.get(`${cliId}\u0000${account}`)?.reading?.windows ?? [];
+    const [window] = [...windows].sort(
+      (a, b) =>
+        Number(b.usedPercent >= 100) - Number(a.usedPercent >= 100) ||
+        b.usedPercent - a.usedPercent,
+    );
+    return window?.resetsAt ? new Date(window.resetsAt) : undefined;
+  }
+
+  /**
    * What a sample tells; a sample without limits keeps the last reading (FR-007) and only counts
    * the agent's tokens, without an event.
    */

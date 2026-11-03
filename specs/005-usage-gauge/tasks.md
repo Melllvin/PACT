@@ -85,9 +85,9 @@ limites → aucune jauge.
 
 **Goal**: heure de réinitialisation connue → reprise automatique à cette heure (FR-015).
 
-- [ ] T027 [P] [US4] Tests rouges `tests/integration/agents/auto-resume.test.ts` : limite sans heure dans le message + heure connue par `UsageService.resetAt(cliId, account)` (fenêtre ≥ 100 %, sinon la plus haute) → reprise à cette heure ; heure passée ou inconnue → intervalles de 001 FR-036 ; `nextResume` inchangé.
-- [ ] T028 [US4] e2e `tests/e2e/us27-usage-resume.spec.ts` (horloge de test de 001).
-- [ ] T029 [US4] Passer le `resetAt` de repli dans `src/main/agents/agent-manager.ts`.
+- [X] T027 [P] [US4] Tests rouges `tests/integration/agents/auto-resume.test.ts` : limite sans heure dans le message + heure connue par `UsageService.resetAt(cliId, account)` (fenêtre ≥ 100 %, sinon la plus haute) → reprise à cette heure ; heure passée ou inconnue → intervalles de 001 FR-036 ; `nextResume` inchangé.
+- [X] T028 [US4] e2e `tests/e2e/us27-usage-resume.spec.ts` (horloge de test de 001).
+- [X] T029 [US4] Passer le `resetAt` de repli dans `src/main/agents/agent-manager.ts`.
 
 ---
 
