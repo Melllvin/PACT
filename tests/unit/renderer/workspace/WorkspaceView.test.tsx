@@ -393,6 +393,23 @@ describe('Review (002 T018, US1)', () => {
       .find((a) => a.getAttribute('aria-label')?.startsWith(`Claude Code ${String(n)},`)) ??
     document.body;
 
+  // T162 — a question opens the agent's terminal in the Focus, from its tile or À faire (FR-024a).
+  it('opens the terminal of an agent asking a question, from its tile and from À faire', async () => {
+    const user = userEvent.setup();
+    const asking = agent(1, { state: 'awaiting-answer', awaiting: 'question' });
+    render(view(binding(), [asking, agent(2)]));
+    await user.click(within(tile(1)).getByRole('button', { name: 'Répondre dans le terminal ↗' }));
+    expect(screen.getByRole('region', { name: 'Focus : Claude Code 1' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Terminal' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: '‹ Tuiles' }));
+    const column = screen.getByRole('complementary', { name: 'À faire' });
+    await user.click(within(column).getByRole('button', { name: 'Répondre dans le terminal ↗' }));
+    expect(screen.getByRole('region', { name: 'Focus : Claude Code 1' })).toBeDefined();
+  });
+
   it('offers « Revue → » on the tile of an agent to review only (FR-002)', () => {
     render(view(binding()));
     expect(within(tile(2)).getByRole('button', { name: 'Revue →' })).toBeDefined();

@@ -405,6 +405,11 @@ actions manuelles restent.
 - **FR-024**: Chaque tuile MUST proposer en bas à droite, selon l'état : Autoriser / Refuser (attend
   une réponse) ; Journal / Relancer / Reprendre (erreur). « Reprendre » MUST reprendre la même
   session du CLI ; « Relancer » MUST redémarrer le CLI et retaper la consigne initiale.
+- **FR-024a** *(amendement du 2026-11-03)*: Quand le CLI pose une question à choix (par exemple
+  l'outil `AskUserQuestion` de Claude Code) et non une demande d'autorisation, la tuile et l'élément
+  À faire MUST proposer « Répondre dans le terminal ↗ », qui ouvre le Focus sur l'onglet Terminal
+  de l'agent, et MUST NOT proposer Autoriser / Refuser ni « Toujours pour ce worktree » ; PACT MUST
+  NOT taper de touche à la place de l'utilisateur.
 - **FR-025**: Le système MUST proposer un terminal libre ouvert à la racine du dépôt principal.
 - **FR-026**: Les agents MUST continuer à s'exécuter quelle que soit la vue affichée (grille,
   Focus, autre onglet).
