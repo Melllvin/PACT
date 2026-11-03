@@ -37,3 +37,27 @@ describe('TileActions « Revue → »', () => {
     expect(screen.getByRole('button', { name: '✓ Autoriser' })).toBeDefined();
   });
 });
+
+// T162 — a question is answered in the terminal, never with « 1 » (FR-024a).
+describe('TileActions for a question', () => {
+  it('opens the terminal instead of offering Autoriser / Refuser', async () => {
+    const user = userEvent.setup();
+    const props = handlers();
+    const onOpenTerminal = vi.fn();
+    render(
+      <TileActions
+        state="awaiting-answer"
+        question
+        {...props}
+        onAlways={vi.fn()}
+        onOpenTerminal={onOpenTerminal}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: '✓ Autoriser' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '✕ Refuser' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Toujours pour ce worktree' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Répondre dans le terminal ↗' }));
+    expect(onOpenTerminal).toHaveBeenCalled();
+    expect(props.onAnswer).not.toHaveBeenCalled();
+  });
+});

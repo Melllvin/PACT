@@ -46,6 +46,8 @@ export const agentSignalSchema = z.discriminatedUnion('type', [
     type: z.literal('awaiting-answer'),
     summary: z.string(),
     ruleKey: z.string().optional(),
+    /** A question to choose from (AskUserQuestion), not a permission: never answered by PACT. */
+    question: z.literal(true).optional(),
   }),
   // `sessionId` lets the manager drop signals from another session (Codex title thread, T049).
   z.object({ type: z.literal('turn-finished'), sessionId: z.string().optional() }),
