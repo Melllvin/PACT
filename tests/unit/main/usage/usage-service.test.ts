@@ -220,4 +220,45 @@ describe('UsageService', () => {
       expect(tokensOf(usage)).toEqual([['a1', 30, false]]);
     });
   });
+
+  describe('resetAt (US4)', () => {
+    const window = (id: string, usedPercent: number, resetsAt: string | null, minutes: number) => ({
+      id,
+      label: id,
+      usedPercent,
+      resetsAt,
+      minutes,
+    });
+
+    it('gives the reset of the window at its limit, else of the highest', () => {
+      const { usage } = service();
+      usage.record(source(), {
+        windows: [
+          window('five-hour', 70, '2026-11-03T16:00:00.000Z', 300),
+          window('week', 100, '2026-11-07T09:00:00.000Z', 10_080),
+        ],
+        tokens: 0,
+      });
+      expect(usage.resetAt('claude-code', 'default')?.toISOString()).toBe(
+        '2026-11-07T09:00:00.000Z',
+      );
+      usage.record(source(), {
+        windows: [
+          window('five-hour', 70, '2026-11-03T16:00:00.000Z', 300),
+          window('week', 20, '2026-11-07T09:00:00.000Z', 10_080),
+        ],
+        tokens: 0,
+      });
+      expect(usage.resetAt('claude-code', 'default')?.toISOString()).toBe(
+        '2026-11-03T16:00:00.000Z',
+      );
+    });
+
+    it('knows no reset for an account never read, or without its time', () => {
+      const { usage } = service();
+      expect(usage.resetAt('claude-code', 'default')).toBeUndefined();
+      usage.record(source(), { windows: [window('five-hour', 100, null, 300)], tokens: 0 });
+      expect(usage.resetAt('claude-code', 'default')).toBeUndefined();
+    });
+  });
 });

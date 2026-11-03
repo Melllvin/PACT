@@ -7,9 +7,10 @@
 //   burst: number                   extra lines printed as fast as possible
 //   permission: string              asks `? Exécuter : <cmd> (allow/deny)` and waits for the answer,
 //                                   unless the hook reply already allows it (ruleKey `Bash(<cmd>)`)
-//   rateLimit: { resetAt, exit, nativeResume }
-//                                   prints a rate-limit message; exits (code 1), resumes on its own
-//                                   like Claude Code's quota_auto_resume_fired, or waits for "continue"
+//   rateLimit: { resetAt?, exit, nativeResume }
+//                                   prints a rate-limit message, without a time when no resetAt;
+//                                   exits (code 1), resumes on its own like Claude Code's
+//                                   quota_auto_resume_fired, or waits for "continue"
 //   hooks: object[]                 raw hook payloads posted after the output
 //   renameBranch: string            runs `git branch -m <name>` in the working directory
 //   files: object[]                 edits the working directory in order (002 R11):
@@ -318,10 +319,22 @@ async function runTurn(line) {
     console.log(answer === 'allow' ? 'Autorisé' : 'Refusé');
   }
 
+  // The limits of the turn are known before its rate limit, as Claude Code's statusLine tells them.
+  const usage = ofTurn(scenario.usage);
+  if (usage) reportUsage(usage);
+  const rollout = ofTurn(scenario.rollout);
+  if (rollout) writeRollout(rollout);
+
   if (scenario.rateLimit) {
     const { resetAt, exit, nativeResume } = scenario.rateLimit;
-    console.log(`Rate limit reached. Resets at ${resetAt}`);
-    await hook({ type: 'failed', kind: 'rate-limit', message: 'Rate limited', resetAt });
+    // Without `resetAt`, the message gives no time (005 FR-015).
+    console.log(resetAt ? `Rate limit reached. Resets at ${resetAt}` : 'Rate limit reached.');
+    await hook({
+      type: 'failed',
+      kind: 'rate-limit',
+      message: 'Rate limited',
+      ...(resetAt ? { resetAt } : {}),
+    });
     if (exit) process.exit(1);
     if (nativeResume) {
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -345,10 +358,6 @@ async function runTurn(line) {
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);
   writeRoleFiles();
-  const usage = ofTurn(scenario.usage);
-  if (usage) reportUsage(usage);
-  const rollout = ofTurn(scenario.rollout);
-  if (rollout) writeRollout(rollout);
   const reports = [scenario.report ?? []].flat();
   if (process.env.PACT_AGENT_MCP_URL && reports.length > 0) {
     const report = reports[Math.min(turn, reports.length - 1)];
