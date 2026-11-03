@@ -100,6 +100,8 @@ void app.whenReady().then(async () => {
           tests,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
+          clis: () => registry.list(),
+          permissions,
         },
         orchestratorId,
       ),

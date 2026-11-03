@@ -1,7 +1,9 @@
 import { unifiedText } from '../../shared/diff';
-import { repoPathSchema, type Agent, type Workspace } from '../../shared/model';
+import { IpcFailure } from '../../shared/ipc';
+import { repoPathSchema, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
 import type { OrchestratorEvent } from '../../shared/orchestrator';
 import type { AgentManager } from '../agents/agent-manager';
+import type { PermissionService } from '../agents/permission-service';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
 import type { WaitResult } from './events';
@@ -13,7 +15,11 @@ import type { McpTool, ToolResult } from './mcp';
 
 export type ToolDependencies = {
   workspaces: { list(): Workspace[] };
-  agents: Pick<AgentManager, 'sendPrompt' | 'waitingPrompts' | 'questionOf'>;
+  agents: Pick<AgentManager, 'sendPrompt' | 'waitingPrompts' | 'questionOf' | 'launch' | 'close'>;
+  /** The CLIs PACT knows, installed or not (US4). */
+  clis: () => CliDefinition[];
+  /** The level the launcher would use in this workspace (FR-015). */
+  permissions: Pick<PermissionService, 'resolve'>;
   /** « Claude Code », « Codex »… */
   cliName: (cliId: string) => string;
   /** The agents of a workspace with changes to review (002 FR-002). */
@@ -56,6 +62,26 @@ const agentArgument = {
 
 const argument = (args: unknown, key: string): unknown =>
   typeof args === 'object' && args !== null ? (args as Record<string, unknown>)[key] : undefined;
+
+/** An optional string argument: absent, or a string. */
+const optionalString = (args: unknown, key: string): string | null => {
+  const value = argument(args, key);
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Refusal(`Argument « ${key} » : texte attendu.`);
+  }
+  return value.trim();
+};
+
+/** The launcher's refusals (limit, branch, CLI) become the orchestrator's (FR-022). */
+const asRefusal = async <T>(run: () => Promise<T>): Promise<T> => {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof IpcFailure) throw new Refusal(error.message);
+    throw error;
+  }
+};
 
 const stringArg = (args: unknown, key: string): string => {
   const value =
@@ -228,6 +254,81 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         }
         await deps.tests.run(target, command, tree);
         return reply(`Tests lancés pour ${nameOf(agent)} : ${command}`, { status: 'running' });
+      },
+    ),
+    tool(
+      'launch_agent',
+      'Lance un agent dans un nouveau worktree, avec le niveau d’autorisation choisi dans PACT. Donne-lui une consigne initiale précise et autonome. Six agents au plus par workspace, toi compris.',
+      {
+        cli: { type: 'string', description: 'Le CLI : son nom (« Codex ») ou son identifiant.' },
+        model: { type: 'string', description: 'Le modèle ; par défaut, celui du CLI.' },
+        branch: {
+          type: 'string',
+          description: 'La branche à créer ; par défaut, une branche neuve.',
+        },
+        baseBranch: {
+          type: 'string',
+          description: 'La branche de départ ; par défaut, la principale.',
+        },
+        prompt: { type: 'string', minLength: 1, maxLength: MAX_PROMPT },
+      },
+      ['cli'],
+      async (args) => {
+        const ws = workspace();
+        const wanted = stringArg(args, 'cli').trim().toLowerCase();
+        const cli = deps
+          .clis()
+          .find((c) => c.id.toLowerCase() === wanted || c.name.toLowerCase() === wanted);
+        if (cli?.status !== 'installed') {
+          throw new Refusal(`Le CLI « ${stringArg(args, 'cli')} » n’est pas installé.`);
+        }
+        const prompt = optionalString(args, 'prompt');
+        if (prompt !== null && prompt.length > MAX_PROMPT) {
+          throw new Refusal(`Consigne de 1 à ${String(MAX_PROMPT)} caractères attendue.`);
+        }
+        const preference = await deps.permissions.resolve(ws.id);
+        if (!preference) {
+          throw new Refusal(
+            'Choisissez d’abord les autorisations dans PACT : l’utilisateur doit lancer un agent depuis PACT une première fois.',
+          );
+        }
+        const [agent] = await asRefusal(() =>
+          deps.agents.launch({
+            workspaceId: ws.id,
+            agents: [
+              {
+                cliId: cli.id,
+                model: optionalString(args, 'model'),
+                permissionLevel: preference.level,
+                baseBranch: optionalString(args, 'baseBranch'),
+                branch: optionalString(args, 'branch'),
+                port: null,
+                startCommand: null,
+              },
+            ],
+            counters: ws.quickLaunchCounters,
+          }),
+        );
+        if (!agent) throw new Refusal('Aucun agent lancé.');
+        if (prompt !== null) await deps.agents.sendPrompt(agent.id, prompt, 'orchestrator');
+        const name = nameOf(agent);
+        return reply(`${name} lancé sur ${agent.branch}, port ${String(agent.port)}.`, {
+          agent: { id: agent.id, name, branch: agent.branch, port: agent.port },
+        });
+      },
+    ),
+    tool(
+      'close_agent',
+      'Ferme un agent : sa tuile disparaît, son worktree et sa branche restent ; seul l’utilisateur peut les supprimer.',
+      { agent: agentArgument },
+      ['agent'],
+      async (args) => {
+        const agent = resolve(stringArg(args, 'agent'));
+        await asRefusal(() => deps.agents.close(agent.id, { removeWorktree: false }));
+        return reply(`${nameOf(agent)} fermé ; worktree et branche ${agent.branch} gardés.`, {
+          closed: true,
+          worktreeKept: true,
+        });
       },
     ),
     tool(
