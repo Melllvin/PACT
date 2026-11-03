@@ -80,4 +80,24 @@ describe('createMainWindow', () => {
     (call?.[1] as (event: { preventDefault(): void }) => void)({ preventDefault });
     expect(preventDefault).toHaveBeenCalled();
   });
+
+  it('keeps the frames of the Aperçu on their own scheme (004 FR-026)', () => {
+    createMainWindow({});
+    const call = lastWindow().webContents.on.mock.calls.find(
+      ([event]) => event === 'will-frame-navigate',
+    );
+    const navigate = call?.[1] as (event: {
+      isMainFrame: boolean;
+      url: string;
+      preventDefault(): void;
+    }) => void;
+    const blocked = (isMainFrame: boolean, url: string) => {
+      const preventDefault = vi.fn();
+      navigate({ isMainFrame, url, preventDefault });
+      return preventDefault.mock.calls.length > 0;
+    };
+    expect(blocked(false, 'https://example.com/')).toBe(true);
+    expect(blocked(false, 'pact-preview://agent/design/mockups/a.html')).toBe(false);
+    expect(blocked(true, 'file:///index.html')).toBe(false);
+  });
 });
