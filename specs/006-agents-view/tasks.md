@@ -140,6 +140,26 @@ l'accès orchestrateur, sa tuile passe en haut, il lance un agent lié à lui.
 
 ---
 
+## Phase 7b: Issues rattachées (#42, #43, #45, #46)
+
+**Goal**: corrections d'UX remontées à l'usage, sur les mêmes fichiers que la vue des agents.
+
+### Tests (rouges d'abord)
+
+- [ ] T043 [P] Test (#42) : dans le Focus, un onglet autre que Terminal (Aperçu, Changements, Actions, Rapports) occupe toute la tuile et le terminal n'est pas visible (ni sortie, ni prompt), pour un orchestrateur comme pour un agent simple, dans `tests/unit/renderer/focus/FocusView.test.tsx` ; e2e : onglet Actions ouvert, la dernière ligne du faux CLI n'est pas visible, dans `tests/e2e/us29-lead-tiles.spec.ts`
+- [ ] T044 [P] Test (#43) : `visibleTabs(agent)` renvoie Terminal toujours ; Aperçu seulement si l'agent a un port servi ; Changements seulement si le diff n'est pas vide ; Actions et Rapports seulement s'ils ont au moins une entrée ; un onglet apparaît dès que son contenu arrive, dans `tests/unit/renderer/focus/visible-tabs.test.ts`
+- [ ] T045 [P] Test (#45) : `renameAgent(agentId, name)` refuse un nom vide ou déjà pris (raison renvoyée), persiste le nom, et le nom est utilisé par la tuile, l'en-tête du Focus, la colonne « Agents », le graphe et les outils MCP de l'orchestrateur (`wait_for_agents` accepte le nouveau nom), dans `tests/integration/agents/rename.test.ts` et `tests/unit/renderer/tiles/TileActions.test.tsx`
+- [ ] T046 [P] Test (#46) : `agentColor(agent, agents)` donne aux sous-agents une nuance proche de la couleur de leur orchestrateur (même famille de teinte, distinctes entre elles) ; deux orchestrateurs ont des familles éloignées ; un agent sans orchestrateur garde sa couleur actuelle, dans `tests/unit/shared/agent-color.test.ts`
+
+### Implementation
+
+- [ ] T047 (#42) Panneau d'onglet en pleine hauteur, terminal masqué hors onglet Terminal (sans le détruire) dans `src/renderer/focus/FocusView.tsx`
+- [ ] T048 (#43) `visibleTabs` dans `src/renderer/focus/visible-tabs.ts` ; barre d'onglets filtrée dans `src/renderer/focus/FocusView.tsx` ; si l'onglet actif disparaît, retour à Terminal
+- [ ] T049 (#45) Canal `agent:rename` `{ agentId, name }` dans `src/shared/ipc.ts` ; implémentation persistée dans `src/main/agents/agent-manager.ts` ; résolution par nom dans les outils MCP ; option « Renommer » (menu ⋮ de la tuile et du Focus) dans `src/renderer/tiles/TileActions.tsx`
+- [ ] T050 (#46) `agentColor` dans `src/shared/agent-color.ts` ; utilisé par la tuile, la colonne « Agents » et le graphe à la place de la couleur fixe
+
+---
+
 ## Phase 8: Polish
 
 - [ ] T030 [P] Documenter colonne « Agents » et vue « Graphe » dans `README.md` (section d'utilisation)
@@ -153,6 +173,8 @@ l'accès orchestrateur, sa tuile passe en haut, il lance un agent lié à lui.
 - Phase 1 → Phase 2 → stories. US1, US2, US3 indépendantes entre elles après Phase 2 ; US3 réutilise
   `agentStateLabel`/`agentPhase` (Phase 2), pas `agentRows`. Toolbar touchée par US1 (T018) et US3 (T029) :
   faire US1 avant US3.
+- Phase 7b après US1 et US2 (mêmes fichiers : `FocusView`, `Tile`, colonne « Agents ») ; T050 avant T028 si US3
+  n'est pas encore faite, pour que le graphe utilise `agentColor`.
 - Dans chaque story : tests rouges commités, puis implémentation jusqu'au vert.
 
 ## Parallel Example
