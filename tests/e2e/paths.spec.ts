@@ -33,6 +33,9 @@ test.beforeEach(async () => {
   repo = join(root, 'Mes Projets', 'Développement');
   await mkdir(repo, { recursive: true });
   git(repo, 'init', '-b', 'main');
+  // PACT commits the integrations itself: the repository needs an identity (none on CI runners).
+  git(repo, 'config', 'user.name', 'PACT Test');
+  git(repo, 'config', 'user.email', 'test@pact.dev');
   await writeFile(join(repo, 'README.md'), '# test\n');
   git(repo, 'add', '.');
   git(repo, 'commit', '-m', 'initial');
