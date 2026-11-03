@@ -151,11 +151,13 @@ function updateAgent(
 
 const applyState =
   (event: IpcEvent<'agent:state'>) =>
-  (agent: Agent): Agent => ({
+  ({ awaiting: _previous, ...agent }: Agent): Agent => ({
     ...agent,
     state: event.state,
     ...(event.lastError === undefined ? {} : { lastError: event.lastError }),
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
+    // Each event tells whether the agent asks a question: absent, it does not (FR-024a).
+    ...(event.awaiting === undefined ? {} : { awaiting: event.awaiting }),
   });
 
 /** `queued` → `working` once the agent works on the prompt, then dropped once it is ready. */

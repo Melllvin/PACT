@@ -49,7 +49,13 @@ const hookPayloadSchema = z.looseObject({
   agent_id: z.string().optional(),
   prompt: z.string().optional(),
   tool_name: z.string().optional(),
-  tool_input: z.looseObject({ command: z.string().optional() }).optional(),
+  tool_input: z
+    .looseObject({
+      command: z.string().optional(),
+      /** AskUserQuestion: the questions Claude asks, each with its options. */
+      questions: z.array(z.looseObject({ question: z.string().optional() })).optional(),
+    })
+    .optional(),
   notification_type: z.string().optional(),
   message: z.string().optional(),
   error: z.unknown().optional(),
@@ -212,6 +218,9 @@ function permissions(level: PermissionLevel, orchestrator: boolean) {
   return Object.keys(rules).length === 0 ? {} : { permissions: rules };
 }
 
+/** Claude Code's multiple-choice question tool (FR-024a). */
+const QUESTION_TOOL = 'AskUserQuestion';
+
 function mapEvent(event: HookPayload): AgentSignal | null {
   const signal = mapLeadEvent(event);
   if (event.agent_id === undefined || signal?.type === 'awaiting-answer') return signal;
@@ -230,6 +239,11 @@ function mapLeadEvent(event: HookPayload): AgentSignal | null {
         ? { type: 'prompt-submitted' }
         : { type: 'prompt-submitted', prompt: event.prompt };
     case 'PermissionRequest': {
+      // A question to choose from is not a permission: « 1 » would pick its first option (FR-024a).
+      if (event.tool_name === QUESTION_TOOL) {
+        const summary = event.tool_input?.questions?.[0]?.question ?? 'Claude pose une question';
+        return { type: 'awaiting-answer', summary, question: true };
+      }
       const tool = event.tool_name ?? 'Outil';
       const command = event.tool_input?.command;
       return command === undefined
@@ -241,6 +255,10 @@ function mapLeadEvent(event: HookPayload): AgentSignal | null {
       // Its `_stale` and `_disabled` siblings mean it will not: PACT's resume stays.
       if (event.notification_type === 'quota_auto_resume_fired')
         return { type: 'prompt-submitted' };
+      if (event.notification_type === 'elicitation_dialog') {
+        const summary = event.message ?? 'Claude pose une question';
+        return { type: 'awaiting-answer', summary, question: true };
+      }
       return event.notification_type === 'permission_prompt' ||
         event.notification_type === 'agent_needs_input'
         ? { type: 'awaiting-answer', summary: event.message ?? 'Claude attend une réponse' }

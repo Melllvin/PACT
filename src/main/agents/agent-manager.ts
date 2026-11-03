@@ -234,10 +234,17 @@ export class AgentManager {
     if (agent.state !== 'awaiting-answer' || !running) {
       throw new IpcFailure('INVALID_INPUT', 'Cet agent n’attend pas de réponse.');
     }
+    // The keys of a permission would pick an option of the question blindly (FR-024a).
+    if (agent.awaiting === 'question') {
+      throw new IpcFailure(
+        'INVALID_INPUT',
+        'Répondez à cette question dans le terminal de l’agent.',
+      );
+    }
     const rule = always && answer === 'allow' ? this.pendingRule.get(id) : undefined;
     this.pendingRule.delete(id);
     this.pty.write(id, running.adapter.answerKeys(answer));
-    await this.change(workspace.id, id, (a) => ({
+    await this.change(workspace.id, id, ({ awaiting: _answered, ...a }) => ({
       ...a,
       state: 'working',
       alwaysAllowRules:
@@ -755,8 +762,14 @@ export class AgentManager {
     this.onPromptTyped(id, origin);
   }
 
-  private emit({ id, state, lastError, scheduledResume }: Agent) {
-    this.onState({ agentId: id, state, lastError, scheduledResume });
+  private emit({ id, state, lastError, scheduledResume, awaiting }: Agent) {
+    this.onState({
+      agentId: id,
+      state,
+      lastError,
+      scheduledResume,
+      ...(awaiting ? { awaiting } : {}),
+    });
   }
 }
 

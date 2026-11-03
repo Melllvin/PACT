@@ -206,6 +206,20 @@ describe('worktrees', () => {
     await service.removeWorktree(repo, { path, branch, force: true });
     await expect(stat(path)).rejects.toThrow();
   });
+
+  it('still removes the folder and the branch, forced, when git cannot (a file held on Windows)', async () => {
+    const { path, branch } = await service.addWorktree(repo, {
+      cli: 'codex',
+      position: 1,
+      base: 'main',
+    });
+    // Without its `.git` file, `git worktree remove` refuses the folder.
+    await rm(join(path, '.git'));
+    await service.removeWorktree(repo, { path, branch, force: true });
+    await expect(stat(path)).rejects.toThrow();
+    expect(git(repo, 'branch', '--list', branch)).toBe('');
+    expect(git(repo, 'worktree', 'list')).not.toContain('codex');
+  });
 });
 
 describe('clone', () => {

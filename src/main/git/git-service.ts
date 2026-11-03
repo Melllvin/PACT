@@ -145,7 +145,15 @@ export class GitService {
     repo: string,
     { path, branch, force = false }: Worktree & { force?: boolean },
   ): Promise<void> {
-    await this.git(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), path]);
+    try {
+      await this.git(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), path]);
+    } catch (error) {
+      if (!force) throw error;
+      // On Windows, a process just stopped may hold a file of the worktree a moment longer: git
+      // unregisters the worktree but leaves its folder. Remove it again, then forget the entry.
+      await rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      await this.git(repo, ['worktree', 'prune']);
+    }
     await this.git(repo, ['branch', '-D', branch]);
   }
 
