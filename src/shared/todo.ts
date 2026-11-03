@@ -1,10 +1,14 @@
 import type { Agent, TileAction, TodoItem, TodoKind, Workspace } from './model';
 
+/** 004 FR-021 — two agents change the same files (`review:pending`). */
+type Overlap = { agents: readonly [string, string]; files: readonly string[] };
+
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
 const ORDER: TodoKind[] = [
   'answer',
   'integration-request',
   'loop-escalated',
+  'overlap',
   'rate-limit',
   'review',
   'prompt',
@@ -44,6 +48,7 @@ export function deriveTodos(
   names: (cliId: string) => string,
   /** The agents with changes to review (`review:pending`). */
   toReview: readonly string[] = [],
+  overlaps: readonly Overlap[] = [],
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   const todos = agents.flatMap(
@@ -81,6 +86,21 @@ export function deriveTodos(
         ]
       : [],
   );
+  // « ⚠ Fichiers communs »: two agents change the same files (004 FR-021).
+  const common = overlaps.flatMap((overlap): TodoItem[] => {
+    const both = overlap.agents.flatMap((id) => byId.get(id) ?? []);
+    if (both.length < 2) return [];
+    const who = both.map((agent) => `${names(agent.cliId)} ${String(agent.position)}`);
+    return [
+      {
+        id: `${overlap.agents.join('+')}:overlap`,
+        agentId: overlap.agents[0],
+        kind: 'overlap',
+        title: `⚠ Fichiers communs · ${who.join(', ')} · ${overlap.files.join(', ')}`,
+        actions: [],
+      },
+    ];
+  });
   const terminals = workspace.freeTerminals.map((terminal): TodoItem => ({
     id: `${terminal.id}:info`,
     agentId: terminal.id,
@@ -89,7 +109,7 @@ export function deriveTodos(
     actions: [],
   }));
   // Array.prototype.sort is stable: the tile order holds within a kind.
-  return [...todos, ...requests, ...loops, ...terminals].sort(
+  return [...todos, ...requests, ...loops, ...common, ...terminals].sort(
     (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind),
   );
 }

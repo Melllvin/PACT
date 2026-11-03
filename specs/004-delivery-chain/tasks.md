@@ -76,7 +76,7 @@ après un run PACT à 0 sur le tree courant.
 
 - [X] T019 [P] [US2] `tests/unit/main/orchestrator/loop-service.test.ts` : transitions `ready → in-progress → done | escalated`, refus d'un 4ᵉ tour (« Plafond de 3 tours atteint : l'utilisateur décide »), `escalated → in-progress` (Relancer 3 tours), `→ abandoned`, « Reprendre la main » clôt la boucle ; preuve `{ tree, exitCode, at }` exigée pour `done` (même tree que le courant) ; verdict rejeté si `testerTouched` non vide (FR-020, motifs `testPaths`) ; escalade au tour 3 vers `maxModel` quand `escalate` (FR-007) ; une question à l'utilisateur pendant le tour ne consomme pas de tour ; retrait du rôle d'orchestrateur → boucles `closed`, agents ouverts ; trace de l'issue (FR-024) : `branch` et `agents` remplis au `start_loop`.
 - [X] T020 [P] [US2] (couvert dans `tests/integration/orchestrator/loops.test.ts`) `tests/integration/orchestrator/reports.test.ts` : `submit_report` valide → événement `report` dans `wait_for_agents` et `orchestrator:report` ; invalide → refus avec champs manquants ; fin de tour sans rapport → `report-missing`.
-- [ ] T021 [P] [US2] `tests/integration/orchestrator/loops.test.ts` (vrais dépôts) : `start_loop` refusé si issue non `ready` ou rôles faux ; `next_round` ; preuve par `TestRunner` ; événement `overlap` quand deux agents modifient le même chemin (`ReviewService.readChanges`) ; rapport validé reçu par l'orchestrateur en moins de 1 s. *(fait sauf `overlap`, voir T026)*
+- [X] T021 [P] [US2] `tests/integration/orchestrator/loops.test.ts` (vrais dépôts) : `start_loop` refusé si issue non `ready` ou rôles faux ; `next_round` ; preuve par `TestRunner` ; événement `overlap` quand deux agents modifient le même chemin (`ReviewService.readChanges`) ; rapport validé reçu par l'orchestrateur en moins de 1 s. *(`overlap` : `tests/integration/review/review-service.test.ts`)*
 - [X] T022 [P] [US2] Renderer : `tests/unit/shared/todo.test.ts` (`loop-escalated` « ✕ Boucle arrêtée · <issue> · 3 tours », `overlap` « ⚠ Fichiers communs · <agents> », ordre après les demandes d'intégration et avant les revues), `TodoItem.test.tsx`, tuile « tour N/3 », bande « Rapports » du chef.
 - [X] T023 [US2] e2e `tests/e2e/us19-loop.spec.ts` : boucle qui échoue 3 fois, puis décision de l'utilisateur ; boucle réussie au 2ᵉ tour.
 
@@ -84,8 +84,8 @@ après un run PACT à 0 sur le tree courant.
 
 - [X] T024 [US2] `src/main/orchestrator/loop-service.ts` (boucles, tours, rapports, preuve, testeur indépendant, escalade), injecté dans `src/main/index.ts`.
 - [X] T025 [US2] Outils `submit_report`, `start_loop`, `next_round`, `get_loop` dans `src/main/orchestrator/tools.ts` ; événements `report`, `report-missing`, `loop`, `overlap` dans `src/main/orchestrator/orchestrator-service.ts` et `src/shared/orchestrator.ts`.
-- [ ] T026 [US2] Recoupement des chemins entre agents dans `src/main/review/review-service.ts`.
-- [ ] T027 [US2] IPC `loop:decide`, événement `orchestrator:report` ; À faire (`src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`), tuile et bande « Rapports » (`src/renderer/tiles/`), onglet « ◎ Rapports » du Focus (`src/renderer/focus/ReportsTab.tsx`). *(fait sauf l'onglet du Focus)*
+- [X] T026 [US2] Recoupement des chemins entre agents dans `src/main/review/review-service.ts`.
+- [X] T027 [US2] IPC `loop:decide`, événement `orchestrator:report` ; À faire (`src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`), tuile et bande « Rapports » (`src/renderer/tiles/`), onglet « ◎ Rapports » du Focus (`src/renderer/focus/ReportsTab.tsx`).
 
 **Checkpoint**: US1 + US2 = MVP de la chaîne.
 

@@ -25,6 +25,7 @@ import {
   integrationAfterSchema,
   integrationModeSchema,
   integrationSchema,
+  overlapSchema,
   reviewSnapshotSchema,
   testRunSchema,
 } from './review';
@@ -282,7 +283,12 @@ export const ipcEvents = {
   ]),
   'review:changed': reviewSnapshotSchema,
   /** Agents to review, for the Revue badge and « Revue → » (FR-002, FR-003). */
-  'review:pending': z.object({ workspaceId: z.string(), agentIds: z.array(z.uuid()) }),
+  'review:pending': z.object({
+    workspaceId: z.string(),
+    agentIds: z.array(z.uuid()),
+    /** 004 FR-021 — the files two of those agents both change. */
+    overlaps: z.array(overlapSchema),
+  }),
   'review:tests': testRunSchema,
   'integration:state': integrationSchema,
   /** 003 FR-010 — a prompt of the orchestrator was typed into this agent. */

@@ -17,7 +17,7 @@ import { AgentPills } from './AgentPills';
 import { cn } from '@/lib/utils';
 import { ROLE_LABELS } from '../../shared/roles';
 
-export type FocusTab = 'terminal' | 'changes' | 'conflicts' | 'actions';
+export type FocusTab = 'terminal' | 'changes' | 'conflicts' | 'actions' | 'reports';
 
 type Props = Omit<AgentActions, 'onClose'> & {
   tab?: FocusTab;
@@ -28,6 +28,8 @@ type Props = Omit<AgentActions, 'onClose'> & {
   conflicts?: { count: number; content: ReactNode } | undefined;
   /** 003 US5 — the orchestrator's journal « ◎ Actions » and the withdrawal of its role. */
   orchestration?: { actions: OrchestratorAction[]; onRevoke: () => void } | undefined;
+  /** 004 FR-006a — « ◎ Rapports » of the orchestrator: the latest report of each agent. */
+  reports?: ReactNode;
   /** Every agent of the workspace, in position order. */
   agents: Agent[];
   /** The agents offered as pills; all of them by default, those to review in the Revue view. */
@@ -55,6 +57,7 @@ export function FocusView({
   changes,
   conflicts,
   orchestration,
+  reports,
   agents,
   pills = agents,
   agentId,
@@ -134,6 +137,11 @@ export function FocusView({
                 ◎ Actions
               </TabsTrigger>
             )}
+            {reports !== undefined && (
+              <TabsTrigger value="reports" className={TAB}>
+                ◎ Rapports
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
         <span className="flex-1" />
@@ -156,6 +164,7 @@ export function FocusView({
         {tab === 'actions' && orchestration && (
           <ActionsJournal {...orchestration} name={(id) => nameOf(agents, id, name)} />
         )}
+        {tab === 'reports' && reports}
         {/* Same place in the tree on both tabs: the terminal stays attached, its session kept. */}
         <div
           ref={terminalBox}

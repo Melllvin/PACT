@@ -56,6 +56,7 @@ export function TodoItem({
         todo.kind === 'integration-request' && 'border-primary/30 bg-primary/6',
         (todo.kind === 'rate-limit' || todo.kind === 'loop-escalated') &&
           'border-destructive/30 bg-destructive/6',
+        todo.kind === 'overlap' && 'border-waiting/30 bg-waiting/6',
       )}
     >
       <span className="font-mono text-[12px] leading-[1.5] break-words text-foreground">
@@ -117,7 +118,7 @@ export function TodoItem({
           </Button>
         </div>
       )}
-      {agent && !request && !loop && (
+      {agent && !request && !loop && todo.kind !== 'overlap' && (
         <TileActions
           state={agent.state}
           scheduledResume={agent.scheduledResume}

@@ -307,4 +307,11 @@ export type TodoItem = {
   loop?: { issueId: string };
 };
 export type TodoKind =
-  'answer' | 'integration-request' | 'loop-escalated' | 'rate-limit' | 'review' | 'prompt' | 'info';
+  | 'answer'
+  | 'integration-request'
+  | 'loop-escalated'
+  | 'overlap'
+  | 'rate-limit'
+  | 'review'
+  | 'prompt'
+  | 'info';

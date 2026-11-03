@@ -230,4 +230,25 @@ describe('deriveTodos', () => {
       loop: { issueId: '0012-connexion' },
     });
   });
+
+  // 004 T026 — two agents change the same files (FR-021).
+  it('warns about the files two agents both change, before the reviews', () => {
+    const todos = deriveTodos(
+      workspace([agent(1, { state: 'done' }), agent(2, { state: 'done' })]),
+      names,
+      ['a1'],
+      [
+        { agents: ['a1', 'a2'] as const, files: ['src/a.ts', 'src/b.ts'] },
+        // An agent gone meanwhile gives nothing.
+        { agents: ['a1', 'a9'] as const, files: ['src/a.ts'] },
+      ],
+    );
+    expect(todos.map((t) => t.id)).toEqual(['a1+a2:overlap', 'a1:review']);
+    expect(todos[0]).toMatchObject({
+      agentId: 'a1',
+      kind: 'overlap',
+      title: '⚠ Fichiers communs · Claude Code 1, Claude Code 2 · src/a.ts, src/b.ts',
+      actions: [],
+    });
+  });
 });

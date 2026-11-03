@@ -155,6 +155,7 @@ export function App({ store, getPathForFile, terminals, review }: Props) {
               review={
                 review && {
                   pending: reviewState.pending[workspace.id] ?? [],
+                  overlaps: reviewState.overlaps[workspace.id],
                   snapshot: reviewState.snapshot,
                   selected: reviewState.selected,
                   diff: reviewState.diff,

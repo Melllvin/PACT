@@ -5,6 +5,7 @@ import type { OrchestratorAction } from '../../shared/orchestrator';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
+import { ReportsTab, type Report } from '../focus/ReportsTab';
 import { ChangesTab } from '../review/ChangesTab';
 import { ConflictsTab } from '../review/ConflictsTab';
 import { DecisionColumn } from '../review/DecisionColumn';
@@ -13,6 +14,7 @@ import {
   seenBlob,
   type FileDiff,
   type Integration,
+  type Overlap,
   type ReviewSnapshot,
   type TestRun,
 } from '../../shared/review';
@@ -49,6 +51,8 @@ export type AgentActions = {
 export type ReviewBinding = {
   /** The agents of this workspace with changes to review. */
   pending: readonly string[];
+  /** 004 FR-021 — the files two agents of this workspace both change. */
+  overlaps?: readonly Overlap[] | undefined;
   snapshot: ReviewSnapshot | null;
   selected: string | null;
   diff: FileDiff | null;
@@ -115,7 +119,7 @@ type Props = {
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
   fromOrchestrator?: Readonly<Record<string, unknown>>;
   /** 004 US2 — what the loops of this workspace told, for the orchestrator's « Rapports ». */
-  loopReports?: readonly { kind: string; summary: string }[];
+  loopReports?: readonly Report[];
   /** 003 US5 — the journal « ◎ Actions » of the orchestrator and the withdrawal of its role. */
   orchestration?: OrchestrationBinding | undefined;
 };
@@ -152,7 +156,7 @@ export function WorkspaceView({
   const [todoOpen, setTodoOpen] = useState(true);
   // A closed agent may still be in the last review:pending: only the agents here count.
   const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
-  const todos = deriveTodos(workspace, cliName, pending);
+  const todos = deriveTodos(workspace, cliName, pending, review?.overlaps);
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
@@ -166,7 +170,13 @@ export function WorkspaceView({
   const focusedAgent = agents.find((agent) => agent.id === focused);
   const focusedLead = focusedAgent?.role === 'orchestrator' ? focusedAgent.id : null;
   // Back to the terminal once the role is gone: the journal belongs to an orchestrator.
-  if (focusTab === 'actions' && focusedLead === null && focused !== null) setFocusTab('terminal');
+  if (
+    (focusTab === 'actions' || focusTab === 'reports') &&
+    focusedLead === null &&
+    focused !== null
+  ) {
+    setFocusTab('terminal');
+  }
 
   const loader = useRef(orchestration?.load);
   useLayoutEffect(() => {
@@ -359,6 +369,16 @@ export function WorkspaceView({
                       },
                     }
                   : undefined
+              }
+              reports={
+                focusedLead !== null ? (
+                  <ReportsTab
+                    reports={loopReports}
+                    agents={agents}
+                    loops={workspace.loops}
+                    name={cliName}
+                  />
+                ) : undefined
               }
               conflicts={
                 integration && review
