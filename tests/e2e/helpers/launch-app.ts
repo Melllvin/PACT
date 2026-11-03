@@ -41,6 +41,10 @@ export async function launchApp({
       USERPROFILE: home,
       CLAUDE_CONFIG_DIR: join(home, '.claude'),
       CODEX_HOME: join(home, '.codex'),
+      // On macOS the app runs hidden, without a Dock icon; PACT_E2E_FOREGROUND=1 shows it to debug
+      // a test. Windows keeps it shown: a never-shown window stalls its rendering there.
+      PACT_TEST_BACKGROUND:
+        process.platform === 'darwin' && process.env.PACT_E2E_FOREGROUND !== '1' ? '1' : '0',
       ...env,
       PACT_TEST_MODE: '1',
       PACT_USER_DATA_DIR: dir,

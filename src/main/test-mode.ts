@@ -1,9 +1,19 @@
 import type { Clock } from './agents/auto-resume';
 
-type PathSetter = { setPath(name: 'userData', path: string): void };
+type TestModeApp = {
+  setPath(name: 'userData', path: string): void;
+  /** macOS only. */
+  setActivationPolicy?(policy: 'regular' | 'accessory' | 'prohibited'): void;
+};
+
+/** In e2e runs, the harness can keep the app out of the user's way: no Dock icon, no shown window. */
+export function isBackgroundTest(env: NodeJS.ProcessEnv): boolean {
+  return env.PACT_TEST_MODE === '1' && env.PACT_TEST_BACKGROUND === '1';
+}
 
 /** In e2e runs (PACT_TEST_MODE=1), isolates app data in the directory chosen by the harness. */
-export function applyTestMode(app: PathSetter, env: NodeJS.ProcessEnv): void {
+export function applyTestMode(app: TestModeApp, env: NodeJS.ProcessEnv): void {
+  if (isBackgroundTest(env)) app.setActivationPolicy?.('accessory');
   if (env.PACT_TEST_MODE !== '1' || !env.PACT_USER_DATA_DIR) return;
   app.setPath('userData', env.PACT_USER_DATA_DIR);
 }

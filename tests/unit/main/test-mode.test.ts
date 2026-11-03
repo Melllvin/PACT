@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { applyTestMode, testClock } from '../../../src/main/test-mode';
 
-const fakeApp = () => ({ setPath: vi.fn() });
+const fakeApp = () => ({ setPath: vi.fn(), setActivationPolicy: vi.fn() });
 
 describe('applyTestMode', () => {
   it('redirects userData to the directory given by the e2e harness', () => {
@@ -14,6 +14,25 @@ describe('applyTestMode', () => {
     const app = fakeApp();
     applyTestMode(app, { PACT_USER_DATA_DIR: '/tmp/pact-e2e-x' });
     expect(app.setPath).not.toHaveBeenCalled();
+  });
+
+  it('hides the app from the Dock when the harness runs it in the background', () => {
+    const app = fakeApp();
+    applyTestMode(app, { PACT_TEST_MODE: '1', PACT_TEST_BACKGROUND: '1' });
+    expect(app.setActivationPolicy).toHaveBeenCalledWith('accessory');
+  });
+
+  it('never hides the app outside test mode', () => {
+    const app = fakeApp();
+    applyTestMode(app, { PACT_TEST_BACKGROUND: '1' });
+    applyTestMode(app, { PACT_TEST_MODE: '1' });
+    expect(app.setActivationPolicy).not.toHaveBeenCalled();
+  });
+
+  it('works where the activation policy does not exist (Windows)', () => {
+    expect(() => {
+      applyTestMode({ setPath: vi.fn() }, { PACT_TEST_MODE: '1', PACT_TEST_BACKGROUND: '1' });
+    }).not.toThrow();
   });
 
   it('keeps the default userData in test mode without a directory', () => {

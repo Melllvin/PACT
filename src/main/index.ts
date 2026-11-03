@@ -37,7 +37,7 @@ import { createPreviewHandler } from './preview/preview-protocol';
 import { PreviewService } from './preview/preview-service';
 import { ReviewService, watchRecursive } from './review/review-service';
 import { TestRunner } from './review/test-runner';
-import { applyTestMode, testClock } from './test-mode';
+import { applyTestMode, isBackgroundTest, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
 import { CloneJobs } from './workspace/clone-job';
 import { WorkspaceService } from './workspace/workspace-service';
@@ -53,7 +53,10 @@ protocol.registerSchemesAsPrivileged([
 
 void app.whenReady().then(async () => {
   const rendererUrl = devServerUrl(app, process.env);
-  const windowEnv = { ELECTRON_RENDERER_URL: rendererUrl };
+  const windowEnv = {
+    ELECTRON_RENDERER_URL: rendererUrl,
+    PACT_TEST_BACKGROUND: isBackgroundTest(process.env) ? '1' : undefined,
+  };
   const emit = createEventEmitter(() =>
     BrowserWindow.getAllWindows().map((win) => win.webContents),
   );
