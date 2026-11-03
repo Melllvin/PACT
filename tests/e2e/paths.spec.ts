@@ -80,3 +80,48 @@ test('runs an agent and a free terminal in « Mes Projets/Développement »', as
   await page.keyboard.press('Enter');
   await expect(terminal).toContainText(/Mes Projets[\\/]Développement/, { timeout: 15_000 });
 });
+
+// 003 T045 — the orchestrator reads and asks for an integration under the same paths (FR-023).
+test('lets the orchestrator read and integrate a file with spaces and accents', async () => {
+  test.setTimeout(120_000);
+  const userDataDir = join(root, 'Données PACT');
+  await mkdir(userDataDir);
+  launched = await launchApp({
+    userDataDir,
+    env: { ...env, FAKE_CLI_SCENARIO: scenarioPath('orchestra-paths') },
+  });
+  const page = await launched.app.firstWindow();
+  await answerFolderPickers(launched.app, repo);
+  await page.getByRole('button', { name: 'Choisir un dépôt Git…' }).click();
+  await page.getByRole('button', { name: /Ajouter des agents/ }).click();
+  const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
+  await launcher
+    .getByRole('group', { name: 'Faux CLI' })
+    .getByRole('button', { name: '+' })
+    .click();
+  await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
+  await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();
+  await page.keyboard.press('Enter'); // 1m: « Toujours autoriser »
+  const lead = page.getByRole('article', { name: /^Faux CLI 1,/ });
+  const worker = page.getByRole('article', { name: /^Faux CLI 2,/ });
+  await expect(lead).toHaveAttribute('data-state', 'awaiting-prompt');
+  await expect(worker).toHaveAttribute('data-state', 'awaiting-prompt');
+
+  await lead.locator('.xterm').click();
+  await page.keyboard.type('Écris la fonction');
+  await page.keyboard.press('Enter');
+  await expect(lead).toContainText('MCP get_file_diff :');
+  await expect(lead).toContainText('+export const f = 1;');
+  await expect(lead).toContainText('MCP request_integration :');
+
+  const request = page
+    .getByRole('complementary', { name: 'À faire' })
+    .getByRole('listitem')
+    .filter({ hasText: '◎ Intégrer Faux CLI 2 → main ?' });
+  await request.getByRole('button', { name: '✓ Intégrer' }).click();
+  await expect(lead).toContainText('intégration integrated');
+  expect(git(repo, 'log', '-1', '--format=%s', 'main')).toBe('feat: données à jour');
+  expect(git(repo, '-c', 'core.quotePath=false', 'show', '--name-only', '--format=', 'main')).toBe(
+    'src/données à jour.ts',
+  );
+});

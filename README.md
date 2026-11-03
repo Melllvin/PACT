@@ -82,6 +82,30 @@ states (process exit and output heuristics).
 
 Claude Code needs no approval: PACT passes its hooks as session settings.
 
+## Orchestrator
+
+Tick « Orchestrateur » when launching a Claude Code agent and it leads the others of the
+workspace. Its tile sits on top, larger than the rest. PACT gives it a `pact` MCP server and a
+`pact-orchestrator` skill, for this session only; your own Claude Code configuration is never
+touched.
+
+- **Tools.** `list_agents`, `get_changes`, `get_file_diff`, `run_tests`, `send_prompt` (a prompt
+  waits in a queue while the agent works or waits for an answer, and is marked « ◎ » in its
+  terminal), `wait_for_agents` (ends of turns, questions, errors, test results), `launch_agent`
+  and `close_agent` (the worktree and the branch are kept), and `request_integration`.
+- **Integrations are yours.** `request_integration` only puts « ◎ Intégrer <agent> → main ? » in
+  « À faire », with the commit message the orchestrator proposed; you edit it, integrate or refuse,
+  and the orchestrator hears the outcome (the commit, the conflicting files, or why it failed).
+  Nothing is integrated, pushed or opened as a PR without you.
+- **Access.** The server listens on `127.0.0.1` only, with a token per orchestrator session,
+  separate from the hooks' token and compared in constant time. Requests with another `Host` or any
+  `Origin` are refused, so a web page cannot reach it. Tools take agent names and repository
+  paths, never absolute paths or commands, and only act on the agents of the same workspace.
+- **Control.** The orchestrator's Focus has a « ◎ Actions » tab: what it did (prompts, launches,
+  closings, integration requests), the latest first, with what PACT refused and why. « Retirer le
+  rôle d’orchestrateur » revokes its token at once, cancels the prompts it queued, and leaves the
+  agent open as an ordinary one.
+
 ## Agent teams in Claude Code
 
 PACT starts every Claude Code agent with
