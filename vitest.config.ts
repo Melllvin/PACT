@@ -21,6 +21,7 @@ export default defineConfig({
             'tests/unit/assets/**/*.test.ts',
             'tests/contract/**/*.test.ts',
           ],
+          setupFiles: ['tests/setup/home.ts'],
         },
       },
       {
@@ -29,6 +30,7 @@ export default defineConfig({
           name: 'integration',
           environment: 'node',
           include: ['tests/integration/**/*.test.ts'],
+          setupFiles: ['tests/setup/home.ts'],
           // Real git repositories and processes: a loaded Windows or macOS runner needs more
           // than the default 5 s, as the agent suites already give themselves.
           testTimeout: 30_000,
@@ -42,7 +44,7 @@ export default defineConfig({
           name: 'renderer',
           environment: 'jsdom',
           include: ['tests/unit/renderer/**/*.test.{ts,tsx}'],
-          setupFiles: ['tests/setup/renderer.ts'],
+          setupFiles: ['tests/setup/home.ts', 'tests/setup/renderer.ts'],
         },
       },
     ],

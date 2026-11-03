@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -21,16 +22,29 @@ export const packagedExecutable = (platform = process.platform, arch = process.a
       ? resolve(`dist/win${arch === 'arm64' ? '-arm64' : ''}-unpacked/PACT.exe`)
       : resolve('dist/linux-unpacked/pact');
 
-/** Launches the built app in test mode with an isolated userData directory. */
+/**
+ * Launches the built app in test mode with an isolated userData directory, and a home of its own:
+ * closing fails if the app or its agents wrote in its `.claude` or `.codex` (004 SC-007).
+ */
 export async function launchApp({
   userDataDir,
   env = {},
 }: { userDataDir?: string; env?: Record<string, string> } = {}): Promise<LaunchedApp> {
   const dir = userDataDir ?? (await mkdtemp(join(tmpdir(), 'pact-e2e-')));
+  const home = await mkdtemp(join(tmpdir(), 'pact-e2e-home-'));
   const packaged = process.env.PACT_E2E_PACKAGED === '1';
   const app = await electron.launch({
     ...(packaged ? { executablePath: packagedExecutable(), args: [] } : { args: ['.'] }),
-    env: { ...process.env, ...env, PACT_TEST_MODE: '1', PACT_USER_DATA_DIR: dir },
+    env: {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      CLAUDE_CONFIG_DIR: join(home, '.claude'),
+      CODEX_HOME: join(home, '.codex'),
+      ...env,
+      PACT_TEST_MODE: '1',
+      PACT_USER_DATA_DIR: dir,
+    },
   });
   return {
     app,
@@ -38,6 +52,9 @@ export async function launchApp({
     async close({ keepData = false } = {}) {
       await app.close();
       if (!keepData) await rm(dir, { recursive: true, force: true });
+      const written = ['.claude', '.codex'].filter((name) => existsSync(join(home, name)));
+      await rm(home, { recursive: true, force: true });
+      if (written.length > 0) throw new Error(`PACT a écrit dans ~/${written.join(' et ~/')}.`);
     },
   };
 }

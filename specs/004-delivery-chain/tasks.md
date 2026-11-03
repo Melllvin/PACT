@@ -149,8 +149,8 @@ en moins de 1 s.
 
 ## Phase 9: Polish & Cross-Cutting
 
-- [ ] T046 [P] Mettre à jour `README.md` et `specs/004-delivery-chain/quickstart.md` avec ce qui a été livré.
-- [ ] T047 [P] Test e2e chemins avec espaces et accents (FR-032) pour les skills, les maquettes et le recap dans `tests/e2e/paths.spec.ts` ; vérifier SC-007 sur la suite : aucun test n'écrit dans `~/.claude` ni `~/.codex` (garde globale dans `tests/setup`).
+- [X] T046 [P] Mettre à jour `README.md` et `specs/004-delivery-chain/quickstart.md` avec ce qui a été livré.
+- [X] T047 [P] Test e2e chemins avec espaces et accents (FR-032) pour les skills, les maquettes et le recap dans `tests/e2e/paths.spec.ts` ; vérifier SC-007 sur la suite : aucun test n'écrit dans `~/.claude` ni `~/.codex` (garde globale dans `tests/setup`).
 - [ ] T048 Caractérisation sur vrais CLI (utilisateur) : `--effort` de Claude Code, `developer_instructions` et orchestrateur sous Codex (R2–R4) ; consigner dans research.md.
 
 ---
