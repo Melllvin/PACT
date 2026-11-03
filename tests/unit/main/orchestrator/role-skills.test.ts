@@ -70,7 +70,10 @@ describe('writeRoleSkills', () => {
     const skills = await writeRoleSkills(dir, { role: 'design', skillsDir: SKILLS, url: URL });
     const plugin = join(dir, 'plugin');
     expect(skills.pluginDir).toBe(plugin);
-    expect(await readdir(join(plugin, 'skills'))).toEqual(['pact-design-system', 'pact-mockup']);
+    expect((await readdir(join(plugin, 'skills'))).sort()).toEqual([
+      'pact-design-system',
+      'pact-mockup',
+    ]);
     expect(skills.skills).toEqual([
       {
         name: 'pact-design-system',
