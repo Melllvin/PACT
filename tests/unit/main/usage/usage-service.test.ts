@@ -130,4 +130,20 @@ describe('UsageService', () => {
     expect(accountOf('')).toBe('default');
     expect(accountOf('/Users/a/.claude-work')).toBe('/Users/a/.claude-work');
   });
+
+  // 005 US2 — new thresholds: every account told again with its level (FR-010).
+  it('tells every account again with the new thresholds, and warns a launch', () => {
+    const { usage, states } = service();
+    usage.record(source(), sample(85));
+    expect(states.at(-1)?.level).toBe('warn');
+    expect(usage.warning('claude-code')).toBe(
+      `Limite 5 h à 85 % : ces agents risquent de s’arrêter avant sa réinitialisation`,
+    );
+    usage.setThresholds({ warn: 50, critical: 80 });
+    expect(states.at(-1)?.level).toBe('critical');
+    usage.setThresholds({ warn: 90, critical: 95 });
+    expect(states.at(-1)?.level).toBe('ok');
+    expect(usage.warning('claude-code')).toBeNull();
+    expect(usage.warning('codex')).toBeNull();
+  });
 });

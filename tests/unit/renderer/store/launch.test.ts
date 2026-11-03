@@ -75,6 +75,7 @@ function setup({
     recents: [],
     clis: [cli('claude-code'), cli('codex')],
     permission,
+    usageThresholds: { warn: 80, critical: 95 },
   };
   const invoke = vi.fn((channel: string, input?: unknown) => {
     switch (channel) {

@@ -32,6 +32,16 @@ const absolute =
 const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown[] }> = {
   'app:getState': { valid: undefined, invalid: [{ extra: true }] },
   'usage:get': { valid: undefined, invalid: [{ extra: true }] },
+  'settings:usageThresholds': {
+    valid: { warn: 70, critical: 90 },
+    invalid: [
+      { warn: 90, critical: 90 },
+      { warn: 0, critical: 50 },
+      { warn: 50, critical: 101 },
+      { warn: 50.5, critical: 90 },
+      {},
+    ],
+  },
   'workspace:open': {
     valid: { path: absolute },
     invalid: [{}, { path: '' }, { path: 'relative/repo' }],
@@ -271,10 +281,18 @@ describe('IPC request schemas', () => {
 
   it('validates the app:getState output', () => {
     const { output } = ipcRequests['app:getState'];
+    const usageThresholds = { warn: 80, critical: 95 };
+    expect(
+      output.safeParse({ workspaces: [], recents: [], clis: [], permission: null, usageThresholds })
+        .success,
+    ).toBe(true);
+    expect(
+      output.safeParse({ workspaces: [], recents: [], clis: [], usageThresholds }).success,
+    ).toBe(false);
+    // 005: the alert thresholds come with the state.
     expect(
       output.safeParse({ workspaces: [], recents: [], clis: [], permission: null }).success,
-    ).toBe(true);
-    expect(output.safeParse({ workspaces: [], recents: [], clis: [] }).success).toBe(false);
+    ).toBe(false);
   });
 });
 

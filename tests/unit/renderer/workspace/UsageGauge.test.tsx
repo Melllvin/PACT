@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -60,7 +60,14 @@ describe('UsageGauge', () => {
   });
 
   it('tells the level in its name and its color', () => {
-    render(<UsageGauge state={state({ level: 'warn' })} cliName="Claude Code" now={NOW} />);
+    render(
+      <UsageGauge
+        state={state()}
+        cliName="Claude Code"
+        now={NOW}
+        thresholds={{ warn: 60, critical: 95 }}
+      />,
+    );
     const meter = screen.getByRole('meter');
     expect(meter.getAttribute('aria-valuetext')).toBe(
       '62 % de la fenêtre 5 h, proche de la limite',
@@ -131,16 +138,84 @@ describe('workspaceGauges', () => {
 });
 
 describe('UsageGauges', () => {
+  const workspace = { agents: [{ cliId: 'claude-code' }] } as never;
+  const clis = [{ id: 'claude-code', name: 'Claude Code' }];
+
   it('shows nothing without a reading, a gauge per account otherwise', () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(NOW);
-    const workspace = { agents: [{ cliId: 'claude-code' }] } as never;
-    const clis = [{ id: 'claude-code', name: 'Claude Code' }];
-    const { rerender } = render(<UsageGauges workspace={workspace} usage={[]} clis={clis} />);
+    const { rerender } = render(
+      <UsageGauges workspace={workspace} usage={[]} clis={clis} now={NOW} />,
+    );
     expect(screen.queryByRole('group', { name: 'Limites d’usage' })).toBeNull();
-    rerender(<UsageGauges workspace={workspace} usage={[state()]} clis={clis} />);
+    rerender(<UsageGauges workspace={workspace} usage={[state()]} clis={clis} now={NOW} />);
     expect(screen.getByRole('group', { name: 'Limites d’usage' }).textContent).toContain(
       'Claude Code 62 % · 5 h',
     );
+  });
+
+  // 005 US2 — orange at the first threshold, red at the second, as set by the user (FR-010).
+  it('colors the gauge with the thresholds of the moment', () => {
+    const { rerender } = render(
+      <UsageGauges
+        workspace={workspace}
+        usage={[state()]}
+        clis={clis}
+        now={NOW}
+        thresholds={{ warn: 60, critical: 95 }}
+      />,
+    );
+    expect(screen.getByRole('meter').dataset.level).toBe('warn');
+    rerender(
+      <UsageGauges
+        workspace={workspace}
+        usage={[state()]}
+        clis={clis}
+        now={NOW}
+        thresholds={{ warn: 50, critical: 60 }}
+      />,
+    );
+    expect(screen.getByRole('meter').dataset.level).toBe('critical');
+    expect(screen.getByRole('meter').getAttribute('aria-valuetext')).toBe(
+      '62 % de la fenêtre 5 h, limite presque atteinte',
+    );
+  });
+
+  it('opens the detail « Détail » of À faire asks for, and tells when it closes', async () => {
+    const onDetail = vi.fn();
+    render(
+      <UsageGauges
+        workspace={workspace}
+        usage={[state()]}
+        clis={clis}
+        now={NOW}
+        detail="usage:claude-code:default"
+        onDetail={onDetail}
+      />,
+    );
+    expect(screen.getByRole('region', { name: 'Détail de l’usage Claude Code' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: /Claude Code 62 %/ }));
+    expect(onDetail).toHaveBeenLastCalledWith(null);
+  });
+
+  it('changes the thresholds from the detail, kept open while the keyboard moves in it', async () => {
+    const onThresholds = vi.fn();
+    render(
+      <UsageGauges
+        workspace={workspace}
+        usage={[state()]}
+        clis={clis}
+        now={NOW}
+        onThresholds={onThresholds}
+      />,
+    );
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.keyboard('{Enter}');
+    const dialog = screen.getByRole('dialog', { name: 'Seuils d’alerte' });
+    const first = within(dialog).getByRole('spinbutton', { name: /Premier seuil/ });
+    await userEvent.clear(first);
+    await userEvent.type(first, '70');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }));
+    expect(onThresholds).toHaveBeenCalledWith({ warn: 70, critical: 95 });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

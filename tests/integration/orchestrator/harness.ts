@@ -73,6 +73,8 @@ export async function createHarness() {
   const scenarios: Record<string, string> = { default: 'prompt-then-done' };
   /** The agents with changes to review, as ReviewService would tell; set by a suite. */
   const pending = { ids: [] as string[] };
+  /** 005 — the usage warning of each CLI, as UsageService would tell; set by a suite. */
+  const usageWarnings: Record<string, string> = {};
   const typed: { agentId: string; origin: string }[] = [];
   const review = new ReviewService({ git: gitService, workspaces });
   /** What `orchestrator:report` announced, in order (004 US2). */
@@ -110,6 +112,7 @@ export async function createHarness() {
           loops,
           issues,
           clis: () => registry.list(),
+          usageWarning: (cliId) => usageWarnings[cliId] ?? null,
           permissions,
           log: (entry) => {
             orchestrator.record(orchestratorId, entry);
@@ -270,6 +273,7 @@ export async function createHarness() {
     events,
     orchestrator,
     pending,
+    usageWarnings,
     typed,
     review,
     tests,

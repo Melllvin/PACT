@@ -67,6 +67,7 @@ describe('app:getState', () => {
       recents: [],
       clis: [],
       permission: null,
+      usageThresholds: { warn: 80, critical: 95 },
     });
   });
 

@@ -309,3 +309,30 @@ describe('QuickLaunch, the orchestrator (003 T010)', () => {
     expect(orchestratorBox()?.hasAttribute('disabled')).toBe(true);
   });
 });
+
+// 005 T020 — a CLI near its usage limit: told, never blocked (FR-012).
+describe('usage warning of the launcher', () => {
+  const WARNING = 'Limite 5 h à 85 % : ces agents risquent de s’arrêter avant 16:40';
+  const usageWarning = (cliId: string) => (cliId === 'claude-code' ? WARNING : null);
+
+  it('warns for the CLIs of the draft, the launch button staying active', async () => {
+    const { launched } = renderLauncher({ usageWarning });
+    const note = screen.getByRole('note', { name: 'Limite d’usage Claude Code' });
+    expect(note.textContent).toBe(`Claude Code · ${WARNING}`);
+    await userEvent.click(within(row('Codex')).getByRole('button', { name: '+' }));
+    expect(screen.queryByRole('note', { name: 'Limite d’usage Codex' })).toBeNull();
+    const button = screen.getByRole('button', { name: 'Lancer 2 agents' });
+    expect(button).toHaveProperty('disabled', false);
+    await userEvent.click(button);
+    expect(launched()).toEqual({ agents: { 'claude-code': 1, codex: 1 }, freeTerminal: 0 });
+  });
+
+  it('says nothing once the draft has no agent of that CLI, and in the detailed mode too', async () => {
+    renderLauncher({ usageWarning });
+    await userEvent.click(within(row('Claude Code')).getByRole('button', { name: '−' }));
+    expect(screen.queryByRole('note', { name: /Limite d’usage/ })).toBeNull();
+    await userEvent.click(within(row('Claude Code')).getByRole('button', { name: '+' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
+    expect(screen.getByRole('note', { name: 'Limite d’usage Claude Code' })).toBeTruthy();
+  });
+});

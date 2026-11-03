@@ -3,6 +3,8 @@ import {
   DEFAULT_USAGE_THRESHOLDS,
   agentShareSchema,
   currentWindow,
+  launchWarning,
+  levelNow,
   readingAge,
   shownWindow,
   usageLevel,
@@ -11,6 +13,7 @@ import {
   usageThresholdsSchema,
   usageWindowSchema,
   type UsageReading,
+  type UsageState,
   type UsageWindow,
 } from '../../../src/shared/usage';
 
@@ -158,5 +161,55 @@ describe('readingAge', () => {
       hidden: false,
     });
     expect(readingAge(reading([window()], at(61)), NOW).hidden).toBe(true);
+  });
+});
+
+// 005 T020 — the warning of a launch, the same for the launcher and launch_agent (FR-012).
+describe('launchWarning', () => {
+  const NOW = new Date('2026-11-03T14:00:00');
+  const state = (cliId: string, percent: number, account = 'default'): UsageState => ({
+    cliId,
+    account,
+    reading: {
+      cliId,
+      account,
+      readAt: NOW.toISOString(),
+      windows: [
+        {
+          id: 'five-hour',
+          label: '5 h',
+          usedPercent: percent,
+          resetsAt: new Date('2026-11-03T16:40:00').toISOString(),
+          minutes: 300,
+        },
+      ],
+    },
+    shares: [],
+    level: 'ok',
+  });
+  const thresholds = { warn: 80, critical: 95 };
+
+  it('warns with the window, the percentage and the reset time, from the first threshold', () => {
+    expect(launchWarning([state('claude-code', 85)], 'claude-code', thresholds, NOW)).toBe(
+      'Limite 5 h à 85 % : ces agents risquent de s’arrêter avant 16:40',
+    );
+    expect(launchWarning([state('claude-code', 79)], 'claude-code', thresholds, NOW)).toBeNull();
+    expect(launchWarning([state('codex', 90)], 'claude-code', thresholds, NOW)).toBeNull();
+  });
+
+  it('takes the account nearest its limit, and says « sa réinitialisation » without a time', () => {
+    const unknown = state('claude-code', 96, '/autre');
+    const window = unknown.reading?.windows[0];
+    if (window) window.resetsAt = null;
+    expect(launchWarning([state('claude-code', 85), unknown], 'claude-code', thresholds, NOW)).toBe(
+      'Limite 5 h à 96 % : ces agents risquent de s’arrêter avant sa réinitialisation',
+    );
+  });
+
+  it('forgets a reading older than an hour', () => {
+    const old = state('claude-code', 90);
+    if (old.reading) old.reading.readAt = new Date('2026-11-03T12:30:00').toISOString();
+    expect(launchWarning([old], 'claude-code', thresholds, NOW)).toBeNull();
+    expect(levelNow(old, thresholds, NOW)).toBe('ok');
   });
 });
