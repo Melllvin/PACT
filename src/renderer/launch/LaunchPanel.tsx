@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { draftFromCounts, type LaunchDraft } from '../../shared/launch-draft';
-import type { Agent, CliDefinition, Workspace } from '../../shared/model';
+import type { Agent, CliDefinition, Role, RoleProfile, Workspace } from '../../shared/model';
 import { DetailedLaunch } from './DetailedLaunch';
 import { launchableClis, QuickLaunch } from './QuickLaunch';
 
@@ -17,6 +17,8 @@ export type LaunchPanelProps = {
   error: string | null;
   /** The repository has uncommitted changes, left out of the worktrees (T122). */
   localChanges?: boolean;
+  /** 004 — the role profiles the user set in this workspace (FR-003). */
+  profiles?: Partial<Record<Role, RoleProfile>>;
   onLaunch: (draft: LaunchDraft) => void;
   onClose: () => void;
 };
@@ -43,6 +45,7 @@ export function LaunchPanel({
   initialDraft,
   error,
   localChanges = false,
+  profiles = {},
   onLaunch,
   onClose,
 }: LaunchPanelProps) {
@@ -59,6 +62,7 @@ export function LaunchPanel({
       canOrchestrate={!running.some((agent) => agent.role === 'orchestrator')}
       error={error}
       localChanges={localChanges}
+      profiles={profiles}
       onLaunch={() => {
         onLaunch(draft);
       }}

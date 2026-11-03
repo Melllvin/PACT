@@ -55,6 +55,16 @@ export function runCliAdapterContract(
       });
     });
 
+    it('7. orders its model tiers from the smallest, none empty (004 R2)', () => {
+      const tiers = adapter.modelTiers();
+      expect(tiers.every((tier) => tier.length > 0)).toBe(true);
+      if (!adapter.supportsEffort) {
+        expect(adapter.buildLaunch({ ...input, effort: 'high' }).args).toEqual(
+          adapter.buildLaunch(input).args,
+        );
+      }
+    });
+
     describe.skipIf(opaqueCommand)('with known permission flags and sessions', () => {
       it('2. maps each permission level to distinct arguments', () => {
         const argsFor = LEVELS.map((level) =>

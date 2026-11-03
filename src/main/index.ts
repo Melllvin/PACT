@@ -266,7 +266,13 @@ void app.whenReady().then(async () => {
         pty,
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
-      ...createOrchestratorServices({ requests, orchestrator, agents }),
+      ...createOrchestratorServices({
+        requests,
+        orchestrator,
+        agents,
+        workspaces,
+        clis: () => registry.list(),
+      }),
     },
     {
       isTrustedSender: trustedSenderCheck({

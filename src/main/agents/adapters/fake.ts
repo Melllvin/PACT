@@ -47,6 +47,12 @@ export class FakeAdapter implements CliAdapter {
     });
   }
 
+  readonly supportsEffort = true;
+
+  modelTiers(): string[][] {
+    return [['fake-small'], ['fake'], ['fake-large']];
+  }
+
   listModels(): Promise<string[]> {
     return Promise.resolve(['fake']);
   }

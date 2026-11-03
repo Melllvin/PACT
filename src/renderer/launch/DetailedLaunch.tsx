@@ -7,7 +7,14 @@ import {
   type Conflict,
   type LaunchDraft,
 } from '../../shared/launch-draft';
-import { MAX_AGENTS, type Agent, type CliDefinition } from '../../shared/model';
+import {
+  MAX_AGENTS,
+  type Agent,
+  type CliDefinition,
+  type Role,
+  type RoleProfile,
+} from '../../shared/model';
+import { profilesOf } from '../../shared/roles';
 import { AgentInspector } from './AgentInspector';
 import { AgentList, type Selection } from './AgentList';
 import { LocalChangesNotice } from './LocalChangesNotice';
@@ -27,6 +34,8 @@ export type DetailedLaunchProps = {
   error: string | null;
   /** 003 — the workspace has no orchestrator yet (FR-001). */
   canOrchestrate?: boolean;
+  /** 004 — the role profiles the user set; the others are the defaults (FR-003). */
+  profiles?: Partial<Record<Role, RoleProfile>>;
   /** The repository has uncommitted changes, left out of the worktrees (T122). */
   localChanges?: boolean;
   onLaunch: () => void;
@@ -48,6 +57,7 @@ export function DetailedLaunch({
   taken,
   error,
   canOrchestrate = true,
+  profiles = {},
   localChanges = false,
   onLaunch,
   onQuick,
@@ -99,6 +109,7 @@ export function DetailedLaunch({
             running={running}
             index={index === -1 ? null : index}
             canOrchestrate={canOrchestrate}
+            profiles={profilesOf(profiles, installed)}
             onDuplicate={() => {
               onChange(duplicate(draft, index));
             }}

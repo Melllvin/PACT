@@ -80,3 +80,22 @@ describe('TileGrid with an orchestrator (003 T019)', () => {
     expect(screen.queryByRole('region', { name: 'Orchestrateur' })).toBeNull();
   });
 });
+
+describe('TileGrid keeps the lead the largest (004 T011, FR-006a)', () => {
+  it.each([1, 3, 5])(
+    'gives the lead the full width and 3/5 of the height, %i others sharing 2/5',
+    (count) => {
+      render(
+        <TileGrid onAdd={vi.fn()} lead={<article aria-label="Chef" />}>
+          {tiles(count)}
+        </TileGrid>,
+      );
+      expect(grid().className).toContain('grid-rows-[minmax(240px,3fr)_minmax(180px,2fr)]');
+      const lead = screen.getByRole('region', { name: 'Orchestrateur' });
+      expect(lead.outerHTML).not.toContain('max-w-');
+      expect(lead.firstElementChild?.className).toContain('w-full');
+      const others = screen.getByRole('region', { name: 'Agents dirigés' });
+      expect(others.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
+    },
+  );
+});

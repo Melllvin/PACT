@@ -16,6 +16,7 @@ const cli = (id: string, name: string, overrides: Partial<CliDefinition> = {}): 
   version: '1.0.0',
   origin: 'detected',
   status: 'installed',
+  modelTiers: [],
   models: [],
   ...overrides,
 });

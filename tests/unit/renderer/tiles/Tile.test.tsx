@@ -209,3 +209,21 @@ describe('Tile and the orchestrator (003 T019)', () => {
     expect(within(tile()).queryByText(/◎/)).toBeNull();
   });
 });
+
+describe('Tile and the roles (004 T011, FR-006)', () => {
+  it.each([
+    ['spec', 'Spec'],
+    ['design', 'Design'],
+    ['dev', 'Dev'],
+    ['test', 'Test'],
+    ['recap', 'Recap'],
+  ] as const)('shows the role %s', (role, label) => {
+    const { tile } = setup({ role });
+    expect(within(tile()).getByLabelText('Rôle').textContent).toBe(label);
+  });
+
+  it('shows no role for an ordinary agent', () => {
+    const { tile } = setup();
+    expect(within(tile()).queryByLabelText('Rôle')).toBeNull();
+  });
+});

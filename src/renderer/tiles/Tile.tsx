@@ -6,6 +6,10 @@ import { TileActions, type TileActionHandlers } from './TileActions';
 import type { TerminalRegistry } from './terminal-registry';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ROLE_LABELS } from '../../shared/roles';
+
+const BADGE =
+  'rounded-md border border-(--agent-color)/40 bg-surface/80 px-1.5 py-0.5 text-[11px] text-(--agent-color)';
 
 /** FR-041: the state in words, for assistive technologies only (FR-020 shows none). */
 const STATE_LABELS: Record<AgentState, string> = {
@@ -97,9 +101,19 @@ export function Tile({
           className={cn('px-4 pt-10', acting ? 'pb-14' : 'pb-3.5')}
         />
       )}
-      {(agent.role === 'orchestrator' || fromOrchestrator) && (
-        <span className="absolute top-2.5 left-3 rounded-md border border-(--agent-color)/40 bg-surface/80 px-1.5 py-0.5 text-[11px] text-(--agent-color)">
-          {agent.role === 'orchestrator' ? '◎ Orchestrateur' : '◎ de l’orchestrateur'}
+      {(agent.role !== null || fromOrchestrator) && (
+        <span className="absolute top-2.5 left-3 flex gap-1">
+          {agent.role !== null && agent.role !== 'orchestrator' && (
+            // 004 FR-006: the role of the agent, at a glance.
+            <span aria-label="Rôle" className={BADGE}>
+              {ROLE_LABELS[agent.role]}
+            </span>
+          )}
+          {(agent.role === 'orchestrator' || fromOrchestrator) && (
+            <span className={BADGE}>
+              {agent.role === 'orchestrator' ? '◎ Orchestrateur' : '◎ de l’orchestrateur'}
+            </span>
+          )}
         </span>
       )}
       <div

@@ -42,6 +42,8 @@ describe('list_agents', () => {
           name: 'Faux CLI 2',
           cli: 'Faux CLI',
           branch: h.current(second)?.branch,
+          role: null,
+          loop: null,
           state: 'awaiting-prompt',
           question: null,
           toReview: false,

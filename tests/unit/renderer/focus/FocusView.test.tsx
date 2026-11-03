@@ -271,3 +271,15 @@ describe('FocusView of the orchestrator', () => {
     expect(onRevoke).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('FocusView and the roles (004 T018, FR-006)', () => {
+  it('shows the role of the agent in its header', () => {
+    const { focus } = setup(team({ role: 'dev' }));
+    expect(within(focus()).getByLabelText('Rôle').textContent).toBe('Dev');
+  });
+
+  it('shows no role for an ordinary agent', () => {
+    const { focus } = setup();
+    expect(within(focus()).queryByLabelText('Rôle')).toBeNull();
+  });
+});

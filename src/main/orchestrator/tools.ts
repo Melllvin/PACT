@@ -1,6 +1,16 @@
 import { unifiedText } from '../../shared/diff';
 import { IpcFailure } from '../../shared/ipc';
-import { repoPathSchema, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
+import {
+  EFFORTS,
+  repoPathSchema,
+  ROLES,
+  effortSchema,
+  roleSchema,
+  type Agent,
+  type CliDefinition,
+  type Workspace,
+} from '../../shared/model';
+import { beyondCeiling, profilesOf } from '../../shared/roles';
 import {
   ORCHESTRATOR_ACTION_TOOLS,
   type OrchestratorAction,
@@ -179,6 +189,29 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     };
   };
 
+  /** The CLI of a launch: the one named, else the role's; and the role's profile on that CLI. */
+  const launchCli = (ws: Workspace, role: Agent['role'], named: string | null) => {
+    const clis = deps.clis();
+    const profile = role === null ? undefined : profilesOf(ws.roleProfiles, clis)[role];
+    if (named !== null) {
+      const wanted = named.trim().toLowerCase();
+      const cli = clis.find(
+        (c) => c.id.toLowerCase() === wanted || c.name.toLowerCase() === wanted,
+      );
+      if (cli?.status !== 'installed') throw new Refusal(`Le CLI « ${named} » n’est pas installé.`);
+      return { cli, profile: profile?.cliId === cli.id ? profile : undefined };
+    }
+    if (role === null) throw new Refusal('Donne le CLI ou le rôle de l’agent.');
+    if (!profile) throw new Refusal(`Aucun CLI installé pour le rôle ${role}.`);
+    const cli = clis.find((c) => c.id === profile.cliId);
+    if (cli?.status !== 'installed') {
+      throw new Refusal(
+        `Le CLI « ${cli?.name ?? profile.cliId} » du rôle ${role} n’est pas installé.`,
+      );
+    }
+    return { cli, profile };
+  };
+
   return [
     tool(
       'list_agents',
@@ -196,12 +229,17 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             name: nameOf(agent),
             cli: deps.cliName(agent.cliId),
             branch: agent.branch,
+            role: agent.role,
+            // 004 FR-006: the loop it works in, dev or test.
+            loop: loopOf(ws, agent.id),
             state: agent.state,
             question: agent.state === 'awaiting-answer' ? deps.agents.questionOf(agent.id) : null,
             toReview: toReview.has(agent.id),
             waitingPrompts: deps.agents.waitingPrompts(agent.id, 'orchestrator'),
           }));
-        const lines = agents.map((a) => `${a.name} (${a.cli}, ${a.branch}) : ${a.state}`);
+        const lines = agents.map(
+          (a) => `${a.name}${a.role ? ` [${a.role}]` : ''} (${a.cli}, ${a.branch}) : ${a.state}`,
+        );
         return reply(lines.length > 0 ? lines.join('\n') : 'Aucun autre agent.', { agents });
       },
     ),
@@ -301,10 +339,19 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'launch_agent',
-      'Lance un agent dans un nouveau worktree, avec le niveau d’autorisation choisi dans PACT. Donne-lui une consigne initiale précise et autonome. Six agents au plus par workspace, toi compris.',
+      'Lance un agent dans un nouveau worktree, avec le niveau d’autorisation choisi dans PACT. Avec un rôle, son profil donne le CLI, le modèle et l’effort ; un modèle au-delà du plafond du rôle est refusé. Donne-lui une consigne initiale précise et autonome. Six agents au plus par workspace, toi compris.',
       {
-        cli: { type: 'string', description: 'Le CLI : son nom (« Codex ») ou son identifiant.' },
-        model: { type: 'string', description: 'Le modèle ; par défaut, celui du CLI.' },
+        role: { type: 'string', enum: [...ROLES], description: 'Le rôle de l’agent.' },
+        cli: {
+          type: 'string',
+          description:
+            'Le CLI : son nom (« Codex ») ou son identifiant ; par défaut, celui du rôle.',
+        },
+        model: {
+          type: 'string',
+          description: 'Le modèle ; par défaut, celui du rôle, sinon celui du CLI.',
+        },
+        effort: { type: 'string', enum: [...EFFORTS], description: 'L’effort de raisonnement.' },
         branch: {
           type: 'string',
           description: 'La branche à créer ; par défaut, une branche neuve.',
@@ -315,16 +362,21 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         },
         prompt: { type: 'string', minLength: 1, maxLength: MAX_PROMPT },
       },
-      ['cli'],
+      [],
       async (args) => {
         const ws = workspace();
-        const wanted = stringArg(args, 'cli').trim().toLowerCase();
-        const cli = deps
-          .clis()
-          .find((c) => c.id.toLowerCase() === wanted || c.name.toLowerCase() === wanted);
-        if (cli?.status !== 'installed') {
-          throw new Refusal(`Le CLI « ${stringArg(args, 'cli')} » n’est pas installé.`);
+        const role = roleSchema.nullable().catch(null).parse(optionalString(args, 'role'));
+        const { cli, profile } = launchCli(ws, role, optionalString(args, 'cli'));
+        const model = optionalString(args, 'model') ?? profile?.model ?? null;
+        if (role !== null && profile && beyondCeiling(model, profile.maxModel, cli.modelTiers)) {
+          throw new Refusal(
+            `Modèle au-delà du plafond du rôle ${role} (${profile.maxModel ?? ''})`,
+          );
         }
+        const effort =
+          effortSchema.nullable().catch(null).parse(optionalString(args, 'effort')) ??
+          profile?.effort ??
+          null;
         const prompt = optionalString(args, 'prompt');
         if (prompt !== null && prompt.length > MAX_PROMPT) {
           throw new Refusal(`Consigne de 1 à ${String(MAX_PROMPT)} caractères attendue.`);
@@ -341,7 +393,9 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             agents: [
               {
                 cliId: cli.id,
-                model: optionalString(args, 'model'),
+                model,
+                effort,
+                role,
                 permissionLevel: preference.level,
                 baseBranch: optionalString(args, 'baseBranch'),
                 branch: optionalString(args, 'branch'),
@@ -356,7 +410,14 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         if (prompt !== null) await deps.agents.sendPrompt(agent.id, prompt, 'orchestrator');
         const name = nameOf(agent);
         return reply(`${name} lancé sur ${agent.branch}, port ${String(agent.port)}.`, {
-          agent: { id: agent.id, name, branch: agent.branch, port: agent.port },
+          agent: {
+            id: agent.id,
+            name,
+            role: agent.role,
+            model: agent.model,
+            branch: agent.branch,
+            port: agent.port,
+          },
         });
       },
     ),
@@ -454,3 +515,11 @@ function describe(event: OrchestratorEvent, name: string): string {
       return `${name} : intégration ${event.integration?.outcome ?? ''}. ${event.summary}`;
   }
 }
+
+/** 004 FR-006 — the running loop an agent works in, as dev or test. */
+const loopOf = (ws: Workspace, agentId: string) => {
+  const loop = ws.loops.find(
+    (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
+  );
+  return loop ? { issueId: loop.issueId, round: loop.round } : null;
+};

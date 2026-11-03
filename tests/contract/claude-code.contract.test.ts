@@ -538,3 +538,17 @@ describe('Claude Code detection', () => {
     expect(await create(host).listModels()).toEqual([]);
   });
 });
+
+describe('Claude Code model tiers and effort (004 T009)', () => {
+  it('orders its models from haiku to opus', () => {
+    expect(create().modelTiers()).toEqual([['haiku'], ['sonnet'], ['opus']]);
+  });
+
+  it('passes the effort with --effort, and nothing without one', () => {
+    expect(create().supportsEffort).toBe(true);
+    expect(valueAfter(create().buildLaunch({ ...input, effort: 'xhigh' }).args, '--effort')).toBe(
+      'xhigh',
+    );
+    expect(create().buildLaunch(input).args).not.toContain('--effort');
+  });
+});

@@ -13,8 +13,10 @@ import {
   remove,
   setAgent,
   setCommon,
+  setEffort,
   setOrchestrator,
   setOverride,
+  setRole,
   toAgentDrafts,
   withCount,
   type LaunchDraft,
@@ -255,5 +257,57 @@ describe('orchestrator in the draft (003 T010)', () => {
     expect(toAgentDrafts(removed, 'always-allow', () => []).some((d) => d.orchestrator)).toBe(
       false,
     );
+  });
+});
+
+describe('setRole (004 T011)', () => {
+  const profile = {
+    cliId: 'claude-code',
+    model: 'sonnet',
+    effort: 'high',
+    maxModel: 'opus',
+    escalate: false,
+  } as const;
+
+  it('takes the profile’s CLI, model and effort, and launches with the role', () => {
+    const draft = setRole(draftFromCounts({ codex: 1 }, 0), 0, 'test', profile);
+    expect(draft.agents[0]).toMatchObject({
+      cliId: 'claude-code',
+      role: 'test',
+      effort: 'high',
+      overrides: { model: 'sonnet' },
+    });
+    expect(toAgentDrafts(draft, 'ask-sensitive', () => ['sonnet'])[0]).toMatchObject({
+      cliId: 'claude-code',
+      model: 'sonnet',
+      role: 'test',
+      effort: 'high',
+    });
+  });
+
+  it('goes back to an ordinary agent with no role, keeping its settings', () => {
+    const withRole = setRole(draftFromCounts({ codex: 1 }, 0), 0, 'dev', profile);
+    const draft = setRole(withRole, 0, null, undefined);
+    expect(draft.agents[0]).toMatchObject({ cliId: 'claude-code', role: null });
+    expect(toAgentDrafts(draft, 'ask-sensitive', () => [])[0]).toMatchObject({ role: null });
+  });
+
+  it('drops the model chosen for the agent when the profile keeps the CLI’s own', () => {
+    let draft = setOverride(draftFromCounts({ codex: 1 }, 0), 0, 'model', 'gpt-5');
+    draft = setOverride(draft, 0, 'startCommand', 'npm run dev');
+    draft = setRole(draft, 0, 'dev', { ...profile, model: null });
+    expect(draft.agents[0]?.overrides).toEqual({ startCommand: 'npm run dev' });
+  });
+
+  it('keeps the role without a profile, and sets the effort of one agent alone', () => {
+    const draft = setEffort(
+      setRole(draftFromCounts({ codex: 2 }, 0), 0, 'recap', undefined),
+      1,
+      'low',
+    );
+    expect(draft.agents.map((a) => [a.role ?? null, a.effort ?? null])).toEqual([
+      ['recap', null],
+      [null, 'low'],
+    ]);
   });
 });

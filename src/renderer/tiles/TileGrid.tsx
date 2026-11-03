@@ -5,7 +5,7 @@ type Props = {
   children: ReactNode;
   /** Opens the add menu from a free slot; without it, free slots stay empty. */
   onAdd: (() => void) | undefined;
-  /** 003 — the orchestrator's tile, on top and centred; the others go below (R10). */
+  /** 003 — the orchestrator's tile, on top; the others go below (R10, 004 R11). */
   lead?: ReactNode;
 };
 
@@ -26,10 +26,11 @@ export function TileGrid({ children, onAdd, lead }: Props) {
         role="region"
         aria-label="Tuiles"
         data-layout="lead"
-        className="grid h-full grid-rows-[minmax(240px,3fr)_minmax(180px,2fr)] gap-3"
+        className="grid h-full grid-cols-[minmax(0,1fr)] grid-rows-[minmax(240px,3fr)_minmax(180px,2fr)] gap-3"
       >
-        <section aria-label="Orchestrateur" className="flex min-h-0 justify-center">
-          <div className="flex min-h-0 w-full max-w-[1100px] flex-col *:flex-1">{lead}</div>
+        {/* 004 FR-006a: the full width and 3/5 of the height, so always the largest tile. */}
+        <section aria-label="Orchestrateur" className="flex min-h-0 min-w-0">
+          <div className="flex min-h-0 min-w-0 w-full flex-col *:flex-1">{lead}</div>
         </section>
         <section
           aria-label="Agents dirigés"

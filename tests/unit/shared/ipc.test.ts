@@ -186,6 +186,20 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
   'integrationRequest:refuse': { valid: { requestId: integrationId }, invalid: [{}] },
   'orchestrator:actions': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
   'orchestrator:revoke': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
+  'roles:setProfiles': {
+    valid: {
+      workspaceId: 'w1',
+      profiles: { dev: { cliId: 'codex', model: null, effort: 'high', maxModel: null } },
+    },
+    invalid: [
+      { workspaceId: 'w1' },
+      { workspaceId: 'w1', profiles: { boss: {} } },
+      {
+        workspaceId: 'w1',
+        profiles: { dev: { cliId: '', model: null, effort: null, maxModel: null } },
+      },
+    ],
+  },
 };
 
 describe('IPC request schemas', () => {

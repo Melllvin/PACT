@@ -4,14 +4,26 @@ import {
   effective,
   preview,
   setAgent,
+  setEffort,
   setOrchestrator,
+  setRole,
   setCommon,
   setOverride,
   type CommonSettings,
   type LaunchDraft,
   type SettingKey,
 } from '../../shared/launch-draft';
-import type { Agent, CliDefinition, PermissionLevel } from '../../shared/model';
+import {
+  EFFORTS,
+  ROLES,
+  type Agent,
+  type CliDefinition,
+  type Effort,
+  type PermissionLevel,
+  type Role,
+  type RoleProfile,
+} from '../../shared/model';
+import { ROLE_LABELS } from '../../shared/roles';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -37,6 +49,8 @@ type AgentInspectorProps = {
   index: number | null;
   /** 003 — the workspace has no orchestrator yet (FR-001). */
   canOrchestrate?: boolean;
+  /** 004 — the profile of each role, the user's or the default one (FR-003). */
+  profiles?: Partial<Record<Role, RoleProfile>>;
   onDuplicate: () => void;
   onRemove: () => void;
 };
@@ -93,6 +107,7 @@ export function AgentInspector({
   index,
   running,
   canOrchestrate = true,
+  profiles = {},
   onDuplicate,
   onRemove,
 }: AgentInspectorProps) {
@@ -175,6 +190,29 @@ export function AgentInspector({
         </Field>
       )}
 
+      {agent && index !== null && (
+        <Field label="Rôle">
+          <select
+            aria-label="Rôle"
+            className={CONTROL}
+            value={agent.role ?? ''}
+            disabled={draft.orchestrator === agent.key}
+            onChange={(event) => {
+              const role = ROLES.find((r) => r === event.target.value) ?? null;
+              onChange(setRole(draft, index, role, role === null ? undefined : profiles[role]));
+            }}
+          >
+            <option value="">Aucun</option>
+            {/* The orchestrator is chosen with its ◎ box, one per workspace. */}
+            {ROLES.filter((role) => role !== 'orchestrator').map((role) => (
+              <option key={role} value={role}>
+                {ROLE_LABELS[role]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+
       <Field label="Modèle" {...field('model')}>
         <select
           aria-label="Modèle"
@@ -192,6 +230,27 @@ export function AgentInspector({
           ))}
         </select>
       </Field>
+
+      {agent && index !== null && cli?.supportsEffort === true && (
+        <Field label="Effort">
+          <select
+            aria-label="Effort"
+            className={CONTROL}
+            value={agent.effort ?? ''}
+            onChange={(event) => {
+              const effort: Effort | null = EFFORTS.find((e) => e === event.target.value) ?? null;
+              onChange(setEffort(draft, index, effort));
+            }}
+          >
+            <option value="">Par défaut du CLI</option>
+            {EFFORTS.map((effort) => (
+              <option key={effort} value={effort}>
+                {effort}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       <Field label="Permissions" {...field('permissionLevel')}>
         <ToggleGroup

@@ -103,6 +103,19 @@ describe('agent actions', () => {
     expect(second).toEqual(workspace.agents[1]);
   });
 
+  // 004 T016 — the role profiles of one workspace, the others untouched.
+  it('sets the role profiles of its workspace alone', async () => {
+    const { store, invoke } = await setup();
+    const profiles = {
+      dev: { cliId: 'claude-code', model: 'grand', effort: null, maxModel: null, escalate: false },
+    };
+    await store.getState().setRoleProfiles('w2', profiles);
+    expect(invoke).toHaveBeenCalledWith('roles:setProfiles', { workspaceId: 'w2', profiles });
+    const [first, second] = store.getState().workspaces;
+    expect(first?.roleProfiles).toEqual({});
+    expect(second?.roleProfiles).toEqual(profiles);
+  });
+
   it('sends the answer, « Reprendre » and « Relancer » to the main process', async () => {
     const { store, invoke } = await setup();
     await store.getState().answerAgent(id, 'allow');

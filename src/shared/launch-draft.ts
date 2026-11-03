@@ -1,5 +1,13 @@
 import type { AgentDraft } from './ipc';
-import { AGENT_COLORS, MAX_AGENTS, type Agent, type PermissionLevel } from './model';
+import {
+  AGENT_COLORS,
+  MAX_AGENTS,
+  type Agent,
+  type Effort,
+  type PermissionLevel,
+  type Role,
+  type RoleProfile,
+} from './model';
 
 // US6 — the agents about to be launched, shared by the quick mode (1c) and the detailed mode (1d)
 // so switching between them loses nothing (FR-011). Pure: the store keeps it, main validates it.
@@ -22,6 +30,10 @@ export type DraftAgent = {
   /** Chosen for this agent only; `null`: `agent/<cli>-<n>` and 3000 + position. */
   branch: string | null;
   port: number | null;
+  /** 004 — its role, chosen in the launcher; absent: never chosen. */
+  role?: Role | null;
+  /** 004 — its reasoning effort, from the role's profile or chosen. */
+  effort?: Effort | null;
 };
 
 export type LaunchDraft = {
@@ -144,6 +156,36 @@ export function setAgent(
   });
 }
 
+/**
+ * 004 FR-003 — the role of an agent: its profile fills CLI, model and effort, still editable
+ * for this launch. `null` makes it an ordinary agent again, its settings kept.
+ */
+export function setRole(
+  draft: LaunchDraft,
+  index: number,
+  role: Role | null,
+  profile: RoleProfile | undefined,
+): LaunchDraft {
+  return updateAgent(draft, index, (agent) => {
+    if (role === null || !profile) return { ...agent, role };
+    const overrides = Object.fromEntries(
+      Object.entries(agent.overrides).filter(([name]) => name !== 'model'),
+    ) as Partial<CommonSettings>;
+    return {
+      ...agent,
+      role,
+      cliId: profile.cliId,
+      effort: profile.effort,
+      overrides: profile.model === null ? overrides : { ...overrides, model: profile.model },
+    };
+  });
+}
+
+/** 004 — the effort of one agent; `null`: the CLI's default. */
+export function setEffort(draft: LaunchDraft, index: number, effort: Effort | null): LaunchDraft {
+  return updateAgent(draft, index, (agent) => ({ ...agent, effort }));
+}
+
 /** 003 — `key` becomes the orchestrator, or none with `null`; one at most (FR-001). */
 export function setOrchestrator(draft: LaunchDraft, key: string | null): LaunchDraft {
   return { ...draft, orchestrator: key };
@@ -259,6 +301,8 @@ export function toAgentDrafts(
       port: agent.port,
       startCommand: settings.startCommand,
       ...(agent.key === draft.orchestrator ? { orchestrator: true } : {}),
+      ...(agent.role === undefined ? {} : { role: agent.role }),
+      ...(agent.effort == null ? {} : { effort: agent.effort }),
     };
   });
 }
