@@ -61,8 +61,10 @@ export type ActionEntry = Omit<OrchestratorAction, 'id' | 'at'>;
 const ACTIONS: readonly string[] = ORCHESTRATOR_ACTION_TOOLS;
 const MAX_SUMMARY = 200;
 
-const DEFAULT_WAIT_S = 300;
-const MAX_WAIT_S = 600;
+// Claude Code's HTTP MCP requests fail after 300 s without an answer (« timeout MCP »), whatever
+// MCP_TOOL_TIMEOUT says: a wait answers before, with `timedOut`, and the orchestrator waits again.
+const DEFAULT_WAIT_S = 240;
+const MAX_WAIT_S = 240;
 
 const MAX_PROMPT = 8000;
 const MAX_MESSAGE = 4000;

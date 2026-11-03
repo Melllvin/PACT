@@ -313,6 +313,7 @@ describe('IPC event schemas', () => {
       'term:data',
       'term:exit',
       'usage:state',
+      'workspace:agentsLaunched',
       'workspace:integrationRequests',
       'workspace:issues',
       'workspace:loops',

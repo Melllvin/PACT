@@ -168,6 +168,10 @@ void app.whenReady().then(async () => {
     onClosing: (agentId) => {
       review.close(agentId);
     },
+    // The tiles of the agents an orchestrator launches appear as the launcher's do.
+    onLaunched: (workspaceId) => {
+      emit('workspace:agentsLaunched', { workspaceId });
+    },
     onState: (event) => {
       emit('agent:state', event);
       // 003 R5 — what the orchestrator of the workspace waits for.
