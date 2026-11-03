@@ -1,5 +1,5 @@
-import type { UsageState } from '../../shared/usage';
-import { UsageGauges } from './UsageGauge';
+import type { UsageState, UsageThresholds } from '../../shared/usage';
+import { UsageGauges, useUsageClock } from './UsageGauge';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
@@ -53,6 +53,8 @@ export type AgentActions = {
   onRefusePublish?: (requestId: string) => void;
   /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
   onOpenTerminal?: (agentId: string) => void;
+  /** 005 — « Détail » of a usage alert: opens the detail of its gauge (`usage:<cli>:<account>`). */
+  onUsageDetail?: (key: string) => void;
 };
 
 /** The review of the app (review-store and « vu » of app-store), for this workspace. */
@@ -124,6 +126,9 @@ type Props = {
   toolbarSlot?: HTMLElement | null;
   /** 005 — the usage of every CLI account read so far. */
   usage?: readonly UsageState[];
+  /** 005 FR-010 — the alert thresholds of the gauges, and their change. */
+  usageThresholds?: UsageThresholds;
+  onUsageThresholds?: (thresholds: UsageThresholds) => void;
   /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
@@ -154,6 +159,8 @@ export function WorkspaceView({
   actionError = null,
   toolbarSlot = null,
   usage = [],
+  usageThresholds,
+  onUsageThresholds,
   review,
   fromOrchestrator = {},
   loopReports = [],
@@ -170,7 +177,15 @@ export function WorkspaceView({
   const [todoOpen, setTodoOpen] = useState(true);
   // A closed agent may still be in the last review:pending: only the agents here count.
   const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
-  const todos = deriveTodos(workspace, cliName, pending, review?.overlaps);
+  const now = useUsageClock(usage);
+  const [usageDetail, setUsageDetail] = useState<string | null>(null);
+  const todos = deriveTodos(
+    workspace,
+    cliName,
+    pending,
+    review?.overlaps,
+    usageThresholds && { states: usage, thresholds: usageThresholds, now },
+  );
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
@@ -255,6 +270,7 @@ export function WorkspaceView({
     ...actions,
     onReview: openReview,
     onOpenTerminal: openTerminal,
+    onUsageDetail: setUsageDetail,
   };
   const backToTiles = () => {
     setFocusedId(null);
@@ -341,7 +357,18 @@ export function WorkspaceView({
       reviewCount={review ? pending.length : 0}
       view={inReview ? 'review' : 'tiles'}
       onView={changeView}
-      usage={<UsageGauges workspace={workspace} usage={usage} clis={clis} />}
+      usage={
+        <UsageGauges
+          workspace={workspace}
+          usage={usage}
+          clis={clis}
+          now={now}
+          detail={usageDetail}
+          onDetail={setUsageDetail}
+          {...(usageThresholds && { thresholds: usageThresholds })}
+          {...(onUsageThresholds && { onThresholds: onUsageThresholds })}
+        />
+      }
     />
   );
 

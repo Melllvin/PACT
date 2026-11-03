@@ -50,6 +50,8 @@ export type ToolDependencies = {
   loops: Pick<LoopService, 'start' | 'next' | 'get'>;
   /** 004 US3 — the issues of the workspace, published once the user confirms. */
   issues: Pick<IssueService, 'register' | 'list' | 'requestPublish'>;
+  /** 005 FR-012 — « Limite 5 h à 85 % : … » when a CLI is near its limit; never a refusal. */
+  usageWarning?: (cliId: string) => string | null;
   /** The journal « ◎ Actions »: each action, done or refused (US5, FR-021). */
   log?: (entry: ActionEntry) => void;
 };
@@ -425,7 +427,9 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         if (!agent) throw new Refusal('Aucun agent lancé.');
         if (prompt !== null) await deps.agents.sendPrompt(agent.id, prompt, 'orchestrator');
         const name = nameOf(agent);
-        return reply(`${name} lancé sur ${agent.branch}, port ${String(agent.port)}.`, {
+        const warning = deps.usageWarning?.(cli.id) ?? null;
+        const launched = `${name} lancé sur ${agent.branch}, port ${String(agent.port)}.`;
+        return reply(warning === null ? launched : `${launched} ${warning}.`, {
           agent: {
             id: agent.id,
             name,

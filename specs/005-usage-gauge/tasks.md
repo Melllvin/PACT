@@ -63,11 +63,11 @@ limites → aucune jauge.
 **Goal**: couleurs, alerte À faire, avertissement du lanceur et de `launch_agent`, seuils réglables
 (FR-010…FR-012).
 
-- [ ] T019 [P] [US2] Tests rouges `tests/unit/shared/todo.test.ts` et `TodoItem.test.tsx` : `usage-limit` « ◆ Limite <CLI> à <N> % · <fenêtre> · réinitialisation <heure> », un par compte (clé `usage:<cliId>:<account>`), mis à jour sans doublon de 80 à 95 %, retiré sous `warn` ; « Détail » ouvre le détail de la jauge.
-- [ ] T020 [P] [US2] Tests rouges du lanceur `tests/unit/renderer/launch/*.test.tsx` : « Limite 5 h à 85 % : ces agents risquent de s'arrêter avant 16:40 », bouton toujours actif ; `tests/integration/orchestrator/tools-agents.test.ts` : `launch_agent` ajoute la même phrase à sa réponse sans refuser.
-- [ ] T021 [P] [US2] Tests rouges `tests/unit/renderer/settings/UsageThresholds.test.tsx` et IPC `settings:usageThresholds` (`{ warn: int 1–99, critical: int 2–100 }`, `warn < critical`) dans `tests/unit/shared/ipc.test.ts`.
-- [ ] T022 [US2] e2e `tests/e2e/us25-usage-alerts.spec.ts` : 80 % orange + alerte, 95 % rouge, une seule alerte, avertissement au lancement puis lancement.
-- [ ] T023 [US2] Implémenter : niveau dans `UsageService`, `usage-limit` dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx`, couleurs de `UsageGauge.tsx`, avertissement dans `src/renderer/launch/` et `src/main/orchestrator/tools.ts`, `src/renderer/settings/UsageThresholds.tsx`, handler `settings:usageThresholds`.
+- [X] T019 [P] [US2] Tests rouges `tests/unit/shared/todo.test.ts` et `TodoItem.test.tsx` : `usage-limit` « ◆ Limite <CLI> à <N> % · <fenêtre> · réinitialisation <heure> », un par compte (clé `usage:<cliId>:<account>`), mis à jour sans doublon de 80 à 95 %, retiré sous `warn` ; « Détail » ouvre le détail de la jauge.
+- [X] T020 [P] [US2] Tests rouges du lanceur `tests/unit/renderer/launch/*.test.tsx` : « Limite 5 h à 85 % : ces agents risquent de s'arrêter avant 16:40 », bouton toujours actif ; `tests/integration/orchestrator/tools-agents.test.ts` : `launch_agent` ajoute la même phrase à sa réponse sans refuser.
+- [X] T021 [P] [US2] Tests rouges `tests/unit/renderer/settings/UsageThresholds.test.tsx` et IPC `settings:usageThresholds` (`{ warn: int 1–99, critical: int 2–100 }`, `warn < critical`) dans `tests/unit/shared/ipc.test.ts`.
+- [X] T022 [US2] e2e `tests/e2e/us25-usage-alerts.spec.ts` : 80 % orange + alerte, 95 % rouge, une seule alerte, avertissement au lancement puis lancement.
+- [X] T023 [US2] Implémenter : niveau dans `UsageService`, `usage-limit` dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx`, couleurs de `UsageGauge.tsx`, avertissement dans `src/renderer/launch/` et `src/main/orchestrator/tools.ts`, `src/renderer/settings/UsageThresholds.tsx`, handler `settings:usageThresholds`.
 
 ---
 

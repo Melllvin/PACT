@@ -1,4 +1,5 @@
 import type { Agent, TileAction, TodoItem, TodoKind, Workspace } from './model';
+import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
 /** 004 FR-021 — two agents change the same files (`review:pending`). */
 type Overlap = { agents: readonly [string, string]; files: readonly string[] };
@@ -11,6 +12,7 @@ const ORDER: TodoKind[] = [
   'loop-escalated',
   'overlap',
   'rate-limit',
+  'usage-limit',
   'review',
   'prompt',
   'info',
@@ -53,6 +55,8 @@ export function deriveTodos(
   /** The agents with changes to review (`review:pending`). */
   toReview: readonly string[] = [],
   overlaps: readonly Overlap[] = [],
+  /** 005 — the usage of the CLI accounts, read with the thresholds at `now`. */
+  usage?: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   const todos = agents.flatMap(
@@ -131,8 +135,42 @@ export function deriveTodos(
     title: `En cours ▸ ${shellName(terminal.shell)} — ${workspace.mainBranch}`,
     actions: [],
   }));
+  const limits = usage ? usageTodos(workspace, names, usage) : [];
   // Array.prototype.sort is stable: the tile order holds within a kind.
-  return [...todos, ...requests, ...publish, ...loops, ...common, ...terminals].sort(
+  return [...todos, ...requests, ...publish, ...loops, ...common, ...limits, ...terminals].sort(
     (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind),
   );
+}
+
+/**
+ * 005 FR-011 — « ◆ Limite <CLI> à <N> % · <fenêtre> · réinitialisation <heure> »: one per account
+ * of a CLI of the workspace near its limit, the same item from 80 to 95 %, gone below the first
+ * threshold.
+ */
+function usageTodos(
+  workspace: Pick<Workspace, 'agents'>,
+  names: (cliId: string) => string,
+  {
+    states,
+    thresholds,
+    now,
+  }: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
+): TodoItem[] {
+  const clis = new Set(workspace.agents.map((agent) => agent.cliId));
+  return states.flatMap((state): TodoItem[] => {
+    const alert = clis.has(state.cliId) ? usageAlert(state, thresholds, now) : null;
+    if (!alert) return [];
+    const key = `usage:${state.cliId}:${state.account}`;
+    const reset = alert.window.resetsAt === null ? 'inconnue' : clockTime(alert.window.resetsAt);
+    return [
+      {
+        id: `${key}:usage-limit`,
+        agentId: key,
+        kind: 'usage-limit',
+        title: `◆ Limite ${names(state.cliId)} à ${String(alert.percent)} % · ${alert.window.label} · réinitialisation ${reset}`,
+        actions: [],
+        usage: { cliId: state.cliId, account: state.account, level: alert.level },
+      },
+    ];
+  });
 }

@@ -15,6 +15,7 @@ import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { AmbientCanvas } from '../effects/AmbientCanvas';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { RoleProfilesDialog } from '../settings/RoleProfiles';
+import { launchWarning } from '../../shared/usage';
 import { Button } from '@/components/ui/button';
 import { Legend } from './Legend';
 import { TabBar } from './TabBar';
@@ -132,6 +133,8 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               terminals={terminals}
               toolbarSlot={toolbarSlot}
               usage={Object.values(state.usage)}
+              usageThresholds={state.usageThresholds}
+              onUsageThresholds={(thresholds) => void state.setUsageThresholds(thresholds)}
               onAddAgents={() => {
                 state.openLauncher(workspace.id);
               }}
@@ -227,6 +230,9 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               error={launcher.error ?? null}
               localChanges={launcher.localChanges ?? false}
               profiles={launching.roleProfiles}
+              usageWarning={(cliId) =>
+                launchWarning(Object.values(state.usage), cliId, state.usageThresholds, new Date())
+              }
               onLaunch={(draft) => void state.requestLaunch(draft)}
               onClose={state.closeLauncher}
             />

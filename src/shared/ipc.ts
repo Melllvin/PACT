@@ -31,7 +31,7 @@ import {
   reviewSnapshotSchema,
   testRunSchema,
 } from './review';
-import { usageStateSchema } from './usage';
+import { usageStateSchema, usageThresholdsSchema } from './usage';
 
 // contracts/ipc.md — every channel is validated on both sides of the bridge.
 
@@ -134,6 +134,8 @@ export const ipcRequests = {
       recents: recentProjectsSchema,
       clis: z.array(cliDefinitionSchema),
       permission: permissionPreferenceSchema.nullable(),
+      /** 005 FR-010 — the alert thresholds of the gauges. */
+      usageThresholds: usageThresholdsSchema,
     }),
   ),
   'workspace:open': request(z.object({ path: absolutePath }), workspaceSchema),
@@ -244,6 +246,8 @@ export const ipcRequests = {
   /** 003 US5 — the journal « ◎ Actions », the latest first (FR-021). */
   /** 005 — the usage of every CLI account read so far, when the renderer loads. */
   'usage:get': request(none, z.array(usageStateSchema)),
+  /** 005 FR-010 — the alert thresholds, set by the user. */
+  'settings:usageThresholds': request(usageThresholdsSchema, usageThresholdsSchema),
   'orchestrator:actions': request(
     z.object({ agentId: z.uuid() }),
     z.array(orchestratorActionSchema),

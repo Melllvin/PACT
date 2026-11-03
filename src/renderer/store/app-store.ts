@@ -16,7 +16,11 @@ import type {
   Workspace,
 } from '../../shared/model';
 import type { OrchestratorAction } from '../../shared/orchestrator';
-import type { UsageState } from '../../shared/usage';
+import {
+  DEFAULT_USAGE_THRESHOLDS,
+  type UsageState,
+  type UsageThresholds,
+} from '../../shared/usage';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
 
@@ -70,6 +74,9 @@ export type AppState = {
   closingAgentId: string | null;
   /** 005 — the usage of each CLI account, by `<cliId>\0<account>`. */
   usage: Record<string, UsageState>;
+  /** 005 FR-010 — the alert thresholds of the gauges. */
+  usageThresholds: UsageThresholds;
+  setUsageThresholds: (thresholds: UsageThresholds) => Promise<void>;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
@@ -288,6 +295,7 @@ export function createAppStore(api: PactApi) {
       log: null,
       closingAgentId: null,
       usage: {},
+      usageThresholds: DEFAULT_USAGE_THRESHOLDS,
       correcting: {},
       orchestratorPrompted: {},
       orchestratorActions: {},
@@ -578,6 +586,11 @@ export function createAppStore(api: PactApi) {
         act(async () => {
           const actions = await api.invoke('orchestrator:actions', { agentId });
           set({ orchestratorActions: { ...get().orchestratorActions, [agentId]: actions } });
+        }),
+
+      setUsageThresholds: (thresholds) =>
+        act(async () => {
+          set({ usageThresholds: await api.invoke('settings:usageThresholds', thresholds) });
         }),
 
       setRoleProfiles: (workspaceId, profiles) =>

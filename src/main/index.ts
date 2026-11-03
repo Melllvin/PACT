@@ -132,6 +132,7 @@ void app.whenReady().then(async () => {
           loops,
           issues,
           clis: () => registry.list(),
+          usageWarning: (cliId) => usage.warning(cliId),
           permissions,
           log: (entry) => {
             orchestrator.record(orchestratorId, entry);
@@ -141,9 +142,8 @@ void app.whenReady().then(async () => {
       ),
   });
   // 005 — the usage limits of the CLI accounts, as the agents' CLIs report them.
-  const thresholds = (await stores.state.read()).usageThresholds;
   const usage = new UsageService({
-    thresholds: () => thresholds,
+    thresholds: (await stores.state.read()).usageThresholds,
     onState: (state) => {
       emit('usage:state', state);
     },
@@ -370,7 +370,7 @@ void app.whenReady().then(async () => {
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
       ...createPreviewServices({ preview }),
-      ...createUsageServices({ usage }),
+      ...createUsageServices({ usage, stores }),
       ...createOrchestratorServices({
         requests,
         orchestrator,

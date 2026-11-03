@@ -312,6 +312,8 @@ export type TodoItem = {
   loop?: { issueId: string };
   /** 004 FR-023 — the issues the orchestrator asks to publish, for `publish-issues`. */
   publish?: { requestId: string };
+  /** 005 FR-011 — the account near its limit, for `usage-limit`. */
+  usage?: { cliId: string; account: string; level: 'warn' | 'critical' };
 };
 export type TodoKind =
   | 'answer'
@@ -320,6 +322,7 @@ export type TodoKind =
   | 'loop-escalated'
   | 'overlap'
   | 'rate-limit'
+  | 'usage-limit'
   | 'review'
   | 'prompt'
   | 'info';

@@ -1,6 +1,7 @@
 import type { Role } from '../../shared/primitives';
 import {
   DEFAULT_USAGE_THRESHOLDS,
+  launchWarning,
   shownWindow,
   usageLevel,
   type UsageReading,
@@ -41,18 +42,18 @@ export const accountOf = (folder: string | undefined) =>
 export class UsageService {
   private readonly accounts = new Map<string, Account>();
   private readonly followers = new Map<string, Follower>();
-  private readonly thresholds: () => UsageThresholds;
+  private thresholds: UsageThresholds;
   private readonly onState: (state: UsageState) => void;
   private readonly now: () => Date;
   private readonly followRollout: FollowRollout;
 
   constructor({
-    thresholds = () => DEFAULT_USAGE_THRESHOLDS,
+    thresholds = DEFAULT_USAGE_THRESHOLDS,
     onState = () => undefined,
     now = () => new Date(),
     followRollout = (options) => new CodexRollout(options),
   }: {
-    thresholds?: () => UsageThresholds;
+    thresholds?: UsageThresholds;
     onState?: (state: UsageState) => void;
     now?: () => Date;
     followRollout?: FollowRollout;
@@ -66,6 +67,17 @@ export class UsageService {
   /** The current state of every account read so far (`usage:get`). */
   list(): UsageState[] {
     return [...this.accounts.values()].map((account) => this.stateOf(account));
+  }
+
+  /** 005 FR-010 — new thresholds: every account is told again with its level. */
+  setThresholds(thresholds: UsageThresholds): void {
+    this.thresholds = thresholds;
+    for (const account of this.accounts.values()) this.onState(this.stateOf(account));
+  }
+
+  /** 005 FR-012 — the warning of a launch of agents of `cliId`, or null. */
+  warning(cliId: string): string | null {
+    return launchWarning(this.list(), cliId, this.thresholds, this.now());
   }
 
   /** What a sample tells; a sample without limits keeps the last reading (FR-007). */
@@ -124,7 +136,7 @@ export class UsageService {
 
   private stateOf({ cliId, account, reading }: Account): UsageState {
     const level = reading
-      ? usageLevel(shownWindow(reading, this.now()).usedPercent, this.thresholds())
+      ? usageLevel(shownWindow(reading, this.now()).usedPercent, this.thresholds)
       : 'ok';
     return { cliId, account, reading, shares: [], level };
   }

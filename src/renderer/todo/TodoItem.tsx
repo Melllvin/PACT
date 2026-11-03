@@ -32,10 +32,11 @@ export function TodoItem({
   onConfirmPublish,
   onRefusePublish,
   onOpenTerminal,
+  onUsageDetail,
 }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
-  const { request, loop, publish } = todo;
+  const { request, loop, publish, usage } = todo;
   const separator = <span className="sr-only">{SEPARATOR}</span>;
 
   if (todo.kind === 'info') {
@@ -61,6 +62,8 @@ export function TodoItem({
         (todo.kind === 'rate-limit' || todo.kind === 'loop-escalated') &&
           'border-destructive/30 bg-destructive/6',
         todo.kind === 'overlap' && 'border-waiting/30 bg-waiting/6',
+        usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
+        usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
       )}
     >
       <span className="font-mono text-[12px] leading-[1.5] break-words text-foreground">
@@ -138,6 +141,17 @@ export function TodoItem({
             }}
           >
             Refuser
+          </Button>
+        </div>
+      )}
+      {usage && onUsageDetail && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onUsageDetail(todo.agentId);
+            }}
+          >
+            Détail
           </Button>
         </div>
       )}

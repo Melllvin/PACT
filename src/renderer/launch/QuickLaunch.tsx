@@ -2,6 +2,7 @@ import { countsOf, setOrchestrator, withCount, type LaunchDraft } from '../../sh
 import { MAX_AGENTS, type CliDefinition } from '../../shared/model';
 import { Waves } from '../effects/Waves';
 import { LocalChangesNotice } from './LocalChangesNotice';
+import { UsageWarnings, type UsageWarning } from './UsageWarnings';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -25,6 +26,8 @@ export type QuickLaunchProps = {
   error: string | null;
   /** The repository has uncommitted changes, left out of the worktrees (T122). */
   localChanges?: boolean;
+  /** 005 FR-012 — the CLIs of the draft near their usage limit. */
+  usageWarnings?: readonly UsageWarning[];
   onLaunch: () => void;
   onDetailed: () => void;
   onClose: () => void;
@@ -150,6 +153,7 @@ export function QuickLaunch({
   canOrchestrate = true,
   error,
   localChanges = false,
+  usageWarnings = [],
   onLaunch,
   onDetailed,
   onClose,
@@ -232,6 +236,7 @@ export function QuickLaunch({
             </select>
           </label>
           {localChanges && <LocalChangesNotice />}
+          <UsageWarnings warnings={usageWarnings} />
           {error && (
             <p
               role="alert"
