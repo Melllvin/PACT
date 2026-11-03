@@ -148,6 +148,7 @@ export function UsageGauge({
     >
       <button
         type="button"
+        aria-label={age.stale ? `${label}, lu il y a ${String(age.minutes)} min` : label}
         aria-expanded={open}
         aria-controls={detailId}
         onClick={() => {

@@ -76,6 +76,10 @@ const typeIn = async (page: Page, tile: Locator, text: string) => {
   await page.keyboard.press('Enter');
 };
 
+// SC-002 is 100 ms. The shared macOS CI runners measure 100–250 ms for code that runs at 25–30 ms
+// locally, so CI macOS only checks for gross regressions (decided with the user, 2026-11-03).
+const ECHO_BUDGET_MS = process.env.CI && process.platform === 'darwin' ? 300 : 100;
+
 test('echoes a keystroke in under 100 ms (p95) while 5 other agents pour out output (SC-002)', async () => {
   test.setTimeout(120_000);
   const { page, tile } = await launchSix('burst-output');
@@ -123,7 +127,7 @@ test('echoes a keystroke in under 100 ms (p95) while 5 other agents pour out out
     description: percentile(samples, 95).toFixed(1),
   });
   expect(samples).toHaveLength(keys.length);
-  expect(percentile(samples, 95)).toBeLessThan(100);
+  expect(percentile(samples, 95)).toBeLessThan(ECHO_BUDGET_MS);
 });
 
 test('shows a question of any of 6 agents in À faire in under 2 s (SC-003)', async () => {
