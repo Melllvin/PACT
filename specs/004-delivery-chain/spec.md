@@ -60,6 +60,8 @@ Décisions prises avec l'utilisateur pendant la conversation de cadrage :
   l'application, que le skill crée s'il n'existe pas, puis utilise ; universel entre CLI.
 - Q: Modèles ? → A: paramétrables par rôle (orchestrateur et agents), modèle moins cher pour le dev.
 - Q: spec-kit ? → A: oui, le skill de cadrage s'appuie sur les skills spec-kit quand le dépôt les a.
+- Q: Comment repérer l'orchestrateur ? → A: sa tuile est toujours plus grande que celles des
+  sous-agents, et ses rapports s'y lisent facilement.
 - Q: Pratiques retenues ? → A: Definition of Ready / Done, tests d'acceptation écrits d'abord (ATDD),
   testeur indépendant, rapport de relais structuré, traçabilité, preuve par la CI, escalade, budgets
   (3 tours), pas de fichiers communs en parallèle, recap versionné.
@@ -296,6 +298,11 @@ configuration globale n'est modifié ; lancer un orchestrateur sous un faux CLI 
   maximal autorisé.
 - **FR-006**: La tuile, le Focus et la liste des agents vue par l'orchestrateur MUST montrer le rôle de
   chaque agent.
+- **FR-006a** *(demande de l'utilisateur, 2026-11-03)*: La tuile de l'orchestrateur MUST rester plus
+  grande que celle de chaque autre agent du workspace, quel que soit leur nombre (jusqu'à 6) et la
+  taille de la fenêtre, pour l'identifier d'un coup d'œil (extension de 003 FR-003) ; les rapports de
+  relais qu'il reçoit MUST être lisibles depuis sa tuile et son Focus (dernier rapport par agent, avec
+  issue, statut et tour), sans ouvrir le terminal d'un autre agent.
 - **FR-007**: Quand l'escalade est activée dans un profil, le troisième tour d'une boucle MUST utiliser
   le modèle supérieur suivant, sans dépasser le maximal autorisé ; le journal de l'orchestrateur MUST
   l'indiquer.
