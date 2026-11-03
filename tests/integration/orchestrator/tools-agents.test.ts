@@ -95,6 +95,20 @@ describe('launch_agent', () => {
     expect(limit).toMatchObject({ isError: true });
     expect(limit.text).toContain('Six agents');
   }, 30_000);
+
+  it('is refused with a branch or a prompt that is not a text, or a prompt too long', async () => {
+    const branch = await tool('launch_agent', { cli: 'Faux CLI', branch: 12 });
+    expect(branch).toMatchObject({ isError: true });
+    expect(branch.text).toContain('Argument « branch » : texte attendu.');
+
+    const blank = await tool('launch_agent', { cli: 'Faux CLI', prompt: '  ' });
+    expect(blank.text).toContain('Argument « prompt » : texte attendu.');
+
+    const long = await tool('launch_agent', { cli: 'Faux CLI', prompt: 'a'.repeat(8001) });
+    expect(long).toMatchObject({ isError: true });
+    expect(long.text).toContain('Consigne de 1 à 8000 caractères attendue.');
+    expect(others()).toHaveLength(0);
+  });
 });
 
 describe('close_agent', () => {
