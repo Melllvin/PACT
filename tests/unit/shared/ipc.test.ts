@@ -31,6 +31,7 @@ const absolute =
 // For every request channel of contracts/ipc.md: one valid input and invalid ones.
 const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown[] }> = {
   'app:getState': { valid: undefined, invalid: [{ extra: true }] },
+  'usage:get': { valid: undefined, invalid: [{ extra: true }] },
   'workspace:open': {
     valid: { path: absolute },
     invalid: [{}, { path: '' }, { path: 'relative/repo' }],
@@ -293,6 +294,7 @@ describe('IPC event schemas', () => {
       'review:tests',
       'term:data',
       'term:exit',
+      'usage:state',
       'workspace:integrationRequests',
       'workspace:issues',
       'workspace:loops',

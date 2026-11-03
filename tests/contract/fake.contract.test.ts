@@ -79,6 +79,40 @@ describe('fake adapter specifics', () => {
   });
 });
 
+describe('fake adapter usage (005 T011)', () => {
+  const launch = (adapter: FakeAdapter) =>
+    adapter.buildLaunch({
+      agentId: '00000000-0000-4000-8000-000000000001',
+      executablePath: process.execPath,
+      repoPath: '/r',
+      cwd: '/w',
+      model: null,
+      permissionLevel: 'always-allow',
+      sessionId: 'sess',
+      port: 3001,
+      hook: { url: 'http://127.0.0.1:1', token: 't' },
+    }).args;
+
+  it('reports its usage like Claude Code, through the statusLine of its --settings', () => {
+    const bridge = { executable: '/Applications/PACT.app/Contents/MacOS/PACT', script: '/b.js' };
+    const adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: 'darwin', bridge });
+    expect(adapter.usageSource).toBe('claude-statusline');
+    const args = launch(adapter);
+    expect(JSON.parse(args[args.indexOf('--settings') + 1] ?? '')).toEqual({
+      statusLine: {
+        type: 'command',
+        command: `ELECTRON_RUN_AS_NODE=1 '${bridge.executable}' '${bridge.script}' '--statusline'`,
+      },
+    });
+  });
+
+  it('has no statusLine without a bridge', () => {
+    expect(launch(new FakeAdapter({ cliPath: FAKE_CLI, platform: 'darwin' }))).not.toContain(
+      '--settings',
+    );
+  });
+});
+
 describe('adapter registry', () => {
   const bridge = { executable: '/Applications/PACT.app/Contents/MacOS/PACT', script: '/b.js' };
   const ids = (env: Record<string, string>) =>

@@ -41,7 +41,7 @@
 //
 // A bracketed paste (ESC[200~ … ESC[201~) is one prompt, its line breaks included, as in the
 // real CLIs (002 R7).
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
   mkdirSync,
@@ -178,6 +178,32 @@ const ofTurn = (steps) => {
   return all[Math.min(turn, all.length - 1)];
 };
 
+/** Splits a command as a POSIX shell does: '…', "…" and \\ escapes. */
+function shellWords(command) {
+  const words = [];
+  let word = null;
+  let quote = null;
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i];
+    if (quote) {
+      if (char === quote) quote = null;
+      else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      word ??= '';
+    } else if (char === '\\') {
+      word = (word ?? '') + (command[++i] ?? '');
+    } else if (/\s/.test(char)) {
+      if (word !== null) words.push(word);
+      word = null;
+    } else {
+      word = (word ?? '') + char;
+    }
+  }
+  if (word !== null) words.push(word);
+  return words;
+}
+
 /** Claude Code's statusLine, run as it would run it (005 R1, R9). */
 function reportUsage(usage) {
   const settings = argValue('--settings');
@@ -198,7 +224,19 @@ function reportUsage(usage) {
     ...(Object.keys(limits).length > 0 ? { rate_limits: limits } : {}),
   };
   try {
-    const output = execSync(command, { input: JSON.stringify(payload), encoding: 'utf8' });
+    // Run without a shell, like a POSIX shell would split it: Windows' cmd.exe would not.
+    const words = shellWords(command);
+    const env = { ...process.env };
+    while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0] ?? '')) {
+      const [name, ...value] = (words.shift() ?? '').split('=');
+      env[name] = value.join('=');
+    }
+    const [file, ...args] = words;
+    const output = execFileSync(file, args, {
+      input: JSON.stringify(payload),
+      encoding: 'utf8',
+      env,
+    });
     console.log(`Statut : ${output.trim()}`);
   } catch {
     // Like Claude Code: a statusLine that fails leaves the line empty.
