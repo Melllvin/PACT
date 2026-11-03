@@ -113,6 +113,8 @@ export type LaunchRequest = {
   workspaceId: string;
   agents: AgentDraft[];
   counters: Workspace['quickLaunchCounters'];
+  /** 006 R4 — the orchestrator that asks for the launch; absent: the user. */
+  launchedBy?: string;
 };
 
 type Running = {
@@ -563,7 +565,7 @@ export class AgentManager {
     this.onBranch({ agentId: id, branch });
   }
 
-  private async launchNow({ workspaceId, agents: drafts, counters }: LaunchRequest) {
+  private async launchNow({ workspaceId, agents: drafts, counters, launchedBy }: LaunchRequest) {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
     const clis = drafts.map((draft) => this.installedCli(draft.cliId));
@@ -618,6 +620,7 @@ export class AgentManager {
         review: { seen: {}, comments: [] },
         role,
         effort: draft.effort ?? fromProfile?.effort ?? null,
+        launchedBy: launchedBy ?? null,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');

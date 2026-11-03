@@ -61,6 +61,7 @@ const agent = (worktreePath: string, state: AgentState = 'done'): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  launchedBy: null,
   effort: null,
 });
 

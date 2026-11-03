@@ -99,6 +99,11 @@ export const agentSchema = z.object({
   role: roleSchema.nullable().default(null),
   /** 004 R2 — `null`: the CLI's own. */
   effort: effortSchema.nullable().default(null),
+  /**
+   * 006 R4 — id (uuid) of the orchestrator that launched it; `null`: launched by the user. Defaulted
+   * so that older workspace files load without a migration. Set once, at launch; never changed after.
+   */
+  launchedBy: z.string().nullable().default(null),
 });
 
 /** 004 R2 — what an agent of a role is launched with; `null` model: the CLI's own. */

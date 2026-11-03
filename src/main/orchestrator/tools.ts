@@ -424,6 +424,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
               },
             ],
             counters: ws.quickLaunchCounters,
+            launchedBy: orchestratorId,
           }),
         );
         if (!agent) throw new Refusal('Aucun agent lancé.');
