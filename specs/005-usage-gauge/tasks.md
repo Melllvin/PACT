@@ -93,8 +93,8 @@ limites → aucune jauge.
 
 ## Phase 7: Polish
 
-- [ ] T030 [P] Garde de test : aucun test n'écrit dans `~/.claude` ni `~/.codex` (FR-005).
-- [ ] T031 [P] Mettre à jour `README.md` et quickstart.md.
+- [X] T030 [P] Garde de test : aucun test n'écrit dans `~/.claude` ni `~/.codex` (FR-005). *(`tests/setup/home.ts` et `tests/e2e/helpers/launch-app.ts`, livrés avec 004 T046)*
+- [X] T031 [P] Mettre à jour `README.md` et quickstart.md.
 - [ ] T032 Caractérisation sur vrais CLI (utilisateur) : écart avec `/usage` et `/status` ≤ 2 points (SC-002), clé d'API sans jauge, `statusLine` personnelle conservée ; consigner dans research.md.
 
 ## Dependencies & Execution Order
