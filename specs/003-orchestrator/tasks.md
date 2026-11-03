@@ -265,8 +265,8 @@ grille du socle revient.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T045 [P] Test e2e chemins avec espaces et accents pour les outils de lecture et l'intégration demandée (FR-023), dans `tests/e2e/paths.spec.ts`.
-- [ ] T046 [P] Mettre à jour `README.md` : orchestrateur, outils, sécurité de l'accès, confirmation des intégrations.
+- [X] T045 [P] Test e2e chemins avec espaces et accents pour les outils de lecture et l'intégration demandée (FR-023), dans `tests/e2e/paths.spec.ts`.
+- [X] T046 [P] Mettre à jour `README.md` : orchestrateur, outils, sécurité de l'accès, confirmation des intégrations.
 - [ ] T047 Caractériser sur un vrai Claude Code (comme T049 de 001) :
   - découverte du skill en session interactive ;
   - `MCP_TOOL_TIMEOUT` pour une attente de plus de 60 s (R5) ;

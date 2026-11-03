@@ -1,0 +1,18 @@
+{
+  "echo": true,
+  "files": [{ "write": "src/données à jour.ts", "content": "export const f = 1;\n" }],
+  "mcp": [
+    { "tool": "send_prompt", "arguments": { "agent": "Faux CLI 2", "text": "{{prompt}}" } },
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 30 } },
+    { "tool": "get_changes", "arguments": { "agent": "Faux CLI 2" } },
+    {
+      "tool": "get_file_diff",
+      "arguments": { "agent": "Faux CLI 2", "path": "src/données à jour.ts" }
+    },
+    {
+      "tool": "request_integration",
+      "arguments": { "agent": "Faux CLI 2", "message": "feat: données à jour" }
+    },
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 90 } }
+  ]
+}
