@@ -98,7 +98,7 @@ export class OrchestratorService {
   notice(workspaceId: string, { agentId, kind, summary }: Notice): void {
     const agent = this.options.workspaces
       .list()
-      .flatMap((ws) => (ws.id === workspaceId ? ws.agents : []))
+      .flatMap((ws) => ws.agents)
       .find((a) => a.id === agentId);
     const state = agent?.state ?? this.lastStates.get(agentId)?.state ?? 'closed';
     this.push(workspaceId, { at: new Date().toISOString(), agentId, kind, state, summary });

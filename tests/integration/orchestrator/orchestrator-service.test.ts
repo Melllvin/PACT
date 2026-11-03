@@ -127,4 +127,14 @@ describe('OrchestratorService notices', () => {
       { agentId: unknown, kind: 'overlap', state: 'closed' },
     ]);
   });
+
+  it('ignores the state of an agent of no workspace, and a wait with no session', async () => {
+    const unknown = '00000000-0000-4000-8000-0000000000fe';
+    h.orchestrator.agentState({ agentId: unknown, state: 'done', lastError: null });
+    expect(await h.orchestrator.wait(unknown, undefined, 10)).toEqual({
+      events: [],
+      timedOut: false,
+      replaced: true,
+    });
+  });
 });
