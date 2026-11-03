@@ -353,6 +353,18 @@ describe('App tile actions (US3)', () => {
           });
         case 'agent:log':
           return Promise.resolve('Erreur simulée');
+        case 'orchestrator:actions':
+          return Promise.resolve([
+            {
+              id: '00000000-0000-4000-8000-0000000000a1',
+              at: '2026-11-03T10:00:00.000Z',
+              tool: 'close_agent',
+              agentId: null,
+              summary: 'Faux CLI 2 fermé',
+              outcome: 'ok',
+              reason: null,
+            },
+          ]);
         default:
           return Promise.resolve(undefined);
       }
@@ -388,6 +400,20 @@ describe('App tile actions (US3)', () => {
     const tiles = await screen.findByRole('region', { name: 'Tuiles' });
     await userEvent.click(within(tiles).getByRole('button', { name: '✓ Autoriser' }));
     expect(invoke).toHaveBeenCalledWith('agent:answer', { agentId: failed.id, answer: 'allow' });
+  });
+
+  it('shows the orchestrator’s actions and withdraws its role (003 US5)', async () => {
+    const lead = { ...failed, state: 'done' as const, role: 'orchestrator' as const };
+    const invoke = setup([lead]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Agrandir' }));
+    await userEvent.click(screen.getByRole('tab', { name: '◎ Actions' }));
+    expect(await screen.findByText('Faux CLI 2 fermé')).toBeDefined();
+    expect(invoke).toHaveBeenCalledWith('orchestrator:actions', { agentId: lead.id });
+    await userEvent.click(screen.getByRole('button', { name: 'Retirer le rôle d’orchestrateur' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Retirer' }));
+    expect(invoke).toHaveBeenCalledWith('orchestrator:revoke', { agentId: lead.id });
+    expect(await screen.findByRole('tab', { name: 'Terminal', selected: true })).toBeDefined();
+    expect(screen.queryByRole('tab', { name: '◎ Actions' })).toBeNull();
   });
 
   it('opens « Journal » for the agent and closes it', async () => {

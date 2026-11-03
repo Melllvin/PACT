@@ -12,7 +12,15 @@ const setup = () => {
     confirm: vi.fn(() => Promise.resolve(integration)),
     refuse: vi.fn(() => Promise.resolve()),
   };
-  return { requests, integration, services: createOrchestratorServices({ requests } as never) };
+  const orchestrator = { actions: vi.fn(() => []) };
+  const agents = { revokeOrchestrator: vi.fn(() => Promise.resolve()) };
+  return {
+    requests,
+    integration,
+    orchestrator,
+    agents,
+    services: createOrchestratorServices({ requests, orchestrator, agents } as never),
+  };
 };
 
 describe('integrationRequest channels', () => {
@@ -35,5 +43,22 @@ describe('integrationRequest channels', () => {
     await expect(
       services['integrationRequest:confirm']({ requestId, message: 'feat' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+// 003 T040 — orchestrator:actions and orchestrator:revoke (contracts/ipc.md).
+describe('orchestrator channels', () => {
+  const agentId = '00000000-0000-4000-8000-000000000002';
+
+  it('gives the journal of an orchestrator', () => {
+    const { orchestrator, services } = setup();
+    expect(services['orchestrator:actions']({ agentId })).toEqual([]);
+    expect(orchestrator.actions).toHaveBeenCalledWith(agentId);
+  });
+
+  it('withdraws the role', async () => {
+    const { agents, services } = setup();
+    await services['orchestrator:revoke']({ agentId });
+    expect(agents.revokeOrchestrator).toHaveBeenCalledWith(agentId);
   });
 });

@@ -187,3 +187,74 @@ describe('FocusView', () => {
     expect(props.onCancelAutoResume).toHaveBeenCalledWith(agent(1).id);
   });
 });
+
+// 003 T041 — the journal « ◎ Actions » and « Retirer le rôle d'orchestrateur » (FR-004, FR-021).
+describe('FocusView of the orchestrator', () => {
+  const action = (n: number, outcome: 'ok' | 'refused' = 'ok') => ({
+    id: `00000000-0000-4000-8000-00000000000${String(n)}`,
+    at: `2026-11-03T0${String(n)}:00:00.000Z`,
+    tool: 'send_prompt' as const,
+    agentId: agent(2).id,
+    summary: `Consigne ${String(n)}`,
+    outcome,
+    reason: outcome === 'refused' ? 'Aucun agent « Faux CLI 9 »' : null,
+  });
+
+  const renderLead = (onRevoke = vi.fn(), tab: 'terminal' | 'actions' = 'actions') => {
+    const onTab = vi.fn();
+    render(
+      <FocusView
+        agents={team({ role: 'orchestrator' })}
+        agentId={agent(1).id}
+        name={() => 'Claude Code'}
+        terminals={undefined}
+        tab={tab}
+        onTab={onTab}
+        orchestration={{ actions: [action(2, 'refused'), action(1)], onRevoke }}
+        onSelect={vi.fn()}
+        onBack={vi.fn()}
+        onAnswer={vi.fn()}
+        onResume={vi.fn()}
+        onRestart={vi.fn()}
+        onLog={vi.fn()}
+        onCancelAutoResume={vi.fn()}
+      />,
+    );
+    return { onTab, onRevoke };
+  };
+
+  it('offers « ◎ Actions » for the orchestrator only', async () => {
+    const user = userEvent.setup();
+    const { onTab } = renderLead(vi.fn(), 'terminal');
+    await user.click(screen.getByRole('tab', { name: '◎ Actions' }));
+    expect(onTab).toHaveBeenCalledWith('actions');
+  });
+
+  it('has no « ◎ Actions » for another agent', () => {
+    setup();
+    expect(screen.queryByRole('tab', { name: '◎ Actions' })).toBeNull();
+  });
+
+  it('lists the actions, the latest first, with the reason of a refusal', () => {
+    renderLead();
+    const items = within(screen.getByRole('list', { name: 'Actions de l’orchestrateur' }))
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toContain('Consigne 2');
+    expect(items[0]).toContain('Aucun agent « Faux CLI 9 »');
+    expect(items[1]).toContain('Consigne 1');
+  });
+
+  it('asks before withdrawing the role', async () => {
+    const user = userEvent.setup();
+    const { onRevoke } = renderLead();
+    await user.click(screen.getByRole('button', { name: 'Retirer le rôle d’orchestrateur' }));
+    expect(onRevoke).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(onRevoke).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Retirer le rôle d’orchestrateur' }));
+    await user.click(screen.getByRole('button', { name: 'Retirer' }));
+    expect(onRevoke).toHaveBeenCalledTimes(1);
+  });
+});

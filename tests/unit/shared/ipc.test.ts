@@ -184,6 +184,8 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
     ],
   },
   'integrationRequest:refuse': { valid: { requestId: integrationId }, invalid: [{}] },
+  'orchestrator:actions': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
+  'orchestrator:revoke': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
 };
 
 describe('IPC request schemas', () => {
@@ -237,6 +239,7 @@ describe('IPC event schemas', () => {
       'agent:state',
       'clone:progress',
       'integration:state',
+      'orchestrator:action',
       'orchestrator:prompted',
       'review:changed',
       'review:pending',

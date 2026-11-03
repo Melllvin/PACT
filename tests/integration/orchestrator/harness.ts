@@ -20,7 +20,7 @@ import { PtyManager } from '../../../src/main/pty/pty-manager';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
 import type { AgentDraft } from '../../../src/shared/ipc';
 import type { AgentState } from '../../../src/shared/model';
-import type { IntegrationRequest } from '../../../src/shared/orchestrator';
+import type { IntegrationRequest, OrchestratorAction } from '../../../src/shared/orchestrator';
 import type { Integration } from '../../../src/shared/review';
 import { FAKE_CLI, scenarioPath } from '../../fixtures/fake-cli/paths';
 
@@ -66,10 +66,13 @@ export async function createHarness() {
   const typed: { agentId: string; origin: string }[] = [];
   const review = new ReviewService({ git: gitService, workspaces });
   const tests = new TestRunner({ env: () => Promise.resolve(gitEnv), onUpdate: () => undefined });
+  /** What `orchestrator:action` announced, in order (US5). */
+  const actionsHeard: (OrchestratorAction & { orchestratorId: string })[] = [];
   const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
     workspaces,
     pluginsDir: join(userData, 'orchestrator'),
+    onAction: (orchestratorId, action) => actionsHeard.push({ ...action, orchestratorId }),
     tools: (orchestratorId) =>
       createOrchestratorTools(
         {
@@ -83,6 +86,9 @@ export async function createHarness() {
           requests,
           clis: () => registry.list(),
           permissions,
+          log: (entry) => {
+            orchestrator.record(orchestratorId, entry);
+          },
         },
         orchestratorId,
       ),
@@ -212,6 +218,7 @@ export async function createHarness() {
     requests,
     announced,
     permissions,
+    actionsHeard,
     get manager() {
       return manager;
     },
