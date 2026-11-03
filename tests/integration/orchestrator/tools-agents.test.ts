@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callTool, createHarness, git, type Harness } from './harness';
 
@@ -106,7 +107,9 @@ describe('close_agent', () => {
     const closed = await tool('close_agent', { agent: 'Faux CLI 2' });
     expect(closed).toMatchObject({ isError: false, json: { closed: true, worktreeKept: true } });
     expect(others()).toEqual([]);
-    expect(git(h.repo, 'worktree', 'list')).toContain(worktree);
+    // `git worktree list` quotes accented paths and writes `/` on Windows: ask the worktree itself.
+    expect(existsSync(worktree)).toBe(true);
+    expect(git(worktree, 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe('feat/garde');
     expect(git(h.repo, 'branch', '--list', 'feat/garde')).toContain('feat/garde');
   });
 
