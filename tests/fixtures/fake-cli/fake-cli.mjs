@@ -20,6 +20,13 @@
 //                                   PACT_ORCHESTRATOR_URL with PACT_ORCHESTRATOR_TOKEN, and prints
 //                                   `MCP <tool> : <text>`. In string arguments, `{{prompt}}` is the
 //                                   prompt typed and `{{prompt.N}}` its N-th `|`-separated part
+//   report: object | object[]       calls `submit_report` with it on PACT_AGENT_MCP_URL, with the
+//                                   agent's PACT_AGENT_TOKEN (004 R5), and prints
+//                                   `MCP submit_report : <text>`; an array gives one report per
+//                                   turn, the last one repeated. `{{prompt}}` is filled as for `mcp`
+//   writeTests: string[]            writes `tests/<name>.test.ts` for each name (004)
+//   writeProd: string[]             writes `src/<name>.ts` for each name (004)
+//   mockup: string                  writes `design/mockups/<name>.html` (004)
 //   signal: object                  final hook payload (default { type: 'turn-finished' })
 //   exitCode: number                exits with this code after the turn
 //
@@ -92,14 +99,19 @@ function fillArguments(args, line) {
 }
 
 /** One `tools/call` to PACT's MCP server, as Claude Code makes it. */
-async function callTool(tool, args) {
+async function callTool(
+  tool,
+  args,
+  url = process.env.PACT_ORCHESTRATOR_URL,
+  token = process.env.PACT_ORCHESTRATOR_TOKEN,
+) {
   try {
-    const response = await fetch(process.env.PACT_ORCHESTRATOR_URL ?? '', {
+    const response = await fetch(url ?? '', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         accept: 'application/json, text/event-stream',
-        'x-pact-token': process.env.PACT_ORCHESTRATOR_TOKEN ?? '',
+        'x-pact-token': token ?? '',
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -115,6 +127,36 @@ async function callTool(tool, args) {
     return `injoignable (${error.message})`;
   }
 }
+
+/** Fills `{{prompt}}` and `{{prompt.N}}` in every string of a value, at any depth. */
+function fillDeep(value, line) {
+  if (typeof value === 'string') return fillArguments({ value }, line).value;
+  if (Array.isArray(value)) return value.map((item) => fillDeep(item, line));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, fillDeep(v, line)]));
+  }
+  return value;
+}
+
+/** The files an agent of a role writes (004): tests, production code, a mockup. */
+function writeRoleFiles() {
+  const write = (path, content) => {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, content);
+  };
+  for (const name of scenario.writeTests ?? []) {
+    write(`tests/${name}.test.ts`, `// Test de ${name}\n`);
+  }
+  for (const name of scenario.writeProd ?? []) write(`src/${name}.ts`, `// ${name}\n`);
+  if (scenario.mockup) {
+    write(
+      `design/mockups/${scenario.mockup}.html`,
+      `<!doctype html>\n<meta charset="utf-8">\n<h1>${scenario.mockup}</h1>\n`,
+    );
+  }
+}
+
+let turn = 0;
 
 function editFiles(steps) {
   const git = (...args) => execFileSync('git', args, { stdio: 'ignore' });
@@ -183,6 +225,19 @@ async function runTurn(line) {
   }
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);
+  writeRoleFiles();
+  const reports = [scenario.report ?? []].flat();
+  if (process.env.PACT_AGENT_MCP_URL && reports.length > 0) {
+    const report = reports[Math.min(turn, reports.length - 1)];
+    const text = await callTool(
+      'submit_report',
+      fillDeep(report, line),
+      process.env.PACT_AGENT_MCP_URL,
+      process.env.PACT_AGENT_TOKEN,
+    );
+    console.log(`MCP submit_report : ${text}`);
+  }
+  turn += 1;
   if (scenario.renameBranch) {
     execFileSync('git', ['branch', '-m', scenario.renameBranch], { stdio: 'ignore' });
   }
