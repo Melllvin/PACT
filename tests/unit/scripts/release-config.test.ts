@@ -15,6 +15,7 @@ const builder = JSON.parse(read('electron-builder.json')) as {
   productName: string;
   icon: string;
   asarUnpack: string[];
+  extraResources?: { from: string; to: string }[];
   publish: { provider: string; owner: string; repo: string; releaseType: string };
   mac: { identity: string | null; target: { target: string; arch: string[] }[] };
   win: { target: { target: string; arch: string[] }[] };
@@ -40,6 +41,11 @@ describe('release configuration', () => {
   it('builds an NSIS installer for Windows x64 and arm64, installable per user', () => {
     expect(builder.win.target).toEqual([{ target: 'nsis', arch: ['x64', 'arm64'] }]);
     expect(builder.nsis).toMatchObject({ oneClick: false, perMachine: false });
+  });
+
+  it('ships the role skills beside the app, outside the asar (004 R3)', () => {
+    expect(builder.extraResources).toContainEqual({ from: 'resources/skills', to: 'skills' });
+    expect(read('resources/skills/README.md')).toContain('contracts/skills.md');
   });
 
   it('keeps node-pty outside the asar', () => {

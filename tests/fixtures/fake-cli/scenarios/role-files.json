@@ -1,0 +1,5 @@
+{
+  "writeTests": ["connexion"],
+  "writeProd": ["connexion"],
+  "mockup": "écran de connexion"
+}

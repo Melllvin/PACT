@@ -84,6 +84,35 @@ async function runFake(
   };
 }
 
+/** A PACT MCP server that answers every tools/call with `text`, recording the calls. */
+async function startMcp(text: string) {
+  const calls: { body: Record<string, unknown>; token: unknown }[] = [];
+  const mcp = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (chunk: Buffer) => (raw += chunk.toString()));
+    req.on('end', () => {
+      const body = JSON.parse(raw) as Record<string, unknown>;
+      calls.push({ body, token: req.headers['x-pact-token'] });
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: body.id,
+          result: { content: [{ type: 'text', text }] },
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => mcp.listen(0, '127.0.0.1', resolve));
+  const address = mcp.address();
+  const port = typeof address === 'object' && address ? address.port : 0;
+  return {
+    calls,
+    url: `http://127.0.0.1:${String(port)}/mcp`,
+    close: () => new Promise((resolve) => mcp.close(resolve)),
+  };
+}
+
 describe('fake CLI', () => {
   it('shows a prompt, runs a turn and reports it through the hooks', async () => {
     const fake = await runFake('prompt-then-done', { args: ['--session-id', 'abc-123'] });
@@ -270,5 +299,61 @@ describe('fake CLI', () => {
     } finally {
       await new Promise((resolve) => mcp.close(resolve));
     }
+  });
+
+  it('reports to PACT with its agent token, one report per turn, the last one repeated (004 R5)', async () => {
+    const mcp = await startMcp('Rapport reçu');
+    try {
+      const fake = await runFake('role-report', { env: { PACT_AGENT_MCP_URL: mcp.url } });
+      await fake.waitForPrompt(1);
+      for (const turn of [1, 2, 3]) {
+        fake.send('0012-connexion');
+        await fake.waitForPrompt(turn + 1);
+      }
+      expect(fake.output()).toContain('MCP submit_report : Rapport reçu');
+      expect(mcp.calls.map((c) => c.token)).toEqual([
+        'secret-token',
+        'secret-token',
+        'secret-token',
+      ]);
+      const reports = mcp.calls.map(
+        (c) => c.body.params as { name: string; arguments: Record<string, unknown> },
+      );
+      expect(reports.map((r) => r.name)).toEqual([
+        'submit_report',
+        'submit_report',
+        'submit_report',
+      ]);
+      expect(reports.map((r) => r.arguments.status)).toEqual(['defects', 'done', 'done']);
+      expect(reports[0]?.arguments).toMatchObject({
+        issue: '0012-connexion',
+        verdict: { result: 'defects', defects: ['a() renvoie 2'] },
+      });
+    } finally {
+      await mcp.close();
+    }
+  });
+
+  it('does not report without PACT’s agent MCP URL', async () => {
+    const fake = await runFake('role-report');
+    await fake.waitForPrompt(1);
+    fake.send('0012-connexion');
+    await fake.waitForHook('turn-finished');
+    expect(fake.output()).not.toContain('submit_report');
+  });
+
+  it('writes tests, production code and a mockup in its folder (004 T003)', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'pact-fake-'));
+    const fake = await runFake('role-files', { cwd: tmp });
+    await fake.waitForPrompt(1);
+    fake.send('go');
+    await fake.waitForHook('turn-finished');
+    expect(await readFile(join(tmp, 'tests', 'connexion.test.ts'), 'utf8')).toContain('connexion');
+    expect(await readFile(join(tmp, 'src', 'connexion.ts'), 'utf8')).toContain('connexion');
+    const mockup = await readFile(
+      join(tmp, 'design', 'mockups', 'écran de connexion.html'),
+      'utf8',
+    );
+    expect(mockup).toContain('<h1>écran de connexion</h1>');
   });
 });
