@@ -361,6 +361,16 @@ describe('usage alerts', () => {
     expect(alerts([usageState(85)], NOW, { warn: 90, critical: 95 })).toEqual([]);
   });
 
+  it('says the reset is unknown when the CLI does not tell it', () => {
+    const unknown = usageState(85);
+    const [window] = unknown.reading?.windows ?? [];
+    if (!unknown.reading || !window) throw new Error('no window');
+    unknown.reading.windows = [{ ...window, resetsAt: null }];
+    expect(alerts([unknown])[0]?.title).toBe(
+      '◆ Limite Claude Code à 85 % · 5 h · réinitialisation inconnue',
+    );
+  });
+
   it('only for the CLIs of the workspace, after the rate limits and before the reviews', () => {
     expect(alerts([usageState(85, { cliId: 'codex' })])).toEqual([]);
     const todos = deriveTodos(

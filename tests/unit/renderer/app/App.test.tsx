@@ -830,3 +830,59 @@ describe('App review (002 T018)', () => {
     );
   });
 });
+
+// 005 US3 — the thresholds of the usage alerts, changed from the gauge of the workspace (FR-010).
+describe('App usage thresholds', () => {
+  type Invoke = (channel: string, input?: unknown) => Promise<unknown>;
+
+  it('saves the thresholds chosen from the gauge', async () => {
+    const now = Date.now();
+    const usage = {
+      cliId: 'claude-code',
+      account: 'default',
+      shares: [],
+      level: 'ok',
+      reading: {
+        cliId: 'claude-code',
+        account: 'default',
+        readAt: new Date(now - 60_000).toISOString(),
+        windows: [
+          {
+            id: 'five-hour',
+            label: '5 h',
+            usedPercent: 62,
+            resetsAt: new Date(now + 3_600_000).toISOString(),
+            minutes: 300,
+          },
+        ],
+      },
+    };
+    const invoke = vi.fn<Invoke>((channel, input) => {
+      switch (channel) {
+        case 'app:getState':
+          return Promise.resolve({
+            workspaces: [{ ...workspace('w1', 'w1'), agents: [agent(1, { state: 'working' })] }],
+            recents: [],
+            clis: [],
+            permission: null,
+          });
+        case 'usage:get':
+          return Promise.resolve([usage]);
+        case 'settings:usageThresholds':
+          return Promise.resolve(input);
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+    const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} />);
+    await userEvent.click(await screen.findByRole('button', { name: /claude-code 62 %/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Seuils d’alerte…' }));
+    const dialog = screen.getByRole('dialog', { name: 'Seuils d’alerte' });
+    const first = within(dialog).getByRole('spinbutton', { name: /Premier seuil/ });
+    await userEvent.clear(first);
+    await userEvent.type(first, '70');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Enregistrer' }));
+    expect(invoke).toHaveBeenCalledWith('settings:usageThresholds', { warn: 70, critical: 95 });
+  });
+});

@@ -335,4 +335,17 @@ describe('usage warning of the launcher', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
     expect(screen.getByRole('note', { name: 'Limite d’usage Claude Code' })).toBeTruthy();
   });
+
+  it('names a CLI no longer detected by its id', () => {
+    const draft: LaunchDraft = {
+      common: { model: null, permissionLevel: null, baseBranch: null, startCommand: null },
+      agents: [{ key: 'a1', cliId: 'disparu', overrides: {}, branch: null, port: null }],
+      freeTerminal: 0,
+      nextKey: 2,
+    };
+    renderLauncher({ initialDraft: draft, usageWarning: () => WARNING });
+    expect(screen.getByRole('note', { name: 'Limite d’usage disparu' }).textContent).toBe(
+      `disparu · ${WARNING}`,
+    );
+  });
 });

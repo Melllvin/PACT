@@ -142,6 +142,21 @@ process.stdout.write('ma ligne');`,
     });
     expect(out.text()).toBe('');
   });
+
+  it('prints nothing when PACT refuses the token, or without its address', async () => {
+    server.register('agent-1', vi.fn(), () => 'PACT · 5 h 62 %');
+    // No token, and a payload without a cwd as text: the user's settings are looked up from here.
+    for (const env of [{ PACT_HOOK_URL: url, HOME: home }, { HOME: home }]) {
+      const out = collect();
+      await relayHook({
+        stdin: Readable.from([JSON.stringify({ cwd: 3 })]),
+        stdout: out.stream,
+        env,
+        argv: ['--statusline'],
+      });
+      expect(out.text()).toBe('');
+    }
+  });
 });
 
 describe('userStatusLine', () => {
