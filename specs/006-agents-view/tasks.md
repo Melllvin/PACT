@@ -67,24 +67,30 @@ apparaître « ◆ Répondre » sur la seule ligne concernée, en tête.
 
 ## Phase 4: User Story 2 — Tuiles sous l'orchestrateur (P1)
 
-**But** : chaque agent lancé par l'orchestrateur a sa tuile dès son lancement, sous l'orchestrateur,
-tout tient à 1024 × 768.
+**But** : chaque agent lancé par l'orchestrateur a sa tuile dès son lancement ; l'orchestrateur occupe
+2×2 cases, les agents la colonne de droite puis des rangées de 3 qu'on fait défiler (#41, #47).
 
-**Test indépendant** : orchestrateur + cinq sous-agents à 1024 × 768 → six tuiles visibles,
-l'orchestrateur la plus grande.
+**Test indépendant** : orchestrateur + cinq sous-agents à 1024 × 768 → orchestrateur 2×2, deux agents à
+droite, trois sur la rangée suivante atteinte par défilement vertical.
 
 ### Tests (rouges d'abord)
 
-- [ ] T019 [P] [US2] Test `TileGrid` disposition `lead` avec 1, 3 et 5 agents : rangées du bas `repeat(ceil(n/3), minmax(0,1fr))`, orchestrateur en premier, dans `tests/unit/renderer/tiles/TileGrid.test.tsx`
+- [ ] T019 [P] [US2] Test `TileGrid` disposition `lead` avec 0, 1, 2, 3 et 5 agents : grille de 3 colonnes, orchestrateur en premier en `col-span-2 row-span-2`, agents 1–2 dans la colonne de droite, suivants par rangées de 3 ; conteneur `overflow-y-auto` ; case « + » unique seulement si la dernière rangée a une place libre (FR-010, FR-010b), dans `tests/unit/renderer/tiles/TileGrid.test.tsx`
 - [ ] T020 [P] [US2] E2E : l'orchestrateur lance deux agents → leurs tuiles apparaissent sous la sienne sans action de l'utilisateur, en moins d'une seconde après l'événement, dans `tests/e2e/us29-lead-tiles.spec.ts`
-- [ ] T021 [P] [US2] E2E layout : orchestrateur + cinq agents à 1024 × 768 → aucune tuile hors écran, hauteur de tuile ≥ 120 px, l'orchestrateur la plus grande, pas de défilement horizontal, dans `tests/e2e/layout.spec.ts`
+- [ ] T021 [P] [US2] E2E layout : orchestrateur + cinq agents à 1024 × 768 → orchestrateur la plus grande tuile sur les deux colonnes de gauche, deux agents à droite visibles sans défilement, la rangée des trois suivants atteinte en faisant défiler la grille verticalement, hauteur de tuile ≥ 120 px, pas de défilement horizontal, dans `tests/e2e/layout.spec.ts`
 
 - [ ] T022a [P] [US2] Test : le terminal est ouvert dans un conteneur sans marge, la hauteur proposée par le fit = zone libre (pas la hauteur avec padding) ; boutons d'action rendus seulement au survol / `focus-within`, dans `tests/unit/renderer/tiles/Tile.test.tsx` ; e2e : la dernière ligne écrite par le faux CLI est visible et non recouverte, dans `tests/e2e/us29-lead-tiles.spec.ts`
 
 ### Implémentation
 
 - [ ] T022b [US2] Ouvrir xterm dans un div interne sans padding (le fit d'xterm compte le padding du parent comme hauteur utile) dans `src/renderer/tiles/TerminalView.tsx` ; retirer `pb-14` conditionnel ; boutons d'action visibles au survol et `focus-within`, action due signalée par le contour, dans `src/renderer/tiles/Tile.tsx`
-- [ ] T022 [US2] Rangées du bas en `minmax(0,1fr)` au nombre de `ceil(n/3)` (au lieu de `auto-rows-[minmax(180px,1fr)]`) dans `src/renderer/tiles/TileGrid.tsx`
+- [ ] T022 [US2] Disposition `lead` en une grille de 3 colonnes (orchestrateur `col-span-2 row-span-2`, rangées de la moitié de la hauteur visible, `overflow-y-auto`) au lieu des deux sections superposées, dans `src/renderer/tiles/TileGrid.tsx`
+
+### Issues rattachées (#40, #47) — grille sans orchestrateur
+
+- [ ] T051 [P] [US2] Test (#40, #47) : `TileGrid` sans orchestrateur avec 1, 2, 3, 4, 6 et 7 tuiles → colonnes 1, 2, 3, 2, 3, 3 ; rangées qui partagent la hauteur jusqu'à 6 tuiles ; la septième sur une rangée atteinte par défilement vertical ; aucune case vide sauf une case « + » quand la dernière rangée a une place libre (FR-010a, FR-010b), dans `tests/unit/renderer/tiles/TileGrid.test.tsx`
+- [ ] T052 [P] [US2] E2E (#40, #47) : un terminal occupe toute la grille ; sept terminaux → 3×2 visibles, le septième atteint par défilement ; ouvrir la colonne « Agents » garde 3 colonnes ; pas de défilement horizontal, dans `tests/e2e/layout.spec.ts` ; adapter les specs e2e qui cliquent une case « + » vide (`rg "Ajouter un agent" tests/e2e`)
+- [ ] T053 [US2] Disposition sans orchestrateur (colonnes selon le nombre de tuiles, rangées de la moitié de la hauteur visible, défilement vertical, case « + » unique) dans `src/renderer/tiles/TileGrid.tsx` ; conteneur de la grille qui se réduit avec la colonne « Agents » dans `src/renderer/workspace/WorkspaceView.tsx`
 
 **Checkpoint** : PR « 006 Phase 4 US2 ».
 

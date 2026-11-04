@@ -36,7 +36,8 @@ Libellés : `docs/maquettes/CONSIGNES-UI.md`.
 ## Périmètre
 
 **Inclus** : la colonne « Agents » qui remplace « À faire » (agents, demandes de l'orchestrateur,
-alertes), la disposition des tuiles orchestrateur / sous-agents, la vue « Graphe » en lecture avec
+alertes), la disposition des tuiles orchestrateur / sous-agents et la grille sans case vide avec
+défilement au-delà de 3×2 (#40, #41, #47), la vue « Graphe » en lecture avec
 navigation vers l'agent, l'enregistrement de qui a lancé chaque agent.
 
 **Hors périmètre** :
@@ -85,9 +86,11 @@ est due, l'ordre, le compteur et l'ouverture de l'agent au clic.
 
 ### User Story 2 - Voir les sous-agents de l'orchestrateur dans les tuiles (Priority: P1)
 
-L'orchestrateur lance un agent : sa tuile apparaît sous celle de l'orchestrateur, sans action de
-l'utilisateur, et l'orchestrateur reste la plus grande tuile. Avec cinq sous-agents, tous sont
-visibles sans faire défiler à la taille de fenêtre minimale prise en charge.
+L'orchestrateur lance un agent : sa tuile apparaît à côté ou sous celle de l'orchestrateur, sans
+action de l'utilisateur, et l'orchestrateur reste la plus grande tuile. L'orchestrateur occupe 2×2 cases
+d'une grille de 3 colonnes ; les deux premiers agents remplissent la colonne de droite, les suivants
+des rangées de 3 qu'on fait défiler (#41, #47). Sans orchestrateur, les tuiles prennent toute la place
+disponible, sans case vide (#40).
 
 **Why this priority**: sans les tuiles, l'utilisateur ne peut ni lire ni corriger le travail des
 agents ; c'est la moitié du défaut constaté.
@@ -99,8 +102,17 @@ apparaît sous l'orchestrateur et que l'orchestrateur reste la plus grande.
 
 1. **Given** un orchestrateur, **When** il lance un agent, **Then** la tuile de l'agent apparaît en
    moins d'une seconde, dans la rangée sous l'orchestrateur.
-2. **Given** un orchestrateur et cinq sous-agents, **When** la fenêtre fait 1024 × 768, **Then** les six
-   tuiles sont visibles sans défilement et l'orchestrateur reste la plus grande (004 FR-006a).
+2. **Given** un orchestrateur et deux sous-agents, **When** la fenêtre fait 1024 × 768, **Then**
+   l'orchestrateur occupe les deux colonnes de gauche sur toute la hauteur, les deux agents la colonne de
+   droite, sans défilement ni case vide.
+2a. **Given** un orchestrateur et cinq sous-agents, **When** la fenêtre fait 1024 × 768, **Then** les trois
+   derniers agents sont sur une rangée de 3 sous l'orchestrateur, atteinte en faisant défiler la grille
+   verticalement ; aucune tuile ne fait moins de 120 px de haut ; pas de défilement horizontal.
+2b. **Given** un seul terminal sans orchestrateur, **When** la vue Tuiles s'affiche, **Then** il occupe
+   toute la grille ; avec deux terminaux, chacun la moitié ; avec sept, la grille montre 3×2 tuiles et
+   se fait défiler pour la septième.
+2c. **Given** la colonne « Agents » ouverte, **When** la grille s'affiche, **Then** les cases se réduisent
+   en largeur sans changer la disposition en 3 colonnes.
 3. **Given** un sous-agent fermé par l'orchestrateur, **When** il se ferme, **Then** sa tuile et sa ligne
    disparaissent.
 
@@ -242,8 +254,18 @@ session avec l'accès orchestrateur, sa tuile passe en haut, il peut lancer un a
 
 - **FR-009**: Un agent lancé par l'orchestrateur MUST avoir sa tuile en moins d'une seconde après son
   lancement, sans action de l'utilisateur.
-- **FR-010**: Avec un orchestrateur, sa tuile MUST rester en haut et la plus grande (004 FR-006a), et
-  jusqu'à cinq autres tuiles MUST tenir en dessous sans défilement à partir de 1024 × 768.
+- **FR-010** (#41): Avec un orchestrateur, sa tuile MUST occuper 2 colonnes × 2 rangées en haut à
+  gauche d'une grille de 3 colonnes et rester la plus grande ; les deux premiers autres agents MUST
+  occuper la colonne de droite, les suivants des rangées de 3 en dessous. Remplace 004 FR-006a
+  (orchestrateur pleine largeur).
+- **FR-010a** (#40, #47): La grille MUST montrer au plus 3 colonnes × 2 rangées dans la hauteur visible ;
+  au-delà, elle MUST défiler verticalement, jamais horizontalement. En dessous de 6 tuiles, sans
+  orchestrateur, les tuiles MUST occuper toute la place disponible (1 tuile : toute la grille ;
+  2 : deux colonnes ; 3 : trois colonnes ; 4 : 2×2 ; 5–6 : 3×2). Ouvrir la colonne « Agents » MUST
+  réduire la largeur des cases sans changer le nombre de colonnes. Remplace 001 FR-019.
+- **FR-010b** (#40): La grille MUST NOT montrer de case vide permanente ; une seule case « + » (ajout
+  d'un agent) MUST apparaître si une place reste libre dans la dernière rangée, et MUST NOT ajouter de
+  rangée à elle seule.
 
 **Lien de lancement**
 

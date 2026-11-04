@@ -17,8 +17,9 @@ Attendu :
 - **US1** : un orchestrateur (faux CLI) lance trois agents ; la colonne « Agents » liste quatre lignes ;
   un agent qui pose une question passe en tête avec « ◆ Répondre » ; les autres lignes n'ont aucun
   bouton d'action ; un clic sur une ligne ouvre le Focus ; une demande d'intégration reste en tête.
-- **US2** : chaque agent lancé par l'orchestrateur a sa tuile sous l'orchestrateur ; avec cinq
-  sous-agents à 1024 × 768, aucune tuile n'est hors écran et l'orchestrateur reste la plus grande.
+- **US2** : chaque agent lancé par l'orchestrateur a sa tuile ; l'orchestrateur occupe 2×2 cases, les
+  deux premiers agents la colonne de droite, les suivants des rangées de 3 atteintes en faisant défiler ;
+  un seul terminal sans orchestrateur occupe toute la grille, sans case « + » vide (#40, #41, #47).
 - **US3** : la vue « Graphe » montre l'orchestrateur relié à ses agents ; une boucle au tour 2
   affiche « dev ↔ test 2/3 » sous son issue ; un changement d'état change le nœud en moins d'une
   seconde ; l'audit axe ne relève aucune violation sérieuse.
