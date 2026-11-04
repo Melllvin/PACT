@@ -152,6 +152,8 @@ afterEach(async () => {
   await pty.dispose();
   await hooks.stop();
   workspaces.dispose();
+  // The writes still queued (the exit of the agent) land before the folder goes.
+  await stores.workspace(workspace.id).read();
   await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
