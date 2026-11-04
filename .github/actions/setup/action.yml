@@ -1,0 +1,18 @@
+name: Setup
+description: Node 22 and the dependencies, node_modules restored from the cache of the same lockfile.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 22
+    # node_modules as npm ci leaves it, node-pty rebuilt for Electron (postinstall) included.
+    # Exact key only: a new lockfile, OS, arch or Node installs from scratch.
+    - id: modules
+      uses: actions/cache@v6
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json') }}
+    - if: steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci

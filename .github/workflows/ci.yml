@@ -7,13 +7,59 @@ on:
 
 permissions:
   contents: read
+  # coverage-guard reads the coverage of the base from the run of main.
+  actions: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Required checks of main: check (macos-latest), check (windows-latest), e2e (macos-latest),
+# e2e (windows-latest), coverage-guard, static. Their names must not change. A pull request
+# that only touches documentation skips the steps of the heavy jobs, never the jobs themselves:
+# a skipped matrix job would not report the check names above.
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: filter
+        name: Code or documentation only?
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # The merge commit of a pull request: its first parent is the base.
+          files=$(git diff --name-only HEAD^1 HEAD)
+          echo "$files"
+          if echo "$files" | grep -qvE '^(specs/|docs/|\.specify/)|^[^/]+\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Documentation only: the heavy jobs skip their steps."
+          fi
+
+  # Typecheck, lint and format do not depend on the OS: once, on Linux.
+  static:
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        if: needs.changes.outputs.code == 'true'
+      - uses: ./.github/actions/setup
+        if: needs.changes.outputs.code == 'true'
+      - if: needs.changes.outputs.code == 'true'
+        run: npm run typecheck && npm run lint && npm run format:check
+
   check:
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
@@ -22,14 +68,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run check
+        if: needs.changes.outputs.code == 'true'
+      - uses: ./.github/actions/setup
+        if: needs.changes.outputs.code == 'true'
+      - if: needs.changes.outputs.code == 'true'
+        run: npm run coverage
       - uses: actions/upload-artifact@v7
-        if: always()
+        if: always() && needs.changes.outputs.code == 'true'
         with:
           name: coverage-${{ matrix.os }}
           path: coverage/
@@ -39,25 +84,49 @@ jobs:
   # platform (OS-specific branches), so the comparison is made on a single OS against the base.
   coverage-guard:
     if: github.event_name == 'pull_request'
-    needs: check
+    needs: [changes, check]
     runs-on: macos-latest
     timeout-minutes: 20
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
+        if: env.CODE == 'true'
       - uses: actions/checkout@v7
+        if: env.CODE == 'true'
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .coverage-base
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
       - uses: actions/download-artifact@v8
+        if: env.CODE == 'true'
         with:
           name: coverage-macos-latest
           path: coverage
+      # The run of main on the base commit already measured it: read it back.
+      - name: Coverage of the base, from its run on main
+        id: saved
+        if: env.CODE == 'true'
+        run: |
+          run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
+            --commit "$BASE_SHA" --status success --limit 1 --json databaseId -q '.[0].databaseId')
+          if [ -n "$run" ] && gh run download "$run" --repo "$GITHUB_REPOSITORY" \
+            -n coverage-macos-latest -D .coverage-saved \
+            && test -f .coverage-saved/coverage-summary.json; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No coverage saved for $BASE_SHA: measured below."
+          fi
+      - uses: actions/setup-node@v7
+        if: env.CODE == 'true' && steps.saved.outputs.found != 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: .coverage-base/package-lock.json
       - name: Measure base coverage
         id: base
+        if: env.CODE == 'true' && steps.saved.outputs.found != 'true'
         working-directory: .coverage-base
         run: |
           if [ ! -f package.json ] || ! grep -q '"coverage"' package.json; then
@@ -65,48 +134,84 @@ jobs:
           fi
           npm ci
           npx vitest run --coverage --coverage.reporter=json-summary --coverage.reportOnFailure || true
-          test -f coverage/coverage-summary.json && echo "measured=true" >> "$GITHUB_OUTPUT"
+          mkdir -p ../.coverage-saved
+          test -f coverage/coverage-summary.json && cp coverage/coverage-summary.json ../.coverage-saved/ \
+            && echo "measured=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        if: env.CODE == 'true'
+        with:
+          node-version: 22
+      # The saved summary names the files under the path of main's runner: the same checkout path.
       - name: Compare with pull request coverage
-        if: steps.base.outputs.measured == 'true'
-        run: >-
-          node --no-warnings --experimental-strip-types scripts/coverage-guard.ts
-          .coverage-base/coverage/coverage-summary.json "$GITHUB_WORKSPACE/.coverage-base"
-          coverage/coverage-summary.json "$GITHUB_WORKSPACE"
+        if: env.CODE == 'true' && (steps.saved.outputs.found == 'true' || steps.base.outputs.measured == 'true')
+        run: |
+          base_root="$GITHUB_WORKSPACE/.coverage-base"
+          if [ "${{ steps.saved.outputs.found }}" = "true" ]; then base_root="$GITHUB_WORKSPACE"; fi
+          node --no-warnings --experimental-strip-types scripts/coverage-guard.ts \
+            .coverage-saved/coverage-summary.json "$base_root" \
+            coverage/coverage-summary.json "$GITHUB_WORKSPACE"
 
-  e2e:
-    needs: check
+  # Two shards per OS, one worker each: the parallelism comes from the machines, the tests keep
+  # the isolation they have today.
+  e2e-shard:
+    needs: changes
+    name: e2e shard ${{ matrix.shard }}/2 (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
+        shard: [1, 2]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    env:
+      CODE: ${{ needs.changes.outputs.code }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run test:e2e
+        if: env.CODE == 'true'
+      - uses: ./.github/actions/setup
+        if: env.CODE == 'true'
+      - if: env.CODE == 'true'
+        run: npm run build
+      - if: env.CODE == 'true'
+        run: npx playwright test --shard=${{ matrix.shard }}/2
       # T125 (plan R12, R14): the same smoke on the packaged app, node-pty loaded from outside asar.
       - name: Package the app (unpacked)
+        if: env.CODE == 'true' && matrix.shard == 2
         run: npx electron-builder --dir --${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }} --publish never
       - name: e2e smoke on the packaged app
+        if: env.CODE == 'true' && matrix.shard == 2
         run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/us2-quick-launch.spec.ts
         env:
           PACT_E2E_PACKAGED: '1'
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: playwright-${{ matrix.os }}
+          name: playwright-${{ matrix.os }}-${{ matrix.shard }}
           path: |
             test-results/
             playwright-report/
       # Layout captures at 1024 px and on a large screen, kept for review (T157).
       - uses: actions/upload-artifact@v7
-        if: always()
+        if: always() && env.CODE == 'true'
         with:
-          name: layout-${{ matrix.os }}
+          name: layout-${{ matrix.os }}-${{ matrix.shard }}
           path: test-results/layout/
           if-no-files-found: ignore
+
+  # The required check of each OS. A matrix job cannot tell which legs of another failed: both
+  # are red as soon as one shard is, the failing shard's own check names it.
+  e2e:
+    needs: e2e-shard
+    if: always()
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Both shards of ${{ matrix.os }}
+        env:
+          RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          echo "e2e shards: $RESULT"
+          test "$RESULT" = "success"
