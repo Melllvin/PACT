@@ -11,6 +11,8 @@
 //                                   prints a rate-limit message, without a time when no resetAt;
 //                                   exits (code 1), resumes on its own like Claude Code's
 //                                   quota_auto_resume_fired, or waits for "continue"
+//   permissionOn: string            with `permission`, asks only when the prompt contains this text
+//                                   (006: one agent of several asks)
 //   hooks: object[]                 raw hook payloads posted after the output
 //   renameBranch: string            runs `git branch -m <name>` in the working directory
 //   files: object[]                 edits the working directory in order (002 R11):
@@ -321,7 +323,7 @@ async function runTurn(line) {
   for (const text of scenario.output ?? []) console.log(text);
   for (let i = 1; i <= (scenario.burst ?? 0); i++) console.log(`burst ${String(i)}`);
 
-  if (scenario.permission) {
+  if (scenario.permission && (!scenario.permissionOn || line.includes(scenario.permissionOn))) {
     console.log(`? Exécuter : ${scenario.permission} (allow/deny)`);
     const reply = await hook({
       type: 'awaiting-answer',

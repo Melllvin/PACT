@@ -48,18 +48,18 @@ apparaître « ◆ Répondre » sur la seule ligne concernée, en tête.
 
 ### Tests (rouges d'abord)
 
-- [ ] T010 [P] [US1] Tests de `agentRows(workspace, todos)` (data-model « AgentsView ») : `answer`, `rate-limit`, `review`, `prompt` vont sur la ligne de leur agent, `todo` = premier selon `ORDER`, `pending` = leur nombre ; `integration-request`, `publish-issues`, `loop-escalated`, `overlap`, `usage-limit`, `info` vont dans `head` ; ordre des lignes : avec action (ordre `ORDER` puis `position`), puis rôle `orchestrator`, puis `position` ; terminaux libres exclus ; `pendingCount` = éléments non `info` ; aucun élément de `deriveTodos` perdu (SC-005), dans `tests/unit/shared/agents-view.test.ts`
-- [ ] T011 [P] [US1] Tests composant `AgentRow` : bouton principal nommé `<Nom>, <rôle>, <état>[, issue <id>]` (contracts/ui.md) ; bouton d'action présent seulement si `todo` ; clic et Entrée sur le bouton principal ouvrent le Focus ; aucun bouton imbriqué, dans `tests/unit/renderer/agents/AgentRow.test.tsx`
-- [ ] T012 [P] [US1] Tests composant `AgentsColumn` : `complementary` « Agents », titre niveau 2 `Agents <N>` + `<M> à traiter`, `list "À traiter"` puis `list "Agents du workspace"` ; les actions existantes (Répondre, Revue →, Intégrer ?, Reprendre, Créer les issues…) restent cliquables ; adapter les cas utiles de `tests/unit/renderer/todo/TodoColumn.test.tsx` puis supprimer ce fichier, dans `tests/unit/renderer/agents/AgentsColumn.test.tsx`
-- [ ] T013 [P] [US1] Test Toolbar : bouton bascule nommé `Agents <M>` (plus « À faire ») dans `tests/unit/renderer/app/Toolbar.test.tsx`
-- [ ] T014 [US1] E2E : orchestrateur (scénario faux CLI `orchestra-agents`) lance trois agents → quatre lignes avec rôles ; un agent pose une question → sa ligne passe en tête avec « ◆ Répondre », les autres sans bouton d'action ; clic sur une ligne → Focus ; demande d'intégration visible dans « À traiter » ; audit axe sans violation sérieuse, dans `tests/e2e/us28-agents-column.spec.ts` ; adapter les sélecteurs « À faire » de `tests/e2e/us4-todo.spec.ts` et autres specs touchées
+- [x] T010 [P] [US1] Tests de `agentRows(workspace, todos)` (data-model « AgentsView ») : `answer`, `rate-limit`, `review`, `prompt` vont sur la ligne de leur agent, `todo` = premier selon `ORDER`, `pending` = leur nombre ; `integration-request`, `publish-issues`, `loop-escalated`, `overlap`, `usage-limit`, `info` vont dans `head` ; ordre des lignes : avec action (ordre `ORDER` puis `position`), puis rôle `orchestrator`, puis `position` ; terminaux libres exclus ; `pendingCount` = éléments non `info` ; aucun élément de `deriveTodos` perdu (SC-005), dans `tests/unit/shared/agents-view.test.ts`
+- [x] T011 [P] [US1] Tests composant `AgentRow` : bouton principal nommé `<Nom>, <rôle>, <état>[, issue <id>]` (contracts/ui.md) ; bouton d'action présent seulement si `todo` ; clic et Entrée sur le bouton principal ouvrent le Focus ; aucun bouton imbriqué, dans `tests/unit/renderer/agents/AgentRow.test.tsx`
+- [x] T012 [P] [US1] Tests composant `AgentsColumn` : `complementary` « Agents », titre niveau 2 `Agents <N>` + `<M> à traiter`, `list "À traiter"` puis `list "Agents du workspace"` ; les actions existantes (Répondre, Revue →, Intégrer ?, Reprendre, Créer les issues…) restent cliquables ; adapter les cas utiles de `tests/unit/renderer/todo/TodoColumn.test.tsx` puis supprimer ce fichier, dans `tests/unit/renderer/agents/AgentsColumn.test.tsx`
+- [x] T013 [P] [US1] Test Toolbar : bouton bascule nommé `Agents <M>` (plus « À faire ») dans `tests/unit/renderer/app/Toolbar.test.tsx`
+- [x] T014 [US1] E2E : orchestrateur (scénario faux CLI `orchestra-agents`) lance trois agents → quatre lignes avec rôles ; un agent pose une question → sa ligne passe en tête avec « ◆ Répondre », les autres sans bouton d'action ; clic sur une ligne → Focus ; demande d'intégration visible dans « À traiter » ; audit axe sans violation sérieuse, dans `tests/e2e/us28-agents-column.spec.ts` ; adapter les sélecteurs « À faire » de `tests/e2e/us4-todo.spec.ts` et autres specs touchées
 
 ### Implémentation
 
-- [ ] T015 [US1] `agentRows()` dans `src/shared/agents-view.ts` (regroupe `deriveTodos` sans recalculer d'action)
-- [ ] T016 [P] [US1] `src/renderer/agents/AgentRow.tsx` : bouton principal + actions réutilisées de `src/renderer/todo/TodoItem.tsx` (extraire le rendu des actions en composant exporté si besoin, sans changer leurs libellés)
-- [ ] T017 [US1] `src/renderer/agents/AgentsColumn.tsx` (en-tête collant, `head` rendus par `TodoItem`, lignes par `AgentRow`) ; remplacer `TodoColumn` dans `src/renderer/workspace/WorkspaceView.tsx` ; supprimer `src/renderer/todo/TodoColumn.tsx`
-- [ ] T018 [US1] Libellé `Agents <M>` du bouton de la barre dans `src/renderer/app/Toolbar.tsx`
+- [x] T015 [US1] `agentRows()` dans `src/shared/agents-view.ts` (regroupe `deriveTodos` sans recalculer d'action)
+- [x] T016 [P] [US1] `src/renderer/agents/AgentRow.tsx` : bouton principal + actions réutilisées de `src/renderer/todo/TodoItem.tsx` (extraire le rendu des actions en composant exporté si besoin, sans changer leurs libellés)
+- [x] T017 [US1] `src/renderer/agents/AgentsColumn.tsx` (en-tête collant, `head` rendus par `TodoItem`, lignes par `AgentRow`) ; remplacer `TodoColumn` dans `src/renderer/workspace/WorkspaceView.tsx` ; supprimer `src/renderer/todo/TodoColumn.tsx`
+- [x] T018 [US1] Libellé `Agents <M>` du bouton de la barre dans `src/renderer/app/Toolbar.tsx`
 
 **Checkpoint** : US1 utilisable seule ; PR « 006 Phase 3 US1 ».
 

@@ -119,7 +119,7 @@ test('lets the orchestrator read and integrate a file with spaces and accents', 
   await expect(lead).toContainText('MCP request_integration :');
 
   const request = page
-    .getByRole('complementary', { name: 'À faire' })
+    .getByRole('complementary', { name: 'Agents' })
     .getByRole('listitem')
     .filter({ hasText: '◎ Intégrer Faux CLI 2 → main ?' });
   await request.getByRole('button', { name: '✓ Intégrer' }).click();

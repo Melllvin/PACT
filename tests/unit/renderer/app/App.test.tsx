@@ -483,7 +483,7 @@ describe('App tile actions (US3)', () => {
     );
     const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
     render(<App store={store} getPathForFile={() => ''} />);
-    const column = await screen.findByRole('complementary', { name: 'À faire' });
+    const column = await screen.findByRole('complementary', { name: 'Agents' });
     await userEvent.click(within(column).getByRole('button', { name: '✓ Intégrer' }));
     expect(invoke).toHaveBeenCalledWith('integrationRequest:confirm', {
       requestId,

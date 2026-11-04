@@ -138,7 +138,7 @@ for (const size of SIZES) {
       const terminal = await tile.locator('.xterm').boundingBox();
       expect(tools && terminal && tools.y + tools.height <= terminal.y).toBe(true);
     }
-    await expectInView(page, page.getByRole('complementary', { name: 'À faire' }));
+    await expectInView(page, page.getByRole('complementary', { name: 'Agents' }));
     await expectInView(page, page.getByRole('toolbar', { name: 'Vues' }));
     await expectNoOverflow(page);
     await capture(page, 'tiles', size.width);

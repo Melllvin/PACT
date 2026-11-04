@@ -34,7 +34,7 @@ test('opens the terminal of an agent that asks a question, from its tile and fro
   await typeIn(page, tile, 'Choisis une base');
   await expect(tile).toHaveAttribute('data-state', 'awaiting-answer');
   await expect(tile.getByRole('button', { name: '✓ Autoriser' })).toHaveCount(0);
-  const column = page.getByRole('complementary', { name: 'À faire' });
+  const column = page.getByRole('complementary', { name: 'Agents' });
   await expect(column.getByRole('button', { name: '✓ Autoriser' })).toHaveCount(0);
 
   await tile.getByRole('button', { name: 'Répondre dans le terminal ↗' }).click();

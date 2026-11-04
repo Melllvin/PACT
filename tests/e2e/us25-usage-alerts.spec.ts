@@ -87,7 +87,7 @@ test('alerts near the limit, once, and warns before a launch', async () => {
   const { page, tile } = await launchOne('usage-alerts');
   const gauges = page.getByRole('group', { name: 'Limites d’usage' });
   const meter = gauges.getByRole('meter', { name: 'Limite d’usage Faux CLI' });
-  const todos = page.getByRole('complementary', { name: 'À faire' });
+  const todos = page.getByRole('complementary', { name: 'Agents' });
   const alerts = todos.getByRole('listitem').filter({ hasText: /Limite Faux CLI à/ });
 
   await typeIn(page, tile, 'Travaille');

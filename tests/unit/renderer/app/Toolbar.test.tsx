@@ -38,3 +38,27 @@ describe('Toolbar, Revue view', () => {
     expect(onView).not.toHaveBeenCalled();
   });
 });
+
+// 006 T013 — the toggle of the right column is « Agents <M> » (M = items to handle), no longer
+// « À faire ».
+describe('Toolbar, Agents column toggle', () => {
+  it('is named « Agents <M> »', () => {
+    render(<Toolbar todoCount={3} onView={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Agents 3' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: /À faire/ })).toBeNull();
+  });
+
+  it('keeps the count at zero', () => {
+    render(<Toolbar todoCount={0} onView={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Agents 0' })).toBeDefined();
+  });
+
+  it('is pressed when the column is open, and toggles it', async () => {
+    const onToggleTodo = vi.fn();
+    render(<Toolbar todoCount={1} todoOpen onToggleTodo={onToggleTodo} onView={vi.fn()} />);
+    const toggle = screen.getByRole('button', { name: 'Agents 1' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(toggle);
+    expect(onToggleTodo).toHaveBeenCalledTimes(1);
+  });
+});
