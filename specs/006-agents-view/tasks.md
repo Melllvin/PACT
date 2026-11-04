@@ -12,8 +12,8 @@ chaque commit dans une chaîne `&&` gardée par `npm run check` et `npm run test
 
 ## Phase 1: Setup
 
-- [ ] T001 Fusionner le correctif orchestrateur de `005-phase-7-polish` (événement `workspace:agentsLaunched`, attente MCP 240 s) dans `006-agents-view` ; vérifier que `src/shared/ipc.ts` déclare `workspace:agentsLaunched`
-- [ ] T002 Ajouter `@axe-core/playwright` en devDependency (version exacte, `npm i -D -E`) dans `package.json` et `package-lock.json` ; helper `expectNoSeriousA11yViolations(page)` (échoue sur toute violation `serious` ou `critical`) dans `tests/e2e/helpers/a11y.ts`
+- [X] T001 Fusionner le correctif orchestrateur de `005-phase-7-polish` (événement `workspace:agentsLaunched`, attente MCP 240 s) dans `006-agents-view` ; vérifier que `src/shared/ipc.ts` déclare `workspace:agentsLaunched`
+- [X] T002 Ajouter `@axe-core/playwright` en devDependency (version exacte, `npm i -D -E`) dans `package.json` et `package-lock.json` ; helper `expectNoSeriousA11yViolations(page)` (échoue sur toute violation `serious` ou `critical`) dans `tests/e2e/helpers/a11y.ts`
 
 ---
 
@@ -23,16 +23,16 @@ chaque commit dans une chaîne `&&` gardée par `npm run check` et `npm run test
 
 ### Tests (rouges d'abord)
 
-- [ ] T003 [P] Tests du schéma : `launchedBy` vaut `null` par défaut à la lecture d'un agent sans le champ, accepte un uuid, refuse un nombre, dans `tests/unit/shared/model.test.ts`
-- [ ] T004 [P] Tests de `agentStateLabel(agent, now)` : un libellé par état (`démarre`, `travaille`, `attend une consigne`, `attend une réponse`, `fini`, `erreur`, `limite de débit`, `reprise à HH:MM` quand une reprise est programmée, `fermé`) dans `tests/unit/shared/agents-view.test.ts`
-- [ ] T005 [P] Tests de `agentPhase(agent, loops)` selon data-model « Phase » : boucle `running` → `{ label: 'dev ↔ test', issueId, round: { n, max: 3 } }` ; `passed` → `boucle terminée` ; `escalated` → `boucle arrêtée` ; `closed` ignorée ; plusieurs boucles → la `running` la plus récente, sinon la dernière du tableau ; hors boucle, rôle `spec`/`design`/`recap` → le rôle, sans issue ; sinon aucune phase, dans `tests/unit/shared/agents-view.test.ts`
-- [ ] T006 [P] Test d'intégration : `launch_agent` appelé par l'orchestrateur crée des agents dont `launchedBy` = id de l'orchestrateur ; un lancement depuis l'interface laisse `launchedBy: null` ; la valeur survit à un rechargement de l'état, dans `tests/integration/orchestrator/tools-agents.test.ts`
+- [X] T003 [P] Tests du schéma : `launchedBy` vaut `null` par défaut à la lecture d'un agent sans le champ, accepte un uuid, refuse un nombre, dans `tests/unit/shared/model.test.ts`
+- [X] T004 [P] Tests de `agentStateLabel(agent, now)` : un libellé par état (`démarre`, `travaille`, `attend une consigne`, `attend une réponse`, `fini`, `erreur`, `limite de débit`, `reprise à HH:MM` quand une reprise est programmée, `fermé`) dans `tests/unit/shared/agents-view.test.ts`
+- [X] T005 [P] Tests de `agentPhase(agent, loops)` selon data-model « Phase » : boucle `running` → `{ label: 'dev ↔ test', issueId, round: { n, max: 3 } }` ; `passed` → `boucle terminée` ; `escalated` → `boucle arrêtée` ; `closed` ignorée ; plusieurs boucles → la `running` la plus récente, sinon la dernière du tableau ; hors boucle, rôle `spec`/`design`/`recap` → le rôle, sans issue ; sinon aucune phase, dans `tests/unit/shared/agents-view.test.ts`
+- [X] T006 [P] Test d'intégration : `launch_agent` appelé par l'orchestrateur crée des agents dont `launchedBy` = id de l'orchestrateur ; un lancement depuis l'interface laisse `launchedBy: null` ; la valeur survit à un rechargement de l'état, dans `tests/integration/orchestrator/tools-agents.test.ts`
 
 ### Implémentation
 
-- [ ] T007 Ajouter `launchedBy: z.string().nullable().default(null)` à `agentSchema` (« id (uuid) de l'orchestrateur qui l'a lancé ; `null` = lancé par l'utilisateur … Posé une fois, au lancement ; jamais modifié ensuite ») dans `src/shared/model.ts` ; corriger les fabriques d'agents des tests si le typage l'exige
-- [ ] T008 `LaunchRequest.launchedBy?: string` recopié dans chaque `Agent` créé (défaut `null`) dans `src/main/agents/agent-manager.ts` ; `launch_agent` passe l'id de l'agent appelant dans `src/main/orchestrator/tools.ts`
-- [ ] T009 Créer `src/shared/agents-view.ts` avec `agentStateLabel()` et `agentPhase()` (purs, sans DOM) ; faire passer T003–T006
+- [X] T007 Ajouter `launchedBy: z.string().nullable().default(null)` à `agentSchema` (« id (uuid) de l'orchestrateur qui l'a lancé ; `null` = lancé par l'utilisateur … Posé une fois, au lancement ; jamais modifié ensuite ») dans `src/shared/model.ts` ; corriger les fabriques d'agents des tests si le typage l'exige
+- [X] T008 `LaunchRequest.launchedBy?: string` recopié dans chaque `Agent` créé (défaut `null`) dans `src/main/agents/agent-manager.ts` ; `launch_agent` passe l'id de l'agent appelant dans `src/main/orchestrator/tools.ts`
+- [X] T009 Créer `src/shared/agents-view.ts` avec `agentStateLabel()` et `agentPhase()` (purs, sans DOM) ; faire passer T003–T006
 
 **Checkpoint** : `npm run check` vert ; PR « 006 Phase 1-2 ».
 
