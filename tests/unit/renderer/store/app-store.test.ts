@@ -27,6 +27,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  launchedBy: null,
   effort: null,
   ...overrides,
 });
@@ -143,6 +144,38 @@ describe('app store', () => {
     expect(store.getState().view).toBe('tiles');
     store.getState().setView('focus');
     expect(store.getState().view).toBe('focus');
+  });
+
+  it('shows the agents an orchestrator launched (003 FR-015)', async () => {
+    const { api, invoke, emit } = fakeApi({ workspaces: [workspace('w1', [agent(1)])] });
+    const store = createAppStore(api);
+    await store.getState().load();
+    store.getState().connect();
+    invoke.mockResolvedValueOnce({
+      workspaces: [workspace('w1', [agent(1), agent(2)])],
+      recents: [],
+      clis: [],
+      permission: null,
+    });
+
+    emit('workspace:agentsLaunched', { workspaceId: 'w1' });
+
+    await vi.waitFor(() => {
+      expect(store.getState().workspaces[0]?.agents.map((a) => a.id)).toEqual([uuid(1), uuid(2)]);
+    });
+  });
+
+  it('keeps the agents it knows when the refresh after a launch fails', async () => {
+    const { api, invoke, emit } = fakeApi({ workspaces: [workspace('w1', [agent(1)])] });
+    const store = createAppStore(api);
+    await store.getState().load();
+    store.getState().connect();
+    invoke.mockRejectedValueOnce(new Error('IPC fermé'));
+
+    emit('workspace:agentsLaunched', { workspaceId: 'w1' });
+    await Promise.resolve();
+
+    expect(store.getState().workspaces[0]?.agents).toHaveLength(1);
   });
 
   it('applies agent state, branch and workspace status events', async () => {

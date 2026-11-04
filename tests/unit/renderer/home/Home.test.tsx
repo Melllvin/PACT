@@ -29,6 +29,7 @@ const agent = (n: number, state: Agent['state'], color: Agent['color']): Agent =
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  launchedBy: null,
   effort: null,
 });
 
@@ -288,5 +289,14 @@ describe('Clone dialog', () => {
   it('shows a clear clone failure', () => {
     renderHome({ clone: { status: 'failed', message: 'Repository not found.' } });
     expect(screen.getByRole('alert').textContent).toContain('Repository not found.');
+  });
+});
+
+describe('Home — version', () => {
+  it('shows the running build', () => {
+    renderHome({ build: 'PACT 1.0.0 · 928bb75 · 3 nov. 2026' });
+    expect(screen.getByLabelText('Version de PACT').textContent).toBe(
+      'PACT 1.0.0 · 928bb75 · 3 nov. 2026',
+    );
   });
 });

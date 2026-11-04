@@ -66,6 +66,8 @@ type Options = {
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
   onBranch?: (event: AgentBranchEvent) => void;
+  /** Agents were launched, whoever asked: the launcher or an orchestrator. */
+  onLaunched?: (workspaceId: string, agents: Agent[]) => void;
   /** Quiet time after which the output is read again for a question (generic adapter). */
   idleMs?: number;
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
@@ -111,6 +113,8 @@ export type LaunchRequest = {
   workspaceId: string;
   agents: AgentDraft[];
   counters: Workspace['quickLaunchCounters'];
+  /** 006 R4 — the orchestrator that asks for the launch; absent: the user. */
+  launchedBy?: string;
 };
 
 type Running = {
@@ -147,6 +151,7 @@ export class AgentManager {
   private readonly isPortInUse: (port: number) => Promise<boolean>;
   private readonly onState: NonNullable<Options['onState']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
+  private readonly onLaunched: NonNullable<Options['onLaunched']>;
   private readonly branches: BranchWatcher;
   private readonly idleMs: number;
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
@@ -183,6 +188,7 @@ export class AgentManager {
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
+    this.onLaunched = options.onLaunched ?? (() => undefined);
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
     this.onClosing = options.onClosing ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
@@ -210,6 +216,12 @@ export class AgentManager {
   launch(request: LaunchRequest): Promise<Agent[]> {
     const run = this.queue.then(() => this.launchNow(request));
     this.queue = run.catch(() => undefined);
+    void run.then(
+      (agents) => {
+        if (agents.length > 0) this.onLaunched(request.workspaceId, agents);
+      },
+      () => undefined,
+    );
     return run;
   }
 
@@ -553,7 +565,7 @@ export class AgentManager {
     this.onBranch({ agentId: id, branch });
   }
 
-  private async launchNow({ workspaceId, agents: drafts, counters }: LaunchRequest) {
+  private async launchNow({ workspaceId, agents: drafts, counters, launchedBy }: LaunchRequest) {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
     const clis = drafts.map((draft) => this.installedCli(draft.cliId));
@@ -608,6 +620,7 @@ export class AgentManager {
         review: { seen: {}, comments: [] },
         role,
         effort: draft.effort ?? fromProfile?.effort ?? null,
+        launchedBy: launchedBy ?? null,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');

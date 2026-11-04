@@ -25,5 +25,6 @@ sortie, aucun chemin absolu venu du renderer).
 | Canal | Charge | Usage |
 |-------|--------|-------|
 | `orchestrator:prompted` | `{ agentId }` | marque « ◎ de l'orchestrateur » sur la tuile (FR-010) |
+| `workspace:agentsLaunched` | `{ workspaceId }` | des agents ont été lancés (lanceur ou orchestrateur) : le renderer recharge les workspaces, les tuiles apparaissent (FR-015) |
 | `orchestrator:action` | `OrchestratorAction & { orchestratorId }` | journal du Focus (FR-021) |
 | `workspace:integrationRequests` | `{ workspaceId, requests: IntegrationRequest[] }` | À faire (FR-017) |
