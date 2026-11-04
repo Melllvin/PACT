@@ -316,6 +316,19 @@ describe('IntegrationService and the external editor (FR-029)', () => {
     // The copies go with the integration.
     expect(await readdir(join(userData, 'conflicts')).catch(() => [])).toEqual([]);
   });
+
+  it('ignores a copy saved again without a change', async () => {
+    await conflict();
+    const { id } = await start(service);
+    await service.openInEditor(id, 'a.txt');
+    const copy = join(userData, 'conflicts', id, 'a.txt');
+    const seen = states.length;
+    // Saved as it is: a new modification time, the same text.
+    await writeFile(copy, await readFile(copy, 'utf8'));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(states).toHaveLength(seen);
+    expect(states.at(-1)?.conflicts[0]?.resolved).toBe(false);
+  });
 });
 
 describe('IntegrationService cancelled (FR-031)', () => {
