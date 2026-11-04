@@ -246,3 +246,46 @@ describe('TodoItem of issues to publish', () => {
     expect(callbacks[handler]).toHaveBeenCalledWith('r1');
   });
 });
+
+// 005 T019 — the usage alert, its color and « Détail », which opens the gauge (FR-011).
+describe('TodoItem usage alert', () => {
+  const alert = (level: 'warn' | 'critical') => ({
+    id: 'usage:claude-code:default:usage-limit' as const,
+    agentId: 'usage:claude-code:default',
+    kind: 'usage-limit' as const,
+    title: '◆ Limite Claude Code à 85 % · 5 h · réinitialisation 16:40',
+    actions: [],
+    usage: { cliId: 'claude-code', account: 'default', level },
+  });
+
+  it('opens the detail of its gauge, in the color of its level', async () => {
+    const onUsageDetail = vi.fn();
+    const { rerender } = render(
+      <ul>
+        <TodoItem
+          todo={alert('warn')}
+          agent={undefined}
+          {...actions()}
+          onUsageDetail={onUsageDetail}
+        />
+      </ul>,
+    );
+    const item = screen.getByRole('listitem');
+    expect(item.textContent).toContain('◆ Limite Claude Code à 85 %');
+    expect(item.textContent).toContain('réinitialisation 16:40');
+    expect(item.className).toContain('border-waiting/30');
+    await userEvent.click(screen.getByRole('button', { name: 'Détail' }));
+    expect(onUsageDetail).toHaveBeenCalledWith('usage:claude-code:default');
+    rerender(
+      <ul>
+        <TodoItem
+          todo={alert('critical')}
+          agent={undefined}
+          {...actions()}
+          onUsageDetail={onUsageDetail}
+        />
+      </ul>,
+    );
+    expect(screen.getByRole('listitem').className).toContain('border-destructive/30');
+  });
+});

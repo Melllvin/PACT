@@ -18,6 +18,7 @@ import { profilesOf } from '../../shared/roles';
 import { AgentInspector } from './AgentInspector';
 import { AgentList, type Selection } from './AgentList';
 import { LocalChangesNotice } from './LocalChangesNotice';
+import { UsageWarnings, type UsageWarning } from './UsageWarnings';
 import { agentsLabel } from './QuickLaunch';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog';
@@ -38,6 +39,8 @@ export type DetailedLaunchProps = {
   profiles?: Partial<Record<Role, RoleProfile>>;
   /** The repository has uncommitted changes, left out of the worktrees (T122). */
   localChanges?: boolean;
+  /** 005 FR-012 — the CLIs of the draft near their usage limit. */
+  usageWarnings?: readonly UsageWarning[];
   onLaunch: () => void;
   onQuick: () => void;
   onClose: () => void;
@@ -59,6 +62,7 @@ export function DetailedLaunch({
   canOrchestrate = true,
   profiles = {},
   localChanges = false,
+  usageWarnings = [],
   onLaunch,
   onQuick,
   onClose,
@@ -121,6 +125,7 @@ export function DetailedLaunch({
         </div>
 
         {localChanges && <LocalChangesNotice className="mx-4 mb-2" />}
+        <UsageWarnings warnings={usageWarnings} className="mx-4 mb-2" />
         {(found.length > 0 || error) && (
           <div className="flex flex-col gap-1 border-t border-white/8 px-4 py-2">
             {found.map((conflict) => (

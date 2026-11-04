@@ -75,6 +75,7 @@ function setup({
     recents: [],
     clis: [cli('claude-code'), cli('codex')],
     permission,
+    usageThresholds: { warn: 80, critical: 95 },
   };
   const invoke = vi.fn((channel: string, input?: unknown) => {
     switch (channel) {
@@ -314,7 +315,8 @@ describe('launch flow', () => {
     await store
       .getState()
       .confirmPermission({ level: 'always-allow', autoResume: true, scope: 'global' });
-    expect(invoke).toHaveBeenCalledTimes(1);
+    // Only the loading of the state, and of the usage gauges (005).
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual(['app:getState', 'usage:get']);
   });
 
   it('adds a CLI typed by the user to the list (FR-008)', async () => {

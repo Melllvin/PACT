@@ -48,6 +48,7 @@ type Settings = {
   permissions?: { ask?: string[]; allow?: string[] };
   env?: Record<string, string>;
   teammateMode?: string;
+  statusLine?: { type: string; command: string };
 };
 const settingsOf = (args: string[]) => JSON.parse(valueAfter(args, '--settings') ?? '') as Settings;
 
@@ -134,6 +135,20 @@ describe('Claude Code launch arguments', () => {
       type: 'command',
       command: `ELECTRON_RUN_AS_NODE=1 '${bridge.executable}' '${bridge.script}'`,
     });
+  });
+
+  // 005 R1 — the usage limits come with each statusLine refresh, read by PACT through the bridge.
+  it('hands its statusLine to the hook bridge, launched or resumed, without touching the user’s', () => {
+    for (const { args } of [
+      create().buildLaunch(input),
+      create().buildResume({ ...input, sessionId: input.sessionId ?? '' }),
+    ]) {
+      expect(settingsOf(args).statusLine).toEqual({
+        type: 'command',
+        command: `ELECTRON_RUN_AS_NODE=1 '${bridge.executable}' '${bridge.script}' '--statusline'`,
+      });
+    }
+    expect(create().usageSource).toBe('claude-statusline');
   });
 
   it('never puts the hook token in the process arguments', () => {

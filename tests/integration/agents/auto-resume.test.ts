@@ -77,6 +77,13 @@ let scenario: string;
 let autoResume: boolean;
 /** Set when the shell environment fails: the agent cannot start again. */
 let envError: Error | null;
+/** 005 US4 — the usage of the CLI accounts: the reset the gauge knows. */
+let usage: {
+  statusLine: () => string;
+  follow: () => void;
+  release: () => void;
+  resetAt: ReturnType<typeof vi.fn<(cliId: string, account: string) => Date | undefined>>;
+};
 
 const createManager = async () => {
   const adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: process.platform });
@@ -102,6 +109,7 @@ const createManager = async () => {
     onState: (event) => events.push(event),
     autoResume: () => Promise.resolve(autoResume),
     clock,
+    usage,
   });
 };
 
@@ -179,6 +187,12 @@ beforeEach(async () => {
   scenario = 'rate-limit';
   autoResume = true;
   envError = null;
+  usage = {
+    statusLine: () => 'PACT',
+    follow: () => undefined,
+    release: () => undefined,
+    resetAt: vi.fn(() => undefined),
+  };
   manager = await createManager();
 }, 30_000);
 
@@ -366,5 +380,44 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
     clock.advanceTo(RESET);
     await waitForState(id, 'awaiting-prompt');
     expect(start).toHaveBeenCalledOnce();
+  });
+});
+
+describe('resume at the reset the gauge knows (005 US4)', { timeout: 30_000 }, () => {
+  /** The gauge knows a reset at 10:15; `rate-limit-usage` meets a limit without a time. */
+  const GAUGE_RESET = '2030-01-01T10:15:00.000Z';
+  beforeEach(() => {
+    usage.resetAt.mockReturnValue(new Date(GAUGE_RESET));
+  });
+
+  it('schedules the resume at the reset of the window at its limit', async () => {
+    scenario = 'rate-limit-usage';
+    const id = await limited();
+    await waitForState(id, 'error');
+    expect(current(id)?.scheduledResume).toEqual({ agentId: id, at: GAUGE_RESET, attempt: 0 });
+    expect(usage.resetAt).toHaveBeenCalledWith('fake', expect.any(String));
+  });
+
+  it('keeps the time of the message when it gives one', async () => {
+    scenario = 'rate-limit-usage-time';
+    const id = await limited();
+    await waitForState(id, 'error');
+    expect(current(id)?.scheduledResume?.at).toBe(RESET);
+  });
+
+  it('falls back on the intervals of 001 when no reset is known', async () => {
+    scenario = 'rate-limit-usage';
+    usage.resetAt.mockReturnValue(undefined);
+    const id = await limited();
+    await waitForState(id, 'error');
+    expect(current(id)?.scheduledResume?.at).toBe('2030-01-01T09:01:00.000Z');
+  });
+
+  it('falls back on the intervals of 001 when the known reset is past', async () => {
+    scenario = 'rate-limit-usage';
+    clock.advanceTo('2030-01-01T11:00:00.000Z');
+    const id = await limited();
+    await waitForState(id, 'error');
+    expect(current(id)?.scheduledResume?.at).toBe('2030-01-01T11:01:00.000Z');
   });
 });

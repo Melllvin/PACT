@@ -79,6 +79,9 @@ export function createTerminalRegistry(api: PactApi, create: () => TerminalLike)
       observer?.observe(element);
       return () => {
         observer?.disconnect();
+        // The same place can show another terminal next (Focus, switching agents): leave it empty,
+        // or both terminals would show there at once. Not when another place already took it.
+        if (shown.element?.parentElement === element) shown.element.remove();
       };
     },
 

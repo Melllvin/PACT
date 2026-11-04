@@ -15,8 +15,10 @@ import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { AmbientCanvas } from '../effects/AmbientCanvas';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { RoleProfilesDialog } from '../settings/RoleProfiles';
+import { launchWarning } from '../../shared/usage';
 import { Button } from '@/components/ui/button';
 import { Legend } from './Legend';
+import { BUILD_INFO, formatBuildInfo } from '../../shared/build-info';
 import { TabBar } from './TabBar';
 
 type Props = {
@@ -131,6 +133,9 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               clis={state.clis}
               terminals={terminals}
               toolbarSlot={toolbarSlot}
+              usage={Object.values(state.usage)}
+              usageThresholds={state.usageThresholds}
+              onUsageThresholds={(thresholds) => void state.setUsageThresholds(thresholds)}
               onAddAgents={() => {
                 state.openLauncher(workspace.id);
               }}
@@ -226,6 +231,9 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               error={launcher.error ?? null}
               localChanges={launcher.localChanges ?? false}
               profiles={launching.roleProfiles}
+              usageWarning={(cliId) =>
+                launchWarning(Object.values(state.usage), cliId, state.usageThresholds, new Date())
+              }
               onLaunch={(draft) => void state.requestLaunch(draft)}
               onClose={state.closeLauncher}
             />
@@ -254,6 +262,7 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               onPickCloneDestination={state.pickCloneDestination}
               onClone={(url, destination) => void state.startClone(url, destination)}
               getPathForFile={getPathForFile}
+              build={formatBuildInfo(BUILD_INFO)}
               aside={
                 <>
                   <DetectedClis

@@ -23,7 +23,7 @@ Règles communes :
 | `get_file_diff` | `{ agent, path }` | `{ path, unified: string }` : le diff en texte unifié, ou `{ path, binary: true, size }` / `{ path, tooLarge: true, size }` | FR-012 |
 | `run_tests` | `{ agent }` | `{ status: 'running' }` ; le résultat arrive par `get_changes` ou un événement | FR-014 |
 | `send_prompt` | `{ agent, text: 1–8 000 caractères }` | `{ queued: true, position: number }` : 0 si tapée tout de suite | FR-009, FR-010 |
-| `wait_for_agents` | `{ agents?: string[], timeoutSeconds?: 1–600 (défaut 300) }` | `{ events: OrchestratorEvent[], timedOut: boolean }` | FR-013 |
+| `wait_for_agents` | `{ agents?: string[], timeoutSeconds?: 1–240 (défaut 240) }` | `{ events: OrchestratorEvent[], timedOut: boolean }` | FR-013 |
 | `launch_agent` | `{ cli, model?, branch?, baseBranch?, prompt? }` | `{ agent: { id, name, branch, port } }` | FR-015 |
 | `close_agent` | `{ agent }` | `{ closed: true, worktreeKept: true }` | FR-016 |
 | `request_integration` | `{ agent, message, mode?: 'squash' \| 'keep-commits' }` | `{ requestId, status: 'waiting-user' }` ; l'issue arrive comme événement `integration` | FR-017…FR-020 |

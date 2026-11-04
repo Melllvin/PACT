@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
@@ -18,6 +19,8 @@ type Props = {
   reviewCount?: number;
   view?: WorkspaceViewMode;
   onView?: (view: WorkspaceViewMode) => void;
+  /** 005 — the usage gauges of the workspace's CLIs, before À faire. */
+  usage?: ReactNode;
 };
 
 export type WorkspaceViewMode = 'tiles' | 'review';
@@ -32,6 +35,7 @@ export function Toolbar({
   reviewCount = 0,
   view = 'tiles',
   onView,
+  usage,
 }: Props) {
   return (
     <nav role="toolbar" aria-label="Vues" className="flex items-center gap-2">
@@ -61,6 +65,7 @@ export function Toolbar({
           {reviewCount > 0 && <Badge variant="waiting">{reviewCount}</Badge>}
         </ToggleGroupItem>
       </ToggleGroup>
+      {usage}
       {showTodo && (
         <Toggle pressed={todoOpen} onPressedChange={() => onToggleTodo?.()}>
           À faire <Badge variant={todoCount > 0 ? 'waiting' : 'muted'}>{todoCount}</Badge>

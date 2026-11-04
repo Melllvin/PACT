@@ -16,6 +16,11 @@ import type {
   Workspace,
 } from '../../shared/model';
 import type { OrchestratorAction } from '../../shared/orchestrator';
+import {
+  DEFAULT_USAGE_THRESHOLDS,
+  type UsageState,
+  type UsageThresholds,
+} from '../../shared/usage';
 
 // research.md R10 — renderer state, fed by window.pact requests and events.
 
@@ -67,6 +72,11 @@ export type AppState = {
   log: { agentId: string; text: string } | null;
   /** Agent whose close dialog is open (FR-037). */
   closingAgentId: string | null;
+  /** 005 — the usage of each CLI account, by `<cliId>\0<account>`. */
+  usage: Record<string, UsageState>;
+  /** 005 FR-010 — the alert thresholds of the gauges. */
+  usageThresholds: UsageThresholds;
+  setUsageThresholds: (thresholds: UsageThresholds) => Promise<void>;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
@@ -284,6 +294,8 @@ export function createAppStore(api: PactApi) {
       actionError: null,
       log: null,
       closingAgentId: null,
+      usage: {},
+      usageThresholds: DEFAULT_USAGE_THRESHOLDS,
       correcting: {},
       orchestratorPrompted: {},
       orchestratorActions: {},
@@ -299,6 +311,13 @@ export function createAppStore(api: PactApi) {
             status: 'ready',
             activeTab: first ? { kind: 'workspace', id: first.id } : { kind: 'home' },
           });
+          // 005 — the gauges come later, without holding the window back.
+          void Promise.resolve()
+            .then(() => api.invoke('usage:get'))
+            .then((states) => {
+              set({ usage: { ...byAccount(states), ...get().usage } });
+            })
+            .catch(() => undefined);
         } catch (error) {
           set({ status: 'error', error: errorMessage(error) });
         }
@@ -306,6 +325,9 @@ export function createAppStore(api: PactApi) {
 
       connect() {
         const unsubscribers = [
+          api.on('usage:state', (state) => {
+            set({ usage: { ...get().usage, ...byAccount([state]) } });
+          }),
           api.on('agent:state', (event) => {
             const { workspaces } = get();
             set({
@@ -319,6 +341,15 @@ export function createAppStore(api: PactApi) {
           }),
           api.on('orchestrator:prompted', ({ agentId }) => {
             set({ orchestratorPrompted: { ...get().orchestratorPrompted, [agentId]: 'queued' } });
+          }),
+          // 003 FR-015 — agents launched by an orchestrator: their tiles appear too.
+          api.on('workspace:agentsLaunched', () => {
+            void api
+              .invoke('app:getState')
+              .then(({ workspaces }) => {
+                set({ workspaces });
+              })
+              .catch(() => undefined);
           }),
           api.on('agent:branch', ({ agentId, branch }) => {
             set({ workspaces: updateAgent(get().workspaces, agentId, (a) => ({ ...a, branch })) });
@@ -566,6 +597,11 @@ export function createAppStore(api: PactApi) {
           set({ orchestratorActions: { ...get().orchestratorActions, [agentId]: actions } });
         }),
 
+      setUsageThresholds: (thresholds) =>
+        act(async () => {
+          set({ usageThresholds: await api.invoke('settings:usageThresholds', thresholds) });
+        }),
+
       setRoleProfiles: (workspaceId, profiles) =>
         act(async () => {
           set({
@@ -666,3 +702,7 @@ export function createAppStore(api: PactApi) {
 }
 
 export type AppStore = ReturnType<typeof createAppStore>;
+
+/** 005 — the usage states keyed by account. */
+const byAccount = (states: readonly UsageState[]): Record<string, UsageState> =>
+  Object.fromEntries(states.map((state) => [`${state.cliId}\u0000${state.account}`, state]));

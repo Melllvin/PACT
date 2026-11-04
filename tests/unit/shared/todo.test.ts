@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { deriveTodos } from '../../../src/shared/todo';
 import type { Agent, FreeTerminal, Workspace } from '../../../src/shared/model';
+import type { UsageState } from '../../../src/shared/usage';
 
 // T080 — the À faire items, derived from the agents only (data-model TodoItem, FR-027, FR-028).
 
@@ -308,5 +309,77 @@ describe('deriveTodos', () => {
         names,
       ),
     ).toEqual([]);
+  });
+});
+
+// 005 T019 — « ◆ Limite <CLI> à <N> % · <fenêtre> · réinitialisation <heure> » (FR-011).
+describe('usage alerts', () => {
+  const NOW = new Date('2026-11-03T14:00:00');
+  const reset = new Date('2026-11-03T16:40:00').toISOString();
+  const usageState = (percent: number, over: Partial<UsageState> = {}): UsageState => ({
+    cliId: 'claude-code',
+    account: 'default',
+    reading: {
+      cliId: 'claude-code',
+      account: 'default',
+      readAt: NOW.toISOString(),
+      windows: [
+        { id: 'five-hour', label: '5 h', usedPercent: percent, resetsAt: reset, minutes: 300 },
+      ],
+    },
+    shares: [],
+    level: 'ok',
+    ...over,
+  });
+  const alerts = (states: UsageState[], now = NOW, thresholds = { warn: 80, critical: 95 }) =>
+    deriveTodos(workspace([agent(1)]), () => 'Claude Code', [], [], {
+      states,
+      thresholds,
+      now,
+    }).filter((todo) => todo.kind === 'usage-limit');
+
+  it('tells the CLI, the percentage, the window and the reset time, one per account', () => {
+    const [alert, ...rest] = alerts([usageState(85)]);
+    expect(rest).toEqual([]);
+    expect(alert).toEqual({
+      id: 'usage:claude-code:default:usage-limit',
+      agentId: 'usage:claude-code:default',
+      kind: 'usage-limit',
+      title: '◆ Limite Claude Code à 85 % · 5 h · réinitialisation 16:40',
+      actions: [],
+      usage: { cliId: 'claude-code', account: 'default', level: 'warn' },
+    });
+  });
+
+  it('keeps the same item from 80 to 95 %, red at 95, gone below 80 or once reset', () => {
+    expect(alerts([usageState(79)])).toEqual([]);
+    expect(alerts([usageState(80)]).map((t) => t.id)).toEqual(
+      alerts([usageState(97)]).map((t) => t.id),
+    );
+    expect(alerts([usageState(97)])[0]?.usage?.level).toBe('critical');
+    expect(alerts([usageState(97)], new Date('2026-11-03T16:41:00'))).toEqual([]);
+    expect(alerts([usageState(85)], NOW, { warn: 90, critical: 95 })).toEqual([]);
+  });
+
+  it('says the reset is unknown when the CLI does not tell it', () => {
+    const unknown = usageState(85);
+    const [window] = unknown.reading?.windows ?? [];
+    if (!unknown.reading || !window) throw new Error('no window');
+    unknown.reading.windows = [{ ...window, resetsAt: null }];
+    expect(alerts([unknown])[0]?.title).toBe(
+      '◆ Limite Claude Code à 85 % · 5 h · réinitialisation inconnue',
+    );
+  });
+
+  it('only for the CLIs of the workspace, after the rate limits and before the reviews', () => {
+    expect(alerts([usageState(85, { cliId: 'codex' })])).toEqual([]);
+    const todos = deriveTodos(
+      workspace([agent(1, { state: 'awaiting-prompt' })]),
+      () => 'Claude Code',
+      ['a1'],
+      [],
+      { states: [usageState(85)], thresholds: { warn: 80, critical: 95 }, now: NOW },
+    );
+    expect(todos.map((t) => t.kind)).toEqual(['usage-limit', 'review']);
   });
 });

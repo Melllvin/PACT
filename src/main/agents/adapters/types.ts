@@ -105,6 +105,11 @@ export interface CliAdapter {
    */
   permissionDecision?(behavior: 'allow'): unknown;
   parseRateLimitReset(text: string): Date | null;
+  /**
+   * 005 R1, R2 — where PACT reads the usage limits of its account: the statusLine Claude Code
+   * runs, or the rollout Codex writes. None for the other CLIs: no gauge.
+   */
+  readonly usageSource?: 'claude-statusline' | 'codex-rollout';
 }
 
 /** Variables every agent receives (contract obligation 1, FR-015). */

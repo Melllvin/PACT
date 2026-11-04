@@ -39,6 +39,7 @@ export function createAppServices({
         recents: state.recents,
         clis: clis ? await clis() : state.customClis,
         permission: state.permission,
+        usageThresholds: state.usageThresholds,
       };
     },
     'workspace:open': async ({ path }: { path: string }) => opened(await workspaces.open(path)),
