@@ -42,7 +42,10 @@
 //
 // A bracketed paste (ESC[200~ … ESC[201~) is one prompt, its line breaks included, as in the
 // real CLIs (002 R7).
-import { execFileSync } from 'node:child_process';
+//
+// FAKE_CLI_STRICT_PASTE=1 (fix-send-prompt): like Claude Code, an Enter received in the SAME
+// chunk as the end of a paste is swallowed. Only an Enter arriving in a later chunk submits.
+import { execFileSync, execSync } from 'node:child_process';
 import {
   appendFileSync,
   mkdirSync,
@@ -53,6 +56,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { PassThrough } from 'node:stream';
 
 const argValue = (name) => {
   const index = process.argv.indexOf(name);
@@ -83,9 +87,20 @@ async function hook(payload) {
   }
 }
 
-const lines = createInterface({ input: process.stdin, crlfDelay: Infinity })[
-  Symbol.asyncIterator
-]();
+/** stdin, or in strict-paste mode a copy that drops the Enter glued to the end of a paste. */
+const input = (() => {
+  if (process.env.FAKE_CLI_STRICT_PASTE !== '1') return process.stdin;
+  const filtered = new PassThrough();
+  process.stdin.on('data', (chunk) => {
+    // The tty turns the carriage return into a line feed before it reaches us.
+    // eslint-disable-next-line no-control-regex -- the escape of a bracketed paste
+    filtered.write(String(chunk).replace(/(\x1b\[201~)(\r\n|\r|\n)$/, '$1'));
+  });
+  process.stdin.on('end', () => filtered.end());
+  return filtered;
+})();
+
+const lines = createInterface({ input, crlfDelay: Infinity })[Symbol.asyncIterator]();
 const nextLine = async () => {
   const { value, done } = await lines.next();
   if (done) process.exit(0);
