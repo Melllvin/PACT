@@ -514,6 +514,8 @@ export class AgentManager {
     clearTimeout(running.idle);
     this.running.delete(id);
     this.hooks.unregister(id);
+    // 005 FR-014 — its part stays, closed; a Codex rollout is no longer followed.
+    this.usage?.release(id);
     await this.pty.kill(id);
   }
 

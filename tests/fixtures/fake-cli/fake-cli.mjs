@@ -45,7 +45,7 @@
 //
 // FAKE_CLI_STRICT_PASTE=1 (fix-send-prompt): like Claude Code, an Enter received in the SAME
 // chunk as the end of a paste is swallowed. Only an Enter arriving in a later chunk submits.
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
   mkdirSync,
