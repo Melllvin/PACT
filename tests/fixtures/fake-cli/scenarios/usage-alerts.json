@@ -1,0 +1,6 @@
+{
+  "usage": [
+    { "five_hour": 80, "seven_day": 30, "tokens": 1200 },
+    { "five_hour": 95, "seven_day": 32, "tokens": 2400 }
+  ]
+}

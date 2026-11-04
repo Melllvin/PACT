@@ -4,6 +4,7 @@ import { createAgentServices } from '../../../../src/main/ipc/agent-handlers';
 import { createOrchestratorServices } from '../../../../src/main/ipc/orchestrator-handlers';
 import { createPreviewServices } from '../../../../src/main/ipc/preview-handlers';
 import { createReviewServices } from '../../../../src/main/ipc/review-handlers';
+import { createUsageServices } from '../../../../src/main/ipc/usage-handlers';
 import { ipcRequests } from '../../../../src/shared/ipc';
 
 // contracts/ipc.md — a channel the renderer may call is served by the main process.
@@ -29,6 +30,7 @@ describe('IPC channels', () => {
       ...Object.keys(createReviewServices({} as never)),
       ...Object.keys(createOrchestratorServices({} as never)),
       ...Object.keys(createPreviewServices({} as never)),
+      ...Object.keys(createUsageServices({} as never)),
     ]);
     const channels = Object.keys(ipcRequests);
     expect(channels.filter((channel) => !served.has(channel) && !pending.has(channel))).toEqual([]);

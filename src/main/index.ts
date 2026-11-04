@@ -13,6 +13,8 @@ import { FreeTerminals } from './agents/free-terminals';
 import { HookServer } from './agents/hook-server';
 import { PermissionService } from './agents/permission-service';
 import { guardQuit, quitQuestion } from './app-lifecycle';
+import { UsageService } from './usage/usage-service';
+import { createUsageServices } from './ipc/usage-handlers';
 import { createAppServices, devServerUrl, trustedSenderCheck } from './app-services';
 import { resolveShellEnv } from './env/shell-env';
 import { GitService } from './git/git-service';
@@ -35,6 +37,7 @@ import { createPreviewHandler } from './preview/preview-protocol';
 import { PreviewService } from './preview/preview-service';
 import { ReviewService, watchRecursive } from './review/review-service';
 import { TestRunner } from './review/test-runner';
+import { BUILD_INFO } from '../shared/build-info';
 import { applyTestMode, isBackgroundTest, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
 import { CloneJobs } from './workspace/clone-job';
@@ -43,6 +46,13 @@ import { WorkspaceService } from './workspace/workspace-service';
 const AVAILABILITY_CHECK_MS = 3000;
 
 applyTestMode(app, process.env);
+
+// « À propos de PACT » (macOS app menu): which build is running.
+app.setAboutPanelOptions({
+  applicationName: 'PACT',
+  applicationVersion: BUILD_INFO.version,
+  version: BUILD_INFO.commit,
+});
 
 // 004 US4 — the Aperçu's own scheme, declared before the app is ready (research R9).
 protocol.registerSchemesAsPrivileged([
@@ -133,6 +143,7 @@ void app.whenReady().then(async () => {
           loops,
           issues,
           clis: () => registry.list(),
+          usageWarning: (cliId) => usage.warning(cliId),
           permissions,
           log: (entry) => {
             orchestrator.record(orchestratorId, entry);
@@ -141,6 +152,13 @@ void app.whenReady().then(async () => {
         orchestratorId,
       ),
   });
+  // 005 — the usage limits of the CLI accounts, as the agents' CLIs report them.
+  const usage = new UsageService({
+    thresholds: (await stores.state.read()).usageThresholds,
+    onState: (state) => {
+      emit('usage:state', state);
+    },
+  });
   const agents: AgentManager = new AgentManager({
     workspaces,
     registry,
@@ -148,6 +166,7 @@ void app.whenReady().then(async () => {
     pty,
     hooks,
     orchestrator,
+    usage,
     onPromptTyped: (agentId, origin) => {
       if (origin === 'orchestrator') emit('orchestrator:prompted', { agentId });
     },
@@ -156,6 +175,10 @@ void app.whenReady().then(async () => {
     // Its worktree no longer followed before it goes (on Windows a watch blocks the removal).
     onClosing: (agentId) => {
       review.close(agentId);
+    },
+    // The tiles of the agents an orchestrator launches appear as the launcher's do.
+    onLaunched: (workspaceId) => {
+      emit('workspace:agentsLaunched', { workspaceId });
     },
     onState: (event) => {
       emit('agent:state', event);
@@ -362,6 +385,7 @@ void app.whenReady().then(async () => {
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
       ...createPreviewServices({ preview }),
+      ...createUsageServices({ usage, stores }),
       ...createOrchestratorServices({
         requests,
         orchestrator,
@@ -403,6 +427,7 @@ void app.whenReady().then(async () => {
       tests.dispose();
       integration.dispose();
       orchestrator.dispose();
+      usage.stop();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
       await hooks.stop();

@@ -1,0 +1,5 @@
+{
+  "output": ["Travail en cours"],
+  "usage": { "five_hour": 100, "seven_day": 40, "resets_at": 1893492900, "tokens": 500 },
+  "rateLimit": { "resetAt": "2030-01-01T09:30:00.000Z", "exit": false }
+}

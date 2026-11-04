@@ -117,8 +117,9 @@ describe('wait_for_agents', () => {
     });
   });
 
-  it('refuses a delay out of 1 to 600 seconds', async () => {
-    expect((await tool('wait_for_agents', { timeoutSeconds: 601 })).isError).toBe(true);
+  // The MCP clients' HTTP requests give up after 300 s without an answer: a wait ends before.
+  it('refuses a delay out of 1 to 240 seconds', async () => {
+    expect((await tool('wait_for_agents', { timeoutSeconds: 241 })).isError).toBe(true);
     expect((await tool('wait_for_agents', { timeoutSeconds: 0 })).isError).toBe(true);
   });
 

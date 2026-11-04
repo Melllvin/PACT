@@ -14,27 +14,37 @@ export type McpHandler = (payload: unknown) => Promise<{ status: number; body?: 
 
 const MCP_PATH = '/mcp';
 
+/** 005 R1 — Claude Code's statusLine payload, answered with the line its terminal shows. */
+export type StatusLineHandler = (payload: unknown) => string;
+
+const STATUSLINE_PATH = '/statusline';
+
 export class HookServer {
   private server: Server | undefined;
   private address: string | undefined;
   private readonly handlers = new Map<string, HookHandler>();
   private readonly tokens = new Map<string, string>();
+  private readonly statusLines = new Map<string, StatusLineHandler>();
   /** Orchestrator tokens, kept apart: a hook token never reaches /mcp, nor the reverse. */
   private readonly mcpHandlers = new Map<string, McpHandler>();
   private readonly mcpTokens = new Map<string, string>();
 
   /** Registers (or re-registers) an agent and returns its new token; any old token is revoked. */
-  register(agentId: string, handler: HookHandler): string {
+  register(agentId: string, handler: HookHandler, statusLine?: StatusLineHandler): string {
     this.unregister(agentId);
     const token = randomBytes(32).toString('hex');
     this.tokens.set(agentId, token);
     this.handlers.set(token, handler);
+    if (statusLine) this.statusLines.set(token, statusLine);
     return token;
   }
 
   unregister(agentId: string): void {
     const token = this.tokens.get(agentId);
-    if (token) this.handlers.delete(token);
+    if (token) {
+      this.handlers.delete(token);
+      this.statusLines.delete(token);
+    }
     this.tokens.delete(agentId);
   }
 
@@ -61,6 +71,13 @@ export class HookServer {
 
   async start(): Promise<string> {
     const server = createServer((req, res) => {
+      if (req.url === STATUSLINE_PATH) {
+        void this.respondStatusLine(req).then(({ status, text }) => {
+          res.writeHead(status, text === '' ? {} : { 'content-type': 'text/plain; charset=utf-8' });
+          res.end(text);
+        });
+        return;
+      }
       const answer = req.url === MCP_PATH ? this.respondMcp(req) : this.respond(req);
       void answer.then(({ status, body }) => {
         reply(res, status, body);
@@ -108,6 +125,26 @@ export class HookServer {
       return await handler(payload);
     } catch {
       return { status: 500 };
+    }
+  }
+
+  /** 005 R1 — one line of text, with the agent's hook token; nothing for an unknown token. */
+  private async respondStatusLine(req: IncomingMessage): Promise<{ status: number; text: string }> {
+    const token = req.headers['x-pact-token'];
+    const known = typeof token === 'string' && this.handlers.has(token);
+    if (!known) return { status: 401, text: '' };
+    if (req.method !== 'POST') return { status: 405, text: '' };
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await readBody(req));
+    } catch (error) {
+      return { status: error instanceof BodyTooLarge ? 413 : 400, text: '' };
+    }
+    try {
+      const line = this.statusLines.get(token)?.(payload) ?? 'PACT';
+      return { status: 200, text: line.replaceAll(/[\r\n]+/g, ' ') };
+    } catch {
+      return { status: 200, text: 'PACT' };
     }
   }
 

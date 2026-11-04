@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { toSpawnCommand } from '../../env/resolve-command';
+import { bridgeCommand } from './shared';
 import {
   agentSignalSchema,
   pactEnv,
@@ -7,6 +8,7 @@ import {
   type AgentSignal,
   type CliAdapter,
   type DetectionResult,
+  type HookBridge,
   type LaunchInput,
   type LaunchSpec,
   type OutputContext,
@@ -21,7 +23,10 @@ import {
 export class FakeAdapter implements CliAdapter {
   readonly id = 'fake';
   readonly supportsOrchestrator = true;
+  /** 005 R9 — like Claude Code: runs the statusLine of its `--settings`. */
+  readonly usageSource = 'claude-statusline' as const;
   private readonly cliPath: string;
+  private readonly bridge: HookBridge | undefined;
   private readonly platform: NodeJS.Platform;
   private readonly runtime: string;
 
@@ -29,12 +34,15 @@ export class FakeAdapter implements CliAdapter {
     cliPath,
     platform,
     runtime = process.execPath,
+    bridge,
   }: {
     cliPath: string;
     platform: NodeJS.Platform;
     runtime?: string | undefined;
+    bridge?: HookBridge;
   }) {
     this.cliPath = cliPath;
+    this.bridge = bridge;
     this.platform = platform;
     this.runtime = runtime;
   }
@@ -91,6 +99,14 @@ export class FakeAdapter implements CliAdapter {
       ...sessionArgs,
       '--permission',
       supportedLevel(input.permissionLevel),
+      ...(this.bridge
+        ? [
+            '--settings',
+            JSON.stringify({
+              statusLine: { type: 'command', command: bridgeCommand(this.bridge, '--statusline') },
+            }),
+          ]
+        : []),
     ];
     const command = toSpawnCommand(input.executablePath, args, this.platform, process.env);
     return {

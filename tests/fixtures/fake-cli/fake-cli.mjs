@@ -7,9 +7,10 @@
 //   burst: number                   extra lines printed as fast as possible
 //   permission: string              asks `? Exécuter : <cmd> (allow/deny)` and waits for the answer,
 //                                   unless the hook reply already allows it (ruleKey `Bash(<cmd>)`)
-//   rateLimit: { resetAt, exit, nativeResume }
-//                                   prints a rate-limit message; exits (code 1), resumes on its own
-//                                   like Claude Code's quota_auto_resume_fired, or waits for "continue"
+//   rateLimit: { resetAt?, exit, nativeResume }
+//                                   prints a rate-limit message, without a time when no resetAt;
+//                                   exits (code 1), resumes on its own like Claude Code's
+//                                   quota_auto_resume_fired, or waits for "continue"
 //   hooks: object[]                 raw hook payloads posted after the output
 //   renameBranch: string            runs `git branch -m <name>` in the working directory
 //   files: object[]                 edits the working directory in order (002 R11):
@@ -44,7 +45,7 @@
 //
 // FAKE_CLI_STRICT_PASTE=1 (fix-send-prompt): like Claude Code, an Enter received in the SAME
 // chunk as the end of a paste is swallowed. Only an Enter arriving in a later chunk submits.
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import {
   appendFileSync,
   mkdirSync,
@@ -193,6 +194,32 @@ const ofTurn = (steps) => {
   return all[Math.min(turn, all.length - 1)];
 };
 
+/** Splits a command as a POSIX shell does: '…', "…" and \\ escapes. */
+function shellWords(command) {
+  const words = [];
+  let word = null;
+  let quote = null;
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i];
+    if (quote) {
+      if (char === quote) quote = null;
+      else word += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      word ??= '';
+    } else if (char === '\\') {
+      word = (word ?? '') + (command[++i] ?? '');
+    } else if (/\s/.test(char)) {
+      if (word !== null) words.push(word);
+      word = null;
+    } else {
+      word = (word ?? '') + char;
+    }
+  }
+  if (word !== null) words.push(word);
+  return words;
+}
+
 /** Claude Code's statusLine, run as it would run it (005 R1, R9). */
 function reportUsage(usage) {
   const settings = argValue('--settings');
@@ -213,7 +240,19 @@ function reportUsage(usage) {
     ...(Object.keys(limits).length > 0 ? { rate_limits: limits } : {}),
   };
   try {
-    const output = execSync(command, { input: JSON.stringify(payload), encoding: 'utf8' });
+    // Run without a shell, like a POSIX shell would split it: Windows' cmd.exe would not.
+    const words = shellWords(command);
+    const env = { ...process.env };
+    while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0] ?? '')) {
+      const [name, ...value] = (words.shift() ?? '').split('=');
+      env[name] = value.join('=');
+    }
+    const [file, ...args] = words;
+    const output = execFileSync(file, args, {
+      input: JSON.stringify(payload),
+      encoding: 'utf8',
+      env,
+    });
     console.log(`Statut : ${output.trim()}`);
   } catch {
     // Like Claude Code: a statusLine that fails leaves the line empty.
@@ -295,10 +334,22 @@ async function runTurn(line) {
     console.log(answer === 'allow' ? 'Autorisé' : 'Refusé');
   }
 
+  // The limits of the turn are known before its rate limit, as Claude Code's statusLine tells them.
+  const usage = ofTurn(scenario.usage);
+  if (usage) reportUsage(usage);
+  const rollout = ofTurn(scenario.rollout);
+  if (rollout) writeRollout(rollout);
+
   if (scenario.rateLimit) {
     const { resetAt, exit, nativeResume } = scenario.rateLimit;
-    console.log(`Rate limit reached. Resets at ${resetAt}`);
-    await hook({ type: 'failed', kind: 'rate-limit', message: 'Rate limited', resetAt });
+    // Without `resetAt`, the message gives no time (005 FR-015).
+    console.log(resetAt ? `Rate limit reached. Resets at ${resetAt}` : 'Rate limit reached.');
+    await hook({
+      type: 'failed',
+      kind: 'rate-limit',
+      message: 'Rate limited',
+      ...(resetAt ? { resetAt } : {}),
+    });
     if (exit) process.exit(1);
     if (nativeResume) {
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -322,10 +373,6 @@ async function runTurn(line) {
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);
   writeRoleFiles();
-  const usage = ofTurn(scenario.usage);
-  if (usage) reportUsage(usage);
-  const rollout = ofTurn(scenario.rollout);
-  if (rollout) writeRollout(rollout);
   const reports = [scenario.report ?? []].flat();
   if (process.env.PACT_AGENT_MCP_URL && reports.length > 0) {
     const report = reports[Math.min(turn, reports.length - 1)];

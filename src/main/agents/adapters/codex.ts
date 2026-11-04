@@ -62,6 +62,8 @@ export class CodexAdapter implements CliAdapter {
   readonly id = 'codex';
   /** 004 R4 — the pact MCP server is given by `-c mcp_servers.pact…`, the skill by R3. */
   readonly supportsOrchestrator = true;
+  /** 005 R2 — the token_count events of its rollout. */
+  readonly usageSource = 'codex-rollout' as const;
   private readonly platform: NodeJS.Platform;
   private readonly bridge: HookBridge;
   private readonly run: CommandRunner;

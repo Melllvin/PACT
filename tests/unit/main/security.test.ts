@@ -47,10 +47,16 @@ describe('main and preload processes', () => {
     expect(code.filter(({ text }) => /\bconsole\.\w+\(/.test(text)).map((c) => c.path)).toEqual([]);
   });
 
+  // 005 R1 — but one: the user's own statusLine, a shell command line of their Claude Code
+  // settings that Claude Code itself runs through a shell. PACT puts nothing of its own in it.
+  const USER_STATUSLINE = 'spawn(command, { shell: true,';
+  const userStatusLine = (path: string) =>
+    path.replaceAll('\\', '/').endsWith('agents/hook-bridge.ts');
+
   it('never run a command through a shell: arguments go as a list', () => {
-    const shelled = code.filter(({ text }) =>
+    const shelled = code.filter(({ path, text }) =>
       /(?<![.\w])exec(Sync)?\(|shell:\s*true|\bexec(Sync)?\b[^;]*from 'node:child_process'/.test(
-        text,
+        userStatusLine(path) ? text.replace(USER_STATUSLINE, '') : text,
       ),
     );
     expect(shelled.map((c) => c.path)).toEqual([]);

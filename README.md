@@ -132,6 +132,27 @@ then hands it to agents with a role, each started with the skills of its role.
   `pact` MCP server for Codex, and for any other CLI a `.pact/ROLE.md` in its worktree, kept out of
   Git, which PACT asks it to read first.
 
+## Usage limits
+
+The bar of each workspace shows a gauge per CLI account its agents use: « Claude Code 62 % · 5 h »,
+the window used the most, with every window, its reset time and the time of the reading on hover
+or click. Nothing extra is asked of the CLI and you never log in again:
+
+- **Claude Code** reports its limits through the `statusLine` PACT hands each agent in its session
+  settings; your own `statusLine`, if you have one, still runs and shows under PACT's line.
+- **Codex** writes them in the rollout of its session, which PACT reads.
+- **Other CLIs**, and Claude Code with an API key, report none: no gauge.
+
+A reading older than 15 minutes is greyed out with its age, and hidden after an hour.
+
+- **Alerts.** At 80 % the gauge turns orange, at 95 % red (« Seuils d’alerte… » in its detail), and
+  « À faire » holds one « ◆ Limite … » per account, with « Détail ». Launching agents of a CLI near
+  its limit warns in the launcher, and `launch_agent` tells the orchestrator, without refusing.
+- **Who consumes.** The detail gives the part of each agent of the workspace in the tokens PACT
+  counted since the window began, the largest first, with its role; a closed agent keeps its part,
+  marked « fermé », until the window resets; the agents of other workspaces are « autres ».
+- **Resume.** A rate limit whose message gives no time resumes at the reset the gauge knows.
+
 ## Agent teams in Claude Code
 
 PACT starts every Claude Code agent with

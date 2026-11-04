@@ -78,6 +78,8 @@ type Options = {
 
 export class ClaudeCodeAdapter implements CliAdapter {
   readonly id = 'claude-code';
+  /** 005 R1 — the statusLine it runs with its account's limits. */
+  readonly usageSource = 'claude-statusline' as const;
   readonly supportsOrchestrator = true;
   private readonly platform: NodeJS.Platform;
   private readonly bridge: HookBridge;
@@ -217,6 +219,8 @@ export class ClaudeCodeAdapter implements CliAdapter {
       // agent's own terminal. Split panes would need tmux or iTerm2, outside PACT's tile.
       env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' },
       teammateMode: 'in-process',
+      // 005 R1 — the limits of the account, posted to PACT; the user's own line still printed.
+      statusLine: { type: 'command', command: bridgeCommand(this.bridge, '--statusline') },
       hooks: {
         // Claude Code refuses HTTP hooks for SessionStart (T049).
         SessionStart: hook({ type: 'command', command: bridgeCommand(this.bridge) }),

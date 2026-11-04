@@ -61,6 +61,27 @@ const setup = () => {
 };
 
 describe('terminal registry', () => {
+  it('shows one terminal only when the same place switches to another', () => {
+    const { registry, terminals } = setup();
+    const place = document.createElement('div');
+    const detach = registry.attach('t1', place);
+    detach();
+    registry.attach('t2', place);
+    expect(place.children).toHaveLength(1);
+    expect(place.firstElementChild).toBe(terminals[1]?.element);
+  });
+
+  it('leaves a terminal another place already took', () => {
+    const { registry, terminals } = setup();
+    const focus = document.createElement('div');
+    const tile = document.createElement('div');
+    registry.attach('t1', tile);
+    const detachFocus = registry.attach('t1', focus);
+    registry.attach('t1', tile);
+    detachFocus();
+    expect(tile.firstElementChild).toBe(terminals[0]?.element);
+  });
+
   it('keeps the output that arrives before the terminal is shown', () => {
     const { registry, emit, terminals } = setup();
     emit({ termId: 't1', data: 'Session s1\r\n> ' });

@@ -290,3 +290,12 @@ describe('Clone dialog', () => {
     expect(screen.getByRole('alert').textContent).toContain('Repository not found.');
   });
 });
+
+describe('Home — version', () => {
+  it('shows the running build', () => {
+    renderHome({ build: 'PACT 1.0.0 · 928bb75 · 3 nov. 2026' });
+    expect(screen.getByLabelText('Version de PACT').textContent).toBe(
+      'PACT 1.0.0 · 928bb75 · 3 nov. 2026',
+    );
+  });
+});

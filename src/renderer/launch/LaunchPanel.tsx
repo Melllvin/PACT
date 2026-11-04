@@ -3,6 +3,7 @@ import { draftFromCounts, type LaunchDraft } from '../../shared/launch-draft';
 import type { Agent, CliDefinition, Role, RoleProfile, Workspace } from '../../shared/model';
 import { DetailedLaunch } from './DetailedLaunch';
 import { launchableClis, QuickLaunch } from './QuickLaunch';
+import type { UsageWarning } from './UsageWarnings';
 
 export type LaunchPanelProps = {
   clis: CliDefinition[];
@@ -19,6 +20,8 @@ export type LaunchPanelProps = {
   localChanges?: boolean;
   /** 004 — the role profiles the user set in this workspace (FR-003). */
   profiles?: Partial<Record<Role, RoleProfile>>;
+  /** 005 FR-012 — « Limite 5 h à 85 % : … » for a CLI near its limit, or null. */
+  usageWarning?: (cliId: string) => string | null;
   onLaunch: (draft: LaunchDraft) => void;
   onClose: () => void;
 };
@@ -46,11 +49,20 @@ export function LaunchPanel({
   error,
   localChanges = false,
   profiles = {},
+  usageWarning,
   onLaunch,
   onClose,
 }: LaunchPanelProps) {
   const [draft, setDraft] = useState(() => initialDraft ?? fromCounters(clis, counters));
   const [detailed, setDetailed] = useState(false);
+  // One per CLI of the draft, the orchestrator's included: a warning, never a block.
+  const usageWarnings = [...new Set(draft.agents.map((agent) => agent.cliId))].flatMap(
+    (cliId): UsageWarning[] => {
+      const text = usageWarning?.(cliId) ?? null;
+      const cli = clis.find((c) => c.id === cliId)?.name ?? cliId;
+      return text === null ? [] : [{ cli, text }];
+    },
+  );
 
   return detailed ? (
     <DetailedLaunch
@@ -62,6 +74,7 @@ export function LaunchPanel({
       canOrchestrate={!running.some((agent) => agent.role === 'orchestrator')}
       error={error}
       localChanges={localChanges}
+      usageWarnings={usageWarnings}
       profiles={profiles}
       onLaunch={() => {
         onLaunch(draft);
@@ -80,6 +93,7 @@ export function LaunchPanel({
       canOrchestrate={!running.some((agent) => agent.role === 'orchestrator')}
       error={error}
       localChanges={localChanges}
+      usageWarnings={usageWarnings}
       onLaunch={() => {
         onLaunch(draft);
       }}

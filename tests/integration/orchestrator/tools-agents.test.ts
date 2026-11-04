@@ -34,6 +34,17 @@ const others = () =>
 type Launched = { agent: { id: string; name: string; branch: string; port: number } };
 
 describe('launch_agent', () => {
+  // 005 FR-012 — the orchestrator is told, as the launcher tells the user; it is not refused.
+  it('adds the usage warning of its CLI to its answer, and launches all the same', async () => {
+    h.usageWarnings.fake = 'Limite 5 h à 85 % : ces agents risquent de s’arrêter avant 16:40';
+    const { isError, text, json } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(false);
+    expect(text).toMatch(
+      /^Faux CLI 2 lancé sur .+\. Limite 5 h à 85 % : ces agents risquent de s’arrêter avant 16:40\.$/,
+    );
+    expect((json as Launched).agent.name).toBe('Faux CLI 2');
+  });
+
   it('launches an agent with its tile, worktree and branch, at the level chosen in PACT', async () => {
     const { isError, json } = await tool('launch_agent', { cli: 'Faux CLI', branch: 'feat/un' });
     expect(isError).toBe(false);
