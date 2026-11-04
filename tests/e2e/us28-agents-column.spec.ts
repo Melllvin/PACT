@@ -69,7 +69,8 @@ test('lists every agent of the orchestrator, puts the one that asks first, opens
 
   // Agent 3 asks a question: its row comes first with « ◆ Répondre » (scenario 2).
   const tile3 = page.getByRole('article', { name: /^Faux CLI 3,/ });
-  await expect(tile3).toHaveAttribute('data-state', 'awaiting-prompt');
+  // Its first turn (the prompt of the orchestrator) may already be over: idle either way.
+  await expect(tile3).toHaveAttribute('data-state', /^(awaiting-prompt|done)$/);
   await typeIn(page, tile3, 'DEMANDE');
   await expect(rows.first()).toContainText('◆ Répondre', { timeout: 1_000 });
   await expect(rows.first().getByRole('button', { name: /^Faux CLI 3, / })).toBeVisible();
