@@ -92,6 +92,7 @@ const input = (() => {
   const filtered = new PassThrough();
   process.stdin.on('data', (chunk) => {
     // The tty turns the carriage return into a line feed before it reaches us.
+    // eslint-disable-next-line no-control-regex -- the escape of a bracketed paste
     filtered.write(String(chunk).replace(/(\x1b\[201~)(\r\n|\r|\n)$/, '$1'));
   });
   process.stdin.on('end', () => filtered.end());

@@ -113,7 +113,7 @@ const setup = async (opts: { strict: boolean; scenario: string }) => {
     onState: (event) => events.push(event),
     submitDelayMs: DELAY,
     submitTimeoutMs: TIMEOUT,
-  } as ConstructorParameters<typeof AgentManager>[0]);
+  });
   const [agent] = await manager.launch({
     workspaceId: workspace.id,
     agents: [
@@ -160,7 +160,7 @@ describe('a prompt sent to an agent is submitted (fix-send-prompt)', { timeout: 
     const agent = await setup({ strict: true, scenario: 'echo-prompt' });
     await manager.sendPrompt(agent.id, 'ligne un\nligne deux', 'orchestrator');
     await waitFor(
-      () => pty.history(agent.id).includes('Reçu : ligne un\nligne deux'),
+      () => pty.history(agent.id).includes('Reçu : ligne un\r\nligne deux'),
       'not submitted',
     );
     expect(writes.map((w) => w.data).slice(0, 2)).toEqual([
