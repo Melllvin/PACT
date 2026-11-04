@@ -159,8 +159,11 @@ describe('a prompt sent to an agent is submitted (fix-send-prompt)', { timeout: 
   it('Given a CLI that swallows an Enter glued to a paste, When a multi-line prompt is sent, Then it is submitted by a separate Enter', async () => {
     const agent = await setup({ strict: true, scenario: 'echo-prompt' });
     await manager.sendPrompt(agent.id, 'ligne un\nligne deux', 'orchestrator');
+    // Submitted: the CLI turns to « working » and answers. Only its first line is checked: each
+    // platform's terminal renders the line break of the echo its own way (CRLF, ConPTY).
     await waitFor(
-      () => pty.history(agent.id).includes('Reçu : ligne un\r\nligne deux'),
+      () =>
+        states(agent.id).includes('working') && pty.history(agent.id).includes('Reçu : ligne un'),
       'not submitted',
     );
     expect(writes.map((w) => w.data).slice(0, 2)).toEqual([
@@ -211,6 +214,8 @@ describe('a prompt sent to an agent is submitted (fix-send-prompt)', { timeout: 
         )
         .filter((w) => w.data === '\r'),
     ).toHaveLength(2);
+    // Its turn ends before the teardown removes the folder its state is saved in.
+    await waitFor(() => current(agent.id)?.state === 'done', 'never done');
   });
 
   it('Given a prompt submitted in time, When the agent works, Then there is no second Enter and nothing is resent', async () => {
