@@ -78,6 +78,18 @@ type Options = {
    * folder watched cannot be removed (002 FR-024).
    */
   onClosing?: (agentId: string) => void;
+  /**
+   * fix-send-prompt — pause between a typed prompt and its Enter. Claude Code swallows an Enter
+   * glued to the end of a paste; 150 ms is long enough for it to have taken the paste in, short
+   * enough to be unnoticeable.
+   */
+  submitDelayMs?: number;
+  /**
+   * fix-send-prompt — how long the agent may stay ready after the Enter before PACT presses it
+   * once more, then gives the prompt up as undelivered. 5 s covers a slow CLI turning to
+   * « working » (its hook goes through a network round trip) without leaving a lost Enter long.
+   */
+  submitTimeoutMs?: number;
   /** 003 R4 — a prompt was typed into the agent, with where it came from. */
   onPromptTyped?: (agentId: string, origin: PromptOrigin) => void;
   /** 003 — the session plugin and token of an orchestrator, prepared before each start (R2). */
@@ -101,6 +113,9 @@ type Options = {
 export type PromptOrigin = 'review' | 'orchestrator';
 
 type QueuedPrompt = { text: string; origin: PromptOrigin };
+
+/** A prompt typed and waiting for the agent to leave the ready state (fix-send-prompt). */
+type Submission = { origin: PromptOrigin; timer: ReturnType<typeof setTimeout> };
 
 /** What a start carries for the role of the agent (003 R2, 004 R3). */
 type Prepared = {
@@ -172,6 +187,12 @@ export class AgentManager {
   private readonly onClosing: NonNullable<Options['onClosing']>;
   /** Agents a prompt was typed to, until they leave the ready state. */
   private readonly promptTyped = new Set<string>();
+  /** The prompt typed to each agent whose submission is not confirmed yet. */
+  private readonly submissions = new Map<string, Submission>();
+  /** Prompts given up after two Enters, per agent and origin (fix-send-prompt). */
+  private readonly undelivered = new Map<string, Record<PromptOrigin, number>>();
+  private readonly submitDelayMs: number;
+  private readonly submitTimeoutMs: number;
   private readonly unsubscribe: (() => void)[];
   /** Launches run one at a time: each one reads the positions and ports the previous one took. */
   private queue: Promise<unknown> = Promise.resolve();
@@ -192,6 +213,8 @@ export class AgentManager {
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
     this.onClosing = options.onClosing ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
+    this.submitDelayMs = options.submitDelayMs ?? 150;
+    this.submitTimeoutMs = options.submitTimeoutMs ?? 5_000;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
     this.orchestrator = options.orchestrator;
     this.usage = options.usage;
@@ -387,6 +410,11 @@ export class AgentManager {
     return (this.prompts.get(id) ?? []).filter((item) => item.origin === origin).length;
   }
 
+  /** fix-send-prompt — the prompts of `origin` typed to the agent but never submitted. */
+  undeliveredPrompts(id: string, origin: PromptOrigin): number {
+    return this.undelivered.get(id)?.[origin] ?? 0;
+  }
+
   /** 003 FR-004 — the role is withdrawn: its prompts not typed yet are dropped. */
   cancelPrompts(id: string, origin: PromptOrigin): void {
     const kept = (this.prompts.get(id) ?? []).filter((item) => item.origin !== origin);
@@ -424,6 +452,7 @@ export class AgentManager {
     const { workspace, agent } = this.find(id);
     this.resumes.forget(id);
     this.prompts.delete(id);
+    this.undelivered.delete(id);
     this.orchestrator?.release(id);
     this.onClosing(id);
     await this.stop(id);
@@ -455,6 +484,8 @@ export class AgentManager {
     for (const stop of this.unsubscribe) stop();
     this.branches.dispose();
     this.resumes.dispose();
+    for (const { timer } of this.submissions.values()) clearTimeout(timer);
+    this.submissions.clear();
     await Promise.all([...this.running.keys()].map((id) => this.stop(id)));
   }
 
@@ -477,6 +508,7 @@ export class AgentManager {
   /** Ends the process without it counting as a crash: PACT asked for it. */
   private async stop(id: string) {
     this.promptTyped.delete(id);
+    this.clearSubmission(id);
     this.pendingRule.delete(id);
     this.branches.unwatch(id);
     const running = this.running.get(id);
@@ -484,6 +516,8 @@ export class AgentManager {
     clearTimeout(running.idle);
     this.running.delete(id);
     this.hooks.unregister(id);
+    // 005 FR-014 — its part stays, closed; a Codex rollout is no longer followed.
+    this.usage?.release(id);
     await this.pty.kill(id);
   }
 
@@ -841,6 +875,7 @@ export class AgentManager {
     this.usage?.release(id);
     this.branches.unwatch(id);
     this.promptTyped.delete(id);
+    this.clearSubmission(id);
     this.pendingRule.delete(id);
     await this.change(running.workspaceId, id, (agent) => applyExit(agent, code));
   }
@@ -910,7 +945,11 @@ export class AgentManager {
     this.emit(changed);
     this.resumes.sync(changed);
     if (isReady(changed.state)) this.flushPrompt(id);
-    else this.promptTyped.delete(id);
+    else {
+      // Left the ready state: the prompt was taken, or something else took over.
+      this.promptTyped.delete(id);
+      this.clearSubmission(id);
+    }
   }
 
   private flushPrompt(id: string) {
@@ -922,8 +961,46 @@ export class AgentManager {
     else this.prompts.set(id, rest);
     this.promptTyped.add(id);
     const { text, origin } = next;
-    this.pty.write(id, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}\r` : `${text}\r`);
+    // The Enter is its own write, after a pause: glued to a paste, it is swallowed.
+    this.pty.write(id, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}` : text);
     this.onPromptTyped(id, origin);
+    this.clearSubmission(id);
+    this.submissions.set(id, {
+      origin,
+      timer: setTimeout(() => {
+        this.submitEnter(id, origin, true);
+      }, this.submitDelayMs),
+    });
+  }
+
+  /**
+   * Presses Enter; the agent should leave the ready state within `submitTimeoutMs`. If not, one
+   * more Enter, then the prompt is given up as undelivered and the queue goes on. Its timers only
+   * fire while the agent runs and stays ready: a stop, an exit or a change of state clears them.
+   */
+  private submitEnter(id: string, origin: PromptOrigin, retry: boolean) {
+    this.pty.write(id, '\r');
+    this.submissions.set(id, {
+      origin,
+      timer: setTimeout(() => {
+        if (retry) {
+          this.submitEnter(id, origin, false);
+          return;
+        }
+        this.submissions.delete(id);
+        const counts = this.undelivered.get(id) ?? { review: 0, orchestrator: 0 };
+        this.undelivered.set(id, { ...counts, [origin]: counts[origin] + 1 });
+        this.promptTyped.delete(id);
+        this.flushPrompt(id);
+      }, this.submitTimeoutMs),
+    });
+  }
+
+  private clearSubmission(id: string) {
+    const submission = this.submissions.get(id);
+    if (!submission) return;
+    clearTimeout(submission.timer);
+    this.submissions.delete(id);
   }
 
   private emit({ id, state, lastError, scheduledResume, awaiting }: Agent) {
