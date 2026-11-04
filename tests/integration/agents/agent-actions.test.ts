@@ -364,10 +364,13 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     await manager.sendPrompt(agent.id, 'premier');
     await manager.sendPrompt(agent.id, 'second');
     await waitForOutput(agent.id, 'Reçu : second');
-    expect(writes.map((w) => w.data)).toEqual(['premier\r', 'second\r']);
-    expect(between(writes[0], writes[1])).toEqual(['working', 'done']);
-    expect(writes[1]?.state).toBe('done');
-    for (const { state } of writes) expect(['awaiting-prompt', 'done']).toContain(state);
+    // fix-send-prompt: the text and its Enter are two writes.
+    expect(writes.map((w) => w.data)).toEqual(['premier', '\r', 'second', '\r']);
+    expect(between(writes[0], writes[2])).toEqual(['working', 'done']);
+    expect(writes[2]?.state).toBe('done');
+    for (const { state } of writes.filter((w) => w.data !== '\r')) {
+      expect(['awaiting-prompt', 'done']).toContain(state);
+    }
   });
 
   it('types nothing while the agent waits for an answer', async () => {
@@ -404,9 +407,9 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     await manager.sendPrompt(agent.id, 'Dès que prêt');
     await manager.sendPrompt(agent.id, 'Puis celui-ci');
     await waitForOutput(agent.id, 'Reçu : Puis celui-ci');
-    expect(writes.map((w) => w.data)).toEqual(['Dès que prêt\r', 'Puis celui-ci\r']);
+    expect(writes.map((w) => w.data)).toEqual(['Dès que prêt', '\r', 'Puis celui-ci', '\r']);
     expect(writes[0]?.state).toBe('awaiting-prompt');
-    expect(between(writes[0], writes[1])).toEqual(['working', 'done']);
+    expect(between(writes[0], writes[2])).toEqual(['working', 'done']);
   });
 
   it('keeps the origin of each prompt, and cancels only the orchestrator ones (003 T018)', async () => {
@@ -434,7 +437,12 @@ describe('AgentManager.sendPrompt', { timeout: 30_000 }, () => {
     const writes = spyWrites();
     await manager.sendPrompt(agent.id, 'Commentaire sur a.ts:3 — un\ndeux');
     await waitForOutput(agent.id, 'Reçu : Commentaire sur a.ts:3 — un');
-    expect(writes[0]?.data).toBe('\x1b[200~Commentaire sur a.ts:3 — un\ndeux\x1b[201~\r');
+    // fix-send-prompt: the Enter never rides in the chunk that ends the paste.
+    await waitFor(() => writes.length >= 2, 'no Enter', agent.id);
+    expect(writes.slice(0, 2).map((w) => w.data)).toEqual([
+      '\x1b[200~Commentaire sur a.ts:3 — un\ndeux\x1b[201~',
+      '\r',
+    ]);
   });
 
   it('refuses an unknown agent', async () => {

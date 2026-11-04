@@ -74,6 +74,7 @@ async function runFake(
   const prompts = () => stdout.split('> ').length - 1;
   return {
     hooks,
+    proc,
     exited,
     output: () => stdout,
     types: () => hooks.map((h) => h.body.type),
@@ -249,6 +250,34 @@ describe('fake CLI', () => {
       type: 'prompt-submitted',
       prompt: 'Commentaire sur a.ts:3 — un\ndeux',
     });
+  });
+
+  it('FAKE_CLI_STRICT_PASTE: an Enter glued to the end of a paste is swallowed, a later one submits (fix-send-prompt)', async () => {
+    const fake = await runFake('echo-prompt', { env: { FAKE_CLI_STRICT_PASTE: '1' } });
+    await fake.waitForPrompt(1);
+    fake.proc.stdin.write('\x1b[200~un\ndeux\x1b[201~\r');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(fake.output()).not.toContain('Reçu');
+    expect(fake.types()).not.toContain('prompt-submitted');
+    fake.proc.stdin.write('\r');
+    await fake.waitForHook('turn-finished');
+    expect(fake.output()).toContain('Reçu : un\ndeux\n');
+  });
+
+  it('FAKE_CLI_STRICT_PASTE: a one-line prompt typed with its Enter still goes through', async () => {
+    const fake = await runFake('echo-prompt', { env: { FAKE_CLI_STRICT_PASTE: '1' } });
+    await fake.waitForPrompt(1);
+    fake.proc.stdin.write('simple\r');
+    await fake.waitForHook('turn-finished');
+    expect(fake.output()).toContain('Reçu : simple');
+  });
+
+  it('without FAKE_CLI_STRICT_PASTE the glued Enter submits, as before', async () => {
+    const fake = await runFake('echo-prompt');
+    await fake.waitForPrompt(1);
+    fake.proc.stdin.write('\x1b[200~collé\x1b[201~\r');
+    await fake.waitForHook('turn-finished');
+    expect(fake.output()).toContain('Reçu : collé');
   });
 
   it('bursts output quickly', async () => {

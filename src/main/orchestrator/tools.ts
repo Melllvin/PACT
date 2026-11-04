@@ -31,7 +31,10 @@ import type { McpTool, ToolResult } from './mcp';
 
 export type ToolDependencies = {
   workspaces: { list(): Workspace[] };
-  agents: Pick<AgentManager, 'sendPrompt' | 'waitingPrompts' | 'questionOf' | 'launch' | 'close'>;
+  agents: Pick<
+    AgentManager,
+    'sendPrompt' | 'waitingPrompts' | 'undeliveredPrompts' | 'questionOf' | 'launch' | 'close'
+  >;
   /** The CLIs PACT knows, installed or not (US4). */
   clis: () => CliDefinition[];
   /** The level the launcher would use in this workspace (FR-015). */
@@ -252,6 +255,8 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             question: agent.state === 'awaiting-answer' ? deps.agents.questionOf(agent.id) : null,
             toReview: toReview.has(agent.id),
             waitingPrompts: deps.agents.waitingPrompts(agent.id, 'orchestrator'),
+            // Typed but never submitted, even after a second Enter.
+            undeliveredPrompts: deps.agents.undeliveredPrompts(agent.id, 'orchestrator'),
           }));
         const lines = agents.map(
           (a) => `${a.name}${a.role ? ` [${a.role}]` : ''} (${a.cli}, ${a.branch}) : ${a.state}`,
@@ -261,7 +266,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'send_prompt',
-      'Envoie une consigne à un agent. Elle est tapée dans son invite dès qu’il est prêt, jamais pendant qu’il travaille ou attend une réponse de l’utilisateur. Donne une consigne précise et autonome.',
+      'Envoie une consigne à un agent. Elle est envoyée dans son invite dès qu’il est prêt, jamais pendant qu’il travaille ou attend une réponse de l’utilisateur, puis validée par Entrée ; rien ne garantit qu’il l’ait prise : list_agents indique (undeliveredPrompts) les consignes non soumises. Donne une consigne précise et autonome.',
       { agent: agentArgument, text: { type: 'string', minLength: 1, maxLength: MAX_PROMPT } },
       ['agent', 'text'],
       async (args) => {
@@ -276,7 +281,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const position = await deps.agents.sendPrompt(agent.id, text, 'orchestrator');
         return reply(
           position === 0
-            ? `Consigne tapée dans l’invite de ${nameOf(agent)}.`
+            ? `Consigne envoyée à ${nameOf(agent)} ; list_agents dira si elle n’a pas été soumise.`
             : `Consigne en file pour ${nameOf(agent)}, en position ${String(position)}.`,
           { queued: true, position },
         );
