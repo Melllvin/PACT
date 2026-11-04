@@ -900,15 +900,14 @@ export class AgentManager {
 
   /**
    * Presses Enter; the agent should leave the ready state within `submitTimeoutMs`. If not, one
-   * more Enter, then the prompt is given up as undelivered and the queue goes on.
+   * more Enter, then the prompt is given up as undelivered and the queue goes on. Its timers only
+   * fire while the agent runs and stays ready: a stop, an exit or a change of state clears them.
    */
   private submitEnter(id: string, origin: PromptOrigin, retry: boolean) {
-    if (!this.running.has(id) || !isReady(this.find(id).agent.state)) return;
     this.pty.write(id, '\r');
     this.submissions.set(id, {
       origin,
       timer: setTimeout(() => {
-        if (!this.running.has(id) || !isReady(this.find(id).agent.state)) return;
         if (retry) {
           this.submitEnter(id, origin, false);
           return;
