@@ -26,14 +26,20 @@
 
 ## R3 — Tuiles sous l'orchestrateur
 
-- **Decision**: garder la disposition `lead` (orchestrateur 3/5 de la hauteur, pleine largeur) ; la
-  section du bas passe de `auto-rows-[minmax(180px,1fr)]` à des rangées `minmax(0,1fr)` au nombre de
-  `ceil(n/3)`, avec une hauteur minimale de tuile lisible (120 px) vérifiée par `layout.spec` à
-  1024 × 768.
-- **Rationale**: avec 5 agents, deux rangées de 180 px débordaient sous 768 px ; le défaut principal
-  (tuiles absentes) est déjà corrigé par `workspace:agentsLaunched`.
-- **Alternatives considered**: défilement de la section du bas (contraire à FR-010) ; réduire la tuile
-  de l'orchestrateur (contraire à 004 FR-006a).
+- **Decision** (révisée après #40, #41, #47) : une seule grille CSS de 3 colonnes au plus, dans un
+  conteneur `overflow-y-auto` ; chaque rangée mesure la moitié de la hauteur visible
+  (`grid-auto-rows: calc((100% - gap) / 2)` mesurée sur le conteneur), donc 3×2 cases visibles au plus.
+  Avec orchestrateur : sa tuile en `col-span-2 row-span-2`, les agents remplissent la colonne de droite
+  puis des rangées de 3 (placement automatique de la grille).
+  Sans orchestrateur : colonnes = `min(n, 3)` sauf n = 4 (2 colonnes) ; rangées = `ceil(n / colonnes)`
+  qui partagent la hauteur tant que n ≤ 6. Une case « + » seulement si la dernière rangée a une place
+  libre. Hauteur minimale lisible 120 px vérifiée par `layout.spec` à 1024 × 768.
+- **Rationale**: l'orchestrateur pleine largeur sur 3/5 de la hauteur ne laissait pas de place aux
+  agents (#41) ; un nombre d'agents borné par les cases visibles empêchait d'en lancer plus de six (#47) ;
+  les cases « + » vides gâchaient l'écran avec un seul terminal (#40).
+- **Alternatives considered**: orchestrateur pleine largeur sur une rangée (moins de place pour lui) ;
+  case « + » toujours présente (rangée vide ajoutée) ; bouton d'ajout dans la barre seulement (choix de
+  l'utilisateur : case « + » si place libre).
 
 ## R4 — Qui a lancé un agent
 

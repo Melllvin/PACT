@@ -16,7 +16,7 @@ l'orchestrateur, ses agents et les boucles dev ↔ test de 004, dessinée sans d
 |---|---|---|
 | Éléments à traiter | `deriveTodos`, `TodoItem`, ordre `ORDER` (`src/shared/todo.ts`) | `agentRows()` : regroupe par agent (R1) |
 | Colonne | `TodoColumn`, `TodoItem.tsx` (actions, styles), bouton « À faire » de la barre | `AgentsColumn`, `AgentRow` (R2) |
-| Tuiles | `TileGrid` disposition `lead` (004 FR-006a) | rangées du bas en `minmax(0,1fr)` (R3) |
+| Tuiles | `TileGrid` disposition `lead` (004 FR-006a) | grille 3 colonnes, orchestrateur 2×2, 3×2 cases visibles, défilement vertical, « + » si place libre (R3, #40 #41 #47) |
 | Apparition des tuiles | `workspace:agentsLaunched` (PR #39) | — |
 | Lien de lancement | `launch_agent` (003), `agentSchema` | champ `launchedBy` (R4) |
 | Issue, phase, tour | `Loop` (004 : `issueId`, `devAgentId`, `testAgentId`, `round`, `state`), `Agent.role` | `agentPhase()` (R5) |
@@ -95,7 +95,7 @@ src/
     ├── agents/AgentsColumn.tsx      # remplace todo/TodoColumn.tsx
     ├── agents/AgentRow.tsx          # ligne d'agent, actions de ses TodoItem
     ├── todo/TodoItem.tsx            # réutilisé pour les éléments sans agent
-    ├── tiles/TileGrid.tsx           # rangées du bas qui tiennent à 1024 × 768
+    ├── tiles/TileGrid.tsx           # grille 3×2 visible, orchestrateur 2×2, défilement (R3)
     ├── graph/graph-layout.ts        # positions des nœuds et liens (pur)
     ├── graph/GraphView.tsx          # nœuds (boutons), liens (SVG décoratif)
     ├── app/Toolbar.tsx              # + « Graphe » ; « À faire » → « Agents »
