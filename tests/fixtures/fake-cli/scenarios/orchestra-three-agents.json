@@ -1,0 +1,25 @@
+{
+  "echo": true,
+  "permission": "rm fichier.txt",
+  "permissionOn": "DEMANDE",
+  "mcp": [
+    {
+      "tool": "launch_agent",
+      "arguments": { "cli": "Faux CLI", "branch": "{{prompt.0}}", "prompt": "{{prompt.3}}" }
+    },
+    {
+      "tool": "launch_agent",
+      "arguments": { "cli": "Faux CLI", "branch": "{{prompt.1}}", "prompt": "{{prompt.3}}" }
+    },
+    {
+      "tool": "launch_agent",
+      "arguments": { "cli": "Faux CLI", "branch": "{{prompt.2}}", "prompt": "{{prompt.3}}" }
+    },
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 30 } },
+    {
+      "tool": "request_integration",
+      "arguments": { "agent": "Faux CLI 4", "message": "feat: la fonction" }
+    },
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 90 } }
+  ]
+}

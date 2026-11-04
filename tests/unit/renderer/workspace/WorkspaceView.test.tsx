@@ -247,21 +247,23 @@ describe('WorkspaceView', () => {
   });
 });
 
-describe('À faire column (T082, T086)', () => {
+describe('Agents column (T082, T086, 006)', () => {
   const waiting = [agent(1, { state: 'awaiting-prompt' }), agent(2, { state: 'awaiting-answer' })];
 
-  it('lists what the agents need, answers first, with the count on the button', () => {
+  it('lists one row per agent, the one that asks first, with the count on the button (006)', () => {
     render(<WorkspaceView workspace={workspace({ agents: waiting })} clis={clis} />);
-    const column = screen.getByRole('complementary', { name: 'À faire' });
+    const column = screen.getByRole('complementary', { name: 'Agents' });
+    const rows = within(column).getByRole('list', { name: 'Agents du workspace' });
     expect(
-      within(column)
-        .getAllByRole('listitem')
-        .map((li) => li.textContent),
+      within(rows)
+        .getAllByRole('button', { name: /^Claude Code \d,/ })
+        .map((button) => button.getAttribute('aria-label') ?? button.textContent),
     ).toEqual([
-      expect.stringContaining('◆ Répondre'),
-      'Donner une consigne · Claude Code · tapez dans le terminal',
+      expect.stringMatching(/^Claude Code 2, .*attend une réponse/),
+      expect.stringMatching(/^Claude Code 1, .*attend une consigne/),
     ]);
-    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toContain('2');
+    expect(within(column).getByText('◆ Répondre')).toBeDefined();
+    expect(screen.getByRole('button', { name: /^Agents \d/ }).textContent).toContain('2');
   });
 
   it('answers from the column for the agent of the item', async () => {
@@ -280,18 +282,18 @@ describe('À faire column (T082, T086)', () => {
         }}
       />,
     );
-    const column = screen.getByRole('complementary', { name: 'À faire' });
+    const column = screen.getByRole('complementary', { name: 'Agents' });
     await userEvent.click(within(column).getByRole('button', { name: '✓ Autoriser' }));
     expect(onAnswer).toHaveBeenCalledWith(agent(2).id, 'allow');
   });
 
   it('closes into the button, which keeps the count', async () => {
     render(<WorkspaceView workspace={workspace({ agents: waiting })} clis={clis} />);
-    await userEvent.click(screen.getByRole('button', { name: /À faire/ }));
-    expect(screen.queryByRole('complementary', { name: 'À faire' })).toBeNull();
-    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toContain('2');
-    await userEvent.click(screen.getByRole('button', { name: /À faire/ }));
-    expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
+    await userEvent.click(screen.getByRole('button', { name: /^Agents \d/ }));
+    expect(screen.queryByRole('complementary', { name: 'Agents' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Agents \d/ }).textContent).toContain('2');
+    await userEvent.click(screen.getByRole('button', { name: /^Agents \d/ }));
+    expect(screen.getByRole('complementary', { name: 'Agents' })).toBeDefined();
   });
 
   it('counts only what waits on the button, not a running free terminal (FR-029)', () => {
@@ -304,9 +306,10 @@ describe('À faire column (T082, T086)', () => {
         clis={clis}
       />,
     );
-    const column = screen.getByRole('complementary', { name: 'À faire' });
-    expect(within(column).getAllByRole('listitem')).toHaveLength(3);
-    expect(screen.getByRole('button', { name: /À faire/ }).textContent).toBe('À faire 2');
+    const column = screen.getByRole('complementary', { name: 'Agents' });
+    const head = within(column).getByRole('list', { name: 'À traiter' });
+    expect(head.textContent).toContain('En cours ▸ zsh');
+    expect(screen.getByRole('button', { name: /^Agents \d/ }).textContent).toBe('Agents 2');
   });
 
   it('is absent without agents, even with a free terminal', () => {
@@ -318,8 +321,8 @@ describe('À faire column (T082, T086)', () => {
         clis={clis}
       />,
     );
-    expect(screen.queryByRole('complementary', { name: 'À faire' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /À faire/ })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Agents' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Agents \d/ })).toBeNull();
   });
 });
 
@@ -414,7 +417,7 @@ describe('Review (002 T018, US1)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: '‹ Tuiles' }));
-    const column = screen.getByRole('complementary', { name: 'À faire' });
+    const column = screen.getByRole('complementary', { name: 'Agents' });
     await user.click(within(column).getByRole('button', { name: 'Répondre dans le terminal ↗' }));
     expect(screen.getByRole('region', { name: 'Focus : Claude Code 1' })).toBeDefined();
   });
@@ -436,12 +439,12 @@ describe('Review (002 T018, US1)', () => {
     );
     expect(review.open).toHaveBeenCalledWith(agent(2).id);
     expect(screen.getByRole('complementary', { name: 'Décision' })).toBeDefined();
-    expect(screen.queryByRole('complementary', { name: 'À faire' })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Agents' })).toBeNull();
     expect(screen.getByRole('heading', { name: 'Changements · 3' })).toBeDefined();
 
     await user.click(screen.getByRole('button', { name: '‹ Tuiles' }));
     expect(review.close).toHaveBeenCalled();
-    expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
+    expect(screen.getByRole('complementary', { name: 'Agents' })).toBeDefined();
     expect(screen.queryByRole('complementary', { name: 'Décision' })).toBeNull();
   });
 
@@ -449,7 +452,7 @@ describe('Review (002 T018, US1)', () => {
     const user = userEvent.setup();
     const review = binding();
     render(view(review));
-    const column = screen.getByRole('complementary', { name: 'À faire' });
+    const column = screen.getByRole('complementary', { name: 'Agents' });
     await user.click(within(column).getByRole('button', { name: 'Revue →' }));
     expect(review.open).toHaveBeenCalledWith(agent(2).id);
   });
@@ -485,7 +488,7 @@ describe('Review (002 T018, US1)', () => {
     expect(review.open).toHaveBeenLastCalledWith(agent(1).id);
     await user.click(screen.getByRole('tab', { name: 'Terminal' }));
     expect(review.close).toHaveBeenCalled();
-    expect(screen.getByRole('complementary', { name: 'À faire' })).toBeDefined();
+    expect(screen.getByRole('complementary', { name: 'Agents' })).toBeDefined();
   });
 
   it('selects a file of the list for its diff', async () => {

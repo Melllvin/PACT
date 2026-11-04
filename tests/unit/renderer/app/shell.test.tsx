@@ -74,7 +74,7 @@ describe('TabBar', () => {
 });
 
 describe('Toolbar', () => {
-  it('offers Tuiles, Comparer, Revue, À faire and + Agents', () => {
+  it('offers Tuiles, Comparer, Revue, Agents and + Agents', () => {
     render(<Toolbar todoCount={0} onAddAgents={vi.fn()} />);
     const views = screen.getByRole('radiogroup', { name: 'Vue' });
     expect(
@@ -82,7 +82,7 @@ describe('Toolbar', () => {
         .getAllByRole('radio')
         .map((view) => view.textContent),
     ).toEqual(['Tuiles', 'Comparer', 'Revue']);
-    for (const name of [/À faire/, /\+ Agents/]) {
+    for (const name of [/^Agents \d/, /\+ Agents/]) {
       expect(screen.getByRole('button', { name })).toBeDefined();
     }
   });
@@ -96,7 +96,7 @@ describe('Toolbar', () => {
 
   it('shows the number of pending items on À faire', () => {
     render(<Toolbar todoCount={3} onAddAgents={vi.fn()} />);
-    const count = within(screen.getByRole('button', { name: /À faire/ })).getByText('3');
+    const count = within(screen.getByRole('button', { name: /^Agents \d/ })).getByText('3');
     expect(count.dataset.slot).toBe('badge');
   });
 
@@ -175,7 +175,7 @@ describe('À faire button (T086)', () => {
   it('opens and closes the column, pressed while it is open', async () => {
     const onToggleTodo = vi.fn();
     const { rerender } = render(<Toolbar todoCount={2} todoOpen onToggleTodo={onToggleTodo} />);
-    const button = screen.getByRole('button', { name: /À faire/ });
+    const button = screen.getByRole('button', { name: /^Agents \d/ });
     expect(button.getAttribute('aria-pressed')).toBe('true');
     await userEvent.click(button);
     expect(onToggleTodo).toHaveBeenCalledOnce();

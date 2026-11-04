@@ -91,7 +91,7 @@ test('reviews the changes of an agent and follows its worktree', async () => {
   await expect(tile).toHaveAttribute('data-state', 'done');
 
   // « Revue → » on the tile and in À faire (FR-002).
-  const todo = page.getByRole('complementary', { name: 'À faire' });
+  const todo = page.getByRole('complementary', { name: 'Agents' });
   await expect(todo.getByRole('button', { name: 'Revue →' })).toBeVisible();
   await tile.getByRole('button', { name: 'Revue →' }).click();
 
@@ -153,7 +153,7 @@ test('reviews the changes of an agent and follows its worktree', async () => {
   // Back to the tiles: À faire again (scenario 7).
   await focus.getByRole('button', { name: '‹ Tuiles' }).click();
   await expect(page.getByRole('region', { name: 'Tuiles' })).toBeVisible();
-  await expect(page.getByRole('complementary', { name: 'À faire' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: 'Agents' })).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Décision' })).toHaveCount(0);
   // Nothing reached main.
   expect(git(repo, 'rev-parse', 'main')).toBe(mainBefore);
