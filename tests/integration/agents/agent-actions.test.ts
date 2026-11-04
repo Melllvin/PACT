@@ -162,6 +162,18 @@ describe('AgentManager.launch', { timeout: 30_000 }, () => {
     const agent = await launchOne();
     expect(launchedIn).toEqual([{ workspaceId: workspace.id, ids: [agent.id] }]);
   });
+
+  it('tells nothing when nothing was launched', async () => {
+    launchedIn = [];
+    const agents = await manager.launch({
+      workspaceId: workspace.id,
+      agents: [],
+      counters: { freeTerminal: 0 },
+    });
+    await Promise.resolve();
+    expect(agents).toEqual([]);
+    expect(launchedIn).toEqual([]);
+  });
 });
 
 describe('AgentManager.suspend', { timeout: 30_000 }, () => {
