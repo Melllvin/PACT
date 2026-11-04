@@ -17,26 +17,10 @@ const SEPARATOR = ' · ';
  * One request, in the color of its agent, with the same buttons as its tile (FR-028). Its title
  * reads « what · who · hint »: 1f shows who above, with the agent's dot, and the hint below.
  */
-export function TodoItem({
-  todo,
-  agent,
-  onAnswer,
-  onResume,
-  onRestart,
-  onLog,
-  onCancelAutoResume,
-  onReview,
-  onConfirmIntegration,
-  onRefuseIntegration,
-  onDecideLoop,
-  onConfirmPublish,
-  onRefusePublish,
-  onOpenTerminal,
-  onUsageDetail,
-}: Props) {
+export function TodoItem({ todo, agent, ...handlers }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
-  const { request, loop, publish, usage } = todo;
+  const { usage } = todo;
   const separator = <span className="sr-only">{SEPARATOR}</span>;
 
   if (todo.kind === 'info') {
@@ -82,6 +66,34 @@ export function TodoItem({
           <span>{hints.join(SEPARATOR)}</span>
         </span>
       )}
+      <TodoActions todo={todo} agent={agent} {...handlers} />
+    </li>
+  );
+}
+
+type ActionsProps = Props;
+
+/** The buttons of a request: the ones of its tile, and the ones of the requests of the column. */
+export function TodoActions({
+  todo,
+  agent,
+  onAnswer,
+  onResume,
+  onRestart,
+  onLog,
+  onCancelAutoResume,
+  onReview,
+  onConfirmIntegration,
+  onRefuseIntegration,
+  onDecideLoop,
+  onConfirmPublish,
+  onRefusePublish,
+  onOpenTerminal,
+  onUsageDetail,
+}: ActionsProps) {
+  const { request, loop, publish, usage } = todo;
+  return (
+    <>
       {request && agent && (
         <IntegrationRequest
           request={request}
@@ -191,7 +203,7 @@ export function TodoItem({
           }
         />
       )}
-    </li>
+    </>
   );
 }
 

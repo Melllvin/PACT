@@ -11,7 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 type Props = {
   todoCount: number;
   showTodo?: boolean;
-  /** Whether the À faire column is shown; closed, the button keeps the count (US4). */
+  /** Whether the Agents column is shown; closed, the button keeps the count (US4). */
   todoOpen?: boolean;
   onToggleTodo?: () => void;
   onAddAgents?: (() => void) | undefined;
@@ -68,7 +68,7 @@ export function Toolbar({
       {usage}
       {showTodo && (
         <Toggle pressed={todoOpen} onPressedChange={() => onToggleTodo?.()}>
-          À faire <Badge variant={todoCount > 0 ? 'waiting' : 'muted'}>{todoCount}</Badge>
+          Agents <Badge variant={todoCount > 0 ? 'waiting' : 'muted'}>{todoCount}</Badge>
         </Toggle>
       )}
       <Button

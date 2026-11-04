@@ -1,4 +1,6 @@
-import type { Agent, Loop } from './model';
+import type { Agent, Loop, TodoItem, Workspace } from './model';
+import type { Role } from './primitives';
+import { ORDER } from './todo';
 
 /** 006 — what the Agents column and the graph read of an agent; pure, no DOM. */
 
@@ -61,4 +63,64 @@ export function agentPhase(agent: Agent, loops: readonly Loop[]): AgentPhase | n
     return { label: agent.role };
   }
   return null;
+}
+
+export type AgentRow = {
+  agent: Agent;
+  name: string;
+  role: Role | null;
+  stateLabel: string;
+  issueId: string | null;
+  todo: TodoItem | null;
+  pending: number;
+};
+
+export type AgentsView = {
+  head: TodoItem[];
+  rows: AgentRow[];
+  agentCount: number;
+  pendingCount: number;
+};
+
+/** The kinds of item that aim at one agent: they go on its row; the others go in the head. */
+const ROW_KINDS: readonly TodoItem['kind'][] = ['answer', 'rate-limit', 'review', 'prompt'];
+
+const rank = (item: TodoItem) => ORDER.indexOf(item.kind);
+
+/** 006 — the Agents column: `deriveTodos` grouped by agent, no action computed again (SC-005). */
+export function agentRows(
+  workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'loops'>,
+  todos: readonly TodoItem[],
+  names: (cliId: string) => string,
+  now: Date,
+): AgentsView {
+  const ids = new Set(workspace.agents.map((agent) => agent.id));
+  const own = (item: TodoItem) => ROW_KINDS.includes(item.kind) && ids.has(item.agentId);
+  const head = todos.filter((item) => !own(item));
+  const rows = workspace.agents.map((agent): AgentRow => {
+    const items = todos.filter((item) => own(item) && item.agentId === agent.id);
+    const first = [...items].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+    return {
+      agent,
+      name: `${names(agent.cliId)} ${String(agent.position)}`,
+      role: agent.role,
+      stateLabel: agentStateLabel(agent, now),
+      issueId: agentPhase(agent, workspace.loops)?.issueId ?? null,
+      todo: first,
+      pending: items.length,
+    };
+  });
+  const group = (row: AgentRow) => (row.todo ? 0 : row.agent.role === 'orchestrator' ? 1 : 2);
+  rows.sort(
+    (a, b) =>
+      group(a) - group(b) ||
+      (a.todo && b.todo ? rank(a.todo) - rank(b.todo) : 0) ||
+      a.agent.position - b.agent.position,
+  );
+  return {
+    head,
+    rows,
+    agentCount: rows.length,
+    pendingCount: todos.filter((item) => item.kind !== 'info').length,
+  };
 }

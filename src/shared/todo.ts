@@ -5,7 +5,7 @@ import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './
 type Overlap = { agents: readonly [string, string]; files: readonly string[] };
 
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
-const ORDER: TodoKind[] = [
+export const ORDER: TodoKind[] = [
   'answer',
   'integration-request',
   'publish-issues',
