@@ -43,7 +43,8 @@ export const git = (cwd: string, ...args: string[]) =>
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
-export async function createHarness() {
+/** `managerOptions`: extra AgentManager options (fix-send-prompt: submitDelayMs, submitTimeoutMs). */
+export async function createHarness(managerOptions: Record<string, unknown> = {}) {
   const root = realpathSync.native(await mkdtemp(join(tmpdir(), 'pact-orchestrator-')));
   const repo = join(root, 'Mes Projets', 'Développement');
   await mkdir(repo, { recursive: true });
@@ -210,6 +211,7 @@ export async function createHarness() {
       },
       onPromptTyped: (agentId, origin) => typed.push({ agentId, origin }),
       orchestrator,
+      ...managerOptions,
     });
   };
   // Assigned at once: the tools above only read it when an orchestrator calls them.

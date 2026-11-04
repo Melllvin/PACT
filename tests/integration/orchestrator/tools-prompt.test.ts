@@ -48,6 +48,8 @@ describe('list_agents', () => {
           question: null,
           toReview: false,
           waitingPrompts: 0,
+          // fix-send-prompt: prompts typed but never submitted.
+          undeliveredPrompts: 0,
         },
         expect.objectContaining({ id: third, name: 'Faux CLI 3', toReview: true }),
       ],
@@ -61,6 +63,37 @@ describe('list_agents', () => {
     expect((json as { agents: { question: string | null }[] }).agents[0]?.question).toBe(
       'rm fichier.txt',
     );
+  });
+});
+
+// fix-send-prompt — a prompt typed but never submitted is told by list_agents.
+describe('list_agents undeliveredPrompts (fix-send-prompt)', () => {
+  it('counts the prompts typed but never submitted, once PACT gave up', async () => {
+    await h.dispose();
+    h = await createHarness({ submitDelayMs: 50, submitTimeoutMs: 200 });
+    const register = h.hooks.registerMcp.bind(h.hooks);
+    vi.spyOn(h.hooks, 'registerMcp').mockImplementation((id, handler) => {
+      token = register(id, handler);
+      return token;
+    });
+    [lead = ''] = (await h.launch([h.draft({ orchestrator: true })])).map((a) => a.id);
+    [second = ''] = (await h.launch([h.draft()], 'echo-prompt')).map((a) => a.id);
+    // The terminal swallows every Enter: the CLI never sees the prompt submitted.
+    const write = h.pty.write.bind(h.pty);
+    vi.spyOn(h.pty, 'write').mockImplementation((id, data) => {
+      if (data !== '\r') write(id, data);
+    });
+    await tool('send_prompt', { agent: second, text: 'Perdue' });
+    const start = Date.now();
+    let listed: { agents: { undeliveredPrompts: number; waitingPrompts: number }[] } = {
+      agents: [],
+    };
+    while (Date.now() - start < 5_000) {
+      listed = (await tool('list_agents')).json as typeof listed;
+      if (listed.agents[0]?.undeliveredPrompts === 1) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(listed.agents[0]).toMatchObject({ undeliveredPrompts: 1, waitingPrompts: 0 });
   });
 });
 
