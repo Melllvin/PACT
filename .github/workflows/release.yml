@@ -1,30 +1,144 @@
 name: Release
 
-# A version tag (v1.0.0) builds the installers on macOS and Windows and adds them to a draft
-# GitHub Release; publishing that draft stays a manual step.
+# Pushing a version tag (v1.0.1) builds the macOS .dmg and the Windows installers, adds them to a
+# draft GitHub Release named after the tag, and publishes it once the .dmg is there. A Windows
+# failure does not hold the release back: the run stays red, the release goes out without it.
+# A manual run (workflow_dispatch) builds the installers and keeps them as run artifacts only:
+# no release, not even a draft.
+#
+# Only a tag push starts the publishing path: no pull_request or pull_request_target trigger, so
+# no pull request, from a fork or not, can run this workflow or reach its token.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  installers:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+  # The tag must be the version of package.json; the draft exists before the builds, so that
+  # they never race to create it.
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      publish: ${{ github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: The tag is the version of package.json
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(jq -r .version package.json)
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match version $version of package.json (expected v$version)."
+            exit 1
+          fi
+      - name: Draft release
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 \
+            || gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes
+
+  mac:
+    needs: prepare
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run release
+      - run: npm run build
+      - run: npx electron-builder --mac --publish never
+      - run: bash scripts/verify-mac-universal.sh
+      - uses: actions/upload-artifact@v7
+        if: needs.prepare.outputs.publish != 'true'
+        with:
+          name: installers-macos
+          path: dist/*.dmg
+          retention-days: 7
+      - name: Add the .dmg to the draft
+        if: needs.prepare.outputs.publish == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$TAG" dist/*.dmg --clobber
+
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --win --publish never
+      - uses: actions/upload-artifact@v7
+        if: needs.prepare.outputs.publish != 'true'
+        with:
+          name: installers-windows
+          path: dist/*.exe
+          retention-days: 7
+      - name: Add the installers to the draft
+        if: needs.prepare.outputs.publish == 'true'
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$TAG" dist/*.exe --clobber
+
+  # Runs whatever Windows did, as long as the macOS build succeeded; never without the .dmg.
+  publish:
+    needs: [prepare, mac, windows]
+    if: always() && needs.prepare.outputs.publish == 'true' && needs.mac.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      WINDOWS: ${{ needs.windows.result }}
+    steps:
+      - name: The draft holds the .dmg
+        run: |
+          gh release view "$TAG" --json assets -q '.assets[].name' | tee /dev/stderr | grep -q '\.dmg$' \
+            || { echo "::error::No .dmg in the draft $TAG: not published."; exit 1; }
+      - name: Windows installers
+        if: env.WINDOWS != 'success'
+        run: |
+          echo "::warning::Windows job $WINDOWS: $TAG is published without the Windows installers."
+      - name: Publish
+        run: gh release edit "$TAG" --draft=false --latest

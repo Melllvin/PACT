@@ -5,7 +5,12 @@
   "copyright": "Copyright © 2026 Melvin",
   "icon": "build/icon.png",
   "directories": { "output": "dist", "buildResources": "build" },
-  "files": ["out/**", "package.json"],
+  "files": [
+    "out/**",
+    "package.json",
+    "!node_modules/node-pty/bin/**",
+    "!node_modules/node-pty/prebuilds/darwin-*/**"
+  ],
   "asarUnpack": ["node_modules/node-pty/**"],
   "extraResources": [{ "from": "resources/skills", "to": "skills" }],
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",

@@ -215,3 +215,39 @@ jobs:
         run: |
           echo "e2e shards: $RESULT"
           test "$RESULT" = "success"
+
+  # The universal macOS build (npm run dist) breaks on what package.json, the lockfile, the
+  # electron-builder config or the workflows change, not on application code: only those
+  # changes pay for it. Not a required check.
+  mac-build-changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: filter
+        name: Does the change reach the packaging?
+        run: |
+          files=$(git diff --name-only HEAD^1 HEAD)
+          echo "$files"
+          if echo "$files" | grep -qE '^(package\.json|package-lock\.json|electron-builder\.json|scripts/verify-mac-universal\.sh|\.github/workflows/|\.github/actions/)'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  mac-build:
+    needs: mac-build-changes
+    if: needs.mac-build-changes.outputs.build == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: npm run build
+      - run: npx electron-builder --mac --publish never
+      - run: bash scripts/verify-mac-universal.sh
