@@ -50,8 +50,6 @@ export function deriveTodos(
   names: (cliId: string) => string,
   /** The agents with changes to review (`review:pending`). */
   toReview: readonly string[] = [],
-  /** Kept so the callers keep their place for `usage`: « Fichiers communs » is gone, this is ignored. */
-  _legacyOverlaps: readonly unknown[] = [],
   /** 005 — the usage of the CLI accounts, read with the thresholds at `now`. */
   usage?: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
 ): TodoItem[] {

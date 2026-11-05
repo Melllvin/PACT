@@ -47,8 +47,6 @@ type Options = {
   workspaces: WorkspaceAccess;
   onChanged?: (snapshot: ReviewSnapshot) => void;
   onPending?: (event: IpcEvent<'review:pending'>) => void;
-  /** Ignored: « Fichiers communs » is gone; an old caller may still pass it. */
-  onOverlap?: unknown;
   /** Types a prompt once the agent is ready for one, never as an answer (R7, FR-014). */
   prompts?: { sendPrompt(agentId: string, text: string): Promise<unknown> };
   /** The last test run of each agent, for « Tests en échec ». */

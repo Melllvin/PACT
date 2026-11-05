@@ -180,7 +180,6 @@ export function WorkspaceView({
     workspace,
     cliName,
     pending,
-    [],
     usageThresholds && { states: usage, thresholds: usageThresholds, now },
   );
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).

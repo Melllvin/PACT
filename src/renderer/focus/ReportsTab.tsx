@@ -32,7 +32,7 @@ type Props = {
  */
 export function ReportsTab({ reports, agents, loops, name }: Props) {
   const latest = new Map<string, Report>();
-  // A kind that no longer exists (an old « Fichiers communs » report) is left out.
+  // A kind that no longer exists (an old kind of report) is left out.
   for (const report of reports) if (report.kind in KIND_LABELS) latest.set(report.agentId, report);
   const rows = agents.flatMap((agent) => {
     const report = latest.get(agent.id);

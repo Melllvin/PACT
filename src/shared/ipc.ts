@@ -345,7 +345,7 @@ export const ipcEvents = {
   'usage:state': usageStateSchema,
   /** Agents were launched in a workspace, by the launcher or by its orchestrator (003 FR-015). */
   'workspace:agentsLaunched': z.object({ workspaceId: z.string() }),
-  /** 004 US2 — a report, a missing one, the end of a loop or . */
+  /** 004 US2 — a report, a missing one or the end of a loop. */
   'orchestrator:report': z.object({
     workspaceId: z.string(),
     agentId: z.uuid(),
