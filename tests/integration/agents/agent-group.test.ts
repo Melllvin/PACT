@@ -26,9 +26,7 @@ const agentsLaunchedBy = (workspace: Workspace, orchestratorId: string): Agent[]
     throw new Error('agentsLaunchedBy is not exported by src/shared/agents-view.ts');
   })();
 
-type Restart = (id: string, options: { resumeWork: boolean }) => Promise<void>;
-const restart = (id: string, resumeWork: boolean) =>
-  (h.manager.restart as unknown as Restart).call(h.manager, id, { resumeWork });
+const restart = (id: string, resumeWork: boolean) => h.manager.restart(id, { resumeWork });
 
 const KEEP = { removeWorktree: false };
 
