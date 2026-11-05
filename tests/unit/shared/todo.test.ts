@@ -324,7 +324,7 @@ describe('usage alerts', () => {
     ...over,
   });
   const alerts = (states: UsageState[], now = NOW, thresholds = { warn: 80, critical: 95 }) =>
-    deriveTodos(workspace([agent(1)]), () => 'Claude Code', [], [], {
+    deriveTodos(workspace([agent(1)]), () => 'Claude Code', [], {
       states,
       thresholds,
       now,
@@ -369,7 +369,6 @@ describe('usage alerts', () => {
       workspace([agent(1, { state: 'awaiting-prompt' })]),
       () => 'Claude Code',
       ['a1'],
-      [],
       { states: [usageState(85)], thresholds: { warn: 80, critical: 95 }, now: NOW },
     );
     expect(todos.map((t) => t.kind)).toEqual(['usage-limit', 'review']);
