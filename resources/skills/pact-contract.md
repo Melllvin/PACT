@@ -42,8 +42,9 @@ prête.
 
 ## Règles communes
 
-- Pas de fichiers communs en parallèle : deux agents ne modifient jamais les mêmes fichiers en même
-  temps. Reste dans les fichiers de ton issue.
+- Chaque agent travaille dans son worktree, sur sa branche, et pousse sa branche sur git. Si tu as
+  besoin du travail d'un autre agent, tu peux récupérer son autre branche (`git fetch`, puis merge
+  ou cherry-pick) au lieu de réécrire ses fichiers.
 - Les questions sont à l'utilisateur : quand tu as un doute, écris-le dans `questions` avec
   `status: blocked` au lieu de deviner. Les demandes d'autorisation passent par l'utilisateur, jamais
   par un autre agent.

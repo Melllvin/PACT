@@ -7,7 +7,6 @@ import {
   seenBlob,
   type ChangedFile,
   type FileDiff,
-  type Overlap,
   type ReviewSnapshot,
   type TestRun,
 } from '../../shared/review';
@@ -44,12 +43,11 @@ type Options = {
     | 'currentBranch'
     | 'diffBlobs'
     | 'mergeTree'
+    | 'remoteBranchExists'
   >;
   workspaces: WorkspaceAccess;
   onChanged?: (snapshot: ReviewSnapshot) => void;
   onPending?: (event: IpcEvent<'review:pending'>) => void;
-  /** 004 R7 — files two agents both change, told once until they differ or stop. */
-  onOverlap?: (workspaceId: string, overlap: Overlap) => void;
   /** Types a prompt once the agent is ready for one, never as an answer (R7, FR-014). */
   prompts?: { sendPrompt(agentId: string, text: string): Promise<unknown> };
   /** The last test run of each agent, for « Tests en échec ». */
@@ -73,18 +71,6 @@ export type ReviewSend =
 
 const NO_COMMIT = '0'.repeat(40);
 const READY: Agent['state'][] = ['done', 'awaiting-prompt'];
-
-/**
- * 004 FR-021 — the files each pair of agents both change. Only agents done with their turn count:
- * a working agent is compared once its turn ends, as its changes are then read anyway (R7).
- */
-const overlapsOf = (changes: { agentId: string; paths: Set<string> }[]): Overlap[] =>
-  changes.flatMap((one, index) =>
-    changes.slice(index + 1).flatMap((other): Overlap[] => {
-      const files = [...one.paths].filter((path) => other.paths.has(path)).sort();
-      return files.length > 0 ? [{ agents: [one.agentId, other.agentId], files }] : [];
-    }),
-  );
 
 /** `fs.watch` recursive, without the `.git` folder or file (R3). */
 export const watchRecursive: Watch = (dir, onChange) => {
@@ -117,7 +103,6 @@ export class ReviewService {
   private readonly workspaces: WorkspaceAccess;
   private readonly onChanged: NonNullable<Options['onChanged']>;
   private readonly onPending: NonNullable<Options['onPending']>;
-  private readonly onOverlap: NonNullable<Options['onOverlap']>;
   private readonly prompts: Options['prompts'];
   private readonly tests: Options['tests'];
   private readonly watch: Watch;
@@ -130,15 +115,12 @@ export class ReviewService {
   private readonly wanted = new Set<string>();
   /** The latest `updatePending` of each workspace: an older one ending last says nothing. */
   private readonly pendingRuns = new Map<string, number>();
-  /** The overlaps last found in each workspace, by key: only a new one is told. */
-  private readonly overlapsTold = new Map<string, Set<string>>();
 
   constructor(options: Options) {
     this.git = options.git;
     this.workspaces = options.workspaces;
     this.onChanged = options.onChanged ?? (() => undefined);
     this.onPending = options.onPending ?? (() => undefined);
-    this.onOverlap = options.onOverlap ?? (() => undefined);
     this.prompts = options.prompts;
     this.tests = options.tests;
     this.watch = options.watch ?? watchRecursive;
@@ -295,38 +277,28 @@ export class ReviewService {
    * (FR-002, FR-003). Announced with `review:pending`.
    */
   async updatePending(workspaceId: string): Promise<string[]> {
+    return Object.keys(await this.pendingFiles(workspaceId));
+  }
+
+  /** The same, with the number of changed files of each agent, in the order of the tiles. */
+  async pendingFiles(workspaceId: string): Promise<Record<string, number>> {
     const run = (this.pendingRuns.get(workspaceId) ?? 0) + 1;
     this.pendingRuns.set(workspaceId, run);
     const workspace = this.workspaces.get(workspaceId);
-    if (!workspace) return [];
-    const agentIds: string[] = [];
-    const changes: { agentId: string; paths: Set<string> }[] = [];
+    if (!workspace) return {};
+    const files: Record<string, number> = {};
     const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
     for (const agent of agents) {
-      if (!READY.includes(agent.state)) continue;
+      // The orchestrator changes no code: nothing of it is « à relire » (its view still shows it).
+      if (!READY.includes(agent.state) || agent.role === 'orchestrator') continue;
       const snapshot = await this.compute(agent.id).catch(() => undefined);
       if (snapshot && !snapshot.missing && snapshot.files.length > 0) {
-        agentIds.push(agent.id);
-        changes.push({ agentId: agent.id, paths: new Set(snapshot.files.map((f) => f.path)) });
+        files[agent.id] = snapshot.files.length;
       }
     }
-    if (this.pendingRuns.get(workspaceId) !== run) return agentIds;
-    const overlaps = overlapsOf(changes);
-    this.onPending({ workspaceId, agentIds, overlaps });
-    this.tellOverlaps(workspaceId, overlaps);
-    return agentIds;
-  }
-
-  /** 004 R7 — tells each overlap not found by the previous computation. */
-  private tellOverlaps(workspaceId: string, overlaps: Overlap[]) {
-    const told = this.overlapsTold.get(workspaceId) ?? new Set<string>();
-    const now = new Set<string>();
-    for (const overlap of overlaps) {
-      const key = `${overlap.agents.join('+')}:${overlap.files.join('\0')}`;
-      now.add(key);
-      if (!told.has(key)) this.onOverlap(workspaceId, overlap);
-    }
-    this.overlapsTold.set(workspaceId, now);
+    if (this.pendingRuns.get(workspaceId) !== run) return files;
+    this.onPending({ workspaceId, agentIds: Object.keys(files), files });
+    return files;
   }
 
   /** What the tests of an agent run: its worktree and port, the command, the tree shown (R8). */
@@ -394,17 +366,23 @@ export class ReviewService {
       return missing(agent);
     }
     try {
+      // The base is origin/<main> when it is known: the local main may lag far behind it.
+      const main = (await this.git.remoteBranchExists(cwd, workspace.mainBranch))
+        ? `refs/remotes/origin/${workspace.mainBranch}`
+        : workspace.mainBranch;
       const [mainHead, base, { commit, tree }, branch] = await Promise.all([
-        this.git.revParse(cwd, workspace.mainBranch),
-        this.git.mergeBase(cwd, workspace.mainBranch, 'HEAD'),
+        this.git.revParse(cwd, main),
+        this.git.mergeBase(cwd, main, 'HEAD'),
         this.git.snapshot(cwd),
         this.git.currentBranch(cwd),
       ]);
-      const [files, merged] = await Promise.all([
+      const [changed, merged] = await Promise.all([
         this.git.changedFiles(cwd, base, tree),
         // Checked on each snapshot: main moving changes `mainHead`, so the review is sent again.
         this.git.mergeTree(cwd, mainHead, commit),
       ]);
+      // The working files of PACT are no change to review.
+      const files = changed.filter((file) => !isPactFile(file));
       let added = 0;
       let removed = 0;
       for (const file of files) {
@@ -455,6 +433,8 @@ export class ReviewService {
     throw new IpcFailure('NOT_FOUND', 'Agent inconnu.');
   }
 }
+
+const isPactFile = ({ path }: ChangedFile) => path.startsWith('.pact/');
 
 function missing(agent: Agent): ReviewSnapshot {
   return {

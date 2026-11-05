@@ -53,6 +53,9 @@ export function gitErrorOutput(error: unknown): string {
   return failure.stderr?.trim() || failure.stdout?.trim() || failure.message;
 }
 
+/** A call to the network gives up after this long. */
+const REMOTE_TIMEOUT_MS = 30_000;
+
 const exitCode = (error: unknown) => (error as { code?: unknown }).code;
 
 /** Git prints `/`-separated and sometimes 8.3 short paths on Windows: compare canonical paths. */
@@ -60,6 +63,7 @@ const canonical = (path: string) => realpathSync.native(resolve(path));
 
 export class GitService {
   private readonly env: Env | undefined;
+  private readonly fetching = new Map<string, Promise<boolean>>();
 
   constructor({ env }: { env?: Env } = {}) {
     this.env = env;
@@ -74,9 +78,10 @@ export class GitService {
     return (await this.run(cwd, args, env)).stdout;
   }
 
-  private run(cwd: string, args: string[], env: Env = {}) {
+  private run(cwd: string, args: string[], env: Env = {}, timeout?: number) {
     return execFileAsync('git', ['-c', 'core.quotePath=false', ...args], {
       cwd,
+      ...(timeout === undefined ? {} : { timeout }),
       env: { ...(this.env ?? process.env), ...env, LC_ALL: 'C' },
       encoding: 'utf8',
       maxBuffer: MAX_OUTPUT,
@@ -97,6 +102,103 @@ export class GitService {
 
   async currentBranch(path: string): Promise<string> {
     return this.git(path, ['branch', '--show-current']);
+  }
+
+  /**
+   * The best main branch known right now, with no network: the default branch of origin
+   * (`origin/HEAD`), then `main` or `master` on origin, then locally, and only then the current
+   * branch; never the branch the root folder happens to be on while one of those exists.
+   * `settled` is false while origin could still tell better (`remoteDefaultBranch`).
+   */
+  async knownDefaultBranch(path: string): Promise<{ branch: string; settled: boolean }> {
+    const quiet = async (args: string[]) => {
+      try {
+        return (await this.git(path, args)).trim();
+      } catch {
+        return '';
+      }
+    };
+    const known = await quiet(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
+    if (known.startsWith('origin/'))
+      return { branch: known.slice('origin/'.length), settled: true };
+    const hasOrigin = (await quiet(['remote'])).split('\n').includes('origin');
+    if (hasOrigin) {
+      for (const name of ['main', 'master']) {
+        if (await this.remoteBranchExists(path, name)) return { branch: name, settled: false };
+      }
+    }
+    for (const name of ['main', 'master']) {
+      if (await this.branchExists(path, name)) return { branch: name, settled: !hasOrigin };
+    }
+    return { branch: await this.currentBranch(path), settled: !hasOrigin };
+  }
+
+  /**
+   * Asks origin for its default branch (`git remote show origin`): slow on a filtered network, so
+   * never awaited by an opening or a launch. `null` when it cannot tell.
+   */
+  async remoteDefaultBranch(path: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.run(
+        path,
+        ['remote', 'show', 'origin'],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      const shown = /^\s*HEAD branch: (\S+)\s*$/m.exec(stdout)?.[1];
+      return shown && shown !== '(unknown)' ? shown : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether `origin/<branch>` is known here. */
+  async remoteBranchExists(repo: string, branch: string): Promise<boolean> {
+    try {
+      await this.git(repo, ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Brings `origin/<branch>` up to date, that branch only: no local branch, HEAD or worktree moves.
+   * `false`, without throwing, when it fails (network down, no origin): the last one known stays.
+   */
+  fetchOrigin(cwd: string, branch: string): Promise<boolean> {
+    // Two fetches of the same branch of the same repository never overlap: they share one.
+    const key = `${cwd}\u0000${branch}`;
+    const running = this.fetching.get(key);
+    if (running) return running;
+    const started = this.fetchNow(cwd, branch).finally(() => {
+      this.fetching.delete(key);
+    });
+    this.fetching.set(key, started);
+    return started;
+  }
+
+  private async fetchNow(cwd: string, branch: string): Promise<boolean> {
+    try {
+      await this.run(
+        cwd,
+        [
+          '-c',
+          'gc.auto=0',
+          'fetch',
+          '--no-tags',
+          '--no-recurse-submodules',
+          '--quiet',
+          'origin',
+          `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
+        ],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async initRepo(path: string): Promise<void> {

@@ -6,6 +6,9 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalLike } from './terminal-registry';
 
+/** What Shift+Enter sends to the PTY: a line break that submits nothing (AgentManager.typed). */
+const LINE_BREAK = '\x1b\r';
+
 /**
  * The DOM renderer by default: its text stays in the page, where the e2e suite and assistive
  * technologies read it. WebGL (research.md R2) is opt-in, and falls back to the DOM renderer.
@@ -25,6 +28,17 @@ export function createXterm({ webgl = false } = {}): TerminalLike {
   terminal.loadAddon(new Unicode11Addon());
   terminal.unicode.activeVersion = '11';
   terminal.loadAddon(new WebLinksAddon());
+  // Shift+Enter: xterm would send `\r`, as for Enter, and the prompt would leave. ESC + CR is the
+  // one sequence sent instead: the CLIs of the agents (Claude Code) and zsh read it as a line
+  // break. xterm calls the handler for keydown, keypress and keyup: it is held back for all three,
+  // and the sequence goes once, on keydown.
+  terminal.attachCustomKeyEventHandler((event) => {
+    const shiftEnter =
+      event.key === 'Enter' && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
+    if (!shiftEnter || event.isComposing) return true;
+    if (event.type === 'keydown') terminal.input(LINE_BREAK, true);
+    return false;
+  });
 
   return {
     get cols() {

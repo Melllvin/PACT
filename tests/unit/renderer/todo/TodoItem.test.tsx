@@ -160,32 +160,6 @@ describe('TodoItem of a loop stopped after 3 rounds', () => {
   });
 });
 
-// 004 T026 — two agents change the same files: a warning, with no action of a tile (FR-021).
-describe('TodoItem of files two agents change', () => {
-  it('names the agents and the files, with no button', () => {
-    const one = agent(1, { state: 'awaiting-answer' });
-    render(
-      <ul>
-        <TodoItem
-          todo={{
-            id: `${one.id}+b:overlap`,
-            agentId: one.id,
-            kind: 'overlap',
-            title: '⚠ Fichiers communs · Claude Code 1, Codex 2 · src/a.ts',
-            actions: [],
-          }}
-          agent={one}
-          {...actions()}
-        />
-      </ul>,
-    );
-    expect(screen.getByText('⚠ Fichiers communs')).toBeTruthy();
-    expect(screen.getByText('Claude Code 1, Codex 2')).toBeTruthy();
-    expect(screen.getByText('src/a.ts')).toBeTruthy();
-    expect(screen.queryByRole('button')).toBeNull();
-  });
-});
-
 // T162 — a question in À faire opens the agent's terminal (FR-024a).
 describe('TodoItem for a question', () => {
   it('opens the terminal of the agent of the item', async () => {
