@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CodexRollout,
@@ -133,18 +134,19 @@ describe('findRollout', () => {
     isDirectory: () => dir,
     isFile: () => !dir,
   });
+  const at = (...parts: string[]) => join('/codex', 'sessions', ...parts);
   const tree: Record<string, unknown[]> = {
-    '/codex/sessions': [entry('2026', true), entry('notes.txt', false)],
-    '/codex/sessions/2026': [entry('11', true), entry('10', true)],
-    '/codex/sessions/2026/11': [entry('05', true), entry('04', true)],
-    '/codex/sessions/2026/11/05': [
+    [at()]: [entry('2026', true), entry('notes.txt', false)],
+    [at('2026')]: [entry('11', true), entry('10', true)],
+    [at('2026', '11')]: [entry('05', true), entry('04', true)],
+    [at('2026', '11', '05')]: [
       entry('rollout-a-autre.jsonl', false),
       entry('rollout-a-abc.json', false),
       entry('x-abc.jsonl', false),
     ],
-    '/codex/sessions/2026/11/04': [],
-    '/codex/sessions/2026/10': [entry('30', true)],
-    '/codex/sessions/2026/10/30': [entry('rollout-b-abc.jsonl', false)],
+    [at('2026', '11', '04')]: [],
+    [at('2026', '10')]: [entry('30', true)],
+    [at('2026', '10', '30')]: [entry('rollout-b-abc.jsonl', false)],
   };
 
   afterEach(() => {
@@ -156,9 +158,7 @@ describe('findRollout', () => {
       typeof dir === 'string' && dir in tree
         ? Promise.resolve(tree[dir])
         : Promise.reject(new Error('ENOENT'));
-    expect(await findRollout('/codex', 'abc')).toBe(
-      '/codex/sessions/2026/10/30/rollout-b-abc.jsonl',
-    );
+    expect(await findRollout('/codex', 'abc')).toBe(at('2026', '10', '30', 'rollout-b-abc.jsonl'));
     expect(await findRollout('/codex', 'inconnue')).toBeNull();
   });
 });
