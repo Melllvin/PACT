@@ -77,33 +77,31 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
   la détailler, parallèle et conditions. Le modèle de données doit la permettre dès le début.
 - Q: Quelles articulations ? → A: 007 pour les événements, 008 pour la livraison.
 
-Le passage `speckit-clarify` n'a interrogé personne, à la demande de l'utilisateur : ce qui reste ouvert est listé sous « Questions ouvertes » et
-marqué [NEEDS CLARIFICATION] là où il joue.
+Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
+
+- Q1: Texte déclaratif ou code ? → A: un fichier déclaratif, sans code exécutable, à un chemin fixe : `.pact/workflow.yaml`.
+- Q2: Qui fait avancer le workflow ? → A: PACT garde l'état, ne permet que les transitions du graphe et refuse les autres avec leur raison ; l'orchestrateur lance les agents et donne les consignes.
+  (Voir Q10.)
+- Q3: Combien de workflows ? → A: un par projet en première phase ; le format nomme son workflow, pour en permettre plusieurs plus tard.
+- Q4: Quelle version fait foi ? → A: le fichier de la branche principale à jour ; un agent ne peut pas le changer pour lui-même ; une exécution en cours garde la version de son démarrage ; un changement
+  s'applique à la suivante.
+- Q5: Avec les réglages de 008 ? → A: le fichier est la seule source pour le plafond et les passes, et les paramètres du projet l'éditent ; le mode de fusion est un réglage de projet versionné dans ce
+  fichier ; le toggle Auto reste local. (Voir Q9.)
+- Q6: Modèle d'une étape ? → A: le plafond du profil de rôle s'applique toujours ; un modèle absent ou trop élevé rend le workflow invalide sur cette machine, avec sa raison, sans remplacement silencieux.
+- Q7: Quelles étapes ? → A: les rôles existants (spec, design, dev, test, recap), plus peaufinage et PR, avec une consigne libre par étape ; pas d'étape sur mesure.
+- Q8: La mise en page ? → A: les positions sont optionnelles dans le fichier, sans influence sur le comportement ; l'éditeur les écrit seulement si l'utilisateur déplace un nœud ; la disposition automatique
+  sert sinon.
 
 ## Questions ouvertes
 
-Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
+Deux questions, nées de ces décisions : l'agent spec ne les tranche pas.
 
-- **Q1 — Texte déclaratif, ou vrai code ?** « Texte ou code, comme LangGraph ». Du code du dépôt exécuté par PACT, avec les droits de
-  l'utilisateur, ouvre un risque : une branche d'agent pourrait le modifier. *Proposition* : un fichier déclaratif, sans code exécutable, à un
-  chemin fixe (`.pact/workflow.yaml`).
-- **Q2 — Qui fait avancer le workflow ?** PACT lui-même, ou l'orchestrateur, guidé ? *Proposition* : PACT garde l'état, ne permet que les
-  transitions du graphe et refuse les autres avec leur raison ; l'orchestrateur lance les agents et donne les consignes.
-- **Q3 — Un seul workflow par projet, ou un par issue ?** *Proposition* : un par projet en première phase ; le format nomme son workflow, pour
-  en permettre plusieurs plus tard.
-- **Q4 — Quelle version fait foi, et quand s'applique un changement ?** Une branche d'agent peut porter un autre fichier. *Proposition* : le
-  fichier de la branche principale à jour ; un agent ne peut pas le changer pour lui-même ; une exécution en cours garde la version de son
-  démarrage ; un changement s'applique à la suivante.
-- **Q5 — Que devient le réglage de 008 quand un workflow existe ?** Plafond et passes sont aussi dans le graphe. *Proposition* : le fichier du
-  workflow est la seule source pour le plafond et les passes, et les paramètres du projet l'éditent ; le mode de fusion reste un réglage de
-  projet versionné dans ce fichier ; le toggle Auto reste local, car c'est un choix personnel.
-- **Q6 — Modèle d'une étape et plafonds du rôle.** Un fichier partagé peut nommer un CLI ou un modèle absent de la machine. *Proposition* : le
-  plafond du profil de rôle (004) s'applique toujours ; un modèle absent ou trop élevé rend le workflow invalide sur cette machine, avec sa raison,
-  au lieu d'un remplacement silencieux.
-- **Q7 — Quelles étapes en première phase ?** Le catalogue est-il fermé ? *Proposition* : les rôles existants (spec, design, dev, test, recap),
-  plus peaufinage et PR, avec une consigne libre par étape ; pas d'étape sur mesure.
-- **Q8 — La mise en page du graphe est-elle versionnée ?** *Proposition* : les positions sont optionnelles dans le fichier, sans influence sur le
-  comportement ; l'éditeur les écrit seulement si l'utilisateur déplace un nœud ; la disposition automatique sert sinon.
+- **Q9 — Où va un enregistrement de l'éditeur ou des paramètres du projet ?** Q5 fait du fichier la seule source, édité par les paramètres. Q4 ne retient que la branche principale. Or `main` peut être protégée, et un
+  projet sans fichier ne doit rien voir écrit dans son dépôt (FR-011). Un clic sur un réglage ne peut donc pas atteindre la version qui fait foi. *Proposition* : l'enregistrement crée une branche et une PR, toujours
+  relue par l'utilisateur ; la version courante s'applique jusqu'à sa fusion ; pour un projet sans fichier, le premier enregistrement est le seul geste qui en crée un. Reste la reprise des réglages déjà faits dans 008,
+  livrée avant, et des consignes de peaufinage de 008.
+- **Q10 — Qui envoie les consignes de départ d'une boucle ?** 007 (FR-021) les fait envoyer par PACT à `start_loop`. La proposition 010-Q2 acceptée dit que l'orchestrateur donne les consignes, et la confirmation de
+  l'utilisateur ne cite que « l'orchestrateur lance les agents ». *Proposition* : PACT envoie la consigne de l'étape écrite dans le workflow, comme 007 ; l'orchestrateur ajoute le reste.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -137,8 +135,8 @@ nombre de tours de la boucle, et enregistre.
 **Acceptance Scenarios**:
 
 1. **Given** l'éditeur, **When** l'utilisateur ajoute une étape et la relie, **Then** le graphe et la forme texte montrent le même changement.
-2. **Given** une étape, **When** il choisit un rôle et un modèle, **Then** seuls ceux permis par le plafond du rôle sont proposés
-   [NEEDS CLARIFICATION: Q6 — modèle absent ou trop élevé].
+2. **Given** une étape, **When** il choisit un rôle et un modèle, **Then** seuls ceux permis par le plafond du rôle sont proposés.
+   Un fichier qui nomme un modèle absent ou trop élevé est invalide sur cette machine, avec sa raison.
 3. **Given** une boucle dev ↔ test, **When** il règle le nombre maximum de tours, **Then** le réglage s'applique à cette boucle.
 4. **Given** un graphe invalide (étape isolée, pas d'arrivée, boucle sans plafond), **When** il enregistre, **Then** l'enregistrement est refusé
    avec l'étape en cause.
@@ -161,8 +159,7 @@ invalide.
 2. **Given** un workflow, **When** on l'enregistre dans l'éditeur sans rien changer, **Then** le fichier ne change pas.
 3. **Given** un fichier invalide, **When** PACT le lit, **Then** il garde la dernière version valide pour les exécutions, et affiche l'erreur avec sa
    ligne.
-4. **Given** une issue en cours, **When** le fichier change, **Then** l'issue garde sa version
-   [NEEDS CLARIFICATION: Q4 — version qui fait foi].
+4. **Given** une issue en cours, **When** le fichier change, **Then** l'issue garde sa version, et le changement s'applique à l'exécution suivante, une fois sur la branche principale.
 5. **Given** un fichier avec une étape parallèle ou une condition (seconde phase), **When** PACT de première phase le lit, **Then** il refuse de
    l'exécuter en le disant clairement, et ne perd rien de son contenu à l'enregistrement.
 
@@ -178,8 +175,7 @@ L'orchestrateur tente de passer à la PR alors que le workflow exige un peaufina
 
 **Acceptance Scenarios**:
 
-1. **Given** une étape en cours, **When** l'orchestrateur demande une étape non reliée, **Then** PACT refuse avec les étapes possibles
-   [NEEDS CLARIFICATION: Q2 — qui fait avancer le workflow].
+1. **Given** une étape en cours, **When** l'orchestrateur demande une étape non reliée, **Then** PACT refuse avec les étapes possibles.
 2. **Given** une boucle au plafond de tours, **When** un défaut arrive, **Then** l'escalade à l'utilisateur de 008 s'applique.
 3. **Given** le passage d'une étape à l'autre, **When** il a lieu, **Then** l'orchestrateur en est réveillé par un message `action` de 007.
 
@@ -203,21 +199,21 @@ L'orchestrateur tente de passer à la PR alors que le workflow exige un peaufina
 
 **Modèle**
 
-- **FR-001**: Un workflow MUST se composer d'étapes, chacune avec ses agents (rôle, modèle) et une consigne, de transitions entre étapes, d'une étape
-  de départ et d'étapes d'arrivée [NEEDS CLARIFICATION: Q7 — catalogue des étapes].
+- **FR-001**: Un workflow MUST se composer d'étapes, chacune avec ses agents (rôle, modèle) et une consigne libre, de transitions entre étapes, d'une étape de départ et d'étapes d'arrivée. Les types d'étapes sont les rôles existants (spec,
+  design, dev, test, recap), plus peaufinage et PR ; pas d'étape sur mesure.
 - **FR-002**: Une boucle MUST être décrite par des transitions, avec un nombre maximum de tours obligatoire.
 - **FR-003**: Une transition de première phase MUST réagir à un résultat typé d'étape (fin, verdict `accepted`, verdict `defects`, CI rouge, refus,
   etc.), jamais à une expression libre.
 - **FR-004**: Le format MUST porter un numéro de version.
-- **FR-005**: La forme texte et le graphe MUST être équivalents : tout ce qui est décrit dans l'un se retrouve dans l'autre, sans perte
-  [NEEDS CLARIFICATION: Q1 — déclaratif ou code ; Q8 — positions].
+- **FR-005**: La forme texte et le graphe MUST être équivalents : tout ce qui est décrit dans l'un se retrouve dans l'autre, sans perte. La forme texte MUST être déclarative, sans code exécutable. Les positions sont optionnelles, sans influence sur le
+  comportement ; l'éditeur MUST ne les écrire que si l'utilisateur déplace un nœud.
 - **FR-006**: Le modèle MUST prévoir dès la première phase des groupes d'étapes parallèles et des conditions sur les transitions ; PACT MUST les
   conserver à l'enregistrement, et refuser de les exécuter en le disant, tant que la seconde phase n'est pas livrée.
 
 **Fichier et éditeur**
 
-- **FR-007**: Le workflow MUST pouvoir vivre dans un fichier du dépôt, versionnable comme le code, et lisible sans PACT
-  [NEEDS CLARIFICATION: Q3 — un ou plusieurs ; Q4 — version qui fait foi].
+- **FR-007**: Le workflow MUST vivre dans `.pact/workflow.yaml`, versionnable comme le code et lisible sans PACT : un par projet, nommé pour en permettre plusieurs plus tard. Le fichier de la branche principale à jour fait foi ; un agent MUST ne pas
+  pouvoir le changer pour lui-même ; une exécution en cours garde la version de son démarrage.
 - **FR-008**: PACT MUST offrir un éditeur visuel pour créer, relier, régler et retirer des étapes, utilisable au clavier et au lecteur d'écran, sur macOS
   et Windows.
 - **FR-009**: PACT MUST valider un workflow avant de l'enregistrer ou de l'exécuter, avec une erreur qui nomme l'étape ou la ligne : arrivée inaccessible,
@@ -228,13 +224,12 @@ L'orchestrateur tente de passer à la PR alors que le workflow exige un peaufina
 **Exécution**
 
 - **FR-012**: PACT MUST tenir, par issue, l'étape en cours et la version du workflow, enregistrées, et les restaurer à un redémarrage.
-- **FR-013**: PACT MUST ne permettre que les transitions du workflow, et refuser les autres avec leur raison
-  [NEEDS CLARIFICATION: Q2 — qui fait avancer].
+- **FR-013**: PACT MUST garder l'état, ne permettre que les transitions du workflow, et refuser les autres avec leur raison. L'orchestrateur lance les agents [NEEDS CLARIFICATION: Q10 — qui envoie les consignes de départ].
 - **FR-014**: Les changements d'étape MUST venir des événements de 007 et réveiller l'orchestrateur par un message `action`.
 - **FR-015**: L'étape PR MUST exécuter la demande de livraison de 008, sans redéfinir ses barrières ni son déroulé.
-- **FR-016**: Plafond de tours et passes de peaufinage MUST avoir une seule source quand un workflow s'applique
-  [NEEDS CLARIFICATION: Q5 — articulation avec les réglages de 008].
-- **FR-017**: Les plafonds de modèle du profil de rôle MUST continuer à s'appliquer [NEEDS CLARIFICATION: Q6].
+- **FR-016**: Le fichier du workflow MUST être la seule source du plafond de tours, des passes de peaufinage et du mode de fusion, et les paramètres du projet MUST l'éditer ; le toggle Auto reste local
+  [NEEDS CLARIFICATION: Q9 — où va un enregistrement].
+- **FR-017**: Les plafonds de modèle du profil de rôle MUST continuer à s'appliquer ; un modèle absent ou trop élevé MUST rendre le workflow invalide sur cette machine, avec sa raison, sans remplacement silencieux.
 - **FR-018**: Le skill `pact-orchestrator` MUST lire le workflow du projet, au lieu d'un ordre écrit en dur.
 
 ### Key Entities

@@ -32,5 +32,5 @@
 ## Notes
 
 - Les outils, hooks et défauts sont nommés par la demande elle-même : les cases sur les détails d'implémentation restent décochées.
-- 12 questions ouvertes attendent l'utilisateur. Ne pas lancer `/speckit-plan` avant ses réponses.
+- 1 question ouverte attend l'utilisateur (Q13) : les 12 autres sont décidées.
 - FR-012 (hooks PostToolUse et Stop sur le CLI installé) n'est pas validée à ce stade.

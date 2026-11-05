@@ -39,7 +39,8 @@ l'utilisateur. Libellés : `docs/maquettes/CONSIGNES-UI.md`.
 
 - **Prérequis** : 005 (lectures), 001 (reprise automatique, `--resume`), 007 (consigne en plein tour, réveil à la reprise, plafond de
   réveils).
-- **Sans dépendance à 008** : une PR déjà ouverte continue d'être suivie pendant la pause, puisque cela ne consomme aucun agent.
+- **Amende** : 005 FR-012, qui voulait qu'un avertissement ne bloque jamais un lancement : `launch_agent` est refusé pendant une pause.
+- **Sans dépendance à 008, sauf Q10** : une PR déjà ouverte continue d'être suivie pendant la pause, puisque cela ne consomme aucun agent.
 
 ## Périmètre
 
@@ -67,36 +68,30 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
 - Q: Et un agent en plein tour ? → A: la consigne doit lui arriver, à concevoir avec 007.
 - Q: Sur quoi se bâtir ? → A: `src/main/usage` et la reprise automatique existante.
 
-Le passage `speckit-clarify` n'a interrogé personne, à la demande de l'utilisateur : ce qui reste ouvert est listé sous « Questions
-ouvertes » et marqué [NEEDS CLARIFICATION] là où il joue.
+Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
+
+- Q1: Lecture trop ancienne ? → A: dernière lecture de plus de 15 minutes, au moins un agent qui travaille, dernier pourcentage connu à 10 points du seuil ou moins : PACT propose
+  d'arrêter par prudence. Il n'arrête pas seul. Sans décision, il repropose à chaque palier de 15 minutes.
+- Q2: Qui arrête-t-on ? → A: tous les agents du compte concerné, dans tous les workspaces ouverts.
+- Q3: Comment pousser sans bloquer ? → A: l'agent ne fait que committer ; PACT pousse sa branche, puis attend le seuil ; un échec de push est signalé sans bloquer l'arrêt ; sans
+  remote, le commit suffit. (Voir Q10.)
+- Q4: Les fenêtres par modèle ? → A: elles ont leur seuil comme les autres, et l'arrêt reste par compte.
+- Q5: Réglage de reprise coupé, heure inconnue ? → A: coupé, l'agent reste en pause avec un bouton « Reprendre » ; sans heure connue, l'attente croissante existante s'applique ; à la
+  reprise, l'orchestrateur repart d'abord.
+- Q6: Bornes et portée ? → A: un réglage par CLI et par fenêtre, de 10 à 100 %. Un seuil à 100 % ne protège pas d'une erreur de limite, et le niveau `critical` de 005 (95 %) ne sera plus
+  vu : les deux restent inchangés, l'interface le signale.
+- Q7: Reprise manuelle, nouveaux lancements ? → A: « Reprendre » vaut dérogation jusqu'au prochain reset ; `launch_agent` est refusé pendant la pause ; le lanceur de l'utilisateur
+  avertit sans bloquer.
+- Q8: Lecture qui saute la bande de sauvegarde ? → A: consigne immédiate, puis arrêt après 60 secondes au plus.
+- Q9: Le non-commité d'un agent muet ? → A: PACT ne committe rien à sa place ; le worktree reste en l'état, et l'agent est marqué « non sauvegardé ».
 
 ## Questions ouvertes
 
-Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
+Une seule question, née de la décision Q3 et de 008 : l'agent spec ne la tranche pas.
 
-- **Q1 — Lecture trop ancienne : à valider** (demandé par l'utilisateur). *Proposition* : si la dernière lecture a plus de 15 minutes
-  (`STALE_MINUTES`), qu'au moins un agent travaille et que le dernier pourcentage connu est à 10 points du seuil ou moins, PACT propose
-  à l'utilisateur d'arrêter par prudence. Il n'arrête pas seul. Sans décision, il repropose à chaque palier de 15 minutes.
-- **Q2 — Qui arrête-t-on ?** « Tous les agents » : tous ceux du compte à la limite, ou tous ceux de PACT ? Un agent Codex n'est pas touché
-  par la limite d'un compte Claude. *Proposition* : tous les agents du compte concerné, dans tous les workspaces ouverts.
-- **Q3 — Comment pousser sans bloquer sur une autorisation ?** Au niveau « Actions sensibles », un `git push` de l'agent pose une question,
-  à laquelle personne ne répond peut-être. *Proposition* : l'agent ne fait que committer ; PACT pousse lui-même sa branche, puis attend le
-  seuil ; un échec de push est signalé, sans bloquer l'arrêt ; sans remote, le commit suffit.
-- **Q4 — Et les fenêtres par modèle (« semaine · Opus ») ?** 005 les lit quand le CLI les donne. *Proposition* : elles ont leur seuil comme
-  les autres, et l'arrêt reste par compte, pour rester simple.
-- **Q5 — Reprise et réglage de reprise automatique.** Le réglage existant `autoResume` fait partie des préférences d'autorisation, qu'un projet peut remplacer. Coupé, faut-il reprendre au reset ? Et
-  sans heure de réinitialisation ? *Proposition* : coupé, l'agent reste en pause avec un bouton « Reprendre » ; sans heure connue, l'attente
-  croissante existante s'applique ; à la reprise, l'orchestrateur repart d'abord.
-- **Q6 — Bornes et portée du réglage.** Par CLI, par compte, global ? *Proposition* : un réglage par CLI et par fenêtre, de 10 à 100 %. Un
-  seuil à 100 % ne protège pas d'une erreur de limite, et le niveau `critical` de 005 (95 %) ne sera plus vu : les deux restent inchangés,
-  l'interface le signale.
-- **Q7 — Reprise manuelle au-dessus du seuil, et nouveaux lancements.** L'utilisateur peut vouloir finir un travail. *Proposition* :
-  « Reprendre » reste possible et vaut dérogation jusqu'au prochain reset ; `launch_agent` est refusé pendant la pause ; le lanceur de
-  l'utilisateur avertit (005) sans bloquer.
-- **Q8 — Lecture qui saute par-dessus la bande de sauvegarde.** Une lecture peut passer de 85 à 92 %. La demande arrête au seuil, mais la
-  sauvegarde n'a pas eu lieu. *Proposition* : consigne immédiate, puis arrêt après 60 secondes au plus.
-- **Q9 — Et le non-commité d'un agent qui n'a pas répondu ?** *Proposition* : PACT ne committe rien à sa place : le worktree reste en l'état,
-  et l'agent est marqué « non sauvegardé », pour que l'utilisateur le sache.
+- **Q10 — Que faire de la sauvegarde pendant une livraison ?** 009 demande au dev de committer et PACT pousse sa branche. Or 008 fige le commit : un commit du dev fait tomber la demande, et le
+  pousser changerait la tête de la PR suivie, avec un commit sans verdict. *Proposition* : pour un agent dont le commit est figé, pas de consigne de sauvegarde ni de push ; le worktree reste en
+  l'état, marqué « non sauvegardé » s'il a des changements. Se pose aussi le sort des branches poussées ainsi sans PR, que 008 ne supprime pas : à voir avec 011.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -112,15 +107,15 @@ d'erreur.
 
 **Acceptance Scenarios**:
 
-1. **Given** un seuil à 90 %, **When** une lecture atteint 87 % sur une fenêtre, **Then** PACT demande une seule fois à chaque agent concerné,
-   pour cette fenêtre et jusqu'à son reset, de committer et pousser.
-2. **Given** un agent inactif, **When** la consigne part, **Then** il la reçoit dans son invite, sans passer sur une saisie de l'utilisateur.
+1. **Given** un seuil à 90 %, **When** une lecture atteint 87 % sur une fenêtre, **Then** PACT demande une seule fois à chaque agent du compte, dans tous les workspaces ouverts, pour cette fenêtre et jusqu'à son reset, de committer, puis pousse sa branche.
+2. **Given** un agent inactif, **When** la consigne part, **Then** il reçoit dans son invite le pointeur de 007, sans passer sur une saisie de l'utilisateur.
 3. **Given** un agent en plein tour, **When** la consigne part, **Then** elle lui arrive par la voie de 007, à sa prochaine fin d'outil.
 4. **Given** une lecture à 90 %, **When** PACT la reçoit, **Then** il arrête les agents concernés, qui sont en pause et non en erreur.
 5. **Given** un seuil par fenêtre, **When** la semaine atteint son seuil avant la fenêtre de 5 h, **Then** l'arrêt a lieu, et la pause nomme la
    semaine.
-6. **Given** un agent sans réponse à la consigne, **When** le seuil est atteint, **Then** il est arrêté quand même
-   [NEEDS CLARIFICATION: Q9 — non-commité].
+6. **Given** un agent sans réponse à la consigne, **When** le seuil est atteint, **Then** il est arrêté quand même, sans commit de PACT, et marqué « non sauvegardé ».
+7. **Given** une lecture qui passe de 85 à 92 %, **When** PACT la reçoit, **Then** la consigne part aussitôt, et l'arrêt a lieu après 60 secondes au plus.
+8. **Given** un agent Codex et un compte Claude à la limite, **When** l'arrêt a lieu, **Then** l'agent Codex continue.
 
 ---
 
@@ -142,6 +137,10 @@ d'erreur.
 4. **Given** PACT redémarré pendant une pause, **When** il rouvre, **Then** les agents restent en pause, la reprise est réarmée, et ils ne passent
    pas en « à reprendre ».
 5. **Given** une session sans identifiant connu, **When** la reprise est due, **Then** l'agent reste en pause, avec le moyen de le relancer.
+6. **Given** la reprise automatique coupée, **When** le reset arrive, **Then** l'agent reste en pause avec un bouton « Reprendre ».
+7. **Given** une reprise au reset, **When** elle a lieu, **Then** l'orchestrateur repart d'abord.
+8. **Given** une pause en cours, **When** l'utilisateur clique sur « Reprendre », **Then** l'agent repart et n'est plus arrêté avant le prochain reset.
+9. **Given** une pause en cours, **When** l'orchestrateur appelle `launch_agent`, **Then** l'appel est refusé ; le lanceur de l'utilisateur avertit sans bloquer.
 
 ---
 
@@ -155,9 +154,8 @@ Les agents travaillent, mais la jauge n'a rien lu depuis un moment. PACT ne sait
 
 **Acceptance Scenarios**:
 
-1. **Given** une lecture trop ancienne et des agents actifs, **When** la règle s'applique, **Then** PACT propose à l'utilisateur d'arrêter par
-   prudence [NEEDS CLARIFICATION: Q1 — règle à valider par l'utilisateur].
-2. **Given** cette proposition, **When** l'utilisateur la refuse, **Then** rien n'est arrêté, et la proposition revient selon la règle.
+1. **Given** une lecture trop ancienne et des agents actifs, **When** la règle s'applique, **Then** PACT propose à l'utilisateur d'arrêter par prudence, dès 15 minutes et à 10 points du seuil ou moins.
+2. **Given** cette proposition, **When** l'utilisateur la refuse, **Then** rien n'est arrêté, et la proposition revient au palier de 15 minutes suivant.
 3. **Given** cette proposition, **When** l'utilisateur l'accepte, **Then** les agents reçoivent la consigne de sauvegarde puis l'arrêt, comme au
    seuil.
 4. **Given** aucun agent actif, **When** la lecture vieillit, **Then** rien n'est proposé.
@@ -195,23 +193,23 @@ L'utilisateur baisse le seuil de la semaine à 80 % pour garder de la marge.
 
 ### Functional Requirements
 
-- **FR-001**: PACT MUST offrir un seuil pour chaque fenêtre exposée par le CLI, à 90 % par défaut, réglable, enregistré
-  [NEEDS CLARIFICATION: Q4 — fenêtres par modèle ; Q6 — portée et bornes].
+- **FR-001**: PACT MUST offrir un seuil pour chaque fenêtre exposée par le CLI, fenêtres par modèle comprises, à 90 % par défaut, réglable par CLI et par fenêtre de 10 à 100 %, enregistré. L'interface
+  MUST signaler qu'à 100 % le seuil ne protège pas d'une erreur de limite, et que le niveau `critical` de 005 (95 %) n'est plus vu.
 - **FR-002**: PACT MUST évaluer chaque fenêtre à chaque lecture, en tenant compte de sa réinitialisation. La fenêtre la plus chargée seule ne suffit
   pas.
-- **FR-003**: À seuil − 3 points sur une fenêtre, PACT MUST demander aux agents concernés de committer et pousser, une fois par fenêtre et par reset
-  [NEEDS CLARIFICATION: Q2 — agents concernés ; Q3 — push].
+- **FR-003**: À seuil − 3 points sur une fenêtre, PACT MUST demander à tous les agents du compte concerné, dans tous les workspaces ouverts, de committer, une fois par fenêtre et par reset. PACT MUST pousser
+  ensuite leur branche ; un échec de push est signalé sans bloquer l'arrêt, et sans remote le commit suffit [NEEDS CLARIFICATION: Q10 — pendant une livraison].
 - **FR-004**: La consigne MUST arriver à un agent en plein tour par la voie de 007, et rester transmissible malgré le plafond de réveils.
-- **FR-005**: Au seuil, PACT MUST arrêter les agents concernés, et les marquer « en pause », état distinct d'une erreur, avec la fenêtre et l'heure de
-  reprise [NEEDS CLARIFICATION: Q8 — saut de la bande de sauvegarde ; Q9 — non-commité].
+- **FR-005**: Au seuil, PACT MUST arrêter tous les agents du compte concerné, et les marquer « en pause », état distinct d'une erreur, avec la fenêtre et l'heure de reprise. Si la lecture a sauté la bande de
+  sauvegarde, PACT MUST envoyer la consigne aussitôt, puis arrêter après 60 secondes au plus. PACT MUST ne rien committer à la place d'un agent muet, et le marquer « non sauvegardé ».
 - **FR-006**: L'état « en pause » MUST survivre à un redémarrage de PACT, reprise réarmée.
-- **FR-007**: Au reset, PACT MUST reprendre chaque agent avec `--resume`, en réutilisant la reprise existante, et seulement quand toutes les fenêtres
-  au-dessus du seuil sont réinitialisées [NEEDS CLARIFICATION: Q5 — réglage coupé, heure inconnue, ordre].
+- **FR-007**: Au reset, PACT MUST reprendre chaque agent avec `--resume`, en réutilisant la reprise existante, l'orchestrateur d'abord, et seulement quand toutes les fenêtres au-dessus du seuil sont
+  réinitialisées. Reprise automatique coupée : l'agent reste en pause avec un bouton « Reprendre ». Heure inconnue : l'attente croissante existante s'applique.
 - **FR-008**: Après la reprise, un agent arrêté en plein tour MUST recevoir un pointeur pour continuer ; un agent inactif MUST ne pas être relancé.
-- **FR-009**: Sur une lecture trop ancienne, PACT MUST proposer un arrêt par prudence à l'utilisateur, et MUST ne pas arrêter de lui-même
-  [NEEDS CLARIFICATION: Q1 — règle à valider par l'utilisateur].
-- **FR-010**: PACT MUST permettre à l'utilisateur d'annuler une reprise prévue, et de reprendre à la main
-  [NEEDS CLARIFICATION: Q7 — dérogation au seuil, lancements pendant la pause].
+- **FR-009**: Si la dernière lecture a plus de 15 minutes, qu'au moins un agent travaille et que le dernier pourcentage connu est à 10 points du seuil ou moins, PACT MUST proposer à l'utilisateur d'arrêter par
+  prudence, MUST ne pas arrêter de lui-même, et sans décision MUST reproposer à chaque palier de 15 minutes.
+- **FR-010**: PACT MUST permettre à l'utilisateur d'annuler une reprise prévue, et de reprendre à la main : « Reprendre » vaut dérogation au seuil jusqu'au prochain reset. Pendant la pause, `launch_agent` MUST être
+  refusé, et le lanceur de l'utilisateur MUST avertir sans bloquer.
 - **FR-011**: Un CLI sans lecture de consommation MUST ne jamais être arrêté par cette règle.
 - **FR-012**: La pause MUST ne consommer ni tour de boucle, ni rapport manquant, et l'orchestrateur MUST en être informé à la reprise.
 - **FR-013**: Chaque consigne, arrêt et reprise MUST figurer au journal de 007, avec la fenêtre et le pourcentage.
@@ -227,7 +225,7 @@ L'utilisateur baisse le seuil de la semaine à 80 % pour garder de la marge.
 
 ### Measurable Outcomes
 
-- **SC-001**: Sur tous les scénarios de test, aucun agent suivi n'atteint le seuil sans être arrêté dans les 5 s qui suivent la lecture.
+- **SC-001**: Sur tous les scénarios de test, aucun agent suivi n'atteint le seuil sans être arrêté dans les 5 s qui suivent la lecture, ou 60 s au plus si la lecture a sauté la bande de sauvegarde.
 - **SC-002**: Un agent qui répond à la consigne a son travail commité avant l'arrêt, dès qu'une bande de 3 points a été lue.
 - **SC-003**: Un agent en pause n'est jamais présenté comme en erreur, même après un redémarrage de PACT.
 - **SC-004**: La reprise a lieu dans la minute qui suit le reset de la dernière fenêtre en cause, sans geste de l'utilisateur.
@@ -236,7 +234,7 @@ L'utilisateur baisse le seuil de la semaine à 80 % pour garder de la marge.
 
 ## Assumptions
 
-- La bande de 3 points est décidée. Elle peut se traverser en une lecture, d'où Q8.
+- La bande de 3 points est décidée. Elle peut se traverser en une lecture : voir FR-005.
 - Les heures de réinitialisation viennent des lectures de 005 ; sans elles, l'attente croissante de `auto-resume.ts` s'applique.
 - Les seuils `warn` et `critical` de 005 restent tels quels : ils alertent, celui-ci arrête.
 - `autoResume` est lu au niveau existant (`permissionPreferenceSchema`).

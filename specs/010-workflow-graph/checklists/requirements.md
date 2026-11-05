@@ -31,5 +31,5 @@
 
 ## Notes
 
-- 8 questions ouvertes attendent l'utilisateur. Q1 (déclaratif ou code) et Q2 (qui fait avancer le workflow) décident de la forme du reste.
+- 2 questions ouvertes attendent l'utilisateur (Q9, Q10) : les 8 autres sont décidées.
 - Dépend de 007 et 008 : leurs réponses peuvent changer FR-014 à FR-016.

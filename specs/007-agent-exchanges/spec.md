@@ -96,57 +96,43 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
   description, nom de branche, journal de CI d'un fork) est non fiable et ne doit jamais atteindre un agent, ni être lu,
   récupéré, exécuté ou fusionné par PACT.
 
-Le passage `speckit-clarify` n'a interrogé personne, à la demande de l'utilisateur : ce qui reste ouvert
-est listé sous « Questions ouvertes » et marqué [NEEDS CLARIFICATION] là où il joue.
+Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
+
+- Q1: Quelles valeurs ? → A: 500 caractères par message ; 5 messages par agent et par tour ; regroupement de 5 s ; 20 réveils par
+  heure et par agent ; boucle à 3 allers-retours entre les deux mêmes agents sans nouveau commit ; `wait_for_agents` à 60 s au plus ;
+  20 événements de 200 caractères rendus.
+- Q2: Une consigne de l'orchestrateur passe-t-elle par le pointeur ? → A: oui. Elle devient un message `action` lu par `get_events`,
+  avec une seule ligne dans l'invite.
+- Q3: Un CLI sans MCP ? → A: PACT écrit ses événements dans un fichier de son worktree exclu de git, et le pointeur nomme ce fichier.
+- Q4: Le type des autres événements ? → A: `action` pour `report-missing`, résultat d'une demande de livraison ou d'intégration,
+  `publish`, `mockup` ; `info` pour `turn-finished`, `closed`, `awaiting-answer`, `overlap`.
+- Q5: Qui écrit à qui ? → A: le dev et le testeur ne s'écrivent dans aucun sens, ni message ni `send_message` : seuls le verdict
+  structuré et git passent entre eux. L'orchestrateur écrit à tous, `ask_orchestrator` pour tout agent, `send_message` entre les autres
+  agents de rôle avec copie à l'orchestrateur ; sans orchestrateur, envoi refusé avec sa raison. (Voir Q13.)
+- Q6: Après l'escalade d'une boucle ? → A: les messages entre ces deux agents sont refusés jusqu'à la décision de l'utilisateur
+  (« Laisser reprendre » ou « Couper ») ; les autres échanges continuent.
+- Q7: Quelle limite coupe les réveils ? → A: le niveau `critical` de 005 tant que 009 n'est pas là, puis le seuil d'arrêt de 009. Les
+  événements restent lisibles ; le pointeur part à la reprise.
+- Q8: Sans réseau, et le lanceur de l'utilisateur ? → A: `fetch` en échec : départ du dernier `origin/main` connu, avec l'avertissement
+  dans la réponse ; sans remote : main local ; `baseBranch` explicite respectée ; le lanceur de l'utilisateur suit la même règle.
+- Q9: Le journal survit-il ? → A: gardé dans le workspace, 500 messages par workspace ; les événements non lus repartent par un
+  pointeur à la reprise.
+- Q10: Une saisie abandonnée ? → A: PACT ne tape jamais tant que l'invite n'est pas vide, et signale après 2 minutes qu'un réveil attend
+  sa saisie ; les hooks n'écrivent pas dans l'invite.
+- Q11: `start_loop` ? → A: PACT envoie au testeur la consigne d'écrire les tests de l'issue, puis au dev la sienne au premier rapport du
+  testeur ; la réponse de l'outil dit ce qui est parti et à qui.
+- Q12: Le shell d'un agent ? → A: les skills interdisent de lire le contenu d'un tiers, et les règles d'autorisation de PACT font passer ces
+  commandes par la décision de l'utilisateur, sur les CLI qui ont ces règles. Sur les autres, la garantie reste partielle, et c'est dit à
+  l'utilisateur.
 
 ## Questions ouvertes
 
-Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
+Une seule question, née de la décision Q5 : l'agent spec ne la tranche pas.
 
-- **Q1 — Valeurs des plafonds.** Longueur d'un message, messages par agent et par tour, regroupement,
-  réveils par heure (par agent ou par workspace), nombre d'allers-retours qui fait une boucle, délai
-  maximal de `wait_for_agents`, nombre d'événements et longueur de résumé rendus. *Proposition* : 500
-  caractères ; 5 messages ; 5 s ; 20 réveils par heure et par agent ; boucle à 3 allers-retours entre les
-  deux mêmes agents sans nouveau commit ; 60 s au plus ; 20 événements de 200 caractères.
-- **Q2 — `send_prompt` passe-t-il aussi par le pointeur ?** « Jamais le texte d'un agent » vise le réveil,
-  mais une consigne de l'orchestrateur est aussi le texte d'un agent, et le défaut `<pasted_content>` ne
-  disparaît pas si elle reste tapée. *Proposition* : toute consigne de l'orchestrateur devient un message
-  `action` lu par `get_events`, avec dans l'invite une ligne unique ; l'agent lit la consigne par son
-  outil, sans emballage.
-- **Q3 — Un CLI sans MCP (générique) lit-il ses événements ?** Il n'a pas `get_events`. *Proposition* :
-  PACT écrit ses événements dans un fichier de son worktree exclu de git, et le pointeur nomme ce fichier.
-- **Q4 — Quel type pour les événements que la demande ne classe pas ?** La demande classe question,
-  rapport, erreur et fin de boucle en `action`. *Proposition* : `action` pour `report-missing`, résultat
-  d'une demande de livraison ou d'intégration, décision sur des issues publiées (`publish`) ou une maquette
-  (`mockup`) ; `info` pour `turn-finished` (un rapport le suit déjà), `closed`, `awaiting-answer` (elle est
-  à l'utilisateur) et `overlap`.
-- **Q5 — Qui peut écrire à qui ?** *Proposition* : l'orchestrateur à tous ; `ask_orchestrator` pour tout
-  agent ; `send_message` entre agents de rôle, sauf le testeur, avec copie à l'orchestrateur. Sans
-  orchestrateur dans le workspace, l'envoi est refusé avec sa raison.
-- **Q6 — Après l'escalade d'une boucle entre deux agents, que devient l'échange ?** *Proposition* : les
-  messages entre ces deux agents sont refusés jusqu'à la décision de l'utilisateur (« Laisser reprendre »
-  ou « Couper ») ; les autres échanges continuent.
-- **Q7 — Que signifie « limite de consommation atteinte » pour couper les réveils ?** 007 peut être livrée
-  avant 009. *Proposition* : niveau `critical` de 005 tant que 009 n'est pas là, puis seuil d'arrêt de 009.
-  Les événements restent lisibles ; le pointeur part à la reprise.
-- **Q8 — `launch_agent` sans réseau, et le lanceur de l'utilisateur ?** La demande vise `launch_agent`.
-  *Proposition* : `fetch` en échec → départ du dernier `origin/main` connu, avec l'avertissement dans la
-  réponse ; sans remote → main local ; une `baseBranch` explicite est respectée ; le lanceur de
-  l'utilisateur suit la même règle, puisqu'il passe par le même lancement.
-- **Q9 — Le journal et les événements survivent-ils à un redémarrage de PACT ?** Aujourd'hui, ils sont en
-  mémoire. *Proposition* : gardés dans le workspace, 500 messages par workspace ; les événements non lus
-  repartent par un pointeur à la reprise.
-- **Q10 — Une saisie abandonnée peut-elle bloquer le réveil indéfiniment ?** *Proposition* : PACT ne tape
-  jamais tant que l'invite n'est pas vide, et signale à l'utilisateur, après 2 minutes, qu'un réveil attend
-  sa saisie ; le hook Stop et le hook PostToolUse ne sont pas concernés, ils n'écrivent pas dans l'invite.
-- **Q11 — `start_loop` envoie-t-il les consignes, ou dit-il seulement qu'il ne les envoie pas ?** La demande
-  nomme les deux défauts. *Proposition* : PACT envoie au testeur la consigne d'écrire les tests de l'issue,
-  puis au dev la sienne au premier rapport du testeur (tests d'abord, 004) ; la réponse de l'outil dit ce
-  qui est parti et à qui.
-- **Q12 — Que faire du shell d'un agent ?** PACT contrôle ce qu'il transmet, mais un agent peut lancer `gh pr view`, ou un
-  `git fetch` d'une référence de PR, depuis son terminal. FR-027 ne tient donc pas par les seuls outils d'échange.
-  *Proposition* : les skills l'interdisent, et les règles d'autorisation de PACT font passer ces commandes par la décision de
-  l'utilisateur, sur les CLI qui ont ces règles. Sur les autres, la limite est dite à l'utilisateur : la garantie reste partielle.
+- **Q13 — Le dev et le testeur peuvent-ils utiliser `send_message` vers un autre rôle ?** « Entre les autres agents de rôle » se lit de deux
+  façons : (a) toutes les paires sauf dev ↔ testeur, donc un testeur peut écrire au design, et deux devs entre eux ; (b) seuls les rôles autres
+  que dev et testeur ont l'outil. *Proposition* : (a), car la règle vise la paire dev ↔ testeur ; à noter qu'un tiers pourrait alors servir de
+  relais entre eux, ce qui reste visible par la copie à l'orchestrateur.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -175,6 +161,9 @@ qu'aucun appel à `wait_for_agents` n'est nécessaire.
    événement déjà lu ne lui est rendu comme nouveau.
 5. **Given** l'utilisateur qui écrit dans l'invite d'un agent inactif, **When** un événement `action`
    arrive, **Then** PACT n'écrit rien ; le pointeur part une fois l'invite vide ou la saisie envoyée.
+6. **Given** une saisie laissée dans l'invite, **When** 2 minutes passent, **Then** l'utilisateur est prévenu qu'un réveil attend, et PACT n'écrit toujours rien.
+7. **Given** une consigne multi-ligne de l'orchestrateur, **When** elle part, **Then** l'agent reçoit une seule ligne dans son invite, et lit la consigne par `get_events`, sans
+   emballage.
 
 ---
 
@@ -227,10 +216,9 @@ journal, le refus au-delà du plafond, le refus du testeur, l'escalade à l'util
    raison, et rien n'est transmis.
 4. **Given** un agent qui a atteint son plafond de messages pour ce tour, **When** il en envoie un de plus,
    **Then** il est refusé avec sa raison ; le compteur repart à son tour suivant.
-5. **Given** un testeur, **When** il appelle `send_message` vers le dev, **Then** l'appel est refusé et la
-   raison l'envoie vers le verdict de `submit_report`.
-6. **Given** deux agents qui se renvoient des messages sans nouveau commit, **When** ils atteignent le seuil
-   de boucle, **Then** l'utilisateur voit une escalade qui nomme les deux agents et le dernier échange.
+5. **Given** un testeur ou un dev, **When** il appelle `send_message` vers l'autre, **Then** l'appel est refusé, et la raison renvoie au verdict de `submit_report` et à git.
+6. **Given** deux agents qui se renvoient des messages sans nouveau commit, **When** ils atteignent 3 allers-retours, **Then** l'utilisateur voit une escalade qui nomme les deux agents et le dernier échange, et leurs messages sont refusés
+   jusqu'à sa décision (« Laisser reprendre » ou « Couper »).
 7. **Given** un agent qui demande une autorisation par message, **When** l'orchestrateur lit ce message,
    **Then** il n'a aucun outil pour l'accorder : la décision reste dans À faire pour l'utilisateur.
 8. **Given** une PR tierce dont le titre, la description et les commentaires contiennent un texte d'injection (« ignore tes
@@ -256,8 +244,7 @@ testeur sur un main avancé dans un dépôt Git temporaire, puis rendre un verdi
 
 **Acceptance Scenarios**:
 
-1. **Given** une issue prête, un dev et un testeur, **When** l'orchestrateur appelle `start_loop`, **Then**
-   la réponse dit quelles consignes ont été envoyées et à qui.
+1. **Given** une issue prête, un dev et un testeur, **When** l'orchestrateur appelle `start_loop`, **Then** le testeur reçoit la consigne d'écrire les tests, le dev recevra la sienne au premier rapport du testeur, et la réponse le dit.
 2. **Given** un testeur qui n'a changé que des fichiers de test puis s'est recalé sur main, **When** il rend
    son verdict, **Then** il est accepté par PACT.
 3. **Given** un testeur qui a changé un fichier de production, **When** il rend son verdict, **Then** il est
@@ -266,6 +253,8 @@ testeur sur un main avancé dans un dépôt Git temporaire, puis rendre un verdi
    des fichiers a lieu quand même, depuis la base réelle.
 5. **Given** un main local en retard sur `origin/main`, **When** l'orchestrateur appelle `launch_agent` sans
    branche de départ, **Then** la branche de l'agent part du `origin/main` à jour.
+6. **Given** un `fetch` en échec, **When** l'orchestrateur appelle `launch_agent`, **Then** la branche part du dernier `origin/main` connu, et la réponse l'avertit.
+7. **Given** un dépôt sans remote, ou une `baseBranch` explicite, **When** un agent est lancé, **Then** il part du main local, ou de cette branche.
 
 ---
 
@@ -313,10 +302,10 @@ l'outil, puis le skill livré.
   une consigne de l'utilisateur.
 - Le testeur fait un `git merge` de la branche du dev : la base réelle ne l'excuse pas, le verdict reste
   rejeté, et la raison lui dit de revenir à ses seuls tests.
-- Le `fetch` échoue ou le dépôt n'a pas de remote : voir Q8.
+- Le `fetch` échoue ou le dépôt n'a pas de remote : voir FR-022.
 - Le `fetch` de `launch_agent` ne vise que la branche principale : aucune référence de PR tierce n'est récupérée.
 - Un agent recopie dans un message un texte trouvé par lui-même : PACT ne peut pas le reconnaître. Le texte reste une donnée
-  rapportée et bornée, et la source est traitée par Q12.
+  rapportée et bornée, et la source relève de FR-027.
 
 ## Requirements *(mandatory)*
 
@@ -324,44 +313,40 @@ l'outil, puis le skill livré.
 
 **Messages**
 
-- **FR-001**: PACT MUST donner à tout agent de rôle les outils `ask_orchestrator` et `get_events`, et, selon la
-  matrice des droits, `send_message` [NEEDS CLARIFICATION: Q5 — qui peut écrire à qui ?].
-- **FR-002**: Un message MUST être typé `action` ou `info`, avoir un expéditeur, un destinataire, une heure, et
-  respecter une longueur maximale [NEEDS CLARIFICATION: Q1 — valeur].
+- **FR-001**: PACT MUST donner à tout agent de rôle les outils `ask_orchestrator` et `get_events`. L'orchestrateur MUST pouvoir écrire à tous. `send_message`
+  MUST relier les autres agents de rôle, avec copie à l'orchestrateur [NEEDS CLARIFICATION: Q13 — portée pour le dev et le testeur]. Sans orchestrateur dans le
+  workspace, l'envoi MUST être refusé avec sa raison.
+- **FR-002**: Un message MUST être typé `action` ou `info`, avoir un expéditeur, un destinataire, une heure, et tenir en 500 caractères.
 - **FR-003**: `ask_orchestrator` et `send_message` MUST rendre la main aussitôt : aucune attente bloquante.
-- **FR-004**: Tout message entre agents MUST être copié à l'orchestrateur du workspace et inscrit au journal, et
-  l'utilisateur MUST pouvoir lire ce journal dans PACT [NEEDS CLARIFICATION: Q9 — persistance].
-- **FR-005**: PACT MUST refuser, avec sa raison, un message au-delà du plafond par agent et par tour
-  [NEEDS CLARIFICATION: Q1 — valeur].
-- **FR-006**: PACT MUST détecter deux agents qui bouclent et l'escalader à l'utilisateur
-  [NEEDS CLARIFICATION: Q1 — critère ; Q6 — suite de l'échange].
-- **FR-007**: Le testeur MUST ne pouvoir parler au dev que par son verdict : `send_message` du testeur vers le
-  dev est refusé. Un verdict `defects` accepté par PACT MUST parvenir au dev comme un message `action`.
+- **FR-004**: Tout message entre agents MUST être copié à l'orchestrateur du workspace et inscrit au journal, et l'utilisateur MUST pouvoir lire ce journal dans PACT. Le
+  journal MUST être gardé dans le workspace, 500 messages par workspace, et les événements non lus MUST repartir par un pointeur à la reprise.
+- **FR-005**: PACT MUST refuser, avec sa raison, un message au-delà de 5 par agent et par tour.
+- **FR-006**: À 3 allers-retours entre les deux mêmes agents sans nouveau commit, PACT MUST escalader à l'utilisateur, et refuser les messages entre ces deux agents jusqu'à sa
+  décision (« Laisser reprendre » ou « Couper ») ; les autres échanges continuent.
+- **FR-007**: Le dev et le testeur MUST ne s'écrire dans aucun sens : `send_message` entre eux est refusé, seuls le verdict structuré et git passent. Un verdict `defects` accepté par
+  PACT MUST parvenir au dev comme un message `action`.
 - **FR-008**: Aucun outil d'échange ne MUST permettre d'accorder une autorisation ou de prendre une décision de
   l'utilisateur : ces demandes restent dans sa zone d'action.
-- **FR-009**: `get_events` MUST rendre les événements non lus de l'agent, une seule fois, avec un résumé borné, et
-  permettre de relire le détail du journal [NEEDS CLARIFICATION: Q1 — bornes].
+- **FR-009**: `get_events` MUST rendre les événements non lus de l'agent, une seule fois, 20 au plus, avec un résumé de 200 caractères au plus, et permettre de relire le détail du
+  journal.
 
 **Réveil**
 
-- **FR-010**: PACT MUST réveiller le destinataire d'un message `action` (au moins question, rapport, erreur, fin de
-  boucle), et MUST ne pas le réveiller pour un message `info`
-  [NEEDS CLARIFICATION: Q4 — classement des autres événements].
-- **FR-011**: PACT MUST regrouper les événements d'un destinataire pendant un court délai, et transmettre un seul
-  pointeur qui en donne le nombre et nomme `get_events` [NEEDS CLARIFICATION: Q1 — délai ; Q3 — CLI sans MCP].
+- **FR-010**: PACT MUST réveiller le destinataire d'un message `action` : question, rapport, erreur, fin de boucle, `report-missing`, résultat d'une demande de livraison ou d'intégration,
+  `publish`, `mockup`. Il MUST ne pas le réveiller pour un message `info` : `turn-finished`, `closed`, `awaiting-answer`, `overlap`.
+- **FR-011**: PACT MUST regrouper les événements d'un destinataire pendant 5 s, et transmettre un seul pointeur qui en donne le nombre et nomme `get_events`. Pour un CLI sans MCP, PACT MUST
+  écrire les événements dans un fichier de son worktree exclu de git, et le pointeur MUST nommer ce fichier.
 - **FR-012**: Avant d'en dépendre, l'équipe MUST valider sur le CLI Claude Code installé (2.1.318 à la date de cette
   spec ; l'adapter est caractérisé sur 2.1.281) que les hooks PostToolUse et Stop remettent un texte à l'agent, par
   une session pilotée sans aucune touche simulée, et consigner le résultat dans la recherche du plan. Si la
   validation échoue, le réveil en plein tour retombe sur la fin de tour.
 - **FR-013**: Pour un agent inactif, le pointeur MUST être une seule ligne tapée dans son invite ; pour un agent en
   plein tour avec hook, il MUST passer par le hook ; sans hook équivalent, il MUST être tapé à la fin du tour.
-- **FR-014**: PACT MUST ne jamais écrire dans l'invite d'un agent tant que l'utilisateur y a une saisie en cours, ni
-  pendant que l'agent attend une réponse [NEEDS CLARIFICATION: Q10 — saisie abandonnée].
-- **FR-015**: PACT MUST ne jamais taper le texte d'un agent dans le cadre d'un réveil
-  [NEEDS CLARIFICATION: Q2 — cas de `send_prompt`].
-- **FR-016**: PACT MUST appliquer un plafond de réveils par heure, et cesser les réveils quand la limite de
-  consommation est atteinte, sans perdre les événements
-  [NEEDS CLARIFICATION: Q1 — valeur ; Q7 — définition de la limite].
+- **FR-014**: PACT MUST ne jamais écrire dans l'invite d'un agent tant qu'elle n'est pas vide, ni pendant que l'agent attend une réponse. Après 2 minutes, il MUST signaler à l'utilisateur
+  qu'un réveil attend sa saisie.
+- **FR-015**: PACT MUST ne jamais taper le texte d'un agent. Une consigne de l'orchestrateur MUST devenir un message `action` lu par `get_events`, avec une seule ligne dans l'invite.
+- **FR-016**: PACT MUST appliquer un plafond de 20 réveils par heure et par agent, et cesser les réveils à la limite de consommation : niveau `critical` de 005 tant que 009 n'est pas
+  livrée, puis seuil d'arrêt de 009. Aucun événement n'est perdu, et le pointeur part à la reprise.
 - **FR-017**: Une consigne de sauvegarde de 009 MUST rester transmissible malgré le plafond de réveils : un arrêt à
   la limite ne doit pas dépendre d'un plafond atteint.
 - **FR-018**: Un tour prolongé par un réveil MUST ne pas être compté comme une fin de tour, ni déclencher
@@ -369,22 +354,20 @@ l'outil, puis le skill livré.
 
 **Attente et skill**
 
-- **FR-019**: `wait_for_agents` MUST avoir un délai maximal court, rendre les événements non lus depuis la dernière
-  lecture, partager cette lecture avec `get_events`, et borner le nombre et la taille de ce qu'il rend
-  [NEEDS CLARIFICATION: Q1 — valeurs].
+- **FR-019**: `wait_for_agents` MUST attendre 60 s au plus, rendre les événements non lus depuis la dernière lecture, partager cette lecture avec `get_events`, et rendre 20 événements de 200
+  caractères au plus.
 - **FR-020**: Le skill `pact-orchestrator`, le contrat commun et les skills de rôle MUST décrire les échanges et le
   réveil comme méthode normale, et `wait_for_agents` comme secours.
 
 **Défauts**
 
-- **FR-021**: `start_loop` MUST dire dans sa réponse quelles consignes sont parties et à qui
-  [NEEDS CLARIFICATION: Q11 — envoi par PACT ou non].
-- **FR-022**: `launch_agent` sans branche de départ MUST faire un `fetch` et partir de `origin/<branche principale>`
-  [NEEDS CLARIFICATION: Q8 — échec du `fetch`, lanceur de l'utilisateur].
+- **FR-021**: À `start_loop`, PACT MUST envoyer au testeur la consigne d'écrire les tests de l'issue, puis au dev la sienne au premier rapport du testeur, et la réponse de l'outil MUST dire ce qui
+  est parti et à qui.
+- **FR-022**: `launch_agent` sans branche de départ MUST faire un `fetch` et partir de `origin/<branche principale>`. `fetch` en échec : départ du dernier `origin/main` connu, avec
+  l'avertissement dans la réponse. Sans remote : main local. Une `baseBranch` explicite MUST être respectée. Le lanceur de l'utilisateur MUST suivre la même règle.
 - **FR-023**: Le contrôle des fichiers du testeur MUST partir de la base réelle de sa branche avec la branche
   principale, calculée à chaque verdict : un recalage ne le fait plus échouer, et un redémarrage ne le saute plus.
-- **FR-024**: Une consigne multi-ligne MUST parvenir à l'agent comme une consigne, sans emballage `<pasted_content>`
-  [NEEDS CLARIFICATION: Q2 — voie retenue].
+- **FR-024**: Une consigne multi-ligne MUST parvenir à l'agent comme une consigne, sans emballage `<pasted_content>`, par la voie de FR-015.
 - **FR-025**: La fin de sortie des tests et les listes de fichiers MUST ne plus figurer dans le résumé d'un
   événement : elles se lisent à la demande.
 
@@ -393,8 +376,8 @@ l'outil, puis le skill livré.
 - **FR-026**: Aucun message, événement, pointeur, consigne ni entrée de journal créé par PACT MUST ne contenir de contenu écrit par un tiers
   (PR, issue, commentaire, description, nom de branche, journal de CI d'un fork). Un événement sur une PR suivie (008) MUST se limiter à
   ses données de structure.
-- **FR-027**: Les skills et les consignes de PACT MUST interdire à un agent de lire ou de récupérer ce contenu
-  [NEEDS CLARIFICATION: Q12 — le shell de l'agent, et ce que PACT peut garantir].
+- **FR-027**: Les skills et les consignes de PACT MUST interdire à un agent de lire ou de récupérer ce contenu, et les règles d'autorisation de PACT MUST faire passer ces commandes par la décision de
+  l'utilisateur, sur les CLI qui ont ces règles. Sur les autres, la garantie reste partielle, et PACT MUST le dire à l'utilisateur.
 
 ### Key Entities
 
@@ -426,6 +409,6 @@ l'outil, puis le skill livré.
 
 - « Projet » et « workspace » désignent la même chose (voir 006).
 - Les tests automatisés utilisent le faux CLI ; aucun test ne pilote un vrai CLI avec des touches simulées.
-- Les durées des critères de succès sont des propositions de l'agent spec, liées à Q1.
+- Les 10 s de SC-002 sont une proposition de l'agent spec, cohérente avec le regroupement de 5 s décidé.
 - Le service Git gagnera `fetch` ; `gh` reste réservé à 004 et 008.
 - Le contrat MCP des outils existants ne change que là où cette spec le dit.

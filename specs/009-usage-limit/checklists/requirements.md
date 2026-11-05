@@ -32,4 +32,4 @@
 ## Notes
 
 - `--resume` et les fichiers de départ sont nommés par la demande elle-même : les cases sur les détails d'implémentation restent décochées.
-- 9 questions ouvertes attendent l'utilisateur. Q1 (arrêt par prudence) est à valider à sa demande.
+- 1 question ouverte attend l'utilisateur (Q10) : les 9 autres sont décidées.

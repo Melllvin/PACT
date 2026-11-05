@@ -46,7 +46,7 @@ fermeture de son agent.
 | Index temporaires | `<tmp>/pact-index-<uuid>` | `git-service.ts:211`, `:397` | Retirés après usage | Non listés, sauf restes |
 
 **Sans stockage disque** : journal d'un agent (`pty/pty-manager.ts:118`), journal d'actions de l'orchestrateur
-(`orchestrator-service.ts:51`), lectures de consommation (`usage/usage-service.ts`), file d'événements : tout est en mémoire.
+(`orchestrator-service.ts:51`), lectures de consommation (`usage/usage-service.ts`), file d'événements : tout est en mémoire. À venir : 007 gardera le journal des messages (500 par workspace) et un fichier d'événements pour les CLI sans MCP, 010 un `.pact/workflow.yaml` : l'inventaire devra les reprendre.
 
 **Hors de portée, jamais touché** : dépôt principal et son `.git`, en dehors des entrées mortes ; `~/.claude` et `~/.codex`, que PACT lit
 seulement (`agents/hook-bridge.ts:53`, `agents/agent-manager.ts:834`, `usage/codex-rollout.ts`).
@@ -103,7 +103,7 @@ Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
 - **Q1 — Où placer l'interface ?** *Proposition* : un onglet « Stockage » dans les réglages globaux, ouvert aussi depuis le compte de
   worktrees de l'accueil, qui filtre alors sur ce projet.
 - **Q2 — PACT supprime-t-il les branches distantes ?** *Proposition* : jamais par défaut ; une case par élément, décochée, seulement pour la
-  branche d'une PR suivie et fusionnée, jamais `main` ni une branche d'une PR ouverte. Elle s'aligne sur 008-Q26.
+  branche d'une PR suivie et fusionnée, jamais `main` ni une branche d'une PR ouverte. Elle complète 008 FR-043, qui supprime déjà cette branche à la fusion si sa tête est encore le commit fusionné.
 - **Q3 — Une alerte de place disque ?** *Proposition* : un avis discret quand les worktrees récupérables dépassent 5 Go, réglable ou coupable ;
   aucune suppression ne s'ensuit. Le disque plein n'est pas surveillé.
 - **Q4 — Un nettoyage périodique ?** *Proposition* : non. 008 nettoie déjà à la fusion ; « Nettoyer » reste un geste de l'utilisateur.
@@ -125,7 +125,7 @@ Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
 - **Q10 — Qu'est-ce que la date du dernier changement ?** *Proposition* : la plus récente entre le dernier commit de la branche et la modification d'un
   fichier suivi ou non suivi, hors fichiers ignorés.
 - **Q11 — Un fichier ignoré est-il « perdu » à dire ?** *Proposition* : la confirmation donne leur taille totale et cite ceux qui correspondent à `.env*` ;
-  mêmes règles que 008-Q25.
+  mêmes règles que 008 FR-034 : les fichiers ignorés ne comptent pas, sauf `.env*`.
 - **Q12 — Un lot qui échoue en partie ?** *Proposition* : les éléments passent un à un, sans arrêt au premier échec ; le résultat liste les réussites et
   les échecs avec leur raison.
 - **Q13 — Sans `gh` ou sans réseau, que dit l'état de la PR ?** *Proposition* : « PR inconnue » ; l'élément n'est pas sûr, mais reste supprimable à la main.

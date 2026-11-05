@@ -117,73 +117,51 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
 - Q: Orchestrateur ? → A: jamais automatique.
 - Q: Worktrees déjà accumulés ? → A: l'action « Nettoyer » sort de cette spec et passe dans 011.
 
-Le passage `speckit-clarify` n'a interrogé personne, à la demande de l'utilisateur : ce qui reste ouvert est listé sous
-« Questions ouvertes » et marqué [NEEDS CLARIFICATION] là où il joue.
+Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
+
+- Q1: Le recalage change le commit : le verdict tient-il ? → A: le commit figé F reste la référence du verdict. Un recalage par PACT sans conflit donne R, même contenu rejoué : le verdict passe de F à R,
+  les tests de PACT sont relancés sur R, et la CI doit valider R. Tout commit qui ne vient pas de PACT fait tomber la demande. Un conflit résolu par le dev demande un nouveau verdict.
+- Q2: Qu'est-ce qui compte comme aller-retour au recalage ? → A: tests de PACT rouges après recalage et conflit résolu par le dev comptent. Un recalage sans conflit ne compte pas, mais 3 recalages de suite préviennent
+  l'utilisateur.
+- Q3: Un travail sans boucle, et « Intégrer » ? → A: avec remote, « Intégrer » devient « Livrer », qui demande une boucle. L'utilisateur garde le geste explicite « Créer la PR sans verdict », qui passe toujours par sa relecture,
+  même Auto activé. (Voir Q27, Q29.)
+- Q4: Remote non GitHub, `gh` absent ou non connecté ? → A: demande refusée avec sa raison et le moyen d'y remédier ; pas de repli sur la fusion locale.
+- Q5: CI configurée sans check visible ? → A: prévenir après 10 min ; À faire propose « Attendre encore » ou « Relire » ; la fusion Auto reste interdite tant qu'aucun check n'est lu, et seule la relecture de l'utilisateur en sort.
+  (Voir Q28.)
+- Q6: Qu'est-ce qu'une CI verte ? → A: tous les checks visibles sur le commit exact, et tous les requis, sont terminés. Verts : `success`, `neutral`, `skipped`. Rouge : `failure`. `cancelled`, `timed_out`, `stale` : ni vert ni rouge,
+  relance d'un job au plus puis prévenir l'utilisateur, sans compter d'aller-retour.
+- Q7: Auto activé après coup ? → A: une PR verte en attente de relecture fusionne à l'activation, si toutes les conditions tiennent. Une PR refusée revient à l'utilisateur une fois, car son refus est une décision explicite.
+- Q8: Les consignes de peaufinage, et un `defects` en passe ? → A: un texte par projet dans les paramètres, complété par l'orchestrateur. Un `defects` reprend la même passe sans compter d'aller-retour. Passes épuisées avec des
+  défauts : l'utilisateur décide, jamais de fusion.
+- Q9: Bornes des réglages ? → A: allers-retours de 1 à 10 ; passes de 0 à 5.
+- Q10: Après la fusion, et si l'utilisateur ferme un agent avant ? → A: à la fusion, PACT ferme le dev et le testeur ; leurs worktrees et branches locales suivent FR-034 et FR-035, la branche distante FR-043. `close_agent` de
+  l'orchestrateur est refusé en cours de livraison. Si l'utilisateur ferme lui-même un agent, PACT le prévient, puis la demande tombe, la boucle passe à `closed`, la PR reste ouverte et l'orchestrateur est réveillé.
+- Q11: Issue non publiée, titre et corps de la PR ? → A: titre et message donnés dans la demande ; corps avec l'identifiant de l'issue, son lien de fermeture si elle est publiée, son texte sinon, et le verdict.
+- Q12: Quelle branche cible ? → A: la branche de départ de l'agent si elle est explicite, sinon la branche principale.
+- Q13: Qu'exige « les tests du testeur présents dans la branche du dev » ? → A: le dev récupère par git les tests de la branche du testeur sur consigne de PACT ; la barrière compare chaque fichier de test changé par le testeur à la
+  version du commit figé : contenu identique exigé.
+- Q14: Qui peut demander la livraison ? → A: l'orchestrateur par l'outil `request_delivery`, et l'utilisateur par un bouton, sur une boucle acceptée.
+- Q15: Comment établir « le compte de l'utilisateur » ? → A: le login de `gh` est noté à la création de la PR, et l'auteur de la PR doit lui être égal. Un changement de compte en cours de suivi arrête la fusion et prévient
+  l'utilisateur. Une PR ouverte à la main par l'utilisateur n'est pas suivie.
+- Q16: Le journal de CI de sa propre PR ? → A: PACT ne transmet que le nom et la conclusion des checks ; le journal d'un check d'une PR suivie reste lisible par le dev, car il vient d'une branche du dépôt. (Voir Q30.)
+- Q23: Qu'est-ce qui ne déclenche jamais de suppression ? → A: une PR d'un autre auteur ne déclenche jamais rien ; `close_agent` reste sans suppression : un agent ne peut pas supprimer de worktree.
+- Q24: FR-034 et FR-035 après un recalage ? → A: PACT amène le worktree du dev sur R après le push ; pour le testeur, « contenu » se lit par le contenu de ses fichiers de test, et non par l'ascendance.
+- Q25: Un fichier ignoré compte-t-il pour « propre » ? → A: non, sauf ceux qui correspondent à `.env*`, qui font passer par À faire.
+- Q26: La branche distante à la fusion ? → A: supprimée pour la branche d'une PR suivie, si sa tête est encore le commit fusionné ; sinon elle reste, et PACT le dit.
 
 ## Questions ouvertes
 
-Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
+Quatre questions, nées de ces décisions : l'agent spec ne les tranche pas.
 
-- **Q1 — Le recalage change le commit : le verdict tient-il ?** « Elle fige ce commit ; s'il change, elle tombe » et
-  « recalage sur origin/main » se contredisent à la lettre, et le squash change encore le commit. *Proposition* : le commit
-  figé F reste la référence du verdict ; le recalage fait par PACT sans conflit donne R, avec le même contenu rejoué ; le
-  verdict passe de F à R, les tests de PACT sont relancés sur R, et la CI doit valider R. Tout commit qui ne vient pas de
-  PACT fait tomber la demande. Un conflit résolu par le dev demande un nouveau verdict.
-- **Q2 — Qu'est-ce qui compte comme aller-retour au recalage ?** La demande compte la CI rouge et le refus. *Proposition* :
-  tests de PACT rouges après recalage et conflit résolu par le dev comptent ; un recalage sans conflit ne compte pas, mais
-  3 recalages de suite préviennent l'utilisateur, pour qu'un main très actif ne consomme pas de CI sans fin.
-- **Q3 — Comment livrer un travail sans boucle, et que devient « Intégrer » (002) ?** Sans verdict, pas de demande ; sans
-  fusion locale, un agent seul n'a plus de chemin. *Proposition* : avec remote, « Intégrer » devient « Livrer », qui demande
-  une boucle ; l'utilisateur garde un geste explicite « Créer la PR sans verdict », qui passe toujours par sa relecture,
-  même Auto activé.
-- **Q4 — Remote non GitHub, `gh` absent ou non connecté ?** *Proposition* : demande refusée avec sa raison et le moyen d'y
-  remédier ; pas de repli sur la fusion locale.
-- **Q5 — Quel délai, et quelle sortie, pour une CI configurée sans check visible ?** *Proposition* : prévenir après 10 min ;
-  À faire propose « Attendre encore » ou « Relire » ; la fusion Auto reste interdite tant qu'aucun check n'est lu, et seule
-  la relecture de l'utilisateur en sort.
-- **Q6 — Qu'est-ce qu'une CI verte ?** *Proposition* : tous les checks visibles sur le commit exact, et tous les requis,
-  sont terminés ; verts : `success`, `neutral`, `skipped`. Rouge : `failure`. `cancelled`, `timed_out`, `stale` : ni vert ni
-  rouge, relance d'un job au plus puis prévenir l'utilisateur, sans compter d'aller-retour.
-- **Q7 — Auto activé après coup : que devient une PR déjà verte, et une PR refusée ?** « Aussitôt aux PR en cours » contre
-  « retour à l'utilisateur ». *Proposition* : une PR verte en attente de relecture fusionne à l'activation, si toutes les
-  conditions tiennent ; une PR refusée revient à l'utilisateur une fois, car son refus est une décision explicite.
-- **Q8 — D'où viennent les consignes de peaufinage ?** Et un verdict `defects` pendant une passe ? *Proposition* : un texte
-  par projet dans les paramètres, complété par l'orchestrateur ; un `defects` reprend la même passe sans compter
-  d'aller-retour ; passes épuisées avec des défauts → l'utilisateur décide, jamais de fusion.
-- **Q9 — Bornes des réglages ?** *Proposition* : allers-retours de 1 à 10 ; passes de 0 à 5.
-- **Q10 — Après la fusion, et si l'utilisateur ferme un agent avant ?** *Proposition* : à la fusion, PACT ferme le dev et le
-  testeur ; leurs worktrees et branches locales suivent FR-034 et FR-035, la branche distante Q26. `close_agent` de
-  l'orchestrateur est refusé en cours de livraison. Si l'utilisateur ferme lui-même un agent, PACT le prévient, puis la
-  demande tombe, la boucle passe à `closed`, la PR reste ouverte et l'orchestrateur est réveillé.
-- **Q11 — Issue non publiée, titre et corps de la PR ?** *Proposition* : titre et message donnés dans la demande ; corps avec
-  l'identifiant de l'issue, son lien de fermeture si elle est publiée, son texte sinon, et le verdict.
-- **Q12 — Quelle est la branche cible ?** La demande dit `origin/main` ; un agent peut être lancé depuis une autre base
-  (`baseBranch`). *Proposition* : la branche de départ de l'agent si elle est explicite, sinon la branche principale.
-- **Q13 — Qu'exige « les tests du testeur présents dans la branche du dev » ?** Comment y arrivent-ils ? Rien ne le dit
-  aujourd'hui, et le testeur ne doit pas fusionner le dev. *Proposition* : le dev récupère par git les tests de la branche du
-  testeur sur consigne de PACT ; la barrière compare chaque fichier de test changé par le testeur à la version du commit
-  figé : contenu identique exigé.
-- **Q14 — Qui peut demander la livraison ?** *Proposition* : l'orchestrateur par l'outil `request_delivery`, et l'utilisateur
-  par un bouton, sur une boucle acceptée.
-- **Q15 — Comment établir « le compte de l'utilisateur » ?** Le compte connecté à `gh` peut changer. *Proposition* : le login
-  de `gh` est noté à la création de la PR, et l'auteur de la PR doit lui être égal ; un changement de compte en cours de
-  suivi arrête la fusion et prévient l'utilisateur. Une PR ouverte à la main par l'utilisateur n'est pas suivie : elle n'a pas
-  de demande.
-- **Q16 — Le dev peut-il lire le journal de CI de sa propre PR ?** La décision interdit le journal d'un fork ; une CI rouge sans
-  journal est dure à corriger. *Proposition* : PACT ne transmet que le nom et la conclusion des checks ; le journal d'un check
-  d'une PR suivie reste lisible par le dev, car il vient d'une branche du dépôt.
-- **Q23 — Qu'est-ce qui ne déclenche jamais de suppression ?** *Proposition* : une PR d'un autre auteur ne déclenche jamais rien ;
-  `close_agent` reste sans suppression : un agent ne peut pas supprimer de worktree.
-- **Q24 — Comment tenir FR-034 et FR-035 après un recalage ?** La règle est décidée, pas son application au cas normal. Le recalage
-  (Q1) donne un commit R : un worktree du dev resté sur F n'est pas identique au commit de tête. Il réécrit aussi les commits, et Q13
-  ne garantit pas de garder ceux du testeur : son HEAD ne serait pas contenu dans le commit de tête. Sans réponse, presque toute
-  livraison recalée finirait en « Supprimer quand même ». *Proposition* : PACT amène le worktree du dev sur R après le push ; pour
-  le testeur, « contenu » se lit par le contenu de ses fichiers de test, comme la barrière de Q13, et non par l'ascendance.
-- **Q25 — Un fichier ignoré compte-t-il pour « propre » ?** La consigne de départ disait non, à cause de `node_modules`. Mais un fichier
-  ignoré peut être irremplaçable (`.env`, réglages locaux), et il serait perdu sans avis. *Proposition* : les fichiers ignorés ne
-  comptent pas, sauf ceux qui correspondent à `.env*`, qui font passer par À faire.
-- **Q26 — PACT supprime-t-il la branche distante à la fusion ?** La demande ne le tranche pas. *Proposition* : oui pour la branche d'une
-  PR suivie, si sa tête est encore le commit fusionné ; sinon elle reste, et PACT le dit.
+- **Q27 — Que peut devenir une PR créée sans verdict (Q3) ?** Valider revérifie les conditions de FR-010, dont le verdict : cette PR ne serait jamais validable, et SC-001 interdit toute fusion sans verdict. Une CI rouge n'a pas de dev ni de
+  compteur à qui revenir, et les tests de PACT n'ont pas de preuve à reprendre. *Proposition* : Valider y vérifie la CI, l'auteur, le dépôt source et la tête, sans verdict ; SC-001 et FR-010 l'excluent nommément ; une CI rouge est signalée dans
+  À faire, sans aller-retour ; pas d'exigence de preuve ; FR-029 à FR-033 s'appliquent ; le nettoyage reste un geste de l'utilisateur.
+- **Q28 — « Relire » (Q5) permet-il de fusionner sans check lu ?** Q5 dit que la relecture sort de l'attente. Or FR-013 et SC-001 exigent une CI validée sur le commit exact quand une CI existe, et la décision de départ dit « sans fusionner ».
+  *Proposition* : Valider reste refusé tant qu'aucun check n'est lu ; « Relire » ouvre la PR, et l'utilisateur la fusionne lui-même sur la forge, ce que PACT constate.
+- **Q29 — Sans remote, Auto et « Intégrer » ?** Q3 ne vise que le cas avec remote. FR-008 dit « mêmes barrières », donc un agent seul sans boucle n'aurait plus aucun chemin ; et Auto n'a pas de réponse pour la fusion locale. *Proposition* : Auto est
+  sans effet sans remote, la fusion locale reste confirmée par l'utilisateur ; « Intégrer » demande une boucle, avec un geste « Fusionner sans verdict » symétrique de Q3.
+- **Q30 — Comment le dev lit-il son journal de CI (Q16) ?** 007-Q12 fait passer les commandes de lecture de `gh` par la décision de l'utilisateur, et la lecture du journal en serait une : un dev bloquerait à chaque CI rouge. *Proposition* : un outil
+  de PACT rend le journal d'un check d'une PR suivie, après avoir vérifié qu'elle l'est ; le `gh` direct reste soumis à la règle.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -211,8 +189,11 @@ passées, le corps de la PR et les événements reçus.
 5. **Given** une demande acceptée et `origin/main` en avance, **When** PACT déroule, **Then** il fait le `fetch`, le recalage,
    les tests, puis le push et la PR, et signale chaque résultat à l'orchestrateur.
 6. **Given** le recalage ou les tests en échec, **When** PACT déroule, **Then** rien n'est poussé, et l'échec est signalé.
-7. **Given** un dépôt sans remote, **When** la livraison est demandée, **Then** les mêmes barrières s'appliquent, et l'issue
-   est la fusion locale après confirmation de l'utilisateur.
+7. **Given** un dépôt sans remote, **When** la livraison est demandée, **Then** les mêmes barrières s'appliquent, et l'issue est la fusion locale après confirmation de l'utilisateur.
+8. **Given** un recalage sans conflit, **When** PACT le fait, **Then** le verdict passe de F à R, les tests de PACT repassent sur R, et la demande ne tombe pas.
+9. **Given** un conflit au recalage, **When** le dev le résout, **Then** un nouveau verdict est exigé, et un aller-retour est compté.
+10. **Given** un remote non GitHub, ou `gh` absent ou non connecté, **When** la livraison est demandée, **Then** elle est refusée avec sa raison et le moyen d'y remédier, sans fusion locale.
+11. **Given** un agent seul avec remote, **When** l'utilisateur ouvre ses actions, **Then** « Livrer » demande une boucle, et « Créer la PR sans verdict » reste offert, avec relecture même Auto activé.
 
 ---
 
@@ -240,6 +221,8 @@ fusion part, sans `--auto`, et avec le commit attendu.
    **Then** PACT fusionne : Auto est lu à ce moment-là.
 6. **Given** Auto activé et une PR dont la CI tourne, **When** l'utilisateur le désactive, puis que la CI devient verte,
    **Then** PACT ne fusionne pas et demande la relecture.
+8. **Given** une PR verte en attente de relecture, **When** l'utilisateur active Auto, **Then** PACT fusionne si toutes les conditions tiennent.
+9. **Given** un check `cancelled`, `timed_out` ou `stale`, **When** PACT le lit, **Then** il relance un job au plus, puis prévient l'utilisateur, sans fusion ni aller-retour.
 7. **Given** une fusion réussie, **When** PACT la constate, **Then** la boucle et l'agent se ferment, et pas avant.
 
 ---
@@ -263,8 +246,7 @@ compteur.
 3. **Given** cet élément, **When** l'utilisateur clique sur Refuser sans motif, **Then** le refus n'est pas accepté.
 4. **Given** un motif écrit, **When** il refuse, **Then** le dev reçoit le motif comme un défaut, un aller-retour est compté,
    la PR reste ouverte.
-5. **Given** un refus puis une nouvelle CI verte, **When** PACT lit les checks, **Then** l'élément revient à l'utilisateur
-   [NEEDS CLARIFICATION: Q7 — et si Auto a été activé entre-temps ?].
+5. **Given** un refus puis une nouvelle CI verte, **When** PACT lit les checks, **Then** l'élément revient à l'utilisateur, une fois, même si Auto a été activé entre-temps.
 6. **Given** un verdict `accepted` qui suit un refus, **When** la nouvelle demande de livraison est prise, **Then** elle
    réutilise la PR ouverte.
 
@@ -284,13 +266,11 @@ check rouge.
 
 1. **Given** aucun workflow ni check requis, Auto activé, **When** la PR est ouverte, **Then** PACT fusionne après le verdict ;
    Auto désactivé, **Then** il demande la relecture.
-2. **Given** des workflows présents ou des checks requis, et aucun check visible, **When** le délai passe, **Then** PACT
-   prévient l'utilisateur et ne fusionne pas [NEEDS CLARIFICATION: Q5 — délai et sortie].
+2. **Given** des workflows présents ou des checks requis, et aucun check visible, **When** 10 minutes passent, **Then** PACT prévient l'utilisateur, propose « Attendre encore » ou « Relire », et ne fusionne pas de lui-même.
 3. **Given** un check rouge, **When** PACT le lit, **Then** le dev reçoit le nom du check en défaut, et un aller-retour est compté.
 4. **Given** le dernier aller-retour consommé, **When** la CI est encore rouge, **Then** PACT escalade à l'utilisateur, sans
    nouveau tour.
-5. **Given** un conflit ou un main qui a bougé, **When** PACT le constate, **Then** il recale et attend une nouvelle CI
-   [NEEDS CLARIFICATION: Q1 — le verdict tient-il ? Q2 — compte-t-il ?].
+5. **Given** un conflit ou un main qui a bougé, **When** PACT le constate, **Then** il recale et attend une nouvelle CI, sans compter d'aller-retour s'il n'y a pas de conflit ; au troisième recalage de suite, l'utilisateur est prévenu.
 6. **Given** une PR fusionnée ou fermée à la main sur la forge, **When** PACT le lit, **Then** il clôt la demande en le disant.
 
 ---
@@ -312,8 +292,9 @@ de PR avant la fin.
    finies, et la raison le dit.
 3. **Given** une passe, **When** elle s'achève, **Then** le testeur a vérifié, les tests de PACT sont passés sur le commit de
    fin, et le compteur de passes avance sans toucher à celui des allers-retours.
-4. **Given** une passe, **When** le dev reçoit sa consigne, **Then** elle dit précisément ce qui est attendu, et interdit toute
-   nouvelle fonctionnalité.
+4. **Given** une passe, **When** le dev reçoit sa consigne, **Then** elle dit précisément ce qui est attendu, et interdit toute nouvelle fonctionnalité.
+5. **Given** un `defects` en passe, **When** il arrive, **Then** la même passe reprend, sans aller-retour compté.
+6. **Given** les passes épuisées avec des défauts, **When** PACT le constate, **Then** l'utilisateur décide, et rien n'est fusionné.
 
 ---
 
@@ -367,8 +348,8 @@ livraison complète, Auto activé, et vérifier que la chaîne témoin ne figure
    ni aux agents, ni à l'orchestrateur.
 7. **Given** une PR suivie dont l'auteur ou le dépôt source n'est plus celui attendu, **When** PACT s'apprête à fusionner,
    **Then** il ne fusionne pas et prévient l'utilisateur, que ce soit par Auto ou par Valider.
-8. **Given** un `fetch` de livraison, **When** PACT récupère le remote, **Then** il ne récupère que la branche cible et ses
-   propres branches, jamais les références de PR tierces.
+8. **Given** un `fetch` de livraison, **When** PACT récupère le remote, **Then** il ne récupère que la branche cible et ses propres branches, jamais les références de PR tierces.
+9. **Given** un login de `gh` qui change pendant le suivi, **When** PACT s'apprête à fusionner, **Then** il ne fusionne pas et prévient l'utilisateur.
 
 ---
 
@@ -392,20 +373,22 @@ qui reste sur le disque.
    supprimer.
 4. **Given** un fusionnement en squash, **When** PACT décide de supprimer, **Then** il se fonde sur la PR et son commit de tête,
    jamais sur `git branch --merged` ni sur l'ascendance avec main.
-5. **Given** un testeur propre dont le HEAD est contenu dans le commit de tête fusionné, **When** PACT constate la fusion, **Then** son
+5. **Given** un testeur propre dont les fichiers de test sont contenus dans le commit de tête fusionné, **When** PACT constate la fusion, **Then** son
    worktree est supprimé ; sinon, le scénario 2 s'applique.
 6. **Given** un orchestrateur, **When** une PR est fusionnée, **Then** son worktree n'est jamais touché.
 7. **Given** une PR fermée sans fusion, une boucle ou un agent fermé, **When** PACT le constate, **Then** rien n'est supprimé sans un
    geste de l'utilisateur.
-8. **Given** une PR d'un autre auteur fusionnée sur une branche de même nom, **When** PACT tourne, **Then** aucune suppression n'a lieu
-   [NEEDS CLARIFICATION: Q23].
-9. **Given** un agent, **When** il appelle `close_agent`, **Then** son worktree et sa branche restent [NEEDS CLARIFICATION: Q23].
+8. **Given** une PR d'un autre auteur fusionnée sur une branche de même nom, **When** PACT tourne, **Then** aucune suppression n'a lieu.
+9. **Given** un agent, **When** il appelle `close_agent`, **Then** son worktree et sa branche restent.
+10. **Given** un dev propre dont seul un `.env` ignoré diffère, **When** PACT constate la fusion, **Then** rien n'est supprimé, et À faire le dit ; un `node_modules` seul n'y fait pas passer.
+11. **Given** une PR recalée puis fusionnée, **When** PACT constate la fusion, **Then** le worktree du dev, amené sur R après le push, est supprimé sans « Supprimer quand même ».
+12. **Given** une fusion constatée, **When** la tête de la branche distante est le commit fusionné, **Then** elle est supprimée ; sinon elle reste, et PACT le dit.
 
 ### Edge Cases
 
 - Le dev travaille pendant que la demande court : PACT ne regarde que le commit figé, sans dialogue « l'agent travaille encore » ; tout
   nouveau commit sur la branche du dev fait tomber la demande.
-- Le recalage ne doit pas casser le worktree du dev : le dev reçoit, après le push, de quoi se remettre sur la branche recalée.
+- Le recalage ne doit pas casser le worktree du dev : PACT l'amène sur R après le push. S'il a des changements ou si l'agent travaille, PACT ne le déplace pas, et FR-037 s'applique à la fusion.
 - Une demande de livraison arrive pendant une autre sur le même dépôt : une file par projet, comme aujourd'hui.
 - La protection de la branche refuse la fusion (revue requise, mode non permis) : PACT le signale avec la raison de la forge,
   sans passer outre et sans changer de mode.
@@ -425,8 +408,7 @@ qui reste sur le disque.
 - Une PR suivie est fusionnée à la main sur la forge (US3) : les mêmes conditions s'appliquent, avec le commit de tête lu sur la PR.
 - Un dépôt sans remote n'a pas de PR : le choix existant à l'intégration locale (fermer la tuile, retirer le worktree) reste en place.
 - L'ancien chemin de suppression force le retrait (`close` avec `force: true`) : il ne doit pas servir de raccourci aux conditions de FR-034.
-- PACT n'a pas de CI à suivre pour un dépôt sans remote : Auto n'y fait pas fusionner sans confirmation
-  [NEEDS CLARIFICATION: à trancher avec Q3 — Auto vaut-il pour la fusion locale ?].
+- PACT n'a pas de CI à suivre pour un dépôt sans remote : Auto n'y fait pas fusionner sans confirmation [NEEDS CLARIFICATION: Q29].
 
 ## Requirements *(mandatory)*
 
@@ -434,55 +416,53 @@ qui reste sur le disque.
 
 **Demande de livraison**
 
-- **FR-001**: PACT MUST retirer `request_integration` et offrir une demande de livraison
-  [NEEDS CLARIFICATION: Q14 — qui peut la demander ; Q3 — travail sans boucle].
-- **FR-002**: PACT MUST refuser la demande, avec sa raison, sans verdict `accepted` du testeur sur ce commit, sans preuve de ses propres
-  tests sur ce commit, si des changements ne sont pas commités, ou si des tests du testeur manquent à la branche du dev
-  [NEEDS CLARIFICATION: Q13 — critère de présence].
+- **FR-001**: PACT MUST retirer `request_integration` et offrir une demande de livraison, sur une boucle acceptée : l'orchestrateur par l'outil `request_delivery`, l'utilisateur par un bouton. Avec remote, « Intégrer » devient « Livrer », qui demande une
+  boucle ; le geste « Créer la PR sans verdict » de l'utilisateur passe toujours par sa relecture, même Auto activé [NEEDS CLARIFICATION: Q27 — ce que devient cette PR].
+- **FR-002**: PACT MUST refuser la demande, avec sa raison, sans verdict `accepted` du testeur sur ce commit, sans preuve de ses propres tests sur ce commit, si des changements ne sont pas commités, ou si des tests du testeur manquent à la branche du dev. Le
+  dev MUST récupérer ces tests par git sur consigne de PACT ; la barrière compare chaque fichier de test changé par le testeur à la version du commit figé : contenu identique exigé.
 - **FR-003**: Un verdict MUST être lié au commit du dev qu'il juge, et la preuve au commit qu'elle teste.
-- **FR-004**: La demande MUST figer ce commit ; tout autre commit la fait tomber, et l'orchestrateur en est réveillé
-  [NEEDS CLARIFICATION: Q1 — cas du recalage par PACT].
-- **FR-005**: PACT MUST enchaîner sans geste : `fetch`, recalage sur la branche cible distante, tests, push, ouverture de la PR, liée
-  à l'issue et au verdict [NEEDS CLARIFICATION: Q11 — contenu ; Q12 — branche cible ; Q4 — forges].
+- **FR-004**: La demande MUST figer ce commit F. Un recalage par PACT sans conflit donne R, même contenu rejoué : le verdict passe de F à R, les tests de PACT sont relancés sur R, et la CI doit valider R. Tout commit qui ne vient pas de PACT fait tomber la demande, et
+  l'orchestrateur en est réveillé. Un conflit résolu par le dev MUST demander un nouveau verdict.
+- **FR-005**: PACT MUST enchaîner sans geste : `fetch`, recalage sur la branche cible distante, tests, push, ouverture de la PR, liée à l'issue et au verdict. La branche cible est la branche de départ de l'agent si elle est explicite, sinon la branche principale. La PR
+  MUST reprendre le titre et le message de la demande, avec dans son corps l'identifiant de l'issue, son lien de fermeture si elle est publiée, son texte sinon, et le verdict. Remote non GitHub, `gh` absent ou non connecté : demande refusée avec sa raison et le moyen
+  d'y remédier, sans repli sur la fusion locale.
 - **FR-006**: PACT MUST réveiller l'orchestrateur à chaque résultat, par un message `action` de 007 : refus, chute, conflit, tests,
   PR ouverte, CI verte ou rouge, relecture demandée, refus de l'utilisateur, fusion, échec de fusion.
-- **FR-007**: La boucle, ses agents et l'état `done` de l'issue MUST n'être clos qu'après la fusion constatée ; la boucle gagne un état
-  intermédiaire entre la preuve et la fusion [NEEDS CLARIFICATION: Q10 — fermeture après fusion et avant].
-- **FR-008**: La fusion locale MUST ne rester que pour un dépôt sans remote, avec les mêmes barrières
-  [NEEDS CLARIFICATION: Q3 — bouton « Intégrer » de 002].
+- **FR-007**: La boucle, ses agents et l'état `done` de l'issue MUST n'être clos qu'après la fusion constatée ; la boucle gagne un état intermédiaire entre la preuve et la fusion. À la fusion, PACT MUST fermer le dev et le testeur. `close_agent` de l'orchestrateur MUST être
+  refusé en cours de livraison. Si l'utilisateur ferme lui-même un agent, PACT MUST le prévenir, puis la demande tombe, la boucle passe à `closed`, la PR reste ouverte et l'orchestrateur est réveillé.
+- **FR-008**: La fusion locale MUST ne rester que pour un dépôt sans remote, avec les mêmes barrières [NEEDS CLARIFICATION: Q29 — Auto et « Intégrer » sans remote].
 
 **Suivi de CI et fusion**
 
-- **FR-009**: PACT MUST lire lui-même les checks du commit exact de la PR, et MUST ne jamais utiliser `gh pr merge --auto` ni une fusion
-  déléguée [NEEDS CLARIFICATION: Q6 — définition du vert].
+- **FR-009**: PACT MUST lire lui-même les checks du commit exact de la PR, et MUST ne jamais utiliser `gh pr merge --auto` ni une fusion déléguée. Une CI est verte quand tous les checks visibles sur ce commit, et tous les requis, sont terminés en `success`, `neutral` ou
+  `skipped`. `failure` est rouge. `cancelled`, `timed_out`, `stale` ne sont ni verts ni rouges : relance d'un job au plus, puis l'utilisateur est prévenu, sans compter d'aller-retour.
 - **FR-010**: PACT MUST fusionner seulement si Auto est activé, la CI verte sur le commit de tête, et le verdict `accepted` valable pour
   ce commit ; la commande de fusion MUST exiger ce commit et échouer sinon.
-- **FR-011**: PACT MUST lire Auto au moment où la CI devient verte ; un changement MUST s'appliquer aux PR en cours
-  [NEEDS CLARIFICATION: Q7 — PR déjà verte ou refusée].
+- **FR-011**: PACT MUST lire Auto au moment où la CI devient verte ; un changement MUST s'appliquer aux PR en cours. Une PR verte en attente de relecture MUST fusionner à l'activation d'Auto si toutes les conditions tiennent. Une PR refusée MUST revenir à l'utilisateur
+  une fois, même Auto activé.
 - **FR-012**: Auto désactivé, une CI verte MUST créer dans À faire un élément de relecture, avec Valider et Refuser.
-- **FR-013**: Valider MUST demander une seule action, être idempotent, et vérifier à nouveau les conditions de FR-010 hors Auto.
+- **FR-013**: Valider MUST demander une seule action, être idempotent, et vérifier à nouveau les conditions de FR-010 hors Auto [NEEDS CLARIFICATION: Q27 — PR sans verdict ; Q28 — aucun check lu].
 - **FR-014**: Refuser MUST exiger un motif écrit, l'envoyer au dev comme un défaut, compter un aller-retour, garder la PR ouverte, et faire
   revenir la relecture après la nouvelle CI.
 - **FR-015**: Sans CI configurée (ni workflow ni check requis), Auto activé MUST fusionner après le verdict ; Auto désactivé MUST demander
   la relecture.
-- **FR-016**: Avec une CI configurée et aucun check visible, PACT MUST attendre, prévenir après un délai, et MUST ne pas fusionner
-  [NEEDS CLARIFICATION: Q5].
-- **FR-017**: Une CI rouge MUST renvoyer au dev le nom des checks en échec et compter un aller-retour ; un conflit ou un main qui a bougé
-  MUST entraîner un recalage puis une nouvelle CI [NEEDS CLARIFICATION: Q2 — ce qui compte].
+- **FR-016**: Avec une CI configurée et aucun check visible, PACT MUST attendre, prévenir après 10 min, et proposer dans À faire « Attendre encore » ou « Relire ». La fusion Auto MUST rester interdite tant qu'aucun check n'est lu, et seule la relecture de l'utilisateur en
+  sort [NEEDS CLARIFICATION: Q28 — fusion sans check lu].
+- **FR-017**: Une CI rouge MUST renvoyer au dev le nom des checks en échec et compter un aller-retour ; un conflit ou un main qui a bougé MUST entraîner un recalage puis une nouvelle CI. Des tests de PACT rouges après recalage et un conflit résolu par le dev comptent un
+  aller-retour ; un recalage sans conflit ne compte pas, mais 3 recalages de suite MUST prévenir l'utilisateur.
 - **FR-018**: Au plafond, PACT MUST escalader à l'utilisateur, et MUST ne pas engager d'aller-retour de plus.
 
 **Réglages et interface**
 
 - **FR-019**: PACT MUST afficher un toggle « Auto » visible, un par projet, enregistré, désactivé sur un nouveau projet.
-- **FR-020**: Les paramètres du projet MUST permettre de choisir le mode de fusion (squash par défaut, merge commit, rebase), le plafond
-  d'allers-retours (3 par défaut) et les passes de peaufinage (0 par défaut) [NEEDS CLARIFICATION: Q9 — bornes].
+- **FR-020**: Les paramètres du projet MUST permettre de choisir le mode de fusion (squash par défaut, merge commit, rebase), le plafond d'allers-retours (3 par défaut, de 1 à 10), les passes de peaufinage (0 par défaut, de 0 à 5) et leur consigne.
 - **FR-021**: Le plafond configuré MUST remplacer partout la valeur 3 : boucle, modèle de données, textes des outils, contrat, escalade de
   modèle au dernier tour.
 
 **Peaufinage**
 
-- **FR-022**: Après `accepted` et avant la PR, PACT MUST dérouler le nombre de passes réglé : le dev corrige selon des consignes précises,
-  le testeur vérifie, les tests sont relancés [NEEDS CLARIFICATION: Q8 — source des consignes, `defects` en passe].
+- **FR-022**: Après `accepted` et avant la PR, PACT MUST dérouler le nombre de passes réglé : le dev corrige selon la consigne du projet, complétée par l'orchestrateur, le testeur vérifie, les tests sont relancés. Un `defects` MUST reprendre la même passe sans compter
+  d'aller-retour. Passes épuisées avec des défauts : l'utilisateur décide, jamais de fusion.
 - **FR-023**: Les passes MUST avoir un compteur séparé des allers-retours, et leur consigne MUST interdire toute nouvelle fonctionnalité.
 - **FR-024**: La demande de livraison MUST être refusée tant que les passes ne sont pas finies, et son verdict MUST porter sur le commit de
   fin de passe.
@@ -491,32 +471,28 @@ qui reste sur le disque.
 
 - **FR-025**: L'état d'une livraison, et celui d'un conflit avec ses résolutions, MUST être enregistrés, et survivre à un redémarrage sans
   doublon de PR ni de fusion.
-- **FR-026**: Fermer ou perdre un agent MUST faire sortir sa boucle de l'état `running`, réveiller l'orchestrateur, et libérer l'issue pour
-  un nouveau `start_loop`.
+- **FR-026**: Fermer ou perdre un agent MUST faire sortir sa boucle de l'état `running`, réveiller l'orchestrateur par le message `action` de fin de boucle (007 FR-010), et libérer l'issue pour un nouveau `start_loop`.
 - **FR-027**: Une livraison MUST ne demander qu'une seule décision à l'utilisateur, à une seule place, quel que soit l'état de l'agent, et
   résister au double clic.
 - **FR-028**: Le suivi MUST être indexé par demande : une intégration manuelle d'un même agent n'est jamais prise pour celle d'une demande.
 
 **Contenu de tiers**
 
-- **FR-029**: PACT MUST ne suivre que ses propres PR : créées par une demande, depuis une branche du dépôt, dont l'auteur est le compte de
-  l'utilisateur [NEEDS CLARIFICATION: Q15 — identité du compte]. Toute autre PR MUST être ignorée.
+- **FR-029**: PACT MUST ne suivre que ses propres PR : créées par une demande, depuis une branche du dépôt, dont l'auteur est le compte de l'utilisateur. Ce compte est le login de `gh` noté à la création de la PR ; un changement de compte en cours de suivi MUST arrêter
+  la fusion et prévenir l'utilisateur. Une PR ouverte à la main n'est pas suivie. Toute autre PR MUST être ignorée.
 - **FR-030**: PACT MUST retrouver une PR par le numéro noté dans sa demande, jamais par une recherche sur le nom de branche ni par une liste
   des PR du dépôt.
 - **FR-031**: Juste avant toute fusion, par Auto comme par Valider, PACT MUST vérifier à nouveau l'auteur, le dépôt source et le commit de tête
   de la PR, et ne pas fusionner si l'un d'eux diffère. Auto MUST ne jamais pouvoir fusionner une autre PR.
-- **FR-032**: Le contenu écrit par un tiers (PR, issue, commentaire, description, nom de branche, journal de CI d'un fork) MUST ne jamais être
-  lu, récupéré, exécuté ou fusionné par PACT, ni atteindre un agent. Sur une PR suivie, PACT MUST se limiter aux données de structure : état,
-  commit de tête, nom et conclusion des checks [NEEDS CLARIFICATION: Q16 — journal de CI d'une PR suivie].
+- **FR-032**: Le contenu écrit par un tiers (PR, issue, commentaire, description, nom de branche, journal de CI d'un fork) MUST ne jamais être lu, récupéré, exécuté ou fusionné par PACT, ni atteindre un agent. Sur une PR suivie, PACT MUST se limiter aux données de
+  structure : état, commit de tête, nom et conclusion des checks. Le journal d'un check d'une PR suivie reste lisible par le dev [NEEDS CLARIFICATION: Q30 — par quelle voie].
 - **FR-033**: Les `fetch` de PACT MUST se limiter à la branche cible et aux branches de ses demandes.
 
 **Nettoyage des worktrees**
 
-- **FR-034**: À la fusion d'une PR suivie, PACT MUST supprimer automatiquement le worktree et la branche locale du dev quand ce worktree est
-  identique au commit de tête fusionné et propre, l'agent étant fermé ou fermé par PACT
-  [NEEDS CLARIFICATION: Q24 — après un recalage ; Q25 — fichiers ignorés].
-- **FR-035**: PACT MUST supprimer automatiquement le worktree du testeur quand il est contenu dans le commit de tête fusionné et propre
-  [NEEDS CLARIFICATION: Q24 — après un recalage ; Q25 — fichiers ignorés].
+- **FR-034**: À la fusion d'une PR suivie, PACT MUST supprimer automatiquement le worktree et la branche locale du dev quand ce worktree est identique au commit de tête fusionné et propre, l'agent étant fermé ou fermé par PACT. PACT MUST amener ce worktree sur R après le
+  push. Les fichiers ignorés ne comptent pas pour « propre », sauf ceux qui correspondent à `.env*`, qui font passer par FR-037.
+- **FR-035**: PACT MUST supprimer automatiquement le worktree du testeur quand il est contenu dans le commit de tête fusionné et propre, au sens de FR-034. « Contenu » se lit par le contenu de ses fichiers de test, comme la barrière de FR-002, et non par l'ascendance.
 - **FR-036**: Toute détection de fusion MUST passer par la PR et son commit de tête, jamais par `git branch --merged` ni par l'ascendance avec
   main, que le squash rend fausses.
 - **FR-037**: Si le worktree a des fichiers modifiés ou des commits en plus, PACT MUST ne rien supprimer, et À faire MUST l'expliquer, avec un
@@ -525,11 +501,10 @@ qui reste sur le disque.
 - **FR-039**: Un travail abandonné (PR fermée sans fusion, boucle ou agent fermé) MUST ne jamais être supprimé automatiquement, seulement sur un
   geste de l'utilisateur.
 - **FR-040**: L'action « Nettoyer » des worktrees déjà accumulés MUST relever de 011, qui reprend les critères de FR-034 à FR-036.
-- **FR-041**: Une PR d'un autre auteur MUST ne déclencher aucune suppression, et `close_agent` MUST rester sans suppression : aucun outil d'agent
-  ne supprime de worktree [NEEDS CLARIFICATION: Q23].
+- **FR-041**: Une PR d'un autre auteur MUST ne déclencher aucune suppression, et `close_agent` MUST rester sans suppression : aucun outil d'agent ne supprime de worktree.
 - **FR-042**: Les conditions de FR-034 et FR-035 MUST être évaluées juste avant la suppression, et un agent ouvert MUST ne jamais perdre son
   worktree par cette voie.
-- **FR-043**: Le sort de la branche distante à la fusion [NEEDS CLARIFICATION: Q26] MUST être dit à l'utilisateur.
+- **FR-043**: À la fusion, PACT MUST supprimer la branche distante de la PR suivie si sa tête est encore le commit fusionné ; sinon elle reste, et PACT MUST le dire à l'utilisateur.
 
 ### Key Entities
 
@@ -558,14 +533,13 @@ qui reste sur le disque.
 - **SC-008**: L'orchestrateur reçoit un réveil à chaque résultat, sans avoir à interroger PACT.
 - **SC-009**: Sur 100 % des scénarios de test avec une PR tierce, la chaîne témoin d'injection n'atteint aucun agent, événement, journal ni élément
   À faire, et cette PR n'est ni récupérée, ni exécutée, ni fusionnée.
-- **SC-010**: Dans aucun scénario de test, une suppression automatique ne perd un fichier modifié, un fichier non suivi non ignoré ou un commit
-  absent du commit de tête fusionné.
+- **SC-010**: Dans aucun scénario de test, une suppression automatique ne perd un fichier modifié, un fichier non suivi non ignoré, un fichier `.env*` ignoré ou un commit absent du commit de tête fusionné.
 - **SC-011**: Après une fusion sans doute possible, aucun worktree de l'agent ne reste sur le disque, sans geste de l'utilisateur.
 
 ## Assumptions
 
-- Le dépôt est sur GitHub, et `gh` y sert déjà à publier les issues (004). Tout autre cas est Q4.
-- Le dépôt peut être public. La limite de ce que PACT peut garantir pour le shell d'un agent est la question 007-Q12.
+- Le dépôt est sur GitHub, et `gh` y sert déjà à publier les issues (004). Tout autre cas est refusé (FR-005).
+- Le dépôt peut être public. La limite de ce que PACT peut garantir pour le shell d'un agent est dite par 007 FR-027.
 - Le push et la PR se font avec les identifiants Git et `gh` de l'utilisateur, par PACT et pas par un agent : la règle d'autorisation de
   `git push` des agents ne s'applique pas.
 - La constitution (principe II) reste tenue : sans CI, c'est la preuve de PACT sur le commit exact qui tient lieu de suite verte.
