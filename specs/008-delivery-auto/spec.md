@@ -155,13 +155,11 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
 - Q30: Comment le dev lit-il son journal de CI ? → A: un outil de PACT rend le journal d'un check d'une PR suivie, après avoir vérifié qu'elle l'est ; le `gh` direct reste soumis à la règle de 007 FR-027.
 - Q31: Le reste du cycle d'une PR sans verdict ? → A: recalage sans conflit comme ailleurs ; un conflit, ou un refus avec son motif, est signalé dans À faire, sans compteur ; tout nouveau commit fait tomber la demande, qui se recrée par le même geste ; FR-043 s'applique, le
   nettoyage des worktrees restant un geste.
+- Q32: Une demande recréée retrouve-t-elle la PR encore ouverte ? → A: une demande tombée garde le numéro de sa PR. La nouvelle demande le reprend si la PR est encore ouverte, après les contrôles de FR-031. Sinon elle crée une PR. FR-030 reste vrai : jamais de recherche par nom de branche ni de liste des PR.
 
 ## Questions ouvertes
 
-Une question, née de Q31 : l'agent spec ne la tranche pas.
-
-- **Q32 — Une demande recréée retrouve-t-elle la PR encore ouverte ?** Q31 recrée la demande par le même geste, et FR-004 peut faire tomber toute demande alors que sa PR est ouverte. Or FR-030 interdit de chercher une PR par nom de branche, la forge refuse une seconde PR ouverte depuis la même branche, et US3 ne couvre
-  que la reprise après un refus. La demande recréée n'a donc pas de chemin écrit. *Proposition* : une demande tombée garde le numéro de sa PR ; une nouvelle demande de la même branche le reprend si la PR est encore ouverte, après les contrôles de FR-031, et sinon en crée une.
+Aucune.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -222,9 +220,9 @@ fusion part, sans `--auto`, et avec le commit attendu.
    **Then** PACT fusionne : Auto est lu à ce moment-là.
 6. **Given** Auto activé et une PR dont la CI tourne, **When** l'utilisateur le désactive, puis que la CI devient verte,
    **Then** PACT ne fusionne pas et demande la relecture.
+7. **Given** une fusion réussie, **When** PACT la constate, **Then** la boucle et l'agent se ferment, et pas avant.
 8. **Given** une PR verte en attente de relecture, **When** l'utilisateur active Auto, **Then** PACT fusionne si toutes les conditions tiennent.
 9. **Given** un check `cancelled`, `timed_out` ou `stale`, **When** PACT le lit, **Then** il relance un job au plus, puis prévient l'utilisateur, sans fusion ni aller-retour.
-7. **Given** une fusion réussie, **When** PACT la constate, **Then** la boucle et l'agent se ferment, et pas avant.
 
 ---
 
@@ -254,6 +252,10 @@ compteur.
 9. **Given** une PR sans verdict, **When** un conflit survient, ou que l'utilisateur la refuse avec un motif, **Then** À faire le signale, sans compteur ; un recalage sans conflit se déroule comme ailleurs.
 10. **Given** une PR sans verdict, **When** un nouveau commit arrive, **Then** la demande tombe, et le même geste la recrée.
 11. **Given** une PR sans verdict fusionnée, **When** PACT le constate, **Then** FR-043 s'applique à la branche distante, et aucun worktree n'est supprimé sans geste de l'utilisateur.
+12. **Given** une demande tombée dont la PR est encore ouverte, **When** une nouvelle demande de la même branche part, **Then** elle reprend la PR par son numéro, après les contrôles de FR-031, sans recherche par nom de branche ni liste des PR.
+13. **Given** une demande tombée dont la PR est fermée, fusionnée ou disparue, **When** une nouvelle demande part, **Then** elle crée une PR.
+14. **Given** une demande tombée dont la PR ouverte n'a plus l'auteur ou le dépôt source attendu, **When** une nouvelle demande part, **Then** PACT ne la reprend pas, n'en crée pas d'autre, et prévient l'utilisateur.
+15. **Given** une demande tombée à cause d'un nouveau commit, **When** la nouvelle demande reprend la PR et que PACT a poussé, **Then** la tête attendue est le commit de cette demande : toute autre tête arrête la reprise et prévient l'utilisateur, et FR-031 vérifie cette même tête avant la fusion.
 
 ---
 
@@ -302,6 +304,7 @@ de PR avant la fin.
 4. **Given** une passe, **When** le dev reçoit sa consigne, **Then** elle dit précisément ce qui est attendu, et interdit toute nouvelle fonctionnalité.
 5. **Given** un `defects` en passe, **When** il arrive, **Then** la même passe reprend, sans aller-retour compté.
 6. **Given** les passes épuisées avec des défauts, **When** PACT le constate, **Then** l'utilisateur décide, et rien n'est fusionné.
+7. **Given** les paramètres du projet, **When** l'utilisateur règle le mode de fusion, un plafond à 5 et 1 passe, **Then** ces valeurs sont gardées dans leurs bornes, la boucle s'arrête au tour 5, et aucun texte d'outil ni du contrat ne dit plus « 3 tours ».
 
 ---
 
@@ -322,6 +325,7 @@ plus son issue. Une intégration manuelle n'est plus prise pour celle d'une dema
 4. **Given** une issue dont la boucle a été fermée ainsi, **When** l'orchestrateur appelle `start_loop`, **Then** il n'est pas refusé.
 5. **Given** une demande en cours pour un agent, **When** l'utilisateur lance une intégration manuelle de cet agent, **Then** l'issue
    de l'une n'est jamais rapportée comme celle de l'autre.
+6. **Given** une livraison en cours, **When** l'orchestrateur appelle `close_agent`, **Then** c'est refusé ; **When** l'utilisateur ferme lui-même un agent, **Then** PACT le prévient, puis la demande tombe, la boucle passe à `closed`, la PR reste ouverte et l'orchestrateur est réveillé.
 
 ---
 
@@ -390,6 +394,7 @@ qui reste sur le disque.
 10. **Given** un dev propre dont seul un `.env` ignoré diffère, **When** PACT constate la fusion, **Then** rien n'est supprimé, et À faire le dit ; un `node_modules` seul n'y fait pas passer.
 11. **Given** une PR recalée puis fusionnée, **When** PACT constate la fusion, **Then** le worktree du dev, amené sur R après le push, est supprimé sans « Supprimer quand même ».
 12. **Given** une fusion constatée, **When** la tête de la branche distante est le commit fusionné, **Then** elle est supprimée ; sinon elle reste, et PACT le dit.
+13. **Given** un worktree qui remplit les conditions, puis un agent rouvert ou un fichier modifié avant la suppression, **When** PACT les réévalue, **Then** rien n'est supprimé.
 
 ### Edge Cases
 
@@ -409,7 +414,7 @@ qui reste sur le disque.
 - Un tiers pousse sur la branche d'une PR suivie (droit d'écriture ou compromission) : le commit n'est pas de PACT, la demande
   tombe (FR-004), et ce commit ne reçoit ni tests, ni fusion.
 - Le nom d'un check d'une PR suivie part au dev (FR-017) : il est borné en longueur, et présenté comme une donnée rapportée.
-- La PR d'une demande disparaît de la forge : PACT ne cherche pas de PR de remplacement par nom de branche.
+- La PR d'une demande disparaît de la forge : PACT ne cherche pas de PR de remplacement par nom de branche, et la nouvelle demande en crée une (FR-030).
 - La suppression d'un worktree échoue (terminal ouvert dedans, fichier verrouillé sous Windows) : À faire le dit, sans forcer.
 - PACT redémarre entre la fusion et le nettoyage : les conditions sont réévaluées, et une suppression déjà faite n'est pas une erreur.
 - Une PR suivie est fusionnée à la main sur la forge (US3) : les mêmes conditions s'appliquent, avec le commit de tête lu sur la PR.
@@ -488,7 +493,8 @@ qui reste sur le disque.
 
 - **FR-029**: PACT MUST ne suivre que ses propres PR : créées par une demande ou par le geste de FR-001, depuis une branche du dépôt, dont l'auteur est le compte de l'utilisateur. Ce compte est le login de `gh` noté à la création de la PR ; un changement de compte en cours de suivi MUST arrêter
   la fusion et prévenir l'utilisateur. Une PR ouverte à la main n'est pas suivie. Toute autre PR MUST être ignorée.
-- **FR-030**: PACT MUST retrouver une PR par le numéro noté dans sa demande, jamais par une recherche sur le nom de branche ni par une liste des PR du dépôt [NEEDS CLARIFICATION: Q32 — demande recréée, PR encore ouverte].
+- **FR-030**: PACT MUST retrouver une PR par le numéro noté dans sa demande, jamais par une recherche sur le nom de branche ni par une liste des PR du dépôt. Une demande tombée MUST garder ce numéro. Une nouvelle demande de la même branche le reprend si la PR est encore ouverte, après les contrôles de FR-031 : l'auteur et le dépôt source avant le push, puis, après le push, la tête de la PR, qui doit être le commit de cette nouvelle demande. Une PR qui n'est plus ouverte (fermée, fusionnée
+  ou disparue) MUST en faire créer une autre. Si l'un de ces contrôles échoue sur une PR ouverte, PACT MUST ne pas la reprendre, ne pas en créer d'autre, et prévenir l'utilisateur.
 - **FR-031**: Juste avant toute fusion, par Auto comme par Valider, PACT MUST vérifier à nouveau l'auteur, le dépôt source et le commit de tête
   de la PR, et ne pas fusionner si l'un d'eux diffère. Auto MUST ne jamais pouvoir fusionner une autre PR.
 - **FR-032**: Le contenu écrit par un tiers (PR, issue, commentaire, description, nom de branche, journal de CI d'un fork) MUST ne jamais être lu, récupéré, exécuté ou fusionné par PACT, ni atteindre un agent. Sur une PR suivie, PACT MUST se limiter aux données de structure : état, commit de tête,
@@ -514,7 +520,7 @@ qui reste sur le disque.
 
 ### Key Entities
 
-- **Demande de livraison** : agent, boucle, issue, commit figé, commit recalé, message, état, PR (numéro, auteur attendu), compte de recalages.
+- **Demande de livraison** : agent, boucle, issue, commit figé, commit recalé, message, état, PR (numéro, gardé même si la demande tombe, auteur attendu), compte de recalages.
   Enregistrée.
 - **Verdict lié** : résultat, défauts, commit jugé, testeur.
 - **Preuve** : commit testé, code de sortie, heure.

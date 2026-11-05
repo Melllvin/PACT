@@ -67,7 +67,7 @@ Pas de maquette dédiée : à produire au plan. L'accueil affiche déjà le comp
 
 ## Périmètre
 
-**Inclus** : une interface globale, tous projets confondus puis par projet ; la taille de chaque élément et le total récupérable ; le détail
+**Inclus** : une interface globale, tous projets confondus puis par projet ; la taille de chaque élément, le total récupérable et le total supprimable sur confirmation ; le détail
 de chaque worktree ; la suppression à l'unité ou en lot ; l'action « Nettoyer » ; le retrait des entrées Git mortes.
 
 **Hors périmètre** :
@@ -99,7 +99,7 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
 
 - Q1: Où placer l'interface ? → A: un onglet « Stockage » dans les réglages globaux, ouvert aussi depuis le compte de worktrees de l'accueil, qui filtre alors sur ce projet.
 - Q2: PACT supprime-t-il les branches distantes ? → A: jamais par défaut ; une case par élément, décochée, seulement pour la branche d'une PR suivie et fusionnée, jamais `main` ni une branche d'une PR ouverte. Elle complète 008 FR-043.
-- Q3: Une alerte de place disque ? → A: un avis discret quand les worktrees récupérables dépassent 5 Go, réglable ou coupable ; aucune suppression ne s'ensuit. Le disque plein n'est pas surveillé. (Précisé par Q16.)
+- Q3: Une alerte de place disque ? → A: un avis discret quand les worktrees récupérables dépassent 5 Go, réglable ou coupable ; aucune suppression ne s'ensuit. Le disque plein n'est pas surveillé. (Précisé par Q16 et Q17.)
 - Q4: Un nettoyage périodique ? → A: non. 008 nettoie déjà à la fusion ; « Nettoyer » reste un geste de l'utilisateur.
 - Q5: Les worktrees d'une ancienne version ? → A: listés, jamais comme sûrs, avec ce qui serait perdu et l'état « PR inconnue », et supprimables à l'unité ou en lot, sur confirmation. `issue.trace` peut relier certains d'entre eux à une PR ; seul le numéro noté compte, avec les contrôles de FR-015.
 - Q6: Refus ou confirmation renforcée ? → A: agent dont le processus tourne : refus, il faut d'abord le fermer. Orchestrateur et agent ouvert à l'arrêt : confirmation renforcée, qui fait taper le nom du worktree et liste les fichiers `.pact/` perdus.
@@ -114,19 +114,17 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
 - Q14: « Irrécupérable » ? → A: un commit absent de toute branche distante, un fichier modifié ou non suivi, sont dits irrécupérables ; un commit présent sur une branche distante est récupérable.
 - Q15: Q7 laisse-t-elle supprimer les éléments de Q8 ? → A: Q7 vaut pour les worktrees ; les éléments de Q8 sont de PACT si leur chemin résolu est celui de l'inventaire, sous `<userData>`, un reste d'intégration y compris ; un `.tmp` se traite comme une sauvegarde.
 - Q16: Comment l'avis connaît-il la taille ? → A: un calcul à basse priorité au démarrage et après une fusion, seule exception à FR-003, sans rien écrire ; « récupérable » désigne les éléments sûrs de « Nettoyer ».
+- Q17: Le total récupérable doit-il rester presque toujours à zéro ? → A: la définition de « récupérable » reste (éléments sûrs). Un second total s'y ajoute, « supprimable sur confirmation », et l'avis à 5 Go porte sur ce second total.
 
 ## Questions ouvertes
 
-Une question, née de Q16 et de Q5 : l'agent spec ne la tranche pas.
-
-- **Q17 — Le total récupérable doit-il rester presque toujours à zéro ?** Q16 réserve « récupérable » aux éléments sûrs. Q5 dit qu'un worktree d'une ancienne version n'est jamais sûr, et 008 supprime déjà à la fusion ce qui l'est. Les 6,4 Go qui motivent cette spec compteraient donc pour 0, l'avis à 5 Go de Q3 ne paraîtrait pas sur ce dépôt, et les
-  caches, sans critère de sûreté, n'y entrent pas non plus. *Proposition* : garder cette définition, et afficher à côté un second total « supprimable sur confirmation » ; l'avis à 5 Go porte sur ce second total. Sinon, l'avis et le total ne servent que dans de rares cas.
+Aucune.
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Voir ce qui occupe la place (Priority: P1)
 
-L'utilisateur ouvre le stockage : il voit le total, tous projets confondus, ce qui est récupérable, puis le détail par projet. L'interface répond
+L'utilisateur ouvre le stockage : il voit le total, tous projets confondus, ce qui est récupérable, ce qui est supprimable sur confirmation, puis le détail par projet. L'interface répond
 aussitôt, et les tailles se remplissent au fil du calcul.
 
 **Why this priority**: on ne supprime rien sans voir, et cette vue ne présente aucun risque.
@@ -136,13 +134,13 @@ fichiers sont inchangés après le calcul.
 
 **Acceptance Scenarios**:
 
-1. **Given** deux projets avec des worktrees, **When** l'utilisateur ouvre la vue globale, **Then** il voit le total, le total récupérable et une
-   ligne par projet.
+1. **Given** deux projets avec des worktrees, **When** l'utilisateur ouvre la vue globale, **Then** il voit le total, le total récupérable, le total supprimable sur confirmation et une ligne par projet.
 2. **Given** une ligne de projet, **When** il l'ouvre, **Then** il voit chaque élément et sa taille.
 3. **Given** un calcul en cours sur plusieurs Go, **When** l'utilisateur agit dans PACT, **Then** l'interface reste réactive, et les tailles non encore
    connues sont indiquées comme telles.
 4. **Given** un calcul terminé, **When** on compare le disque, le `.git` et son index avant et après, **Then** rien n'a été écrit.
 5. **Given** un projet fermé ou absent du disque, **When** la vue s'affiche, **Then** un projet fermé est affiché, et un projet absent montre ses données, sans ses worktrees, qui ne sont pas calculables.
+6. **Given** le compte de worktrees de l'accueil, **When** l'utilisateur le suit, **Then** l'onglet « Stockage » des réglages globaux s'ouvre, filtré sur ce projet.
 
 ---
 
@@ -161,6 +159,7 @@ Pour un worktree, l'utilisateur lit projet, branche, agent et état, PR et état
 3. **Given** un worktree avec une PR notée, **When** l'état est lu, **Then** il vient du numéro noté, avec l'auteur et le dépôt source vérifiés.
 4. **Given** `gh` absent ou hors ligne, **When** l'état est lu, **Then** l'état affiché est « PR inconnue » ; l'élément n'est pas sûr, mais reste supprimable à la main.
 5. **Given** une PR d'un autre auteur sur une branche de même nom, **When** la vue s'affiche, **Then** elle n'est ni lue, ni affichée, ni liée.
+6. **Given** un commit non poussé, **When** l'état s'affiche, **Then** il est calculé sur les références distantes déjà connues, sans `fetch`, et l'écran dit que cet état peut être en retard.
 
 ---
 
@@ -203,7 +202,10 @@ L'utilisateur lance « Nettoyer » : PACT liste ce qui est sûr selon les critè
 5. **Given** une PR fusionnée avec squash, **When** il lance « Nettoyer », **Then** la détection réussit par la PR et son commit de tête.
 6. **Given** la liste, **When** il l'ouvre, **Then** rien n'est supprimé sans confirmation, et la place totale gagnée est indiquée.
 7. **Given** un worktree d'une ancienne version, **When** il lance « Nettoyer », **Then** il n'est pas dit sûr ; dans la vue, il est listé avec ce qui serait perdu et l'état « PR inconnue », et se supprime sur confirmation.
-8. **Given** PACT qui démarre, ou une fusion constatée, **When** les worktrees récupérables dépassent 5 Go, **Then** un avis discret paraît, sans vue ouverte, sans rien écrire ni supprimer.
+8. **Given** PACT qui démarre, ou une fusion constatée, **When** le total supprimable sur confirmation dépasse 5 Go, **Then** un avis discret paraît, sans vue ouverte, sans rien écrire ni supprimer.
+9. **Given** 6 Go de worktrees d'une ancienne version, **When** la vue s'affiche, **Then** ils comptent dans le total supprimable sur confirmation, pas dans le total récupérable, et l'avis paraît.
+10. **Given** PACT ouvert longtemps, **When** aucun geste n'a lieu, **Then** rien n'est nettoyé de lui-même.
+11. **Given** un seuil réglé à 10 Go, ou l'avis coupé, **When** le total supprimable sur confirmation atteint 6 Go, **Then** aucun avis ne paraît.
 
 ---
 
@@ -224,6 +226,9 @@ Un agent actif et l'orchestrateur sont protégés ; un dossier que PACT n'a pas 
 5. **Given** `~/.claude`, `~/.codex` et le dépôt principal, **When** toute action a lieu, **Then** ils ne changent pas.
 6. **Given** un dossier sous `.worktrees/` que Git ne connaît pas comme worktree de ce dépôt, **When** la vue s'affiche, **Then** il n'est pas supprimable.
 7. **Given** un reste sous `<userData>/integrations` retiré de Git, un cache, une sauvegarde ou un `.tmp` à son chemin d'inventaire, **When** l'utilisateur le supprime, **Then** PACT le retire ; **Given** un lien symbolique à ce chemin qui pointe ailleurs, **Then** la cible reste intacte.
+8. **Given** un agent, **When** il cherche à déclencher une suppression, **Then** aucun de ses outils ne le permet.
+9. **Given** `state.json`, un élément en lecture seule ou le worktree d'un agent dont le processus tourne, **When** les totaux se calculent, **Then** ils ne comptent pas dans le total supprimable sur confirmation.
+10. **Given** les données d'un workspace, **When** la vue s'affiche, **Then** elles sont supprimables seulement si le projet n'est ni ouvert ni récent ; **Given** un cache d'Electron supprimé, **Then** PACT demande une relance ; **Given** un rôle orphelin, **Then** il est supprimable sur confirmation.
 
 ### Edge Cases
 
@@ -249,8 +254,8 @@ Un agent actif et l'orchestrateur sont protégés ; un dossier que PACT n'a pas 
 
 - **FR-001**: PACT MUST offrir une interface globale du stockage, tous projets confondus puis par projet : un onglet « Stockage » dans les réglages globaux, ouvert aussi depuis le compte de worktrees de l'accueil, qui filtre alors sur ce projet. Elle MUST couvrir tous les projets qui ont un fichier dans
   `workspaces/`, même fermés ; un projet déplacé ou absent est affiché avec ses données, sans ses worktrees.
-- **FR-002**: La vue MUST montrer la taille de chaque élément et le total récupérable, pour l'inventaire de cette spec. « Récupérable » désigne les éléments sûrs de « Nettoyer » [NEEDS CLARIFICATION: Q17 — ce total reste presque toujours à zéro]. Hors worktrees, sont supprimables les caches d'Electron, avec relance demandée, les rôles orphelins, les restes
-  d'intégration et de conflit, les sauvegardes `.corrupt-*` et `.tmp` sur confirmation, et les données d'un workspace dont le projet n'est ni ouvert ni récent. `state.json` ne l'est jamais.
+- **FR-002**: La vue MUST montrer la taille de chaque élément et, pour l'inventaire de cette spec, deux totaux : « récupérable », les éléments sûrs de « Nettoyer », et « supprimable sur confirmation », tout ce que l'utilisateur peut supprimer, sans ce que FR-010 refuse ni ce qui est en lecture seule. Hors worktrees, sont supprimables
+  les caches d'Electron, avec relance demandée, les rôles orphelins, les restes d'intégration et de conflit, les sauvegardes `.corrupt-*` et `.tmp` sur confirmation, et les données d'un workspace dont le projet n'est ni ouvert ni récent. `state.json` ne l'est jamais.
 - **FR-003**: Le calcul des tailles MUST ne pas bloquer l'interface, afficher ce qui est connu au fur et à mesure, et s'arrêter quand on ne le regarde plus. Seule exception : un calcul à basse priorité au démarrage de PACT et après une fusion, sans rien écrire, pour l'avis de FR-020.
 - **FR-004**: Le calcul et la lecture des états MUST ne rien écrire : ni fichier, ni référence, ni index Git (les commandes Git de lecture ne doivent pas
   rafraîchir l'index), et aucun `fetch`.
@@ -282,12 +287,12 @@ Un agent actif et l'orchestrateur sont protégés ; un dossier que PACT n'a pas 
 
 **Avis**
 
-- **FR-020**: Un avis discret MUST paraître quand les worktrees récupérables dépassent 5 Go, seuil réglable, avis coupable, et ne jamais supprimer. Sa taille vient du calcul à basse priorité de FR-003, gardée en mémoire. Le disque plein n'est pas surveillé.
+- **FR-020**: Un avis discret MUST paraître quand le total supprimable sur confirmation dépasse 5 Go, seuil réglable, avis coupable, et ne jamais supprimer. Sa taille vient du calcul à basse priorité de FR-003, gardée en mémoire. Le disque plein n'est pas surveillé.
 - **FR-021**: PACT MUST ne faire aucun nettoyage périodique : 008 nettoie à la fusion, et « Nettoyer » reste un geste de l'utilisateur.
 
 ### Key Entities
 
-- **Élément stocké** : type, chemin, projet, taille (connue ou non), récupérable ou non, créé par PACT ou non.
+- **Élément stocké** : type, chemin, projet, taille (connue ou non), récupérable ou non, supprimable sur confirmation ou non, créé par PACT ou non.
 - **Worktree** : projet, branche réelle, agent et état, PR notée et état, fichiers modifiés, commits non poussés, date du dernier changement, verdict sûr ou non.
 - **Perte annoncée** : fichiers, commits, fichiers ignorés, caractère irrécupérable, état relu.
 - **Résultat de suppression** : élément, réussite ou échec, raison.
