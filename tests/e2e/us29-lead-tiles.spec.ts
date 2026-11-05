@@ -27,10 +27,24 @@ test.afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-const box = async (locator: Locator) => {
-  const b = await locator.boundingBox();
-  expect(b).not.toBeNull();
-  return b ?? { x: 0, y: 0, width: 0, height: 0 };
+type Box = { x: number; y: number; width: number; height: number };
+
+/** The box of a tile once it has stopped moving (a tile comes in with an animation, FR-042). */
+const box = async (locator: Locator): Promise<Box> => {
+  const seen: { previous: string; box: Box | null } = { previous: '', box: null };
+  await expect
+    .poll(
+      async () => {
+        seen.box = await locator.boundingBox();
+        const now = JSON.stringify(seen.box);
+        const stable = now === seen.previous && seen.box !== null;
+        seen.previous = now;
+        return stable;
+      },
+      { intervals: [150], timeout: 5_000 },
+    )
+    .toBe(true);
+  return seen.box ?? { x: 0, y: 0, width: 0, height: 0 };
 };
 
 /** Opens the repository and launches one fake agent, as the orchestrator. */

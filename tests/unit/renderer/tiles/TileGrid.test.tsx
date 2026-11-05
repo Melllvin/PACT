@@ -39,9 +39,9 @@ const children = () => Array.from(grid().children);
 const labels = (elements: Element[]) => elements.map((e) => e.getAttribute('aria-label'));
 
 describe('TileGrid with an orchestrator (T019, FR-010, FR-010b)', () => {
-  const lead = (count: number, onAdd: (() => void) | undefined = vi.fn()) =>
+  const lead = (count: number, onAdd: (() => void) | null = vi.fn()) =>
     render(
-      <TileGrid onAdd={onAdd} lead={<article aria-label="Chef" />}>
+      <TileGrid onAdd={onAdd ?? undefined} lead={<article aria-label="Chef" />}>
         {tiles(count)}
       </TileGrid>,
     );
@@ -105,15 +105,15 @@ describe('TileGrid with an orchestrator (T019, FR-010, FR-010b)', () => {
   });
 
   it('offers no « + » and no empty slot when no agent can be added', () => {
-    lead(1, undefined);
+    lead(1, null);
     expect(plus()).toHaveLength(0);
     expect(children()).toHaveLength(2);
   });
 });
 
 describe('TileGrid without an orchestrator (T051, FR-010a, FR-010b)', () => {
-  const plain = (count: number, onAdd: (() => void) | undefined = vi.fn()) =>
-    render(<TileGrid onAdd={onAdd}>{tiles(count)}</TileGrid>);
+  const plain = (count: number, onAdd: (() => void) | null = vi.fn()) =>
+    render(<TileGrid onAdd={onAdd ?? undefined}>{tiles(count)}</TileGrid>);
 
   it.each([
     [1, 1],
@@ -176,7 +176,7 @@ describe('TileGrid without an orchestrator (T051, FR-010a, FR-010b)', () => {
   });
 
   it('offers no « + » and no empty slot when no agent can be added', () => {
-    plain(5, undefined);
+    plain(5, null);
     expect(plus()).toHaveLength(0);
     expect(children()).toHaveLength(5);
   });
