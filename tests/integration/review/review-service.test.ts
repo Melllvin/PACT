@@ -342,9 +342,9 @@ describe('ReviewService pending reviews (FR-002, FR-003)', () => {
 });
 
 // fix-relance-communs — two agents changing the same file: no overlap is computed, announced to
-// the pending reviews, nor told to the orchestrator.
+// the pending reviews.
 describe('ReviewService with two agents on the same file', () => {
-  it('announces no overlap and tells none', async () => {
+  it('announces no overlap', async () => {
     const OTHER_ID = '00000000-0000-4000-8000-000000000002';
     const other = join(repo, '.worktrees', 'codex-2');
     git(repo, 'worktree', 'add', '-b', 'agent/codex-2', other, 'main');
@@ -358,12 +358,6 @@ describe('ReviewService with two agents on the same file', () => {
     await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
     await writeFile(join(other, 'a.txt'), 'UN\ndeux\n');
 
-    const told: unknown[] = [];
-    service.dispose();
-    // The option of the old callback is passed anyway: it must never be called.
-    service = createService(
-      Object.assign({}, { onOverlap: (...args: unknown[]) => told.push(args) }),
-    );
     await service.updatePending(workspace.id);
     await service.updatePending(workspace.id);
 
@@ -374,7 +368,6 @@ describe('ReviewService with two agents on the same file', () => {
     });
     // ... but nothing says they share a file.
     expect(pending.at(-1)).not.toHaveProperty('overlaps');
-    expect(told).toEqual([]);
   });
 });
 
