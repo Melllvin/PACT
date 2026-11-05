@@ -261,4 +261,37 @@ describe('UsageService', () => {
       expect(usage.resetAt('claude-code', 'default')).toBeUndefined();
     });
   });
+
+  // fix-todo-diff-notifications — a timer refresh without any new API call of the session must not
+  // pass for a fresh reading.
+  describe('a refresh brought by the timer', () => {
+    it('shows at once a reading whose percentage or reset changed', () => {
+      const { usage, states, later } = service();
+      usage.record(source(), sample(40, 100, '2026-11-03T18:00:00.000Z'));
+      later(5);
+      usage.record(source(), sample(41, 100, '2026-11-03T18:00:00.000Z'));
+      later(5);
+      usage.record(source(), sample(41, 100, '2026-11-03T23:00:00.000Z'));
+      expect(states).toHaveLength(3);
+      expect(states[1]?.reading?.readAt).toBe('2026-11-03T14:05:00.000Z');
+      expect(states[2]?.reading?.readAt).toBe('2026-11-03T14:10:00.000Z');
+    });
+
+    it('keeps the age of the reading when nothing new happened (same windows, same tokens)', () => {
+      const { usage, later } = service();
+      const same = () => sample(40, 100, '2026-11-03T18:00:00.000Z');
+      usage.record(source(), same());
+      later(7);
+      usage.record(source(), same());
+      expect(usage.list()[0]?.reading?.readAt).toBe('2026-11-03T14:00:00.000Z');
+    });
+
+    it('restarts the age when the session called the API without changing the rounded percentage', () => {
+      const { usage, later } = service();
+      usage.record(source(), sample(40, 100, '2026-11-03T18:00:00.000Z'));
+      later(7);
+      usage.record(source(), sample(40, 180, '2026-11-03T18:00:00.000Z'));
+      expect(usage.list()[0]?.reading?.readAt).toBe('2026-11-03T14:07:00.000Z');
+    });
+  });
 });
