@@ -31,8 +31,10 @@ jobs:
     outputs:
       publish: ${{ github.event_name == 'push' }}
     steps:
+      # Full history: the tagged commit is compared with origin/main below.
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: The tag is the version of package.json
         if: github.event_name == 'push'
@@ -42,6 +44,16 @@ jobs:
           version=$(jq -r .version package.json)
           if [ "$TAG" != "v$version" ]; then
             echo "::error::Tag $TAG does not match version $version of package.json (expected v$version)."
+            exit 1
+          fi
+      # A tag on an unmerged branch would publish a public release that no CI has seen.
+      - name: The tagged commit is on main
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Tag $TAG ($(git rev-parse --short HEAD)) is not on main: merge it into main first, then tag."
             exit 1
           fi
       - name: Draft release

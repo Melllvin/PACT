@@ -90,6 +90,15 @@ describe('release configuration', () => {
     expect(workflow).toContain('jq -r .version package.json');
   });
 
+  it('refuses a tag whose commit is not on main, before creating the draft', () => {
+    const workflow = read('.github/workflows/release.yml');
+    const prepare = workflow.slice(workflow.indexOf('\n  prepare:'), workflow.indexOf('\n  mac:'));
+    expect(prepare).toContain('fetch-depth: 0');
+    expect(prepare).toContain('persist-credentials: false');
+    expect(prepare).toContain('git merge-base --is-ancestor HEAD origin/main');
+    expect(prepare.indexOf('is-ancestor')).toBeLessThan(prepare.indexOf('gh release create'));
+  });
+
   it('publishes the draft only once it holds the .dmg, whatever Windows did', () => {
     const workflow = read('.github/workflows/release.yml');
     const publish = workflow.slice(workflow.indexOf('\n  publish:'));
