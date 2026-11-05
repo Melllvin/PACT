@@ -1,3 +1,4 @@
+import { within } from '../timeout';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -71,6 +72,8 @@ type Options = {
   /** Base URL of the hook server, known once it listens. */
   hookUrl: () => string;
   resolveEnv: () => Promise<ResolvedEnv>;
+  /** A launch waits this long for the fetch of origin/<main>, then goes on with the last known. */
+  fetchTimeoutMs?: number;
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
   onBranch?: (event: AgentBranchEvent) => void;
@@ -163,6 +166,9 @@ const isReady = (state: Agent['state']) => state === 'awaiting-prompt' || state 
 const RESTORED_MESSAGE = 'PACT a redémarré : agent à reprendre.';
 const UNAVAILABLE_MESSAGE = 'Dossier du workspace introuvable : agent arrêté.';
 
+/** How long a launch waits for the fetch of origin/<main> (a slow remote must not block it). */
+const FETCH_WAIT_MS = 5000;
+
 export class AgentManager {
   private readonly workspaces: WorkspaceAccess;
   private readonly registry: Options['registry'];
@@ -171,6 +177,7 @@ export class AgentManager {
   private readonly hooks: Options['hooks'];
   private readonly hookUrl: () => string;
   private readonly resolveEnv: () => Promise<ResolvedEnv>;
+  private readonly fetchTimeoutMs: number;
   private readonly isPortInUse: (port: number) => Promise<boolean>;
   private readonly onState: NonNullable<Options['onState']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
@@ -213,6 +220,7 @@ export class AgentManager {
     this.hooks = options.hooks;
     this.hookUrl = options.hookUrl;
     this.resolveEnv = options.resolveEnv;
+    this.fetchTimeoutMs = options.fetchTimeoutMs ?? FETCH_WAIT_MS;
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
@@ -629,7 +637,10 @@ export class AgentManager {
       // fetch keeps the last one known); a lagging local main is no base.
       let start = baseBranch;
       if (draft.baseBranch === null) {
-        await this.git.fetchOrigin(workspace.path, workspace.mainBranch);
+        await within(
+          this.git.fetchOrigin(workspace.path, workspace.mainBranch),
+          this.fetchTimeoutMs,
+        );
         if (await this.git.remoteBranchExists(workspace.path, workspace.mainBranch)) {
           start = `origin/${workspace.mainBranch}`;
         }

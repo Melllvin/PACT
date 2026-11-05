@@ -63,6 +63,7 @@ const canonical = (path: string) => realpathSync.native(resolve(path));
 
 export class GitService {
   private readonly env: Env | undefined;
+  private readonly fetching = new Map<string, Promise<boolean>>();
 
   constructor({ env }: { env?: Env } = {}) {
     this.env = env;
@@ -104,33 +105,51 @@ export class GitService {
   }
 
   /**
-   * The main branch of a repository, never the branch its root folder happens to be on: the
-   * default branch of origin (`origin/HEAD`, else asked to origin once), then `main` or `master`
-   * on origin, then locally, and only then the current branch (fix-todo-diff-notifications).
+   * The best main branch known right now, with no network: the default branch of origin
+   * (`origin/HEAD`), then `main` or `master` on origin, then locally, and only then the current
+   * branch; never the branch the root folder happens to be on while one of those exists.
+   * `settled` is false while origin could still tell better (`remoteDefaultBranch`).
    */
-  async defaultBranch(path: string): Promise<string> {
-    const quiet = async (args: string[], timeout?: number) => {
+  async knownDefaultBranch(path: string): Promise<{ branch: string; settled: boolean }> {
+    const quiet = async (args: string[]) => {
       try {
-        return (await this.run(path, args, { GIT_TERMINAL_PROMPT: '0' }, timeout)).stdout.trim();
+        return (await this.git(path, args)).trim();
       } catch {
         return '';
       }
     };
     const known = await quiet(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
-    if (known.startsWith('origin/')) return known.slice('origin/'.length);
-    if ((await quiet(['remote'])).split('\n').includes('origin')) {
-      const shown = /^\s*HEAD branch: (\S+)\s*$/m.exec(
-        await quiet(['remote', 'show', 'origin'], REMOTE_TIMEOUT_MS),
-      )?.[1];
-      if (shown && shown !== '(unknown)') return shown;
+    if (known.startsWith('origin/'))
+      return { branch: known.slice('origin/'.length), settled: true };
+    const hasOrigin = (await quiet(['remote'])).split('\n').includes('origin');
+    if (hasOrigin) {
       for (const name of ['main', 'master']) {
-        if (await this.remoteBranchExists(path, name)) return name;
+        if (await this.remoteBranchExists(path, name)) return { branch: name, settled: false };
       }
     }
     for (const name of ['main', 'master']) {
-      if (await this.branchExists(path, name)) return name;
+      if (await this.branchExists(path, name)) return { branch: name, settled: !hasOrigin };
     }
-    return this.currentBranch(path);
+    return { branch: await this.currentBranch(path), settled: !hasOrigin };
+  }
+
+  /**
+   * Asks origin for its default branch (`git remote show origin`): slow on a filtered network, so
+   * never awaited by an opening or a launch. `null` when it cannot tell.
+   */
+  async remoteDefaultBranch(path: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.run(
+        path,
+        ['remote', 'show', 'origin'],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      const shown = /^\s*HEAD branch: (\S+)\s*$/m.exec(stdout)?.[1];
+      return shown && shown !== '(unknown)' ? shown : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Whether `origin/<branch>` is known here. */
@@ -147,7 +166,19 @@ export class GitService {
    * Brings `origin/<branch>` up to date, that branch only: no local branch, HEAD or worktree moves.
    * `false`, without throwing, when it fails (network down, no origin): the last one known stays.
    */
-  async fetchOrigin(cwd: string, branch: string): Promise<boolean> {
+  fetchOrigin(cwd: string, branch: string): Promise<boolean> {
+    // Two fetches of the same branch of the same repository never overlap: they share one.
+    const key = `${cwd}\u0000${branch}`;
+    const running = this.fetching.get(key);
+    if (running) return running;
+    const started = this.fetchNow(cwd, branch).finally(() => {
+      this.fetching.delete(key);
+    });
+    this.fetching.set(key, started);
+    return started;
+  }
+
+  private async fetchNow(cwd: string, branch: string): Promise<boolean> {
     try {
       await this.run(
         cwd,

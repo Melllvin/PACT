@@ -79,6 +79,12 @@ void app.whenReady().then(async () => {
   const workspaces = new WorkspaceService({
     git,
     stores,
+    // origin told a main branch other than the one known at opening: the review is read again.
+    onMainBranch: (id) => {
+      void review.updatePending(id);
+      emit('workspace:agentsLaunched', { workspaceId: id });
+      syncTodos();
+    },
     onStatus: (event) => {
       emit('workspace:status', event);
       // Spec edge case « dossier supprimé » (T121): what runs there stops; shells come back with it.
@@ -376,6 +382,13 @@ void app.whenReady().then(async () => {
   const notifications = new NotificationService({
     notify,
     isForeground: () => BrowserWindow.getAllWindows().some((win) => win.isFocused()),
+    agentLabel: ({ workspaceId, agentId }) => {
+      const agent = workspaces
+        .list()
+        .find((w) => w.id === workspaceId)
+        ?.agents.find((a) => a.id === agentId);
+      return agent ? `${cliNameOf(agent.cliId)} ${String(agent.position)}` : null;
+    },
     activate: ({ workspaceId, agentId }) => {
       const [window] = BrowserWindow.getAllWindows();
       if (window?.isMinimized()) window.restore();

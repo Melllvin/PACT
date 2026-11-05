@@ -1,7 +1,8 @@
 import type { TodoItem, TodoKind } from '../shared/model';
 
 // fix-todo-diff-notifications — a system notification once per new item that needs the user, while
-// PACT is in the background. Only the title of the item travels, never the text of an agent.
+// PACT is in the background. Only the title of the item travels, never the text of an agent:
+// an item whose title holds some (issue titles, an issue id) is notified under a fixed title.
 
 export type Notification = {
   title: string;
@@ -22,6 +23,12 @@ const NOTIFIED: ReadonlySet<TodoKind> = new Set([
   'usage-limit',
 ]);
 
+/** Fixed titles of the items whose own title holds text an agent wrote (issue titles, issue id). */
+const GENERIC_TITLE: Partial<Record<TodoKind, string>> = {
+  'publish-issues': '◎ Issues à publier',
+  'loop-escalated': '✕ Boucle arrêtée',
+};
+
 export class NotificationService {
   /** The ids of the notified items still listed, per workspace: gone and back, it notifies again. */
   private readonly shown = new Map<string, Set<string>>();
@@ -31,6 +38,8 @@ export class NotificationService {
       notify: Notify;
       activate: (target: { workspaceId: string; agentId: string }) => void;
       isForeground: () => boolean;
+      /** « Claude Code 2 »: the name of an agent, from PACT's own data. */
+      agentLabel?: (target: { workspaceId: string; agentId: string }) => string | null;
     },
   ) {}
 
@@ -43,7 +52,7 @@ export class NotificationService {
     for (const todo of wanted) {
       if (known.has(todo.id)) continue;
       this.options.notify({
-        title: todo.title,
+        title: this.titleOf(workspaceId, todo),
         workspaceId,
         agentId: todo.agentId,
         onClick: () => {
@@ -51,6 +60,15 @@ export class NotificationService {
         },
       });
     }
+  }
+
+  private titleOf(workspaceId: string, todo: TodoItem): string {
+    const generic = GENERIC_TITLE[todo.kind];
+    const { agentLabel } = this.options;
+    // Without `agentLabel` (unit tests of the service alone) the item's own title goes out.
+    if (generic === undefined || agentLabel === undefined) return todo.title;
+    const label = agentLabel({ workspaceId, agentId: todo.agentId });
+    return label ? `${generic} · ${label}` : generic;
   }
 }
 

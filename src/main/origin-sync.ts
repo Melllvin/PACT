@@ -7,6 +7,8 @@ type Target = { id: string; path: string; mainBranch: string; available: boolean
 
 export class OriginSync {
   private timer: ReturnType<typeof setInterval> | undefined;
+  /** The workspaces being synchronised: a slow remote never stacks fetches. */
+  private readonly running = new Set<string>();
 
   constructor(
     private readonly deps: {
@@ -19,9 +21,14 @@ export class OriginSync {
   /** One workspace: a fetch that fails changes nothing, the last origin known stays the base. */
   async sync(workspaceId: string): Promise<void> {
     const target = this.deps.workspaces().find((ws) => ws.id === workspaceId);
-    if (!target?.available || target.mainBranch === '') return;
-    await this.deps.fetchOrigin(target.path, target.mainBranch);
-    await this.deps.refresh(target.id).catch(() => undefined);
+    if (!target?.available || target.mainBranch === '' || this.running.has(target.id)) return;
+    this.running.add(target.id);
+    try {
+      await this.deps.fetchOrigin(target.path, target.mainBranch);
+      await this.deps.refresh(target.id).catch(() => undefined);
+    } finally {
+      this.running.delete(target.id);
+    }
   }
 
   start(intervalMs = ORIGIN_SYNC_MS): void {

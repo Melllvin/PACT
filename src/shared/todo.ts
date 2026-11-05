@@ -139,8 +139,9 @@ export function deriveTodos(
       })
     : [];
   // « ✕ Boucle arrêtée »: 3 rounds without the tests passing, the user decides (004 FR-018).
-  const loops = (workspace.loops ?? []).flatMap((loop): TodoItem[] =>
-    loop.state === 'escalated' && byId.has(loop.devAgentId)
+  const loops = (workspace.loops ?? []).flatMap((loop): TodoItem[] => {
+    const dev = byId.get(loop.devAgentId);
+    return loop.state === 'escalated' && dev
       ? [
           {
             id: `${loop.issueId}:loop-escalated`,
@@ -151,8 +152,8 @@ export function deriveTodos(
             loop: { issueId: loop.issueId },
           },
         ]
-      : [],
-  );
+      : [];
+  });
   const terminals = workspace.freeTerminals.map((terminal): TodoItem => ({
     id: `${terminal.id}:info`,
     agentId: terminal.id,

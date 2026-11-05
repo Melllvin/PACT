@@ -66,4 +66,28 @@ describe('OriginSync', () => {
     await vi.advanceTimersByTimeAsync(ORIGIN_SYNC_MS * 2);
     expect(fetchOrigin).toHaveBeenCalledTimes(2);
   });
+
+  it('never stacks two syncs of a workspace while a slow remote holds the first', async () => {
+    let release: () => void = () => undefined;
+    const fetchOrigin = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          release = () => {
+            resolve(true);
+          };
+        }),
+    );
+    const { sync, refresh } = setup([target()], fetchOrigin);
+    const first = sync.sync('w1');
+    await sync.sync('w1');
+    expect(fetchOrigin).toHaveBeenCalledTimes(1);
+    release();
+    await first;
+    expect(refresh).toHaveBeenCalledTimes(1);
+    // Once it is over, the next one goes.
+    const second = sync.sync('w1');
+    release();
+    await second;
+    expect(fetchOrigin).toHaveBeenCalledTimes(2);
+  });
 });

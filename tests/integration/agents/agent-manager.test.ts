@@ -94,6 +94,8 @@ const createManager = async ({
   service = workspaces,
   idleMs = undefined as number | undefined,
   orchestrator = undefined as ConstructorParameters<typeof AgentManager>[0]['orchestrator'],
+  gitService = new GitService({ env: gitEnv }),
+  fetchTimeoutMs = undefined as number | undefined,
 } = {}) => {
   const registry = new CliRegistry({
     adapters: [adapter],
@@ -104,7 +106,8 @@ const createManager = async ({
   const manager = new AgentManager({
     workspaces: service,
     registry,
-    git: new GitService({ env: gitEnv }),
+    git: gitService,
+    ...(fetchTimeoutMs === undefined ? {} : { fetchTimeoutMs }),
     pty: ptyManager,
     hooks,
     hookUrl: () => hookUrl,
@@ -620,5 +623,21 @@ describe('AgentManager.launch from origin', { timeout: 30_000 }, () => {
     expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(
       git(repo, 'rev-parse', 'develop'),
     );
+  });
+
+  // A remote that does not answer must not hold a launch: it waits a short time, then starts
+  // from the last origin/main known. The fetch itself is never really waited for.
+  it('starts from the last origin/main known when the fetch does not answer in time', async () => {
+    git(repo, 'fetch', '-q', 'origin', 'main');
+    const known = git(repo, 'rev-parse', 'origin/main');
+    class Silent extends GitService {
+      override fetchOrigin = () => new Promise<boolean>(() => undefined);
+    }
+    const manager = await createManager({
+      gitService: new Silent({ env: gitEnv }),
+      fetchTimeoutMs: 20,
+    });
+    const [agent] = await launch(manager, [draft()]);
+    expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(known);
   });
 });
