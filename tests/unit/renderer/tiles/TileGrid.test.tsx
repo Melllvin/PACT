@@ -3,7 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TileGrid } from '../../../../src/renderer/tiles/TileGrid';
 
-// T069 — 2×2 up to 4 tiles, 3×2 for 5 or 6, « + » in the free slots (FR-019, US3 scenario 1).
+// 006 Phase 4 — T019 (disposition `lead`, FR-010, FR-010b) and T051 (without an orchestrator,
+// FR-010a, FR-010b, #40 #47). Replaces the 2×2 / 3×2 tests of 001 FR-019 and the lead on top of
+// 004 FR-006a (two stacked sections), which the spec removes.
+//
+// What the tests read of the grid (the region « Tuiles »): its columns, from the inline
+// `grid-template-columns: repeat(N, …)` or a `grid-cols-N` class; the height of its rows, from
+// `grid-auto-rows` (inline or `auto-rows-[…]`), which R3 sets to half the visible height; its
+// vertical scroll, from the `overflow-y-auto` class. The geometry itself is in the e2e `layout`.
 
 const tiles = (count: number) =>
   Array.from({ length: count }, (_, i) => (
@@ -13,89 +20,164 @@ const tiles = (count: number) =>
 const grid = () => screen.getByRole('region', { name: 'Tuiles' });
 const plus = () => screen.queryAllByRole('button', { name: 'Ajouter un agent' });
 
-describe('TileGrid', () => {
-  it.each([1, 2, 3, 4])('lays %i tiles out in 2×2, with « + » in the free slots', (count) => {
-    render(<TileGrid onAdd={vi.fn()}>{tiles(count)}</TileGrid>);
-    expect(grid().dataset.layout).toBe('2x2');
-    expect(plus()).toHaveLength(4 - count);
+/** The number of columns of the grid, however it is written. */
+const columns = () => {
+  const inline = /repeat\(\s*(\d+)\s*,/.exec(grid().style.gridTemplateColumns);
+  const named = /(?:^|\s)grid-cols-(\d+)(?:\s|$)/.exec(grid().className);
+  return Number((inline ?? named)?.[1]);
+};
+
+/** The height of a row, as written: `calc((100% - gap) / 2)` or half of the visible height. */
+const rowHeight = () => {
+  const inline = grid().style.gridAutoRows;
+  const named = /auto-rows-\[([^\]]+)\]/.exec(grid().className)?.[1]?.replaceAll('_', ' ');
+  return inline || named || '';
+};
+const HALF = /(\/\s*2\s*\)?$|^50%$|^calc\(\s*50%)/;
+
+const children = () => Array.from(grid().children);
+const labels = (elements: Element[]) => elements.map((e) => e.getAttribute('aria-label'));
+
+describe('TileGrid with an orchestrator (T019, FR-010, FR-010b)', () => {
+  const lead = (count: number, onAdd: (() => void) | undefined = vi.fn()) =>
+    render(
+      <TileGrid onAdd={onAdd} lead={<article aria-label="Chef" />}>
+        {tiles(count)}
+      </TileGrid>,
+    );
+
+  it.each([0, 1, 2, 3, 5])('is one grid of 3 columns with %i agents', (count) => {
+    lead(count);
+    expect(grid().dataset.layout).toBe('lead');
+    expect(columns()).toBe(3);
+    // One grid, not the two stacked sections of 004.
+    expect(screen.queryByRole('region', { name: 'Agents dirigés' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Orchestrateur' })).toBeNull();
   });
 
-  it.each([5, 6])('lays %i tiles out in 3×2', (count) => {
-    render(<TileGrid onAdd={vi.fn()}>{tiles(count)}</TileGrid>);
-    expect(grid().dataset.layout).toBe('3x2');
-    expect(plus()).toHaveLength(6 - count);
+  it.each([0, 1, 2, 3, 5])(
+    'puts the orchestrator first, on 2 columns × 2 rows, then the %i agents in order',
+    (count) => {
+      lead(count);
+      const [first, ...others] = children();
+      expect(first?.className).toMatch(/(?:^|\s)col-span-2(?:\s|$)/);
+      expect(first?.className).toMatch(/(?:^|\s)row-span-2(?:\s|$)/);
+      expect(first?.contains(screen.getByRole('article', { name: 'Chef' }))).toBe(true);
+      expect(screen.getAllByRole('article')[0]?.getAttribute('aria-label')).toBe('Chef');
+      // The agents come after it, in order; the placement of the grid does the right column
+      // (agents 1 and 2) and the rows of 3 below.
+      const agents = others.filter((e) => e.getAttribute('aria-label')?.startsWith('Tuile'));
+      expect(labels(agents)).toEqual(
+        Array.from({ length: count }, (_, i) => `Tuile ${String(i + 1)}`),
+      );
+      // None of the agents is itself spanning several cells.
+      for (const agent of agents) expect(agent.className).not.toMatch(/(?:col|row)-span-/);
+    },
+  );
+
+  it('scrolls vertically, never horizontally, and the rows take half of the visible height', () => {
+    lead(5);
+    expect(grid().className).toMatch(/(?:^|\s)overflow-y-auto(?:\s|$)/);
+    expect(grid().className).not.toMatch(/overflow-x-(?:auto|scroll)/);
+    expect(grid().className).not.toMatch(/(?:^|\s)overflow-auto(?:\s|$)/);
+    expect(rowHeight()).toMatch(HALF);
   });
 
-  it('keeps the order it is given', () => {
-    render(<TileGrid onAdd={vi.fn()}>{tiles(3)}</TileGrid>);
-    expect(screen.getAllByRole('article').map((t) => t.getAttribute('aria-label'))).toEqual([
-      'Tuile 1',
-      'Tuile 2',
-      'Tuile 3',
-    ]);
+  it.each([
+    [0, 1],
+    [1, 1],
+    [2, 0],
+    [3, 1],
+    [4, 1],
+    [5, 0],
+  ])('with %i agents, shows %i « + » (one only, if the last row has a free place)', (n, shown) => {
+    lead(n);
+    expect(plus()).toHaveLength(shown);
+    // No empty slot either: the cells are the orchestrator, the agents and that one « + ».
+    expect(children()).toHaveLength(1 + n + shown);
   });
 
-  it('opens the add menu from a « + »', async () => {
+  it('opens the add menu from the « + »', async () => {
     const onAdd = vi.fn();
-    render(<TileGrid onAdd={onAdd}>{tiles(1)}</TileGrid>);
+    lead(1, onAdd);
     await userEvent.click(plus()[0] ?? document.body);
     expect(onAdd).toHaveBeenCalledOnce();
   });
 
-  it('offers no « + » when no agent can be added', () => {
-    render(<TileGrid onAdd={undefined}>{tiles(2)}</TileGrid>);
+  it('offers no « + » and no empty slot when no agent can be added', () => {
+    lead(1, undefined);
     expect(plus()).toHaveLength(0);
-    expect(grid().dataset.layout).toBe('2x2');
-  });
-
-  it('grows beyond 3×2 rather than hiding a tile', () => {
-    render(<TileGrid onAdd={vi.fn()}>{tiles(7)}</TileGrid>);
-    expect(grid().dataset.layout).toBe('3x2');
-    expect(screen.getAllByRole('article')).toHaveLength(7);
-    expect(plus()).toHaveLength(0);
+    expect(children()).toHaveLength(2);
   });
 });
 
-describe('TileGrid with an orchestrator (003 T019)', () => {
-  it('puts the lead tile on top, centred, and the others below in order', () => {
-    render(
-      <TileGrid onAdd={vi.fn()} lead={<article aria-label="Chef" />}>
-        {tiles(3)}
-      </TileGrid>,
-    );
-    expect(grid().dataset.layout).toBe('lead');
-    const lead = screen.getByRole('region', { name: 'Orchestrateur' });
-    expect(lead.contains(screen.getByRole('article', { name: 'Chef' }))).toBe(true);
-    const others = screen.getByRole('region', { name: 'Agents dirigés' });
-    expect(
-      Array.from(others.querySelectorAll('article')).map((a) => a.getAttribute('aria-label')),
-    ).toEqual(['Tuile 1', 'Tuile 2', 'Tuile 3']);
-    // Up to six agents in all: two more fit below.
-    expect(plus()).toHaveLength(2);
-  });
+describe('TileGrid without an orchestrator (T051, FR-010a, FR-010b)', () => {
+  const plain = (count: number, onAdd: (() => void) | undefined = vi.fn()) =>
+    render(<TileGrid onAdd={onAdd}>{tiles(count)}</TileGrid>);
 
-  it('keeps the plain grid without one', () => {
-    render(<TileGrid onAdd={vi.fn()}>{tiles(2)}</TileGrid>);
-    expect(grid().dataset.layout).toBe('2x2');
+  it.each([
+    [1, 1],
+    [2, 2],
+    [3, 3],
+    [4, 2],
+    [6, 3],
+    [7, 3],
+  ])('lays %i tiles out on %i columns', (count, cols) => {
+    plain(count);
+    expect(columns()).toBe(cols);
     expect(screen.queryByRole('region', { name: 'Orchestrateur' })).toBeNull();
   });
-});
 
-describe('TileGrid keeps the lead the largest (004 T011, FR-006a)', () => {
-  it.each([1, 3, 5])(
-    'gives the lead the full width and 3/5 of the height, %i others sharing 2/5',
+  it('keeps 3 columns for 5 tiles (3×2, FR-010a)', () => {
+    plain(5);
+    expect(columns()).toBe(3);
+  });
+
+  it.each([1, 2, 3, 4, 6, 7])(
+    'with %i tiles, the rows take half of the visible height and the grid scrolls vertically',
     (count) => {
-      render(
-        <TileGrid onAdd={vi.fn()} lead={<article aria-label="Chef" />}>
-          {tiles(count)}
-        </TileGrid>,
-      );
-      expect(grid().className).toContain('grid-rows-[minmax(240px,3fr)_minmax(180px,2fr)]');
-      const lead = screen.getByRole('region', { name: 'Orchestrateur' });
-      expect(lead.outerHTML).not.toContain('max-w-');
-      expect(lead.firstElementChild?.className).toContain('w-full');
-      const others = screen.getByRole('region', { name: 'Agents dirigés' });
-      expect(others.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
+      plain(count);
+      expect(rowHeight()).toMatch(HALF);
+      expect(grid().className).toMatch(/(?:^|\s)overflow-y-auto(?:\s|$)/);
+      expect(grid().className).not.toMatch(/overflow-x-(?:auto|scroll)/);
     },
   );
+
+  it.each([
+    [1, 0],
+    [2, 0],
+    [3, 0],
+    [4, 0],
+    [5, 1],
+    [6, 0],
+    [7, 1],
+  ])('with %i tiles, shows %i « + » and no empty slot', (count, shown) => {
+    plain(count);
+    expect(plus()).toHaveLength(shown);
+    expect(children()).toHaveLength(count + shown);
+  });
+
+  it('keeps every tile, the seventh on a row reached by scrolling', () => {
+    plain(7);
+    expect(screen.getAllByRole('article')).toHaveLength(7);
+    expect(columns()).toBe(3);
+  });
+
+  it('keeps the order it is given', () => {
+    plain(3);
+    expect(labels(screen.getAllByRole('article'))).toEqual(['Tuile 1', 'Tuile 2', 'Tuile 3']);
+  });
+
+  it('opens the add menu from the « + »', async () => {
+    const onAdd = vi.fn();
+    plain(5, onAdd);
+    await userEvent.click(plus()[0] ?? document.body);
+    expect(onAdd).toHaveBeenCalledOnce();
+  });
+
+  it('offers no « + » and no empty slot when no agent can be added', () => {
+    plain(5, undefined);
+    expect(plus()).toHaveLength(0);
+    expect(children()).toHaveLength(5);
+  });
 });

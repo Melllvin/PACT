@@ -53,11 +53,11 @@ test('leads the other agents from the top, and its prompts reach them', async ()
   const tile = await launchTeam(page);
 
   // Chef au centre (FR-003).
-  const lead = page.getByRole('region', { name: 'Orchestrateur' });
-  await expect(lead.getByRole('article')).toHaveCount(1);
+  // 006 FR-010: one grid; the orchestrator is the first tile, the two others come after it.
+  const grid = page.getByRole('region', { name: 'Tuiles' });
+  await expect(grid.getByRole('article')).toHaveCount(3);
+  await expect(grid.getByRole('article').first()).toHaveAccessibleName(/^Faux CLI 1,/);
   await expect(tile(1)).toContainText('◎ Orchestrateur');
-  const others = page.getByRole('region', { name: 'Agents dirigés' });
-  await expect(others.getByRole('article')).toHaveCount(2);
 
   // Two prompts sent by the orchestrator through PACT (FR-009).
   await typeIn(page, tile(1), 'Faux CLI 2|Écris la fonction');
