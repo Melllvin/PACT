@@ -7,7 +7,6 @@ import {
   seenBlob,
   type ChangedFile,
   type FileDiff,
-  type Overlap,
   type ReviewSnapshot,
   type TestRun,
 } from '../../shared/review';
@@ -48,8 +47,8 @@ type Options = {
   workspaces: WorkspaceAccess;
   onChanged?: (snapshot: ReviewSnapshot) => void;
   onPending?: (event: IpcEvent<'review:pending'>) => void;
-  /** 004 R7 — files two agents both change, told once until they differ or stop. */
-  onOverlap?: (workspaceId: string, overlap: Overlap) => void;
+  /** Ignored: « Fichiers communs » is gone; an old caller may still pass it. */
+  onOverlap?: unknown;
   /** Types a prompt once the agent is ready for one, never as an answer (R7, FR-014). */
   prompts?: { sendPrompt(agentId: string, text: string): Promise<unknown> };
   /** The last test run of each agent, for « Tests en échec ». */
@@ -73,18 +72,6 @@ export type ReviewSend =
 
 const NO_COMMIT = '0'.repeat(40);
 const READY: Agent['state'][] = ['done', 'awaiting-prompt'];
-
-/**
- * 004 FR-021 — the files each pair of agents both change. Only agents done with their turn count:
- * a working agent is compared once its turn ends, as its changes are then read anyway (R7).
- */
-const overlapsOf = (changes: { agentId: string; paths: Set<string> }[]): Overlap[] =>
-  changes.flatMap((one, index) =>
-    changes.slice(index + 1).flatMap((other): Overlap[] => {
-      const files = [...one.paths].filter((path) => other.paths.has(path)).sort();
-      return files.length > 0 ? [{ agents: [one.agentId, other.agentId], files }] : [];
-    }),
-  );
 
 /** `fs.watch` recursive, without the `.git` folder or file (R3). */
 export const watchRecursive: Watch = (dir, onChange) => {
@@ -117,7 +104,6 @@ export class ReviewService {
   private readonly workspaces: WorkspaceAccess;
   private readonly onChanged: NonNullable<Options['onChanged']>;
   private readonly onPending: NonNullable<Options['onPending']>;
-  private readonly onOverlap: NonNullable<Options['onOverlap']>;
   private readonly prompts: Options['prompts'];
   private readonly tests: Options['tests'];
   private readonly watch: Watch;
@@ -130,15 +116,12 @@ export class ReviewService {
   private readonly wanted = new Set<string>();
   /** The latest `updatePending` of each workspace: an older one ending last says nothing. */
   private readonly pendingRuns = new Map<string, number>();
-  /** The overlaps last found in each workspace, by key: only a new one is told. */
-  private readonly overlapsTold = new Map<string, Set<string>>();
 
   constructor(options: Options) {
     this.git = options.git;
     this.workspaces = options.workspaces;
     this.onChanged = options.onChanged ?? (() => undefined);
     this.onPending = options.onPending ?? (() => undefined);
-    this.onOverlap = options.onOverlap ?? (() => undefined);
     this.prompts = options.prompts;
     this.tests = options.tests;
     this.watch = options.watch ?? watchRecursive;
@@ -300,33 +283,17 @@ export class ReviewService {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) return [];
     const agentIds: string[] = [];
-    const changes: { agentId: string; paths: Set<string> }[] = [];
     const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
     for (const agent of agents) {
       if (!READY.includes(agent.state)) continue;
       const snapshot = await this.compute(agent.id).catch(() => undefined);
       if (snapshot && !snapshot.missing && snapshot.files.length > 0) {
         agentIds.push(agent.id);
-        changes.push({ agentId: agent.id, paths: new Set(snapshot.files.map((f) => f.path)) });
       }
     }
     if (this.pendingRuns.get(workspaceId) !== run) return agentIds;
-    const overlaps = overlapsOf(changes);
-    this.onPending({ workspaceId, agentIds, overlaps });
-    this.tellOverlaps(workspaceId, overlaps);
+    this.onPending({ workspaceId, agentIds });
     return agentIds;
-  }
-
-  /** 004 R7 — tells each overlap not found by the previous computation. */
-  private tellOverlaps(workspaceId: string, overlaps: Overlap[]) {
-    const told = this.overlapsTold.get(workspaceId) ?? new Set<string>();
-    const now = new Set<string>();
-    for (const overlap of overlaps) {
-      const key = `${overlap.agents.join('+')}:${overlap.files.join('\0')}`;
-      now.add(key);
-      if (!told.has(key)) this.onOverlap(workspaceId, overlap);
-    }
-    this.overlapsTold.set(workspaceId, now);
   }
 
   /** What the tests of an agent run: its worktree and port, the command, the tree shown (R8). */

@@ -1,16 +1,12 @@
 import type { Agent, TileAction, TodoItem, TodoKind, Workspace } from './model';
 import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
-/** 004 FR-021 — two agents change the same files (`review:pending`). */
-type Overlap = { agents: readonly [string, string]; files: readonly string[] };
-
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
 const ORDER: TodoKind[] = [
   'answer',
   'integration-request',
   'publish-issues',
   'loop-escalated',
-  'overlap',
   'rate-limit',
   'usage-limit',
   'review',
@@ -54,7 +50,8 @@ export function deriveTodos(
   names: (cliId: string) => string,
   /** The agents with changes to review (`review:pending`). */
   toReview: readonly string[] = [],
-  overlaps: readonly Overlap[] = [],
+  /** Kept so the callers keep their place for `usage`: « Fichiers communs » is gone, this is ignored. */
+  _legacyOverlaps: readonly unknown[] = [],
   /** 005 — the usage of the CLI accounts, read with the thresholds at `now`. */
   usage?: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
 ): TodoItem[] {
@@ -113,21 +110,6 @@ export function deriveTodos(
         ]
       : [],
   );
-  // « ⚠ Fichiers communs »: two agents change the same files (004 FR-021).
-  const common = overlaps.flatMap((overlap): TodoItem[] => {
-    const both = overlap.agents.flatMap((id) => byId.get(id) ?? []);
-    if (both.length < 2) return [];
-    const who = both.map((agent) => `${names(agent.cliId)} ${String(agent.position)}`);
-    return [
-      {
-        id: `${overlap.agents.join('+')}:overlap`,
-        agentId: overlap.agents[0],
-        kind: 'overlap',
-        title: `⚠ Fichiers communs · ${who.join(', ')} · ${overlap.files.join(', ')}`,
-        actions: [],
-      },
-    ];
-  });
   const terminals = workspace.freeTerminals.map((terminal): TodoItem => ({
     id: `${terminal.id}:info`,
     agentId: terminal.id,
@@ -137,7 +119,7 @@ export function deriveTodos(
   }));
   const limits = usage ? usageTodos(workspace, names, usage) : [];
   // Array.prototype.sort is stable: the tile order holds within a kind.
-  return [...todos, ...requests, ...publish, ...loops, ...common, ...limits, ...terminals].sort(
+  return [...todos, ...requests, ...publish, ...loops, ...limits, ...terminals].sort(
     (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind),
   );
 }

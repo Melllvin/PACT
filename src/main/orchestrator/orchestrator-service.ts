@@ -31,10 +31,10 @@ type Options = {
   onTurnFinished: (agentId: string) => void;
 };
 
-/** 004 US2 — what a loop tells the orchestrator: a report, a missing one, its end, an overlap. */
+/** 004 US2 — what a loop tells the orchestrator: a report, a missing one, its end. */
 export type Notice = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish' | 'mockup';
+  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup';
   summary: string;
 };
 

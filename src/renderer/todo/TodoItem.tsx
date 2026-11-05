@@ -61,7 +61,6 @@ export function TodoItem({
           'border-primary/30 bg-primary/6',
         (todo.kind === 'rate-limit' || todo.kind === 'loop-escalated') &&
           'border-destructive/30 bg-destructive/6',
-        todo.kind === 'overlap' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
       )}
@@ -155,7 +154,7 @@ export function TodoItem({
           </Button>
         </div>
       )}
-      {agent && !request && !loop && !publish && todo.kind !== 'overlap' && (
+      {agent && !request && !loop && !publish && (
         <TileActions
           state={agent.state}
           question={todo.actions.includes('open-terminal')}

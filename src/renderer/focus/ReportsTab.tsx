@@ -3,7 +3,7 @@ import type { Agent, Loop } from '../../shared/model';
 /** What a loop told the orchestrator (`orchestrator:report`). */
 export type Report = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'overlap' | 'publish' | 'mockup';
+  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup';
   summary: string;
   at: string;
 };
@@ -12,7 +12,6 @@ const KIND_LABELS: Record<Report['kind'], string> = {
   report: 'Rapport',
   'report-missing': 'Rapport manquant',
   loop: 'Boucle',
-  overlap: 'Fichiers communs',
   publish: 'Publication',
   mockup: 'Maquette',
 };
@@ -33,7 +32,8 @@ type Props = {
  */
 export function ReportsTab({ reports, agents, loops, name }: Props) {
   const latest = new Map<string, Report>();
-  for (const report of reports) latest.set(report.agentId, report);
+  // A kind that no longer exists (an old « Fichiers communs » report) is left out.
+  for (const report of reports) if (report.kind in KIND_LABELS) latest.set(report.agentId, report);
   const rows = agents.flatMap((agent) => {
     const report = latest.get(agent.id);
     return report ? [{ agent, report }] : [];

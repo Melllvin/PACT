@@ -17,7 +17,6 @@ import {
   seenBlob,
   type FileDiff,
   type Integration,
-  type Overlap,
   type ReviewSnapshot,
   type TestRun,
 } from '../../shared/review';
@@ -61,8 +60,6 @@ export type AgentActions = {
 export type ReviewBinding = {
   /** The agents of this workspace with changes to review. */
   pending: readonly string[];
-  /** 004 FR-021 — the files two agents of this workspace both change. */
-  overlaps?: readonly Overlap[] | undefined;
   snapshot: ReviewSnapshot | null;
   selected: string | null;
   diff: FileDiff | null;
@@ -183,7 +180,7 @@ export function WorkspaceView({
     workspace,
     cliName,
     pending,
-    review?.overlaps,
+    [],
     usageThresholds && { states: usage, thresholds: usageThresholds, now },
   );
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).

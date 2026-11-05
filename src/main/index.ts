@@ -215,20 +215,6 @@ void app.whenReady().then(async () => {
     onPending: (event) => {
       emit('review:pending', event);
     },
-    // 004 R7 — the orchestrator hears of files two agents both change.
-    onOverlap: (workspaceId, { agents: [agentId, otherId], files }) => {
-      const other = workspaces.get(workspaceId)?.agents.find((a) => a.id === otherId);
-      const name = other
-        ? `${registry.list().find((cli) => cli.id === other.cliId)?.name ?? other.cliId} ${String(other.position)}`
-        : otherId;
-      const notice = {
-        agentId,
-        kind: 'overlap' as const,
-        summary: `fichiers communs avec ${name} : ${files.join(', ')}`,
-      };
-      orchestrator.notice(workspaceId, notice);
-      emit('orchestrator:report', { workspaceId, ...notice });
-    },
     prompts: agents,
     tests: { latest: (agentId) => tests.latest(agentId) },
   });
