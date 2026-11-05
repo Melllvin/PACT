@@ -126,11 +126,12 @@ describe('WorkspaceView', () => {
     const onAddAgents = vi.fn();
     const { rerender } = render(
       <WorkspaceView
-        workspace={workspace({ agents: agents(3) })}
+        workspace={workspace({ agents: agents(5) })}
         clis={clis}
         onAddAgents={onAddAgents}
       />,
     );
+    // FR-010b: the « + » exists only if a place is left in the last row (5 tiles on 3 columns).
     await user.click(screen.getByRole('button', { name: 'Ajouter un agent' }));
     expect(onAddAgents).toHaveBeenCalledOnce();
     rerender(
@@ -820,11 +821,11 @@ describe('WorkspaceView with an orchestrator (003 T019)', () => {
         fromOrchestrator={{ [agent(2).id]: 'working' }}
       />,
     );
-    const lead = screen.getByRole('region', { name: 'Orchestrateur' });
-    expect(within(lead).getByRole('article').getAttribute('aria-label')).toMatch(/^Claude Code 1/);
-    const others = within(screen.getByRole('region', { name: 'Agents dirigés' })).getAllByRole(
+    // FR-010: one grid, the orchestrator first on 2×2, the others after it.
+    const [lead, ...others] = within(screen.getByRole('region', { name: 'Tuiles' })).getAllByRole(
       'article',
     );
+    expect(lead?.getAttribute('aria-label')).toMatch(/^Claude Code 1/);
     expect(others).toHaveLength(2);
     expect(others[0]?.textContent).toContain('◎ de l’orchestrateur');
   });

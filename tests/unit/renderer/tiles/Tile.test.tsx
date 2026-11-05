@@ -266,3 +266,70 @@ describe('Tile and the loops (004 T022)', () => {
     ).toBeNull();
   });
 });
+
+// 006 Phase 4 — T022a. xterm's fit counts the padding of the element it is opened in as free height
+// (FR-021): the terminal opens in a div without any padding, and the buttons of the state no
+// longer take room at the bottom (FR-022).
+describe('Tile terminal and action buttons (006 T022a, FR-021, FR-022)', () => {
+  const PADDING = /(?:^|\s)-?p[xytblrse]?-/;
+  const body = () => screen.getByLabelText(/^Terminal de /);
+
+  it('opens the terminal in a container without padding, so that the fit offers the free area', () => {
+    const { terminals } = setup({ state: 'working' });
+    const attached = (
+      terminals.attach.mock.calls as unknown as [string, HTMLElement][]
+    )[0]?.[1] as HTMLElement;
+    expect(attached).toBeInstanceOf(HTMLElement);
+    expect(attached.className).not.toMatch(PADDING);
+    expect(attached.getAttribute('style') ?? '').not.toMatch(/padding/);
+    // The margin of the tile is on a parent, never on the element xterm measures.
+    expect(body().contains(attached)).toBe(true);
+    expect(screen.getByRole('article').contains(attached)).toBe(true);
+  });
+
+  it.each(['awaiting-answer', 'error'] as const)(
+    'reserves no room under the terminal while the agent is %s',
+    (state) => {
+      setup({ state });
+      expect(body().className).not.toMatch(/pb-14/);
+      expect(screen.getAllByRole('button').length).toBeGreaterThan(0);
+    },
+  );
+
+  it('gives the terminal the same room whatever the state', () => {
+    const { rerender } = setup({ state: 'working' });
+    const before = body().className;
+    rerender({ state: 'awaiting-answer' });
+    expect(body().className).toBe(before);
+  });
+
+  it('shows the action buttons on hover or focus within the tile only', () => {
+    setup({ state: 'awaiting-answer' });
+    const tile = screen.getByRole('article');
+    expect(tile.className).toMatch(/(?:^|\s)group(?:\/\S+)?(?:\s|$)/);
+    // One of the ancestors of the buttons, inside the tile, is hidden until then.
+    const allow = screen.getByRole('button', { name: '✓ Autoriser' });
+    let hidden: HTMLElement | null = null;
+    for (let el = allow.parentElement; el && el !== tile; el = el.parentElement) {
+      if (/(?:^|\s)opacity-0(?:\s|$)/.test(el.className)) hidden = el;
+    }
+    expect(hidden).not.toBeNull();
+    expect(hidden?.className).toMatch(/group-hover(?:\/\S+)?:opacity-100/);
+    expect(hidden?.className).toMatch(/group-focus-within(?:\/\S+)?:opacity-100/);
+  });
+
+  it('keeps the buttons reachable by keyboard (still in the tab order)', () => {
+    setup({ state: 'awaiting-answer' });
+    const allow = screen.getByRole('button', { name: '✓ Autoriser' });
+    expect(allow.getAttribute('tabindex')).not.toBe('-1');
+    expect(allow.closest('[hidden], [aria-hidden="true"], [inert]')).toBeNull();
+  });
+
+  it('signals an action that is due on the outline of the tile, without hover', () => {
+    const { tile, rerender } = setup({ state: 'working' });
+    const quiet = tile().className;
+    rerender({ state: 'awaiting-answer' });
+    expect(tile().className).not.toBe(quiet);
+    expect(tile().className).toMatch(/(?:ring|outline|border|shadow)/);
+  });
+});

@@ -92,8 +92,12 @@ test('drives agents from their tiles', async () => {
   await setCount(launcher.getByRole('group', { name: 'Faux CLI' }), 2);
   await setCount(launcher.getByRole('group', { name: 'Terminal libre' }), 1);
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();
-  await expect(grid).toHaveAttribute('data-layout', '3x2');
+  // 7 tiles with the free terminal: 3 columns, the seventh on a row reached by scrolling (006 FR-010a).
   await expect(page.getByRole('article', { name: /^Faux CLI \d/ })).toHaveCount(6);
+  const xs = await grid
+    .getByRole('article')
+    .evaluateAll((all) => [...new Set(all.map((t) => Math.round(t.getBoundingClientRect().x)))]);
+  expect(xs).toHaveLength(3);
   const after = await page
     .getByRole('article', { name: /^Faux CLI \d/ })
     .evaluateAll((tiles) =>

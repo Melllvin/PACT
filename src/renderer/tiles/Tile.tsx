@@ -72,7 +72,8 @@ export function Tile({
 
   const title = `${name} ${String(agent.position)}`;
   const failed = agent.state === 'error';
-  // The buttons of the state sit over the bottom of the terminal, which leaves them room (1f).
+  // The buttons of the state show on hover or focus only, over the terminal (FR-022); the outline
+  // says that one is due.
   const reviewing =
     actions.onReview !== undefined && (agent.state === 'done' || agent.state === 'awaiting-prompt');
   const acting = agent.state === 'awaiting-answer' || failed || reviewing;
@@ -83,7 +84,8 @@ export function Tile({
       data-state={agent.state}
       data-pulse={pulses}
       className={cn(
-        'relative flex min-h-0 min-w-0 animate-tile-enter flex-col rounded-[14px] border border-[color-mix(in_srgb,var(--agent-color)_55%,transparent)] bg-surface transition-[border-color,box-shadow] duration-500 ease-out-soft motion-reduce:animate-none',
+        'group relative flex min-h-0 min-w-0 animate-tile-enter flex-col rounded-[14px] border border-[color-mix(in_srgb,var(--agent-color)_55%,transparent)] bg-surface transition-[border-color,box-shadow] duration-500 ease-out-soft motion-reduce:animate-none',
+        acting && !failed && 'ring-1 ring-(--pulse-color)',
         failed &&
           'halo border-destructive shadow-[0_0_0_1px_color-mix(in_srgb,var(--danger)_60%,transparent),0_0_40px_color-mix(in_srgb,var(--danger)_18%,transparent)]',
       )}
@@ -107,7 +109,7 @@ export function Tile({
           termId={agent.id}
           registry={terminals}
           label={`Terminal de ${title}`}
-          className={cn('px-4 pt-10', acting ? 'pb-14' : 'pb-3.5')}
+          className="px-4 pt-10 pb-3.5"
         />
       )}
       {agent.role === 'orchestrator' && reports.length > 0 && (
@@ -158,18 +160,21 @@ export function Tile({
         </Button>
       </div>
       {acting && (
-        <div className="absolute right-3 bottom-3 left-4 flex items-center justify-end gap-2">
-          {failed && agent.lastError && (
-            <span className="min-w-0 truncate font-mono text-[12px] text-[#f2a0a0]">
-              {agent.lastError.message}
-            </span>
-          )}
-          <TileActions
-            state={agent.state}
-            question={agent.awaiting === 'question'}
-            scheduledResume={agent.scheduledResume}
-            {...actions}
-          />
+        // Hover on the tile, but focus on the buttons only: the terminal keeps the focus of the tile.
+        <div className="group/actions absolute right-3 bottom-3 left-4">
+          <div className="flex items-center justify-end gap-2 opacity-0 transition-opacity duration-200 group-focus-within/actions:opacity-100 group-hover:opacity-100">
+            {failed && agent.lastError && (
+              <span className="min-w-0 truncate font-mono text-[12px] text-[#f2a0a0]">
+                {agent.lastError.message}
+              </span>
+            )}
+            <TileActions
+              state={agent.state}
+              question={agent.awaiting === 'question'}
+              scheduledResume={agent.scheduledResume}
+              {...actions}
+            />
+          </div>
         </div>
       )}
     </article>

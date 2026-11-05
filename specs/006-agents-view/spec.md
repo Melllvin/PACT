@@ -299,8 +299,8 @@ session avec l'accès orchestrateur, sa tuile passe en haut, il peut lancer un a
 
 - **FR-021**: Le terminal d'une tuile MUST occuper exactement la zone libre de la tuile : aucune ligne
   (prompt, ligne d'état) cachée sous un bouton ni coupée en bas.
-- **FR-022**: Les boutons d'action d'une tuile MUST apparaître au survol ou quand la tuile a le
-  focus clavier, sans jamais recouvrir le texte du terminal ; une action due reste signalée sans
+- **FR-022**: Les boutons d'action d'une tuile MUST apparaître au survol de la tuile ou quand l'un
+  d'eux a le focus clavier (pas la tuile : xterm garde le focus de la tuile), sans jamais recouvrir le texte du terminal ; une action due reste signalée sans
   survol (contour de la tuile, ligne dans la colonne « Agents »).
 
 **Fermeture et relance liées**
