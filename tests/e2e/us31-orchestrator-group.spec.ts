@@ -104,6 +104,7 @@ test('closing an agent that is not the orchestrator closes only that agent', asy
   await expect(closing.getByRole('listitem')).toHaveCount(0);
   await closing.getByRole('button', { name: 'Fermer l’agent' }).click();
   await expect(worker).toHaveCount(0);
-  await expect(lead).toHaveAttribute('data-state', 'awaiting-prompt');
+  // The orchestrator's turn is over, so it may be « done »: what counts is that it stays open.
+  await expect(lead).toHaveAttribute('data-state', /^(awaiting-prompt|done)$/);
   await expect(idle).toHaveAttribute('data-state', 'awaiting-prompt');
 });
