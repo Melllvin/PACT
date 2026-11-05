@@ -104,9 +104,9 @@ describe('a remote that does not answer', () => {
     const { id } = await opened.open(repo);
     remote.answer('develop');
     await vi.waitFor(() => {
-      expect(opened.get(id)?.mainBranch).toBe('develop');
+      expect(changed).toEqual([[id, 'develop']]);
     });
-    expect(changed).toEqual([[id, 'develop']]);
+    expect(opened.get(id)?.mainBranch).toBe('develop');
     expect((await opened.recents())[0]?.branch).toBe('develop');
     expect(git(repo, 'branch', '--show-current')).toBe('feature');
   });
