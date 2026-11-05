@@ -74,7 +74,12 @@ type Options = {
   bridge: HookBridge;
   run: CommandRunner;
   now?: () => Date;
+  /** `statusLine.refreshInterval` (seconds) of the user's own settings, `null`: none. */
+  userStatusLineInterval?: number | null;
 };
+
+/** The gauge is refreshed at least this often (seconds), the user's shorter interval winning. */
+const STATUSLINE_REFRESH_SECONDS = 300;
 
 export class ClaudeCodeAdapter implements CliAdapter {
   readonly id = 'claude-code';
@@ -85,10 +90,21 @@ export class ClaudeCodeAdapter implements CliAdapter {
   private readonly bridge: HookBridge;
   private readonly run: CommandRunner;
   private readonly now: () => Date;
+  private readonly refreshInterval: number;
   /** Older builds have no `--permission-mode auto`; « Toujours autoriser » then uses acceptEdits. */
   private autoMode = true;
 
-  constructor({ platform, bridge, run, now = () => new Date() }: Options) {
+  constructor({
+    platform,
+    bridge,
+    run,
+    now = () => new Date(),
+    userStatusLineInterval = null,
+  }: Options) {
+    this.refreshInterval = Math.min(
+      STATUSLINE_REFRESH_SECONDS,
+      userStatusLineInterval ?? STATUSLINE_REFRESH_SECONDS,
+    );
     this.platform = platform;
     this.bridge = bridge;
     this.run = run;
@@ -220,7 +236,11 @@ export class ClaudeCodeAdapter implements CliAdapter {
       env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' },
       teammateMode: 'in-process',
       // 005 R1 — the limits of the account, posted to PACT; the user's own line still printed.
-      statusLine: { type: 'command', command: bridgeCommand(this.bridge, '--statusline') },
+      statusLine: {
+        type: 'command',
+        command: bridgeCommand(this.bridge, '--statusline'),
+        refreshInterval: this.refreshInterval,
+      },
       hooks: {
         // Claude Code refuses HTTP hooks for SessionStart (T049).
         SessionStart: hook({ type: 'command', command: bridgeCommand(this.bridge) }),

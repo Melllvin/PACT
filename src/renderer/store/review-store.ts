@@ -4,7 +4,6 @@ import type {
   ConflictChoice,
   FileDiff,
   Integration,
-  Overlap,
   ReviewSnapshot,
   TestRun,
 } from '../../shared/review';
@@ -32,8 +31,8 @@ export type ReviewState = {
   error: string | null;
   /** The agents with changes to review, per workspace (`review:pending`). */
   pending: Record<string, string[]>;
-  /** 004 FR-021 — the files two agents both change, per workspace (`review:pending`). */
-  overlaps: Record<string, Overlap[]>;
+  /** Their number of changed files, per workspace then agent; absent for an older payload. */
+  files: Record<string, Record<string, number>>;
   /** The last test run of each agent (`review:tests`). */
   tests: Record<string, TestRun>;
   decisions: Record<string, Decision>;
@@ -156,7 +155,7 @@ export function createReviewStore(api: PactApi) {
     return {
       ...CLOSED,
       pending: {},
-      overlaps: {},
+      files: {},
       tests: {},
       decisions: {},
       integrations: {},
@@ -167,10 +166,10 @@ export function createReviewStore(api: PactApi) {
           api.on('review:changed', (snapshot) => {
             if (snapshot.agentId === get().agentId) show(snapshot);
           }),
-          api.on('review:pending', ({ workspaceId, agentIds, overlaps }) => {
+          api.on('review:pending', ({ workspaceId, agentIds, files }) => {
             set({
               pending: { ...get().pending, [workspaceId]: agentIds },
-              overlaps: { ...get().overlaps, [workspaceId]: overlaps },
+              files: { ...get().files, [workspaceId]: files ?? {} },
             });
           }),
           api.on('review:tests', keepRun),
@@ -303,7 +302,7 @@ export type ReviewStore = ReturnType<typeof createReviewStore>;
 export const idleReviewStore: ReviewStore = createStore<ReviewState>()(() => ({
   ...CLOSED,
   pending: {},
-  overlaps: {},
+  files: {},
   tests: {},
   decisions: {},
   integrations: {},

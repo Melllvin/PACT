@@ -33,10 +33,11 @@ export function TodoItem({
   onRefusePublish,
   onOpenTerminal,
   onUsageDetail,
+  onDecide,
 }: Props) {
   const style = agent && ({ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties);
   const [what, who, ...hints] = todo.title.split(SEPARATOR);
-  const { request, loop, publish, usage } = todo;
+  const { request, loop, publish, usage, decide } = todo;
   const separator = <span className="sr-only">{SEPARATOR}</span>;
 
   if (todo.kind === 'info') {
@@ -57,11 +58,12 @@ export function TodoItem({
       className={cn(
         'flex origin-top animate-unfold flex-col gap-2.5 overflow-hidden rounded-xl border border-white/6 bg-surface p-3 motion-reduce:animate-none',
         todo.kind === 'answer' && 'border-waiting/30 bg-waiting/6',
-        (todo.kind === 'integration-request' || todo.kind === 'publish-issues') &&
+        (todo.kind === 'integration-request' ||
+          todo.kind === 'publish-issues' ||
+          todo.kind === 'decide') &&
           'border-primary/30 bg-primary/6',
         (todo.kind === 'rate-limit' || todo.kind === 'loop-escalated') &&
           'border-destructive/30 bg-destructive/6',
-        todo.kind === 'overlap' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
       )}
@@ -155,7 +157,15 @@ export function TodoItem({
           </Button>
         </div>
       )}
-      {agent && !request && !loop && !publish && todo.kind !== 'overlap' && (
+      {decide && agent && (
+        <Decide
+          questions={decide.questions}
+          onSend={(text) => {
+            onDecide?.(agent.id, text);
+          }}
+        />
+      )}
+      {agent && !request && !loop && !publish && !decide && (
         <TileActions
           state={agent.state}
           question={todo.actions.includes('open-terminal')}
@@ -237,6 +247,41 @@ function IntegrationRequest({
             Revue →
           </Button>
         )}
+      </div>
+    </form>
+  );
+}
+
+/** « ◆ Décider »: the questions of the agent, and the answer sent to it as a prompt. */
+function Decide({ questions, onSend }: { questions: string[]; onSend: (text: string) => void }) {
+  const [answer, setAnswer] = useState('');
+  return (
+    <form
+      className="flex flex-col gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSend(answer.trim());
+        setAnswer('');
+      }}
+    >
+      <ol className="flex list-decimal flex-col gap-1 pl-4 text-[12px] text-foreground">
+        {questions.map((question, index) => (
+          <li key={index}>{question}</li>
+        ))}
+      </ol>
+      <textarea
+        aria-label="Réponse à l’agent"
+        rows={3}
+        value={answer}
+        onChange={(event) => {
+          setAnswer(event.target.value);
+        }}
+        className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/50"
+      />
+      <div className="flex flex-wrap gap-1.5">
+        <Button type="submit" variant="accept" disabled={answer.trim() === ''}>
+          Envoyer
+        </Button>
       </div>
     </form>
   );

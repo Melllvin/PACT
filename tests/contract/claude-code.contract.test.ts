@@ -146,6 +146,7 @@ describe('Claude Code launch arguments', () => {
       expect(settingsOf(args).statusLine).toEqual({
         type: 'command',
         command: `ELECTRON_RUN_AS_NODE=1 '${bridge.executable}' '${bridge.script}' '--statusline'`,
+        refreshInterval: 300,
       });
     }
     expect(create().usageSource).toBe('claude-statusline');
@@ -602,4 +603,27 @@ describe('Claude Code model tiers and effort (004 T009)', () => {
     );
     expect(create().buildLaunch(input).args).not.toContain('--effort');
   });
+
+  // fix-todo-diff-notifications — the gauge is refreshed every 5 min, or sooner if the user asks.
+  // Hypothesis of interface: the option `userStatusLineInterval` (seconds, null: none), read by
+  // PACT from the user's own `statusLine.refreshInterval`.
+  it.each([
+    [120, 120],
+    [300, 300],
+    [900, 300],
+    [null, 300],
+  ])(
+    'refreshes its statusLine every 300 s, or the shorter of the user’s (%s → %s)',
+    (user, wanted) => {
+      const adapter = new ClaudeCodeAdapter({
+        platform: 'darwin',
+        bridge,
+        run: installed,
+        userStatusLineInterval: user,
+      });
+      expect(settingsOf(adapter.buildLaunch(input).args).statusLine).toMatchObject({
+        refreshInterval: wanted,
+      });
+    },
+  );
 });

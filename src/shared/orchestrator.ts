@@ -17,11 +17,10 @@ export const orchestratorEventSchema = z.object({
     'error',
     'closed',
     'integration',
-    // 004 US2 — reports, loops and files two agents change.
+    // 004 US2 — reports and loops.
     'report',
     'report-missing',
     'loop',
-    'overlap',
     // 004 US3 — the issues published, or not.
     'publish',
     // 004 US4 — the user's decision on a mockup.

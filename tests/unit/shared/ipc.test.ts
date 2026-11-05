@@ -323,18 +323,18 @@ describe('IPC event schemas', () => {
 
   it('announce the agents to review per workspace (FR-002)', () => {
     const schema = ipcEvents['review:pending'];
-    const pending = (overlaps: unknown[]) => ({ workspaceId: 'w1', agentIds: [agentId], overlaps });
-    expect(schema.safeParse(pending([])).success).toBe(true);
-    expect(schema.safeParse({ ...pending([]), agentIds: ['x'] }).success).toBe(false);
-    // 004 FR-021 — two agents and at least one file in common.
+    const pending = { workspaceId: 'w1', agentIds: [agentId] };
+    expect(schema.safeParse(pending).success).toBe(true);
+    expect(schema.safeParse({ ...pending, agentIds: ['x'] }).success).toBe(false);
+    // fix-relance-communs: no more « Fichiers communs ». A payload that still carries overlaps
+    // is read without error, and the overlaps are not kept.
     const other = agentId.replace(/.$/, 'f');
-    expect(schema.safeParse(pending([{ agents: [agentId, other], files: ['a.ts'] }])).success).toBe(
-      true,
-    );
-    expect(schema.safeParse(pending([{ agents: [agentId, other], files: [] }])).success).toBe(
-      false,
-    );
-    expect(schema.safeParse(pending([{ agents: [agentId], files: ['a.ts'] }])).success).toBe(false);
+    const legacy = schema.safeParse({
+      ...pending,
+      overlaps: [{ agents: [agentId, other], files: ['a.ts'] }],
+    });
+    expect(legacy.success).toBe(true);
+    expect(legacy.data).not.toHaveProperty('overlaps');
   });
 
   it('accept progress and failure clone events', () => {

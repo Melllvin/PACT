@@ -119,12 +119,12 @@ describe('OrchestratorService notices', () => {
     await h.orchestrator.wait(leadId, undefined, 50);
     const unknown = '00000000-0000-4000-8000-0000000000ff';
     for (const agentId of [workerId, unknown]) {
-      h.orchestrator.notice(h.workspace.id, { agentId, kind: 'overlap', summary: 'a.ts' });
+      h.orchestrator.notice(h.workspace.id, { agentId, kind: 'loop', summary: 'a.ts' });
     }
     const { events } = await h.orchestrator.wait(leadId, [workerId, unknown], 1000);
     expect(events.map(({ agentId, kind, state }) => ({ agentId, kind, state }))).toEqual([
-      { agentId: workerId, kind: 'overlap', state: 'closed' },
-      { agentId: unknown, kind: 'overlap', state: 'closed' },
+      { agentId: workerId, kind: 'loop', state: 'closed' },
+      { agentId: unknown, kind: 'loop', state: 'closed' },
     ]);
   });
 

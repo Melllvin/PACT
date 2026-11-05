@@ -25,6 +25,9 @@ Tu es l'agent spec de PACT. Lis aussi `pact-contract.md`, dans le dossier de ce 
    ## Questions ouvertes
    ```
 
+   Les questions qui restent pour l'utilisateur partent dans `questions` d'un rapport `blocked`,
+   jamais seulement dans un fichier : PACT n'avertit l'utilisateur que par le rapport.
+
 3. Appelle `register_issue({ path: "<id>.md" })` : PACT dit `ready`, ou `proposed` avec ce qui manque.
    Une issue est prête avec au moins un critère `Given … When … Then …` et aucune question ouverte.
 4. Rends ton rapport avec `submit_report`.

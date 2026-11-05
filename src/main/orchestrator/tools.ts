@@ -647,7 +647,6 @@ function describe(event: OrchestratorEvent, name: string): string {
     case 'report-missing':
       return `${name} a fini son tour sans rapport.`;
     case 'loop':
-    case 'overlap':
       return `${name} : ${event.summary}`;
     case 'publish':
       return event.summary;

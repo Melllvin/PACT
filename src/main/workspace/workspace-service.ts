@@ -20,6 +20,8 @@ type Options = {
   stores: Stores;
   now?: () => Date;
   onStatus?: (event: { id: string; status: Workspace['status'] }) => void;
+  /** The main branch of a workspace changed once origin answered (never awaited at opening). */
+  onMainBranch?: (id: string, mainBranch: string) => void;
 };
 
 const WATCH_DEBOUNCE_MS = 50;
@@ -51,16 +53,24 @@ export class WorkspaceService {
   private readonly stores: Stores;
   private readonly now: () => Date;
   private readonly onStatus: NonNullable<Options['onStatus']>;
+  private readonly onMainBranch: NonNullable<Options['onMainBranch']>;
   private timer: ReturnType<typeof setInterval> | undefined;
   private readonly watchers = new Map<string, FSWatcher>();
   private watching = false;
   private pendingCheck: ReturnType<typeof setTimeout> | undefined;
 
-  constructor({ git, stores, now = () => new Date(), onStatus = () => undefined }: Options) {
+  constructor({
+    git,
+    stores,
+    now = () => new Date(),
+    onStatus = () => undefined,
+    onMainBranch = () => undefined,
+  }: Options) {
     this.git = git;
     this.stores = stores;
     this.now = now;
     this.onStatus = onStatus;
+    this.onMainBranch = onMainBranch;
   }
 
   list(): Workspace[] {
@@ -95,6 +105,8 @@ export class WorkspaceService {
     }
 
     const saved = await this.stores.workspace(id).read();
+    // The best value known now: opening never waits for the network.
+    const known = await this.git.knownDefaultBranch(root);
     const workspace: Workspace = {
       agents: [],
       freeTerminals: [],
@@ -111,7 +123,7 @@ export class WorkspaceService {
       id,
       path: root,
       name: basename(root),
-      mainBranch: await this.git.currentBranch(root),
+      mainBranch: known.branch,
       lastOpenedAt: this.now().toISOString(),
       status: 'available',
     };
@@ -123,7 +135,25 @@ export class WorkspaceService {
       openWorkspaces: [...state.openWorkspaces.filter((p) => p !== root), root],
     }));
     await this.remember(workspace);
+    if (!known.settled) this.resolveWithOrigin(id, root);
     return workspace;
+  }
+
+  /**
+   * Origin may know a better main branch than the refs here: asked in the background, the
+   * workspace is changed (and told) only if it answers something else.
+   */
+  private resolveWithOrigin(id: string, path: string): void {
+    void this.git
+      .remoteDefaultBranch(path)
+      .then(async (branch) => {
+        const current = this.open_.get(id);
+        if (branch === null || !current || current.mainBranch === branch) return;
+        const updated = await this.update(id, (ws) => ({ ...ws, mainBranch: branch }));
+        await this.remember(updated);
+        this.onMainBranch(id, branch);
+      })
+      .catch(() => undefined);
   }
 
   /** Worktrees start from the committed base branch: uncommitted changes stay out (T122). */
@@ -157,10 +187,16 @@ export class WorkspaceService {
   /** Reopens the workspaces that were open when the app quit (FR-005, FR-038). */
   async restore(): Promise<Workspace[]> {
     const { openWorkspaces } = await this.stores.state.read();
+    const resolving: { id: string; path: string }[] = [];
     for (const path of openWorkspaces) {
       const id = workspaceId(path);
       const saved = await this.stores.workspace(id).read();
       const available = (await isDirectory(path)) && (await this.git.isRepo(path));
+      // The main branch is the one of origin, whatever was saved (and whatever the root is on):
+      // the best value known now, origin being asked in the background.
+      const known = available ? await this.git.knownDefaultBranch(path) : undefined;
+      const mainBranch = known?.branch ?? saved?.mainBranch ?? '';
+      if (known && !known.settled) resolving.push({ id, path });
       this.open_.set(id, {
         agents: [],
         freeTerminals: [],
@@ -173,15 +209,16 @@ export class WorkspaceService {
         loops: [],
         testPaths: [...DEFAULT_TEST_PATHS],
         publishRequests: [],
-        mainBranch: '',
         lastOpenedAt: this.now().toISOString(),
         ...saved,
+        mainBranch,
         id,
         path,
         name: basename(path),
         status: available ? 'available' : 'unavailable',
       });
     }
+    for (const { id, path } of resolving) this.resolveWithOrigin(id, path);
     return this.list();
   }
 

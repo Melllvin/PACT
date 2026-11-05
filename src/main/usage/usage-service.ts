@@ -90,6 +90,11 @@ export class UsageService {
     return [...this.accounts.values()].map((account) => this.stateOf(account));
   }
 
+  /** The thresholds the levels are read with. */
+  getThresholds(): UsageThresholds {
+    return this.thresholds;
+  }
+
   /** 005 FR-010 — new thresholds: every account is told again with its level. */
   setThresholds(thresholds: UsageThresholds): void {
     this.thresholds = thresholds;
@@ -124,6 +129,15 @@ export class UsageService {
     const known = this.accounts.get(key);
     if (!sample.windows) {
       if (known) this.count(known, source, sample.tokens);
+      return;
+    }
+    // A refresh by the timer with nothing new (same windows, same tokens: no API call since) is
+    // not a fresh reading: the age of the last one goes on.
+    if (
+      known?.reading &&
+      known.shares.get(source.agentId)?.last === sample.tokens &&
+      JSON.stringify(known.reading.windows) === JSON.stringify(sample.windows)
+    ) {
       return;
     }
     const now = this.now();
