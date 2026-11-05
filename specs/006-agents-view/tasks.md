@@ -83,7 +83,7 @@ droite, trois sur la rangée suivante atteinte par défilement vertical.
 
 ### Implémentation
 
-- [x] T022b [US2] Ouvrir xterm dans un div interne sans padding (le fit d'xterm compte le padding du parent comme hauteur utile) dans `src/renderer/tiles/TerminalView.tsx` ; retirer `pb-14` conditionnel ; boutons d'action visibles au survol et `focus-within`, action due signalée par le contour, dans `src/renderer/tiles/Tile.tsx`
+- [x] T022b [US2] Ouvrir xterm dans un div interne sans padding (le fit d'xterm compte le padding du parent comme hauteur utile) dans `src/renderer/tiles/TerminalView.tsx` ; retirer `pb-14` conditionnel ; boutons d'action visibles au survol de la tuile et au focus des boutons eux-mêmes (le focus de la tuile appartient à xterm), action due signalée par le contour, dans `src/renderer/tiles/Tile.tsx`
 - [x] T022 [US2] Disposition `lead` en une grille de 3 colonnes (orchestrateur `col-span-2 row-span-2`, rangées de la moitié de la hauteur visible, `overflow-y-auto`) au lieu des deux sections superposées, dans `src/renderer/tiles/TileGrid.tsx`
 
 ### Issues rattachées (#40, #47) — grille sans orchestrateur

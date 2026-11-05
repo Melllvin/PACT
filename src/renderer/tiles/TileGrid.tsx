@@ -50,7 +50,7 @@ export function TileGrid({ children, onAdd, lead }: Props) {
     <div
       role="region"
       aria-label="Tuiles"
-      data-layout={count <= 4 ? '2x2' : '3x2'}
+      data-layout={`${String(columns)}x${String(Math.min(rows, 2))}`}
       className={base}
       style={{
         gridTemplateColumns: `repeat(${String(columns)}, minmax(0, 1fr))`,
