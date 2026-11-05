@@ -59,7 +59,8 @@ Pas de maquette dédiée. Toggle « Auto » : barre de PACT, en bas à droite. V
 
 **Inclus** : la demande de livraison et ses barrières ; le déroulé automatique jusqu'à la PR ; le suivi de CI ; le toggle
 « Auto » ; la relecture Valider / Refuser ; les passes de peaufinage ; les réglages du projet (mode de fusion, plafond
-d'allers-retours, passes) ; la persistance de l'état de livraison et de conflit ; le retrait de `request_integration`.
+d'allers-retours, passes) ; la persistance de l'état de livraison et de conflit ; le retrait de `request_integration` ; le
+nettoyage des worktrees après une fusion ou un abandon.
 
 **Hors périmètre** :
 
@@ -104,6 +105,8 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
   ni être lu, récupéré, exécuté ou fusionné par PACT.
 - Q: Quelles PR PACT suit-il ? → A: seulement ses propres PR, créées depuis une branche du dépôt et dont l'auteur est le
   compte de l'utilisateur ; toute autre PR est ignorée. Auto ne peut jamais fusionner une autre PR.
+- Q: Que deviennent les worktrees ? → A: ils ne doivent plus s'accumuler après une fusion ou un abandon (mesuré le 2026-11-05 :
+  6,4 Go, environ 750 Mo par worktree, surtout `node_modules`). Le comment reste à décider : Q17 à Q23.
 
 Le passage `speckit-clarify` n'a interrogé personne, à la demande de l'utilisateur : ce qui reste ouvert est listé sous
 « Questions ouvertes » et marqué [NEEDS CLARIFICATION] là où il joue.
@@ -140,7 +143,7 @@ Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
   d'aller-retour ; passes épuisées avec des défauts → l'utilisateur décide, jamais de fusion.
 - **Q9 — Bornes des réglages ?** *Proposition* : allers-retours de 1 à 10 ; passes de 0 à 5.
 - **Q10 — Après la fusion, et si l'utilisateur ferme un agent avant ?** *Proposition* : à la fusion, PACT ferme le dev et le
-  testeur, garde worktrees et branches locales (comme `close_agent`), et supprime la branche distante. `close_agent` de
+  testeur, et supprime la branche distante ; leurs worktrees et branches locales suivent Q17 et Q18. `close_agent` de
   l'orchestrateur est refusé en cours de livraison. Si l'utilisateur ferme lui-même un agent, PACT le prévient, puis la
   demande tombe, la boucle passe à `closed`, la PR reste ouverte et l'orchestrateur est réveillé.
 - **Q11 — Issue non publiée, titre et corps de la PR ?** *Proposition* : titre et message donnés dans la demande ; corps avec
@@ -160,6 +163,30 @@ Chaque question porte une proposition de l'agent spec. Aucune n'est décidée.
 - **Q16 — Le dev peut-il lire le journal de CI de sa propre PR ?** La décision interdit le journal d'un fork ; une CI rouge sans
   journal est dure à corriger. *Proposition* : PACT ne transmet que le nom et la conclusion des checks ; le journal d'un check
   d'une PR suivie reste lisible par le dev, car il vient d'une branche du dépôt.
+- **Q17 — Quand supprimer le worktree et la branche locale du dev ?** *Proposition* : à la fusion d'une PR suivie, seulement si
+  son HEAD est exactement le commit de tête fusionné, si aucun fichier suivi ou non suivi n'est modifié (les fichiers ignorés
+  comme `node_modules` ne comptent pas), et si l'agent est fermé ou fermé par PACT. *Deux points à trancher* : le recalage de
+  PACT (Q1) donne un commit R ; si le worktree du dev reste sur F, la condition échoue, il faut donc que PACT l'amène sur R.
+  Et un fichier ignoré peut être précieux (`.env`, réglages locaux) : il serait perdu sans avis.
+- **Q18 — Quand supprimer le worktree du testeur ?** *Proposition* : seulement si son HEAD est contenu dans le commit de tête
+  fusionné et qu'il est propre. Le squash interdit de se fier à `git branch --merged` : toute détection passe par la PR et son
+  commit de tête, jamais par l'ascendance avec main. *Point à trancher* : le recalage réécrit les commits, et Q13 prévoit une
+  récupération des tests sans garantir de garder leurs commits ; le HEAD du testeur ne serait alors pas contenu dans le commit
+  de tête, et la condition échouerait dans le cas normal. Variante possible : comparer le contenu de ses fichiers de test à ce
+  commit, comme la barrière de Q13.
+- **Q19 — Que faire quand une condition manque ?** *Proposition* : rien n'est supprimé ; À faire dit pourquoi, avec un bouton
+  « Supprimer quand même » qui confirme ce qui serait perdu.
+- **Q20 — L'orchestrateur est-il nettoyé ?** *Proposition* : jamais automatiquement, car ses fichiers `.pact/` ne sont pas suivis.
+- **Q21 — Et le travail abandonné ?** *Proposition* : PR fermée sans fusion, boucle fermée, agent fermé : aucune suppression
+  automatique, un geste de l'utilisateur.
+- **Q22 — Et les worktrees déjà accumulés ?** *Proposition* : une action « Nettoyer » dans PACT, avec la liste, la place gagnée et
+  une confirmation, plus `git worktree prune` pour les entrées mortes. *Points à trancher* : un agent fermé sort du workspace,
+  et sa PR n'est pas notée, donc PACT ne peut plus dire si ce travail a été fusionné ; la liste montrerait alors ce qui serait
+  perdu (fichiers modifiés, commits absents de toute branche distante), sans mention « fusionné ». Elle ne doit contenir que des
+  worktrees créés par PACT, sans agent ouvert. Reste à savoir comment les reconnaître : le chemin seul ne suffit pas, car d'autres
+  outils créent aussi des worktrees à côté (par exemple `.worktrees/claude-code-4-2`).
+- **Q23 — Qu'est-ce qui ne déclenche jamais de suppression ?** *Proposition* : une PR d'un autre auteur ne déclenche jamais rien ;
+  `close_agent` reste sans suppression : un agent ne peut pas supprimer de worktree.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -346,6 +373,39 @@ livraison complète, Auto activé, et vérifier que la chaîne témoin ne figure
 8. **Given** un `fetch` de livraison, **When** PACT récupère le remote, **Then** il ne récupère que la branche cible et ses
    propres branches, jamais les références de PR tierces.
 
+---
+
+### User Story 8 - Les worktrees ne s'accumulent plus (Priority: P2)
+
+Une PR suivie est fusionnée : PACT retire de lui-même les worktrees qui ne contiennent plus rien d'unique. Quand il y a un doute,
+il ne supprime rien et explique pourquoi. L'utilisateur nettoie les anciens worktrees en une action, en voyant ce qu'il gagne et
+ce qu'il perdrait.
+
+**Why this priority**: 6,4 Go occupés aujourd'hui, mais une suppression à tort perdrait du travail : la prudence prime sur la place.
+
+**Independent Test**: dépôt Git temporaire et faux `gh` ; dérouler une fusion avec chaque condition vraie puis fausse, et vérifier ce
+qui reste sur le disque. Tous les scénarios sont [NEEDS CLARIFICATION: Q17 à Q23 — propositions à valider].
+
+**Acceptance Scenarios**:
+
+1. **Given** une PR suivie fusionnée, un dev fermé, dont le HEAD est le commit de tête fusionné et qui est propre, avec un
+   `node_modules`, **When** PACT constate la fusion, **Then** son worktree et sa branche locale sont supprimés.
+2. **Given** ce dev avec un fichier non suivi, ou un commit de plus que le commit de tête, **When** PACT constate la fusion, **Then**
+   rien n'est supprimé, et À faire dit pourquoi, avec « Supprimer quand même ».
+3. **Given** cet élément, **When** l'utilisateur clique sur « Supprimer quand même », **Then** PACT confirme la liste de ce qui serait
+   perdu avant de supprimer.
+4. **Given** un fusionnement en squash, **When** PACT décide de supprimer, **Then** il se fonde sur la PR et son commit de tête,
+   jamais sur `git branch --merged` ni sur l'ascendance avec main.
+5. **Given** un testeur propre dont le HEAD est contenu dans le commit de tête fusionné, **When** PACT constate la fusion, **Then** son
+   worktree est supprimé ; sinon, le scénario 2 s'applique.
+6. **Given** un orchestrateur, **When** une PR est fusionnée, **Then** son worktree n'est jamais touché.
+7. **Given** une PR fermée sans fusion, une boucle ou un agent fermé, **When** PACT le constate, **Then** rien n'est supprimé sans un
+   geste de l'utilisateur.
+8. **Given** des worktrees accumulés, **When** l'utilisateur lance « Nettoyer », **Then** il voit la liste et la place gagnée, et rien
+   n'est supprimé sans sa confirmation ; les entrées mortes sont retirées par `git worktree prune`.
+9. **Given** une PR d'un autre auteur fusionnée sur une branche de même nom, **When** PACT tourne, **Then** aucune suppression n'a lieu.
+10. **Given** un agent, **When** il appelle `close_agent`, **Then** son worktree et sa branche restent.
+
 ### Edge Cases
 
 - Le dev travaille pendant que la demande court : PACT ne regarde que le commit figé, sans dialogue « l'agent travaille encore » ; tout
@@ -365,6 +425,11 @@ livraison complète, Auto activé, et vérifier que la chaîne témoin ne figure
   tombe (FR-004), et ce commit ne reçoit ni tests, ni fusion.
 - Le nom d'un check d'une PR suivie part au dev (FR-017) : il est borné en longueur, et présenté comme une donnée rapportée.
 - La PR d'une demande disparaît de la forge : PACT ne cherche pas de PR de remplacement par nom de branche.
+- La suppression d'un worktree échoue (terminal ouvert dedans, fichier verrouillé sous Windows) : À faire le dit, sans forcer.
+- PACT redémarre entre la fusion et le nettoyage : les conditions sont réévaluées, et une suppression déjà faite n'est pas une erreur.
+- Une PR suivie est fusionnée à la main sur la forge (US3) : les mêmes conditions s'appliquent, avec le commit de tête lu sur la PR.
+- Un dépôt sans remote n'a pas de PR : le choix existant à l'intégration locale (fermer la tuile, retirer le worktree) reste en place.
+- L'ancien chemin de suppression force le retrait (`close` avec `force: true`) : il ne doit pas servir de raccourci aux conditions de FR-034.
 - PACT n'a pas de CI à suivre pour un dépôt sans remote : Auto n'y fait pas fusionner sans confirmation
   [NEEDS CLARIFICATION: à trancher avec Q3 — Auto vaut-il pour la fusion locale ?].
 
@@ -450,6 +515,27 @@ livraison complète, Auto activé, et vérifier que la chaîne témoin ne figure
   commit de tête, nom et conclusion des checks [NEEDS CLARIFICATION: Q16 — journal de CI d'une PR suivie].
 - **FR-033**: Les `fetch` de PACT MUST se limiter à la branche cible et aux branches de ses demandes.
 
+**Nettoyage des worktrees**
+
+- **FR-034**: À la fusion d'une PR suivie, PACT MUST supprimer le worktree et la branche locale du dev seulement si son HEAD est exactement le
+  commit de tête fusionné, si aucun fichier suivi ou non suivi n'est modifié, les fichiers ignorés ne comptant pas, et si l'agent est fermé ou
+  fermé par PACT [NEEDS CLARIFICATION: Q17 — F ou R, fichiers ignorés précieux].
+- **FR-035**: Le worktree du testeur MUST n'être supprimé que si son HEAD est contenu dans le commit de tête fusionné et qu'il est propre
+  [NEEDS CLARIFICATION: Q18 — condition qui échouerait après un recalage].
+- **FR-036**: Toute détection de fusion MUST passer par la PR et son commit de tête, jamais par `git branch --merged` ni par l'ascendance avec
+  main, que le squash rend fausses.
+- **FR-037**: Si une condition manque, PACT MUST ne rien supprimer, et À faire MUST dire pourquoi, avec un bouton « Supprimer quand même » qui
+  confirme ce qui serait perdu [NEEDS CLARIFICATION: Q19].
+- **FR-038**: Le worktree de l'orchestrateur MUST ne jamais être nettoyé automatiquement [NEEDS CLARIFICATION: Q20].
+- **FR-039**: Un travail abandonné (PR fermée sans fusion, boucle fermée, agent fermé) MUST ne faire l'objet d'aucune suppression automatique :
+  elle demande un geste de l'utilisateur [NEEDS CLARIFICATION: Q21].
+- **FR-040**: PACT MUST offrir une action « Nettoyer » avec la liste des worktrees, la place gagnée et une confirmation, et retirer les entrées
+  mortes par `git worktree prune` [NEEDS CLARIFICATION: Q22 — périmètre de la liste, reconnaissance des worktrees de PACT].
+- **FR-041**: Une PR d'un autre auteur MUST ne déclencher aucune suppression, et `close_agent` MUST rester sans suppression : aucun outil d'agent
+  ne supprime de worktree [NEEDS CLARIFICATION: Q23].
+- **FR-042**: Les conditions de FR-034 et FR-035 MUST être évaluées juste avant la suppression, et un agent ouvert MUST ne jamais perdre son
+  worktree [NEEDS CLARIFICATION: Q17, Q18].
+
 ### Key Entities
 
 - **Demande de livraison** : agent, boucle, issue, commit figé, commit recalé, message, état, PR (numéro, auteur attendu), compte de recalages.
@@ -460,6 +546,7 @@ livraison complète, Auto activé, et vérifier que la chaîne témoin ne figure
 - **Réglages de livraison du projet** : Auto, mode de fusion, plafond d'allers-retours, passes, consignes de peaufinage.
 - **Compteurs** : allers-retours et passes, séparés, par boucle.
 - **Élément de relecture** : PR, commit, verdict, décision, motif.
+- **Nettoyage de worktree** : agent, worktree, branche, PR, commit de tête fusionné, conditions lues, ce qui serait perdu, décision.
 
 ## Success Criteria *(mandatory)*
 
@@ -476,6 +563,9 @@ livraison complète, Auto activé, et vérifier que la chaîne témoin ne figure
 - **SC-008**: L'orchestrateur reçoit un réveil à chaque résultat, sans avoir à interroger PACT.
 - **SC-009**: Sur 100 % des scénarios de test avec une PR tierce, la chaîne témoin d'injection n'atteint aucun agent, événement, journal ni élément
   À faire, et cette PR n'est ni récupérée, ni exécutée, ni fusionnée.
+- **SC-010**: Dans aucun scénario de test, une suppression automatique ne perd un fichier modifié, un fichier non suivi non ignoré ou un commit
+  absent du commit de tête fusionné.
+- **SC-011**: Après une fusion sans doute possible, aucun worktree de l'agent ne reste sur le disque, sans geste de l'utilisateur.
 
 ## Assumptions
 
