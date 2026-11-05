@@ -32,4 +32,4 @@
 ## Notes
 
 - `gh`, `--auto` et les états de boucle sont nommés par la demande elle-même : les cases sur les détails d'implémentation restent décochées.
-- 23 questions ouvertes attendent l'utilisateur. Q1 (le recalage change le commit figé) est à trancher en premier : elle touche la règle de fusion.
+- 20 questions ouvertes attendent l'utilisateur (Q1 à Q16, Q23 à Q26 ; Q17 à Q22 sont retirées, décidées ou passées à 011). Q1 (le recalage change le commit figé) est à trancher en premier : elle touche la règle de fusion.
