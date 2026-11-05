@@ -513,3 +513,48 @@ describe('ReviewService shortcuts (FR-013, FR-015)', () => {
     });
   });
 });
+
+describe('ReviewService edge cases', () => {
+  it('announces nothing for a workspace that is not open', async () => {
+    expect(await service.updatePending('unknown-workspace')).toEqual([]);
+    expect(pending).toEqual([]);
+  });
+
+  it('refuses the diff of a file that is no part of the changes', async () => {
+    await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
+    await service.open(AGENT_ID);
+    await expect(service.fileDiff(AGENT_ID, 'absent.txt')).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('refuses a comment when no agent can receive it', async () => {
+    service.dispose();
+    service = createService({ prompts: undefined as never });
+    await expect(
+      service.comment(AGENT_ID, { path: 'a.txt', line: 1, text: 'x' }),
+    ).rejects.toMatchObject({ code: 'INTERNAL' });
+  });
+
+  it('works with nobody listening to its announcements', async () => {
+    service.dispose();
+    service = createService({
+      onChanged: undefined as never,
+      onPending: undefined as never,
+      watch: () => () => undefined,
+      safetyMs: 100,
+    });
+    await writeFile(join(worktree, 'a.txt'), 'un\nDEUX\n');
+    expect(paths(await service.open(AGENT_ID))).toEqual(['a.txt']);
+    expect(await service.updatePending(workspace.id)).toEqual([AGENT_ID]);
+    // A change found while followed is read without anyone to announce it to.
+    await writeFile(join(worktree, 'b.txt'), 'b\n');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(paths(await service.open(AGENT_ID))).toEqual(['a.txt', 'b.txt']);
+  });
+
+  it('calls the work missing when the folder is there but git no longer knows its worktree', async () => {
+    await rm(join(repo, '.git', 'worktrees', 'claude-code-1'), { recursive: true, force: true });
+    expect(await service.open(AGENT_ID)).toMatchObject({ missing: true, files: [] });
+  });
+});

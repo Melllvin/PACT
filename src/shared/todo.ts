@@ -41,7 +41,7 @@ function agentTodo(agent: Agent, cli: string, toReview: boolean): TodoItem | nul
 }
 
 /** `/bin/zsh` → zsh, `C:\…\pwsh.exe` → pwsh. */
-const shellName = (path: string) => (path.split(/[\\/]/).pop() ?? path).replace(/\.exe$/i, '');
+const shellName = (path: string) => path.replace(/^.*[\\/]/, '').replace(/\.exe$/i, '');
 
 /** The À faire items of a workspace, derived and never stored (data-model TodoItem, FR-027). */
 export function deriveTodos(
