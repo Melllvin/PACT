@@ -32,4 +32,4 @@
 ## Notes
 
 - `--resume` et les fichiers de départ sont nommés par la demande elle-même : les cases sur les détails d'implémentation restent décochées.
-- Aucune question ouverte : les 10 sont décidées. La ligne 13 de la spec cite la demande : ce n'est pas un marqueur actif.
+- Aucune question ouverte : les 10 sont décidées, Q3 et Q10 modifiées (commit local, sans push). La ligne 13 de la spec cite la demande : ce n'est pas un marqueur actif.

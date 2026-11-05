@@ -32,4 +32,4 @@
 ## Notes
 
 - `gh`, `--auto` et les états de boucle sont nommés par la demande elle-même : les cases sur les détails d'implémentation restent décochées.
-- 1 question ouverte attend l'utilisateur (Q31) : les 24 autres sont décidées (Q17 à Q22 étaient déjà retirées).
+- 1 question ouverte attend l'utilisateur (Q32) : les 25 autres sont décidées (Q17 à Q22 étaient déjà retirées).

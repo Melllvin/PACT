@@ -94,13 +94,11 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
 - Q9: Où va un enregistrement ? → A: l'enregistrement de l'éditeur ou des paramètres crée une branche et une PR, toujours relue par l'utilisateur ; la version courante s'applique jusqu'à sa fusion ; pour un projet sans fichier, le premier enregistrement est le seul geste qui en crée un.
   La reprise des réglages de 008, livrée avant, est écrite ici de façon cohérente avec cette décision (FR-020).
 - Q10: Qui envoie les consignes de départ ? → A: PACT envoie la consigne de l'étape écrite dans le workflow, comme 007 ; l'orchestrateur ajoute le reste.
+- Q11: Où va un enregistrement quand aucune PR n'est possible ? → A: sans remote, l'enregistrement passe par le geste « Fusionner sans verdict » de 008 ; remote non GitHub ou `gh` absent, il est refusé avec sa raison, et l'utilisateur modifie le fichier lui-même avec Git ; les réglages restent lisibles.
 
 ## Questions ouvertes
 
-Une question, née de Q9 : l'agent spec ne la tranche pas.
-
-- **Q11 — Où va un enregistrement quand aucune PR n'est possible ?** Q9 passe par une PR. Or un dépôt sans remote n'a pas de PR, et 008 ne donne aucune voie de livraison à un remote non GitHub ou sans `gh`. Dans ces cas, l'éditeur et les paramètres ne pourraient plus rien enregistrer.
-  *Proposition* : sans remote, l'enregistrement passe par le geste « Fusionner sans verdict » de 008 ; remote non GitHub ou `gh` absent, il est refusé avec sa raison, et l'utilisateur modifie le fichier lui-même avec Git ; les réglages restent lisibles.
+Aucune.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -144,6 +142,8 @@ nombre de tours de la boucle, et enregistre.
 5. **Given** le clavier seul, **When** il crée et relie une étape, **Then** il y parvient, et un lecteur d'écran annonce le changement.
 6. **Given** un workflow valide modifié, **When** il enregistre, **Then** PACT crée une branche et une PR, à relire même Auto activé, et la version courante s'applique jusqu'à la fusion.
 7. **Given** un projet sans fichier avec des réglages de 008, **When** il enregistre pour la première fois, **Then** la PR crée le fichier avec ces valeurs ; une fois fusionnée, le fichier fait foi.
+8. **Given** un dépôt sans remote, **When** il enregistre, **Then** PACT passe par « Fusionner sans verdict », qui demande sa confirmation.
+9. **Given** un remote non GitHub ou `gh` absent, **When** il enregistre, **Then** PACT refuse avec sa raison, et dit de modifier le fichier avec Git ; les réglages restent lisibles.
 
 ---
 
@@ -181,6 +181,8 @@ L'orchestrateur tente de passer à la PR alors que le workflow exige un peaufina
 1. **Given** une étape en cours, **When** l'orchestrateur demande une étape non reliée, **Then** PACT refuse avec les étapes possibles.
 2. **Given** une boucle au plafond de tours, **When** un défaut arrive, **Then** l'escalade à l'utilisateur de 008 s'applique.
 3. **Given** le passage d'une étape à l'autre, **When** il a lieu, **Then** l'orchestrateur en est réveillé par un message `action` de 007.
+4. **Given** un fichier dont une transition porte une expression libre ou un numéro de format inconnu, **When** PACT le lit, **Then** il est invalide, avec la ligne en cause.
+5. **Given** le skill orchestrateur livré, **When** un projet a un workflow, **Then** le skill lit ce workflow, sans ordre écrit en dur.
 
 ### Edge Cases
 
@@ -233,8 +235,8 @@ L'orchestrateur tente de passer à la PR alors que le workflow exige un peaufina
 - **FR-016**: Dès qu'un fichier existe, il MUST être la seule source du plafond de tours, des passes de peaufinage et du mode de fusion, et les paramètres du projet MUST l'éditer par FR-019 ; le toggle Auto reste local.
 - **FR-017**: Les plafonds de modèle du profil de rôle MUST continuer à s'appliquer ; un modèle absent ou trop élevé MUST rendre le workflow invalide sur cette machine, avec sa raison, sans remplacement silencieux.
 - **FR-018**: Le skill `pact-orchestrator` MUST lire le workflow du projet, au lieu d'un ordre écrit en dur.
-- **FR-019**: Un enregistrement de l'éditeur ou des paramètres du projet MUST créer une branche et une PR, toujours relue par l'utilisateur, même Auto activé, selon les règles de la PR sans verdict de 008. La version courante s'applique jusqu'à sa fusion. Pour un projet sans fichier, ce premier
-  enregistrement est le seul geste qui en crée un [NEEDS CLARIFICATION: Q11 — quand aucune PR n'est possible].
+- **FR-019**: Un enregistrement de l'éditeur ou des paramètres du projet MUST créer une branche et une PR, toujours relue par l'utilisateur, même Auto activé, selon les règles de la PR sans verdict de 008. La version courante s'applique jusqu'à sa fusion. Pour un projet sans fichier, ce premier enregistrement est le seul geste qui en crée un. Sans
+  remote, il MUST passer par le geste « Fusionner sans verdict » de 008. Avec un remote non GitHub ou sans `gh`, il MUST être refusé avec sa raison, l'utilisateur modifie le fichier lui-même avec Git, et les réglages restent lisibles.
 - **FR-020**: À la livraison de 010, un projet sans fichier MUST garder ses réglages enregistrés par 008 (mode de fusion, plafond, passes, consigne de peaufinage) comme valeurs de son workflow par défaut, sans rien écrire dans le dépôt. Son premier enregistrement MUST les reprendre dans le fichier ; une
   fois la PR fusionnée, le fichier fait seul foi, et ces valeurs locales ne servent plus. Avec un fichier sur la branche principale, le fichier l'emporte, et PACT MUST dire qu'un réglage local différent est ignoré. La consigne de peaufinage devient la consigne de l'étape de peaufinage.
 

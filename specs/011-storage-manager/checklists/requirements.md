@@ -32,4 +32,4 @@
 ## Notes
 
 - L'inventaire cite les fichiers du code, à la demande de l'utilisateur : les cases sur les détails d'implémentation restent décochées.
-- 2 questions ouvertes attendent l'utilisateur (Q15, Q16), nées des décisions : les 14 autres sont décidées.
+- 1 question ouverte attend l'utilisateur (Q17), née des décisions : les 16 autres sont décidées.

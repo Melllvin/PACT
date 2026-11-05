@@ -26,8 +26,7 @@ erreur de limite. Constats dans le code au moment de cette spec :
 - La reprise (`resumeDue`) n'accepte que `state: error` et `kind: rate-limit`. Il n'y a pas d'état « en pause », et `restore` marque
   « à reprendre » tout agent sans processus après un redémarrage.
 - `--resume` rouvre la session et attend à l'invite : un agent arrêté en plein tour ne repart pas de lui-même.
-- La règle `Bash(git push *)` est sensible (`claude-code.ts`, niveau « Actions sensibles ») : la consigne de pousser peut arrêter
-  l'agent sur une question à l'utilisateur.
+- La règle `Bash(git push *)` est sensible (`claude-code.ts`, niveau « Actions sensibles ») : une consigne de pousser arrêterait l'agent sur une question à l'utilisateur. La sauvegarde ne pousse pas (FR-003).
 
 ## Références UI
 
@@ -53,6 +52,9 @@ reprise au reset avec `--resume` ; la proposition d'arrêt sur une lecture trop 
 - Un coût en euros, une limite par clé d'API (005).
 - Le basculement automatique vers un autre CLI ou un autre modèle.
 - Les CLI qui n'exposent pas leur consommation : sans lecture, PACT n'arrête rien.
+- Tout push à la sauvegarde : le push reste à la livraison (008).
+
+**Perte acceptée** : la sauvegarde est un commit local. Si la machine lâche avant la reprise, il n'en existe aucune copie distante, et ce travail peut être perdu. C'est le prix de ne rien rendre visible sur un dépôt qui peut être public.
 
 ## Clarifications
 
@@ -62,7 +64,7 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
 
 - Q: Quel seuil ? → A: un par fenêtre exposée par le CLI (5 h et semaine pour Claude, pas de fenêtre journalière), 90 % par défaut,
   réglable.
-- Q: Quand sauvegarder ? → A: à seuil − 3 points, PACT demande aux agents de committer et pousser.
+- Q: Quand sauvegarder ? → A: à seuil − 3 points, PACT demande aux agents de committer. Le « et pousser » de la demande est retiré par la décision Q3 ci-dessous.
 - Q: Quand arrêter ? → A: au seuil, PACT arrête tous les agents, marqués en pause.
 - Q: Quand reprendre ? → A: au reset, avec `--resume`.
 - Q: Et un agent en plein tour ? → A: la consigne doit lui arriver, à concevoir avec 007.
@@ -73,8 +75,8 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
 - Q1: Lecture trop ancienne ? → A: dernière lecture de plus de 15 minutes, au moins un agent qui travaille, dernier pourcentage connu à 10 points du seuil ou moins : PACT propose
   d'arrêter par prudence. Il n'arrête pas seul. Sans décision, il repropose à chaque palier de 15 minutes.
 - Q2: Qui arrête-t-on ? → A: tous les agents du compte concerné, dans tous les workspaces ouverts.
-- Q3: Comment pousser sans bloquer ? → A: l'agent ne fait que committer ; PACT pousse sa branche, puis attend le seuil ; un échec de push est signalé sans bloquer l'arrêt ; sans
-  remote, le commit suffit. (Précisé par Q10.)
+- Q3: Comment sauvegarder sans bloquer ? → A: (décision modifiée le 2026-11-05, elle remplace la précédente) un commit local, sans aucun push : PACT ne pousse rien à ce moment-là. Le dépôt peut être public : du travail non relu ne doit pas devenir visible, et aucune branche de sauvegarde ne s'accumule sur le
+  remote. Le push reste à la livraison, comme tout travail. Perte acceptée : pas de copie distante si la machine lâche avant la reprise.
 - Q4: Les fenêtres par modèle ? → A: elles ont leur seuil comme les autres, et l'arrêt reste par compte.
 - Q5: Réglage de reprise coupé, heure inconnue ? → A: coupé, l'agent reste en pause avec un bouton « Reprendre » ; sans heure connue, l'attente croissante existante s'applique ; à la
   reprise, l'orchestrateur repart d'abord.
@@ -84,7 +86,7 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
   avertit sans bloquer.
 - Q8: Lecture qui saute la bande de sauvegarde ? → A: consigne immédiate, puis arrêt après 60 secondes au plus.
 - Q9: Le non-commité d'un agent muet ? → A: PACT ne committe rien à sa place ; le worktree reste en l'état, et l'agent est marqué « non sauvegardé ».
-- Q10: La sauvegarde pendant une livraison ? → A: pour un agent dont le commit est figé (008), pas de consigne de sauvegarde ni de push ; le worktree reste en l'état, marqué « non sauvegardé » s'il a des changements. Le sort des branches poussées sans PR suit 011.
+- Q10: La sauvegarde pendant une livraison ? → A: (décision modifiée le 2026-11-05) si un commit est figé par une demande de livraison (008), pas de sauvegarde ; le worktree reste en l'état, et l'agent est marqué « non sauvegardé » s'il a des changements.
 - Confirmé à la relecture : `launch_agent` bloqué en pause, ce qui amende 005 FR-012.
 
 ## Questions ouvertes
@@ -105,7 +107,7 @@ d'erreur.
 
 **Acceptance Scenarios**:
 
-1. **Given** un seuil à 90 %, **When** une lecture atteint 87 % sur une fenêtre, **Then** PACT demande une seule fois à chaque agent du compte, dans tous les workspaces ouverts, pour cette fenêtre et jusqu'à son reset, de committer, puis pousse sa branche.
+1. **Given** un seuil à 90 %, **When** une lecture atteint 87 % sur une fenêtre, **Then** PACT demande une seule fois à chaque agent du compte, dans tous les workspaces ouverts, pour cette fenêtre et jusqu'à son reset, de committer localement ; rien n'est poussé.
 2. **Given** un agent inactif, **When** la consigne part, **Then** il reçoit dans son invite le pointeur de 007, sans passer sur une saisie de l'utilisateur.
 3. **Given** un agent en plein tour, **When** la consigne part, **Then** elle lui arrive par la voie de 007, à sa prochaine fin d'outil.
 4. **Given** une lecture à 90 %, **When** PACT la reçoit, **Then** il arrête les agents concernés, qui sont en pause et non en erreur.
@@ -114,9 +116,10 @@ d'erreur.
 6. **Given** un agent sans réponse à la consigne, **When** le seuil est atteint, **Then** il est arrêté quand même, sans commit de PACT, et marqué « non sauvegardé ».
 7. **Given** une lecture qui passe de 85 à 92 %, **When** PACT la reçoit, **Then** la consigne part aussitôt, et l'arrêt a lieu après 60 secondes au plus.
 8. **Given** un agent Codex et un compte Claude à la limite, **When** l'arrêt a lieu, **Then** l'agent Codex continue.
-9. **Given** un dev dont le commit est figé par une demande de 008, avec des changements, **When** la bande de sauvegarde est lue, **Then** il ne reçoit ni consigne ni push, et il est marqué « non sauvegardé » ; la PR garde sa tête.
+9. **Given** un dev dont le commit est figé par une demande de 008, avec des changements, **When** la bande de sauvegarde est lue, **Then** il ne reçoit pas de consigne, et il est marqué « non sauvegardé » ; la PR garde sa tête.
 10. **Given** un CLI sans lecture de consommation, **When** l'arrêt a lieu, **Then** son agent continue.
 11. **Given** une consigne, un arrêt ou une reprise, **When** elle a lieu, **Then** elle figure au journal de 007, avec la fenêtre et le pourcentage.
+12. **Given** un agent qui committe sur consigne de sauvegarde, **When** le commit est fait et le seuil atteint, **Then** le remote n'a pas changé : ni push, ni branche créée.
 
 ---
 
@@ -199,8 +202,8 @@ L'utilisateur baisse le seuil de la semaine à 80 % pour garder de la marge.
   MUST signaler qu'à 100 % le seuil ne protège pas d'une erreur de limite, et que le niveau `critical` de 005 (95 %) n'est plus vu.
 - **FR-002**: PACT MUST évaluer chaque fenêtre à chaque lecture, en tenant compte de sa réinitialisation. La fenêtre la plus chargée seule ne suffit
   pas.
-- **FR-003**: À seuil − 3 points sur une fenêtre, PACT MUST demander à tous les agents du compte concerné, dans tous les workspaces ouverts, de committer, une fois par fenêtre et par reset. PACT MUST pousser ensuite leur branche ; un échec de push est signalé sans bloquer l'arrêt, et sans remote le
-  commit suffit. Un agent dont le commit est figé par une demande de 008 MUST ne recevoir ni consigne ni push : son worktree reste en l'état, marqué « non sauvegardé » s'il a des changements. Une branche poussée ainsi sans PR suit 011 FR-013.
+- **FR-003**: À seuil − 3 points sur une fenêtre, PACT MUST demander à tous les agents du compte concerné, dans tous les workspaces ouverts, de committer localement, une fois par fenêtre et par reset. PACT MUST ne rien pousser à ce moment-là, ni demander de pousser : le push reste à la livraison (008). Un agent dont le commit est figé par
+  une demande de 008 MUST ne pas recevoir cette consigne : son worktree reste en l'état, marqué « non sauvegardé » s'il a des changements.
 - **FR-004**: La consigne MUST arriver à un agent en plein tour par la voie de 007, et rester transmissible malgré le plafond de réveils.
 - **FR-005**: Au seuil, PACT MUST arrêter tous les agents du compte concerné, et les marquer « en pause », état distinct d'une erreur, avec la fenêtre et l'heure de reprise. Si la lecture a sauté la bande de
   sauvegarde, PACT MUST envoyer la consigne aussitôt, puis arrêter après 60 secondes au plus. PACT MUST ne rien committer à la place d'un agent muet, et le marquer « non sauvegardé ».
@@ -233,6 +236,7 @@ L'utilisateur baisse le seuil de la semaine à 80 % pour garder de la marge.
 - **SC-004**: La reprise a lieu dans la minute qui suit le reset de la dernière fenêtre en cause, sans geste de l'utilisateur.
 - **SC-005**: Après reprise, un agent interrompu en plein tour repart sans qu'on lui retape sa consigne.
 - **SC-006**: PACT n'arrête jamais un agent sur une lecture trop ancienne sans l'accord de l'utilisateur.
+- **SC-007**: Dans aucun scénario de test, la sauvegarde ne provoque de push ni ne crée de branche sur le remote.
 
 ## Assumptions
 
