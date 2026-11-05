@@ -1,3 +1,4 @@
+import { within } from '../timeout';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -56,13 +57,23 @@ type Options = {
     /** 004 — every CLI, for the default role profiles. */
     list(): CliDefinition[];
   };
-  git: Pick<GitService, 'addWorktree' | 'branchExists' | 'currentBranch' | 'removeWorktree'> &
+  git: Pick<
+    GitService,
+    | 'addWorktree'
+    | 'branchExists'
+    | 'currentBranch'
+    | 'removeWorktree'
+    | 'fetchOrigin'
+    | 'remoteBranchExists'
+  > &
     Partial<Pick<GitService, 'exclude'>>;
   pty: PtyManager;
   hooks: Pick<HookServer, 'register' | 'unregister'>;
   /** Base URL of the hook server, known once it listens. */
   hookUrl: () => string;
   resolveEnv: () => Promise<ResolvedEnv>;
+  /** A launch waits this long for the fetch of origin/<main>, then goes on with the last known. */
+  fetchTimeoutMs?: number;
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
   onBranch?: (event: AgentBranchEvent) => void;
@@ -150,10 +161,15 @@ const isParentClaudeVariable = (name: string) =>
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
+/** What the terminal sends for Shift+Enter (see xterm-factory). */
+const LINE_BREAK = '\x1b\r';
 const isReady = (state: Agent['state']) => state === 'awaiting-prompt' || state === 'done';
 
 const RESTORED_MESSAGE = 'PACT a redémarré : agent à reprendre.';
 const UNAVAILABLE_MESSAGE = 'Dossier du workspace introuvable : agent arrêté.';
+
+/** How long a launch waits for the fetch of origin/<main> (a slow remote must not block it). */
+const FETCH_WAIT_MS = 5000;
 
 export class AgentManager {
   private readonly workspaces: WorkspaceAccess;
@@ -163,6 +179,7 @@ export class AgentManager {
   private readonly hooks: Options['hooks'];
   private readonly hookUrl: () => string;
   private readonly resolveEnv: () => Promise<ResolvedEnv>;
+  private readonly fetchTimeoutMs: number;
   private readonly isPortInUse: (port: number) => Promise<boolean>;
   private readonly onState: NonNullable<Options['onState']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
@@ -177,8 +194,7 @@ export class AgentManager {
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
   /**
-   * Prompts waiting for the agent to be ready (002 R7): the initial prompt « Relancer » types
-   * again, review comments and shortcuts. One is typed per ready transition.
+   * Prompts waiting for the agent to be ready (002 R7): review comments and shortcuts. One is typed per ready transition.
    */
   private readonly prompts = new Map<string, QueuedPrompt[]>();
   /** 003 — the question each agent waits on, for the orchestrator's list_agents (FR-011). */
@@ -206,6 +222,7 @@ export class AgentManager {
     this.hooks = options.hooks;
     this.hookUrl = options.hookUrl;
     this.resolveEnv = options.resolveEnv;
+    this.fetchTimeoutMs = options.fetchTimeoutMs ?? FETCH_WAIT_MS;
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
@@ -353,7 +370,8 @@ export class AgentManager {
    * of CLIs without a prompt hook (FR-036). Free terminals are no agents: nothing to do.
    */
   typed(id: string, data: string): void {
-    if (!data.includes('\r')) return;
+    // Shift+Enter (ESC + CR) inserts a line break: it sends no line.
+    if (data === LINE_BREAK || !data.includes('\r')) return;
     const found = this.workspaces
       .list()
       .flatMap((workspace) => workspace.agents)
@@ -361,17 +379,12 @@ export class AgentManager {
     if (found?.scheduledResume) void this.cancelAutoResume(id);
   }
 
-  /** « Relancer »: a new session, then the initial prompt typed again (FR-024, R6). */
+  /** « Relancer »: a new session. The initial prompt is not typed again: an agent that has one has
+   * already begun, and the queued prompts (review, orchestrator) stay delivered in order. */
   async restart(id: string): Promise<void> {
     const { workspace, agent } = this.inError(id);
     this.resumes.forget(id);
     await this.stop(id);
-    if (agent.initialPrompt !== null) {
-      this.prompts.set(id, [
-        { text: agent.initialPrompt, origin: 'review' },
-        ...(this.prompts.get(id) ?? []),
-      ]);
-    }
     await this.startAgain(workspace, agent, null);
   }
 
@@ -614,6 +627,10 @@ export class AgentManager {
     ]);
 
     const env = await this.resolveEnv();
+    // One wait per launch, not per agent: a silent remote costs at most `fetchTimeoutMs` in all.
+    if (drafts.some((draft) => draft.baseBranch === null)) {
+      await within(this.git.fetchOrigin(workspace.path, workspace.mainBranch), this.fetchTimeoutMs);
+    }
     const launched: Agent[] = [];
     for (const [index, draft] of drafts.entries()) {
       const position = positions[index] ?? 0;
@@ -622,10 +639,18 @@ export class AgentManager {
         (await allocatePort(position, usedPorts, { inUse: (p) => this.isPortInUse(p) }));
       usedPorts.add(port);
       const baseBranch = draft.baseBranch ?? workspace.mainBranch;
+      // Without a chosen base, the worktree starts from origin/<main>, fetched first (a failed
+      // fetch keeps the last one known); a lagging local main is no base.
+      let start = baseBranch;
+      if (draft.baseBranch === null) {
+        if (await this.git.remoteBranchExists(workspace.path, workspace.mainBranch)) {
+          start = `origin/${workspace.mainBranch}`;
+        }
+      }
       const worktree = await this.git.addWorktree(workspace.path, {
         cli: draft.cliId,
         position,
-        base: baseBranch,
+        base: start,
         ...(draft.branch === null ? {} : { branch: draft.branch }),
       });
       const role = draftRole(draft);

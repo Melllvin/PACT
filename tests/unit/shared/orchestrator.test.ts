@@ -107,3 +107,19 @@ describe('orchestratorActionSchema', () => {
     ).toMatchObject({ outcome: 'refused', reason: 'Six agents au plus' });
   });
 });
+
+// fix-relance-communs — wait_for_agents never hears of files two agents change.
+describe('orchestratorEventSchema kinds', () => {
+  const event = { at: now, agentId: uuid(1), state: 'done', summary: 'a.ts' };
+
+  it('has no overlap event', () => {
+    expect(orchestratorEventSchema.safeParse({ ...event, kind: 'overlap' }).success).toBe(false);
+    expect(orchestratorEventSchema.shape.kind.options).not.toContain('overlap');
+  });
+
+  it('still has the other kinds', () => {
+    for (const kind of ['report', 'report-missing', 'loop', 'publish', 'mockup']) {
+      expect(orchestratorEventSchema.safeParse({ ...event, kind }).success).toBe(true);
+    }
+  });
+});

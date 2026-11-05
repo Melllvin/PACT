@@ -83,7 +83,13 @@ export type AgentsView = {
 };
 
 /** The kinds of item that aim at one agent: they go on its row; the others go in the head. */
-const ROW_KINDS: readonly TodoItem['kind'][] = ['answer', 'rate-limit', 'review', 'prompt'];
+const ROW_KINDS: readonly TodoItem['kind'][] = [
+  'answer',
+  'decide',
+  'rate-limit',
+  'review',
+  'prompt',
+];
 
 const rank = (item: TodoItem) => ORDER.indexOf(item.kind);
 

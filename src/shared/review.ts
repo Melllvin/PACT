@@ -136,14 +136,7 @@ const NULL_ID = '0'.repeat(40);
 
 /** What « vu » remembers for a file: its content, or the null id once deleted (FR-009). */
 export const seenBlob = (file: Pick<ChangedFile, 'blob'>): string => file.blob ?? NULL_ID;
-/** 004 FR-021 — the files two agents both change, the agents in tile order. */
-export const overlapSchema = z.object({
-  agents: z.tuple([z.uuid(), z.uuid()]),
-  files: z.array(repoPathSchema).min(1),
-});
-
 export type ReviewSnapshot = z.infer<typeof reviewSnapshotSchema>;
-export type Overlap = z.infer<typeof overlapSchema>;
 export type DiffLine = z.infer<typeof diffLineSchema>;
 export type DiffHunk = z.infer<typeof diffHunkSchema>;
 export type FileDiff = z.infer<typeof fileDiffSchema>;

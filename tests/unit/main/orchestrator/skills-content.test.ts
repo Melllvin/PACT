@@ -31,7 +31,6 @@ const MUST_SAY: Record<string, string[]> = {
     'sortent à 0',
     'Le rapport est rendu',
     'Le recap (`.pact/recap.md`) est à jour',
-    'Pas de fichiers communs en parallèle',
     "Les questions sont à l'utilisateur",
   ],
   'pact-orchestrator/SKILL.md': [
@@ -129,4 +128,33 @@ describe('the skills of the roles', () => {
       );
     }
   });
+});
+
+// fix-relance-communs — no more ban on touching the files another agent touches: each agent works
+// in its worktree, pushes its branch, and can fetch another branch when it needs it.
+describe('skills about the files two agents change', () => {
+  const FORBIDDEN = [
+    /Pas de fichiers communs en parallèle/i,
+    /ne modifient jamais les mêmes fichiers/i,
+    /ne doivent pas modifier les mêmes fichiers/i,
+    /mêmes fichiers en même temps/i,
+  ];
+
+  it.each(['pact-contract.md', 'pact-orchestrator/SKILL.md'])(
+    '%s no longer forbids the same files as another agent',
+    async (path) => {
+      const text = flat(await read(path));
+      for (const banned of FORBIDDEN) expect(text).not.toMatch(banned);
+    },
+  );
+
+  it.each(['pact-contract.md', 'pact-orchestrator/SKILL.md'])(
+    '%s says each agent works in its worktree, pushes its branch and can fetch another',
+    async (path) => {
+      const text = flat(await read(path));
+      expect(text).toMatch(/worktree/i);
+      expect(text).toMatch(/pouss\w*\b[^.]*\bbranche/i);
+      expect(text).toMatch(/récupér\w*\b[^.]*\bautre branche/i);
+    },
+  );
 });

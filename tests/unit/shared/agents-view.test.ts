@@ -235,7 +235,7 @@ describe('agentRows', () => {
 
   it('puts the « review » item of an agent on its row', () => {
     const ws = workspaceOf([agent(1, { state: 'done' })]);
-    const result = view(ws, deriveTodos(ws, names, [uuid(1)]));
+    const result = view(ws, deriveTodos(ws, names, { [uuid(1)]: 1 }));
     expect(result.head).toEqual([]);
     expect(result.rows[0]?.todo?.kind).toBe('review');
   });
@@ -248,20 +248,17 @@ describe('agentRows', () => {
     expect(row?.pending).toBe(3);
   });
 
-  it.each([
-    'integration-request',
-    'publish-issues',
-    'loop-escalated',
-    'overlap',
-    'usage-limit',
-  ] as const)('sends « %s » to the head, even when it targets an agent', (kind) => {
-    const ws = workspaceOf([agent(1)]);
-    const item = todo(uuid(1), kind);
-    const result = view(ws, [item]);
-    expect(result.head).toEqual([item]);
-    expect(result.rows[0]?.todo).toBeNull();
-    expect(result.rows[0]?.pending).toBe(0);
-  });
+  it.each(['integration-request', 'publish-issues', 'loop-escalated', 'usage-limit'] as const)(
+    'sends « %s » to the head, even when it targets an agent',
+    (kind) => {
+      const ws = workspaceOf([agent(1)]);
+      const item = todo(uuid(1), kind);
+      const result = view(ws, [item]);
+      expect(result.head).toEqual([item]);
+      expect(result.rows[0]?.todo).toBeNull();
+      expect(result.rows[0]?.pending).toBe(0);
+    },
+  );
 
   it('sends the free terminals (« info ») to the head', () => {
     const ws = workspaceOf([agent(1)], { freeTerminals: [terminal] });
@@ -287,7 +284,7 @@ describe('agentRows', () => {
     const ws = workspaceOf([agent(1, { state: 'awaiting-answer' }), agent(2)], {
       freeTerminals: [terminal],
     });
-    const items = [...deriveTodos(ws, names), todo(uuid(2), 'overlap')];
+    const items = [...deriveTodos(ws, names), todo(uuid(2), 'usage-limit')];
     const result = view(ws, items);
     expect(items.map((item) => item.kind)).toContain('info');
     expect(result.pendingCount).toBe(2);
@@ -308,7 +305,7 @@ describe('agentRows', () => {
         ],
       },
     );
-    const items = deriveTodos(ws, names, [uuid(3)]);
+    const items = deriveTodos(ws, names, { [uuid(3)]: 1 });
     const result = view(ws, items);
     const placed = result.rows.reduce((sum, row) => sum + row.pending, result.head.length);
     expect(placed).toBe(items.length);

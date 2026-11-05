@@ -140,3 +140,15 @@ describe('send_prompt', () => {
     expect((await tool('send_prompt', { agent: third, text: 'x' })).isError).toBe(true);
   });
 });
+
+describe('send_prompt to an agent in error', () => {
+  it('refuses, saying the user has to resume it', async () => {
+    const [dead = ''] = (await h.launch([h.draft()], 'crash-exit-1')).map((a) => a.id);
+    h.pty.write(dead, 'Plante\r');
+    await h.waitForState(dead, 'error');
+    const { isError, text } = await tool('send_prompt', { agent: dead, text: 'Reprends' });
+    expect(isError).toBe(true);
+    expect(text).toContain('est en erreur : l’utilisateur doit le reprendre.');
+    expect(h.typed.some((t) => t.agentId === dead)).toBe(false);
+  });
+});

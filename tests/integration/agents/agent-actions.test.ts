@@ -244,19 +244,43 @@ describe('AgentManager after a crash', { timeout: 30_000 }, () => {
     expect(current(agent.id)).toMatchObject({ sessionId, lastError: null });
   });
 
-  it('« Relancer » starts a new session and types the initial prompt again', async () => {
+  // fix-relance-communs — an agent with an initial prompt has already begun: typing it again
+  // would restart work already done.
+  it('« Relancer » starts a new session and types no initial prompt', async () => {
     scenario = 'crash-exit-1';
     const agent = await launchOne();
     const first = current(agent.id)?.sessionId;
     await crash(agent.id, 'Consigne initiale');
+    expect(current(agent.id)?.initialPrompt).toBe('Consigne initiale');
     const launchSpy = vi.spyOn(adapter, 'buildLaunch');
     scenario = 'prompt-then-done';
+    const write = vi.spyOn(pty, 'write');
     await manager.restart(agent.id);
     expect(launchSpy).toHaveBeenCalled();
-    await waitForState(agent.id, 'done');
+    await waitForState(agent.id, 'awaiting-prompt');
+    // Time for a prompt typed at once, and for its Enter, to show up.
+    await new Promise((r) => setTimeout(r, 500));
+    expect(write).not.toHaveBeenCalled();
+    expect(current(agent.id)).toMatchObject({ state: 'awaiting-prompt', lastError: null });
     expect(current(agent.id)?.sessionId).not.toBe(first);
-    expect(current(agent.id)?.initialPrompt).toBe('Consigne initiale');
-    expect(pty.history(agent.id)).toContain('Terminé');
+    expect(pty.history(agent.id)).not.toContain('Terminé');
+  });
+
+  // fix-relance-communs — the prompts waiting (review, orchestrator) stay delivered, in order.
+  it('« Relancer » still delivers the queued prompts in order, without the initial prompt', async () => {
+    scenario = 'crash-exit-1';
+    const agent = await launchOne();
+    await crash(agent.id, 'Consigne initiale');
+    await manager.sendPrompt(agent.id, 'Revue A', 'review');
+    await manager.sendPrompt(agent.id, 'Orchestrateur B', 'orchestrator');
+    scenario = 'prompt-then-done';
+    const write = vi.spyOn(pty, 'write');
+    await manager.restart(agent.id);
+    const typedTexts = () =>
+      write.mock.calls.map(([, data]) => data).filter((data) => data !== '\r');
+    await waitFor(() => typedTexts().length >= 2, 'queued prompts not delivered', agent.id);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(typedTexts()).toEqual(['Revue A', 'Orchestrateur B']);
   });
 
   it('« Reprendre » types « continue » when the CLI is still alive after a rate limit', async () => {
