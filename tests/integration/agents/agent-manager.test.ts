@@ -640,4 +640,26 @@ describe('AgentManager.launch from origin', { timeout: 30_000 }, () => {
     const [agent] = await launch(manager, [draft()]);
     expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(known);
   });
+
+  it('waits once for a silent remote whatever the number of agents', async () => {
+    git(repo, 'fetch', '-q', 'origin', 'main');
+    const known = git(repo, 'rev-parse', 'origin/main');
+    const fetches: string[] = [];
+    class Silent extends GitService {
+      override fetchOrigin = (_cwd: string, branch: string) => {
+        fetches.push(branch);
+        return new Promise<boolean>(() => undefined);
+      };
+    }
+    const manager = await createManager({
+      gitService: new Silent({ env: gitEnv }),
+      fetchTimeoutMs: 150,
+    });
+    const agents = await launch(manager, [draft(), draft(), draft()]);
+    // One fetch, so one wait: a wait per agent would have asked three times.
+    expect(fetches).toHaveLength(1);
+    for (const agent of agents) {
+      expect(git(agent.worktreePath, 'rev-parse', 'HEAD')).toBe(known);
+    }
+  });
 });

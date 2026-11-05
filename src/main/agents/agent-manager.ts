@@ -625,6 +625,10 @@ export class AgentManager {
     ]);
 
     const env = await this.resolveEnv();
+    // One wait per launch, not per agent: a silent remote costs at most `fetchTimeoutMs` in all.
+    if (drafts.some((draft) => draft.baseBranch === null)) {
+      await within(this.git.fetchOrigin(workspace.path, workspace.mainBranch), this.fetchTimeoutMs);
+    }
     const launched: Agent[] = [];
     for (const [index, draft] of drafts.entries()) {
       const position = positions[index] ?? 0;
@@ -637,10 +641,6 @@ export class AgentManager {
       // fetch keeps the last one known); a lagging local main is no base.
       let start = baseBranch;
       if (draft.baseBranch === null) {
-        await within(
-          this.git.fetchOrigin(workspace.path, workspace.mainBranch),
-          this.fetchTimeoutMs,
-        );
         if (await this.git.remoteBranchExists(workspace.path, workspace.mainBranch)) {
           start = `origin/${workspace.mainBranch}`;
         }

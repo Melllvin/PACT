@@ -135,7 +135,7 @@ export class WorkspaceService {
       openWorkspaces: [...state.openWorkspaces.filter((p) => p !== root), root],
     }));
     await this.remember(workspace);
-    if (!known.settled) this.resolveWithOrigin(id);
+    if (!known.settled) this.resolveWithOrigin(id, root);
     return workspace;
   }
 
@@ -143,9 +143,7 @@ export class WorkspaceService {
    * Origin may know a better main branch than the refs here: asked in the background, the
    * workspace is changed (and told) only if it answers something else.
    */
-  private resolveWithOrigin(id: string): void {
-    const path = this.open_.get(id)?.path;
-    if (path === undefined) return;
+  private resolveWithOrigin(id: string, path: string): void {
     void this.git
       .remoteDefaultBranch(path)
       .then(async (branch) => {
@@ -189,7 +187,7 @@ export class WorkspaceService {
   /** Reopens the workspaces that were open when the app quit (FR-005, FR-038). */
   async restore(): Promise<Workspace[]> {
     const { openWorkspaces } = await this.stores.state.read();
-    const resolving: string[] = [];
+    const resolving: { id: string; path: string }[] = [];
     for (const path of openWorkspaces) {
       const id = workspaceId(path);
       const saved = await this.stores.workspace(id).read();
@@ -198,7 +196,7 @@ export class WorkspaceService {
       // the best value known now, origin being asked in the background.
       const known = available ? await this.git.knownDefaultBranch(path) : undefined;
       const mainBranch = known?.branch ?? saved?.mainBranch ?? '';
-      if (known && !known.settled) resolving.push(id);
+      if (known && !known.settled) resolving.push({ id, path });
       this.open_.set(id, {
         agents: [],
         freeTerminals: [],
@@ -220,7 +218,7 @@ export class WorkspaceService {
         status: available ? 'available' : 'unavailable',
       });
     }
-    for (const id of resolving) this.resolveWithOrigin(id);
+    for (const { id, path } of resolving) this.resolveWithOrigin(id, path);
     return this.list();
   }
 

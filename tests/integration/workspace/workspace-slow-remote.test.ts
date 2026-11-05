@@ -25,10 +25,12 @@ const git = (cwd: string, ...args: string[]) =>
 /** A git whose origin answers only when `answer` is called (or never). */
 class SilentRemote extends GitService {
   readonly asked: string[] = [];
+  failing = false;
   private readonly waiting: ((branch: string | null) => void)[] = [];
 
   override remoteDefaultBranch(path: string): Promise<string | null> {
     this.asked.push(path);
+    if (this.failing) return Promise.reject(new Error('remote en panne'));
     return new Promise((resolve) => this.waiting.push(resolve));
   }
 
@@ -42,11 +44,13 @@ let services: WorkspaceService[];
 let remote: SilentRemote;
 let changed: [string, string][];
 
-const service = () => {
+const service = (callbacks = true) => {
   const created = new WorkspaceService({
     git: remote,
     stores: openStores(join(root, 'userData')),
-    onMainBranch: (id, branch) => changed.push([id, branch]),
+    ...(callbacks
+      ? { onMainBranch: (id: string, branch: string) => changed.push([id, branch]) }
+      : {}),
   });
   services.push(created);
   return created;
@@ -115,6 +119,29 @@ describe('a remote that does not answer', () => {
     await settle();
     expect(opened.get(id)?.mainBranch).toBe('main');
     expect(changed).toEqual([]);
+  });
+
+  it('survives a remote that fails, and keeps the main branch known', async () => {
+    const repo = await clone('repo');
+    remote.failing = true;
+    const opened = service();
+    const { id } = await opened.open(repo);
+    await settle();
+    expect(opened.get(id)?.mainBranch).toBe('main');
+    expect(changed).toEqual([]);
+  });
+
+  it('works without any callback: the main branch changes and a vanished folder is noticed', async () => {
+    const repo = await clone('repo');
+    const opened = service(false);
+    const { id } = await opened.open(repo);
+    remote.answer('develop');
+    await vi.waitFor(() => {
+      expect(opened.get(id)?.mainBranch).toBe('develop');
+    });
+    await rm(repo, { recursive: true, force: true });
+    await opened.checkAvailability();
+    expect(opened.get(id)?.status).toBe('unavailable');
   });
 
   it('forgets an answer that comes after the workspace was closed', async () => {

@@ -34,13 +34,21 @@ const NOTIFIED: TodoKind[] = [
   'answer',
   'decide',
   'integration-request',
-  'publish-issues',
-  'loop-escalated',
   'rate-limit',
   'usage-limit',
 ];
 
 describe('NotificationService', () => {
+  it.each([
+    ['publish-issues', '◎ Issues à publier'],
+    ['loop-escalated', '✕ Boucle arrêtée'],
+  ] as const)('notifies a « %s » item under a fixed title, even without a label', (kind, title) => {
+    const { service, notify } = setup();
+    service.update('w1', [item(kind, 'a1', { title: `Titre libre ${kind}` })]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title }));
+  });
+
   it.each(NOTIFIED)('notifies a new « %s » item once, with its title', (kind) => {
     const { service, notify } = setup();
     service.update('w1', [item(kind)]);

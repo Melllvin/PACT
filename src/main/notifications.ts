@@ -64,10 +64,8 @@ export class NotificationService {
 
   private titleOf(workspaceId: string, todo: TodoItem): string {
     const generic = GENERIC_TITLE[todo.kind];
-    const { agentLabel } = this.options;
-    // Without `agentLabel` (unit tests of the service alone) the item's own title goes out.
-    if (generic === undefined || agentLabel === undefined) return todo.title;
-    const label = agentLabel({ workspaceId, agentId: todo.agentId });
+    if (generic === undefined) return todo.title;
+    const label = this.options.agentLabel?.({ workspaceId, agentId: todo.agentId });
     return label ? `${generic} · ${label}` : generic;
   }
 }
