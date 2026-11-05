@@ -320,7 +320,6 @@ export type TodoKind =
   | 'integration-request'
   | 'publish-issues'
   | 'loop-escalated'
-  | 'overlap'
   | 'rate-limit'
   | 'usage-limit'
   | 'review'

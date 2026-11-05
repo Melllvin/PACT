@@ -240,25 +240,17 @@ describe('deriveTodos', () => {
     });
   });
 
-  // 004 T026 — two agents change the same files (FR-021).
-  it('warns about the files two agents both change, before the reviews', () => {
+  // fix-relance-communs — two agents changing the same files give no « Fichiers communs » entry:
+  // the reviews alone are listed (the overlaps are no input of the todos any more).
+  it('lists no « Fichiers communs » entry for agents that change the same files', () => {
     const todos = deriveTodos(
       workspace([agent(1, { state: 'done' }), agent(2, { state: 'done' })]),
       names,
-      ['a1'],
-      [
-        { agents: ['a1', 'a2'] as const, files: ['src/a.ts', 'src/b.ts'] },
-        // An agent gone meanwhile gives nothing.
-        { agents: ['a1', 'a9'] as const, files: ['src/a.ts'] },
-      ],
+      ['a1', 'a2'],
     );
-    expect(todos.map((t) => t.id)).toEqual(['a1+a2:overlap', 'a1:review']);
-    expect(todos[0]).toMatchObject({
-      agentId: 'a1',
-      kind: 'overlap',
-      title: '⚠ Fichiers communs · Claude Code 1, Claude Code 2 · src/a.ts, src/b.ts',
-      actions: [],
-    });
+    expect(todos.map((t) => t.id)).toEqual(['a1:review', 'a2:review']);
+    expect(todos.some((t) => (t.kind as string) === 'overlap')).toBe(false);
+    expect(todos.some((t) => t.title.includes('Fichiers communs'))).toBe(false);
   });
 
   // 004 T029 — « ◎ Créer N issues ? »: the orchestrator asks, the user decides (FR-023).
@@ -332,7 +324,7 @@ describe('usage alerts', () => {
     ...over,
   });
   const alerts = (states: UsageState[], now = NOW, thresholds = { warn: 80, critical: 95 }) =>
-    deriveTodos(workspace([agent(1)]), () => 'Claude Code', [], [], {
+    deriveTodos(workspace([agent(1)]), () => 'Claude Code', [], {
       states,
       thresholds,
       now,
@@ -377,7 +369,6 @@ describe('usage alerts', () => {
       workspace([agent(1, { state: 'awaiting-prompt' })]),
       () => 'Claude Code',
       ['a1'],
-      [],
       { states: [usageState(85)], thresholds: { warn: 80, critical: 95 }, now: NOW },
     );
     expect(todos.map((t) => t.kind)).toEqual(['usage-limit', 'review']);

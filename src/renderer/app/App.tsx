@@ -166,7 +166,6 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               review={
                 review && {
                   pending: reviewState.pending[workspace.id] ?? [],
-                  overlaps: reviewState.overlaps[workspace.id],
                   snapshot: reviewState.snapshot,
                   selected: reviewState.selected,
                   diff: reviewState.diff,

@@ -560,3 +560,14 @@ describe('AgentManager restart of the app (FR-038)', { timeout: 30_000 }, () => 
     expect(current(id)?.state).toBe('awaiting-prompt');
   });
 });
+
+describe('AgentManager launch of an orchestrator without a way to serve one', () => {
+  it('refuses an orchestrator draft, and saves no agent', async () => {
+    const manager = await createManager();
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: 'Orchestrateur indisponible.',
+    });
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+  });
+});

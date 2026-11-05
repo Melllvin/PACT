@@ -303,6 +303,22 @@ describe('auto resume after a rate limit', { timeout: 30_000 }, () => {
     expect(continues(write)).toBe(0);
   });
 
+  // fix-relance-communs — Shift+Enter inserts a line break, it sends no line: the resume stays.
+  it.each([['\x1b\r'], ['\n'], ['\x1b[13;2u']])(
+    'the Shift+Enter sequence %j does not replace the scheduled resume',
+    async (sequence) => {
+      scenario = 'rate-limit-alive';
+      const id = await limited();
+      await waitForState(id, 'error');
+      const write = vi.spyOn(pty, 'write');
+      manager.typed(id, sequence);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(current(id)?.scheduledResume).not.toBeNull();
+      clock.advanceTo('2030-01-01T12:00:00.000Z');
+      await waitFor(() => continues(write) === 1, 'resume cancelled', id);
+    },
+  );
+
   it('ignores what is typed in a terminal that is no agent', () => {
     expect(() => {
       manager.typed('free-terminal', 'ls\r');
