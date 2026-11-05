@@ -130,3 +130,13 @@ export function agentRows(
     pendingCount: todos.filter((item) => item.kind !== 'info').length,
   };
 }
+
+/** 006 FR-023 — the agents an orchestrator launched, by position; never itself nor the user's. */
+export function agentsLaunchedBy(
+  workspace: Pick<Workspace, 'agents'>,
+  orchestratorId: string,
+): Agent[] {
+  return workspace.agents
+    .filter((agent) => agent.launchedBy === orchestratorId && agent.id !== orchestratorId)
+    .sort((a, b) => a.position - b.position);
+}

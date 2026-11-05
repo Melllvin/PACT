@@ -61,3 +61,17 @@ describe('TileActions for a question', () => {
     expect(props.onAnswer).not.toHaveBeenCalled();
   });
 });
+
+// 006 FR-025 — the tile of an agent closed with its orchestrator offers to start it again.
+describe('TileActions of a closed agent', () => {
+  it('offers « Relancer » and « Journal »', async () => {
+    const user = userEvent.setup();
+    const h = handlers();
+    render(<TileActions state="closed" {...h} />);
+    await user.click(screen.getByRole('button', { name: 'Relancer' }));
+    await user.click(screen.getByRole('button', { name: 'Journal' }));
+    expect(h.onRestart).toHaveBeenCalledOnce();
+    expect(h.onLog).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Reprendre' })).toBeNull();
+  });
+});

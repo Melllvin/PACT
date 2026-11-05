@@ -125,11 +125,11 @@ un changement d'état met le nœud à jour.
 **Test indépendant** : orchestrateur + deux agents ; fermer l'orchestrateur ferme les trois ; relancer
 avec « Reprendre le travail » relance les trois et envoie la consigne au seul agent qui travaillait.
 
-- [ ] T033 [P] [US4] Tests : `agentsLaunchedBy(workspace, orchestratorId)` ; fermeture de l'orchestrateur ferme ses agents (choix du worktree appliqué à tous) ; fermeture d'un sous-agent ne ferme que lui ; l'état à la fermeture est mémorisé (`closedWhileWorking: boolean`) ; relance → agents relancés, consigne de reprise aux seuls `closedWhileWorking`, dans `tests/integration/agents/agent-group.test.ts`
-- [ ] T034 [P] [US4] Test `CloseAgentDialog` : liste les sous-agents de l'orchestrateur, garder par défaut, dans `tests/unit/renderer/tiles/CloseAgentDialog.test.tsx` ; test de la case « Reprendre le travail » (cochée par défaut) à la relance
-- [ ] T035 [US4] E2E : fermer puis relancer un orchestrateur et deux agents (faux CLI), consigne de reprise reçue par le seul agent qui travaillait, dans `tests/e2e/us31-orchestrator-group.spec.ts`
-- [ ] T036 [US4] Fermeture et relance en groupe dans `src/main/agents/agent-manager.ts` (champ persisté `closedWhileWorking`, défaut `false`) ; option `resumeWork` sur `agent:restart` dans `src/shared/ipc.ts`
-- [ ] T037 [US4] Liste des sous-agents dans `src/renderer/tiles/CloseAgentDialog.tsx` ; case « Reprendre le travail » à la relance de l'orchestrateur
+- [x] T033 [P] [US4] Tests : `agentsLaunchedBy(workspace, orchestratorId)` ; fermeture de l'orchestrateur ferme ses agents (choix du worktree appliqué à tous) ; fermeture d'un sous-agent ne ferme que lui ; l'état à la fermeture est mémorisé (`closedWhileWorking: boolean`) ; relance → agents relancés, consigne de reprise aux seuls `closedWhileWorking`, dans `tests/integration/agents/agent-group.test.ts`
+- [x] T034 [P] [US4] Test `CloseAgentDialog` : liste les sous-agents de l'orchestrateur, garder par défaut, dans `tests/unit/renderer/tiles/CloseAgentDialog.test.tsx` ; test de la case « Reprendre le travail » (cochée par défaut) à la relance
+- [x] T035 [US4] E2E : fermer puis relancer un orchestrateur et deux agents (faux CLI), consigne de reprise reçue par le seul agent qui travaillait, dans `tests/e2e/us31-orchestrator-group.spec.ts`
+- [x] T036 [US4] Fermeture et relance en groupe dans `src/main/agents/agent-manager.ts` (champ persisté `closedWhileWorking`, défaut `false`) ; option `resumeWork` sur `agent:restart` dans `src/shared/ipc.ts`
+- [x] T037 [US4] Liste des sous-agents dans `src/renderer/tiles/CloseAgentDialog.tsx` ; case « Reprendre le travail » à la relance de l'orchestrateur
 
 ---
 

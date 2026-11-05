@@ -105,6 +105,12 @@ export const agentSchema = z.object({
    */
   launchedBy: z.string().nullable().default(null),
   /**
+   * 006 FR-026 — the agent was at work (`WORKING_STATES`) when it was closed with its orchestrator:
+   * « Reprendre le travail » gives it a resume prompt. Absent (false) in the files saved before, and
+   * for an agent never closed with its group.
+   */
+  closedWhileWorking: z.boolean().optional(),
+  /**
    * The last hand-off report of the agent, with or without a loop: « ◆ Décider » reads it. Cleared
    * when the agent works again; absent in workspace files saved before.
    */

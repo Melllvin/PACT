@@ -76,7 +76,8 @@ export function Tile({
   // says that one is due.
   const reviewing =
     actions.onReview !== undefined && (agent.state === 'done' || agent.state === 'awaiting-prompt');
-  const acting = agent.state === 'awaiting-answer' || failed || reviewing;
+  const acting =
+    agent.state === 'awaiting-answer' || agent.state === 'closed' || failed || reviewing;
   return (
     <article
       data-fx-shield
@@ -85,7 +86,7 @@ export function Tile({
       data-pulse={pulses}
       className={cn(
         'group relative flex min-h-0 min-w-0 animate-tile-enter flex-col rounded-[14px] border border-[color-mix(in_srgb,var(--agent-color)_55%,transparent)] bg-surface transition-[border-color,box-shadow] duration-500 ease-out-soft motion-reduce:animate-none',
-        acting && !failed && 'ring-1 ring-(--pulse-color)',
+        acting && !failed && agent.state !== 'closed' && 'ring-1 ring-(--pulse-color)',
         failed &&
           'halo border-destructive shadow-[0_0_0_1px_color-mix(in_srgb,var(--danger)_60%,transparent),0_0_40px_color-mix(in_srgb,var(--danger)_18%,transparent)]',
       )}
