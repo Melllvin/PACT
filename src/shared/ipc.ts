@@ -301,6 +301,13 @@ export const ipcEvents = {
     scheduledResume: scheduledResumeSchema.nullable().optional(),
     /** Sent with an `awaiting-answer` state when the agent asks a question (FR-024a). */
     awaiting: z.enum(['question']).optional(),
+    /** Sent when the agent gives a report (« ◆ Décider » reads its questions). */
+    lastReport: z
+      .object({
+        status: z.enum(['done', 'blocked', 'defects']),
+        questions: z.array(z.string()),
+      })
+      .optional(),
   }),
   'agent:branch': z.object({ agentId: z.uuid(), branch: z.string() }),
   'workspace:status': z.object({ id: z.string(), status: z.enum(['available', 'unavailable']) }),
@@ -315,6 +322,8 @@ export const ipcEvents = {
   'review:pending': z.object({
     workspaceId: z.string(),
     agentIds: z.array(z.uuid()),
+    /** Changed files of each agent to review; absent in older payloads. */
+    files: z.record(z.string(), z.int().nonnegative()).optional(),
   }),
   'review:tests': testRunSchema,
   'integration:state': integrationSchema,
@@ -344,7 +353,11 @@ export const ipcEvents = {
   /** 005 — a new reading of a CLI account, or a change of its level. */
   'usage:state': usageStateSchema,
   /** Agents were launched in a workspace, by the launcher or by its orchestrator (003 FR-015). */
-  'workspace:agentsLaunched': z.object({ workspaceId: z.string() }),
+  'workspace:agentsLaunched': z.object({
+    workspaceId: z.string(),
+    /** A clicked notification: the view goes to this agent too. */
+    focusAgentId: z.string().optional(),
+  }),
   /** 004 US2 — a report, a missing one or the end of a loop. */
   'orchestrator:report': z.object({
     workspaceId: z.string(),

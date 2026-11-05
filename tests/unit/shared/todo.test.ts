@@ -153,20 +153,22 @@ describe('deriveTodos', () => {
         agent(4, { state: 'awaiting-answer' }),
       ]),
       names,
-      ['a2', 'a3'],
+      { a2: 3, a3: 1 },
     );
     expect(todos.map((t) => t.id)).toEqual(['a4:answer', 'a2:review', 'a3:review', 'a1:prompt']);
     expect(todos[1]).toEqual({
       id: 'a2:review',
       agentId: 'a2',
       kind: 'review',
-      title: 'Changements à relire · Codex',
+      title: 'Changements à relire · Codex 2 · 3 fichiers',
       actions: ['review'],
     });
   });
 
   it('keeps answers and rate limits first, even for an agent to review', () => {
-    const todos = deriveTodos(workspace([agent(1, { state: 'awaiting-answer' })]), names, ['a1']);
+    const todos = deriveTodos(workspace([agent(1, { state: 'awaiting-answer' })]), names, {
+      a1: 2,
+    });
     expect(todos.map((t) => t.id)).toEqual(['a1:answer']);
   });
 
@@ -189,7 +191,7 @@ describe('deriveTodos', () => {
         integrationRequests: [request, { ...request, id: 'r2', agentId: 'a9' }],
       },
       names,
-      ['a1'],
+      { a1: 1 },
     );
     expect(todos.map((t) => t.id)).toEqual(['a3:answer', 'r1:integration-request', 'a1:review']);
     expect(todos[1]).toMatchObject({
@@ -226,7 +228,7 @@ describe('deriveTodos', () => {
         ],
       },
       names,
-      ['a1'],
+      { a1: 1 },
     );
     expect(todos.map((t) => t.id)).toEqual([
       'a3:answer',
@@ -246,7 +248,7 @@ describe('deriveTodos', () => {
     const todos = deriveTodos(
       workspace([agent(1, { state: 'done' }), agent(2, { state: 'done' })]),
       names,
-      ['a1', 'a2'],
+      { a1: 1, a2: 1 },
     );
     expect(todos.map((t) => t.id)).toEqual(['a1:review', 'a2:review']);
     expect(todos.some((t) => (t.kind as string) === 'overlap')).toBe(false);
@@ -368,9 +370,200 @@ describe('usage alerts', () => {
     const todos = deriveTodos(
       workspace([agent(1, { state: 'awaiting-prompt' })]),
       () => 'Claude Code',
-      ['a1'],
+      { a1: 1 },
       { states: [usageState(85)], thresholds: { warn: 80, critical: 95 }, now: NOW },
     );
     expect(todos.map((t) => t.kind)).toEqual(['usage-limit', 'review']);
+  });
+});
+
+// fix-todo-diff-notifications — hypotheses of interface (see the report of the test agent):
+// - `toReview` is `Record<agentId, number of changed files>`;
+// - a report is kept on the agent as `lastReport: { status, questions }`, whichever its loop.
+type WithReport = Partial<Agent> & {
+  lastReport?: { status: 'done' | 'blocked' | 'defects'; questions: string[] } | null;
+};
+const reported = (n: number, overrides: WithReport = {}): Agent => agent(n, overrides);
+
+const loopOf = (
+  state: 'running' | 'escalated' | 'passed' | 'closed',
+  devAgentId: string,
+  testAgentId: string,
+) => ({
+  issueId: '0020-panier',
+  devAgentId,
+  testAgentId,
+  round: 1,
+  rounds: [],
+  state,
+  escalatedModel: null,
+});
+
+describe('deriveTodos — « Changements à relire » names the agent, its role and its size', () => {
+  it('gives the number, the role and the files of an agent outside a loop', () => {
+    const todos = deriveTodos(workspace([agent(4, { state: 'done', role: 'spec' })]), names, {
+      a4: 8,
+    });
+    expect(todos[0]).toMatchObject({
+      id: 'a4:review',
+      kind: 'review',
+      title: 'Changements à relire · Claude Code 4 · spec · 8 fichiers',
+    });
+  });
+
+  it('says « 1 fichier » in the singular, and leaves the role out when there is none', () => {
+    const [todo] = deriveTodos(workspace([agent(2, { state: 'awaiting-prompt' })]), names, {
+      a2: 1,
+    });
+    expect(todo?.title).toBe('Changements à relire · Claude Code 2 · 1 fichier');
+  });
+});
+
+describe('deriveTodos — who has no review', () => {
+  it('never lists the orchestrator to review, whatever it changed', () => {
+    const todos = deriveTodos(
+      workspace([agent(1, { state: 'done', role: 'orchestrator' })]),
+      names,
+      { a1: 5 },
+    );
+    expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
+  });
+
+  it.each(['running', 'escalated'] as const)('gives the dev of a %s loop no review', (state) => {
+    const todos = deriveTodos(
+      {
+        ...workspace([
+          agent(1, { state: 'done', role: 'dev' }),
+          agent(2, { state: 'done', role: 'test' }),
+        ]),
+        loops: [loopOf(state, 'a1', 'a2')],
+      },
+      names,
+      { a1: 2, a2: 1 },
+    );
+    expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
+  });
+
+  it.each(['passed', 'closed'] as const)('gives the dev of a %s loop its review', (state) => {
+    const todos = deriveTodos(
+      {
+        ...workspace([agent(1, { state: 'done', role: 'dev' })]),
+        loops: [loopOf(state, 'a1', 'a2')],
+      },
+      names,
+      { a1: 2 },
+    );
+    expect(todos.map((t) => t.id)).toEqual(['a1:review']);
+  });
+
+  it.each(['running', 'escalated', 'passed', 'closed'] as const)(
+    'gives the tester of a %s loop no review',
+    (state) => {
+      const todos = deriveTodos(
+        {
+          ...workspace([
+            agent(1, { state: 'working', role: 'dev' }),
+            agent(2, { state: 'done', role: 'test' }),
+          ]),
+          loops: [loopOf(state, 'a1', 'a2')],
+        },
+        names,
+        { a2: 3 },
+      );
+      expect(todos.filter((t) => t.id === 'a2:review')).toEqual([]);
+    },
+  );
+});
+
+describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', () => {
+  const blocked = (n: number, count: number, overrides: WithReport = {}) =>
+    reported(n, {
+      state: 'done',
+      role: 'spec',
+      lastReport: {
+        status: 'blocked',
+        questions: Array.from({ length: count }, (_, i) => `Question ${String(i + 1)} ?`),
+      },
+      ...overrides,
+    });
+
+  it('names the agent, its role and the number of questions', () => {
+    const [todo] = deriveTodos(workspace([blocked(4, 2)]), names);
+    expect(todo).toMatchObject({
+      id: 'a4:decide',
+      agentId: 'a4',
+      kind: 'decide',
+      title: '◆ Décider · Claude Code 4 · spec · 2 questions',
+    });
+  });
+
+  it('says « 1 question » in the singular and leaves the role out when there is none', () => {
+    const [todo] = deriveTodos(
+      workspace([blocked(2, 1, { role: null, state: 'awaiting-prompt' })]),
+      names,
+    );
+    expect(todo?.title).toBe('◆ Décider · Claude Code 2 · 1 question');
+  });
+
+  it('comes after « Répondre » and before the others, in place of the review and the prompt', () => {
+    const todos = deriveTodos(
+      {
+        ...workspace([
+          agent(1, { state: 'awaiting-prompt' }),
+          blocked(2, 3),
+          agent(3, { state: 'awaiting-answer' }),
+          agent(4, { state: 'error', lastError: rateLimited }),
+          blocked(5, 1, { state: 'awaiting-prompt' }),
+        ]),
+        integrationRequests: [
+          {
+            id: 'r1',
+            agentId: 'a1',
+            mode: 'squash' as const,
+            message: 'feat',
+            requestedAt: '2026-11-03T00:00:00.000Z',
+          },
+        ],
+      },
+      names,
+      { a1: 1, a2: 4, a5: 2 },
+    );
+    expect(todos.map((t) => t.id)).toEqual([
+      'a3:answer',
+      'a2:decide',
+      'a5:decide',
+      'r1:integration-request',
+      'a4:rate-limit',
+      'a1:review',
+    ]);
+  });
+
+  it('applies with a loop too, where the agent is the dev or the tester', () => {
+    const todos = deriveTodos(
+      {
+        ...workspace([blocked(1, 1, { role: 'dev' }), blocked(2, 2, { role: 'test' })]),
+        loops: [loopOf('running', 'a1', 'a2')],
+      },
+      names,
+    );
+    expect(todos.map((t) => t.id)).toEqual(['a1:decide', 'a2:decide']);
+  });
+
+  it('disappears when the agent works again', () => {
+    for (const state of ['working', 'starting'] as const) {
+      expect(deriveTodos(workspace([blocked(1, 2, { state })]), names)).toEqual([]);
+    }
+  });
+
+  it('disappears when a new report arrives, with no more questions', () => {
+    const next = blocked(1, 0, {
+      lastReport: { status: 'done', questions: [] },
+    });
+    expect(deriveTodos(workspace([next]), names, { a1: 2 }).map((t) => t.kind)).toEqual(['review']);
+  });
+
+  it('is not asked for a report that is not « blocked »', () => {
+    const done = reported(1, { state: 'done', lastReport: { status: 'done', questions: [] } });
+    expect(deriveTodos(workspace([done]), names)).toEqual([]);
   });
 });

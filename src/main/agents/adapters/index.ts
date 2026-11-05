@@ -4,6 +4,7 @@ import { toSpawnCommand } from '../../env/resolve-command';
 import { ClaudeCodeAdapter } from './claude-code';
 import { CodexAdapter } from './codex';
 import { FakeAdapter } from './fake';
+import { userStatusLineInterval } from './user-settings';
 import type { CliAdapter, CommandRunner, HookBridge, ResolvedEnv } from './types';
 
 const DETECTION_TIMEOUT_MS = 10_000;
@@ -52,7 +53,12 @@ export function createAdapters({
     return cliPath ? [new FakeAdapter({ cliPath, platform, runtime, bridge })] : [];
   }
   return [
-    new ClaudeCodeAdapter({ platform, bridge, run }),
+    new ClaudeCodeAdapter({
+      platform,
+      bridge,
+      run,
+      userStatusLineInterval: userStatusLineInterval(env),
+    }),
     new CodexAdapter({ platform, bridge, run }),
   ];
 }

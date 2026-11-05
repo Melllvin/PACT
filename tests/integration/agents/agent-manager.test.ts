@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { realpathSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -94,6 +94,8 @@ const createManager = async ({
   service = workspaces,
   idleMs = undefined as number | undefined,
   orchestrator = undefined as ConstructorParameters<typeof AgentManager>[0]['orchestrator'],
+  gitService = new GitService({ env: gitEnv }),
+  fetchTimeoutMs = undefined as number | undefined,
 } = {}) => {
   const registry = new CliRegistry({
     adapters: [adapter],
@@ -104,7 +106,8 @@ const createManager = async ({
   const manager = new AgentManager({
     workspaces: service,
     registry,
-    git: new GitService({ env: gitEnv }),
+    git: gitService,
+    ...(fetchTimeoutMs === undefined ? {} : { fetchTimeoutMs }),
     pty: ptyManager,
     hooks,
     hookUrl: () => hookUrl,
@@ -569,5 +572,94 @@ describe('AgentManager launch of an orchestrator without a way to serve one', ()
       message: 'Orchestrateur indisponible.',
     });
     expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+  });
+});
+
+// fix-todo-diff-notifications — a new worktree starts from origin/<main>, after a try to fetch it.
+describe('AgentManager.launch from origin', { timeout: 30_000 }, () => {
+  let origin: string;
+  let other: string;
+
+  beforeEach(() => {
+    origin = join(root, 'origin.git');
+    other = join(root, 'other');
+    git(root, 'init', '--bare', '-b', 'main', origin);
+    git(repo, 'remote', 'add', 'origin', origin);
+    git(repo, 'push', '-q', 'origin', 'main');
+    git(repo, 'fetch', '-q', 'origin');
+    git(root, 'clone', '-q', origin, other);
+    writeFileSync(join(other, 'lag.txt'), 'lag\n');
+    git(other, 'add', '.');
+    git(other, 'commit', '-m', 'lag');
+    git(other, 'push', '-q', 'origin', 'main');
+  });
+
+  it('starts from the fetched origin/main, the local main lagging behind', async () => {
+    const [agent] = await launch(await createManager(), [draft()]);
+    const remote = git(other, 'rev-parse', 'HEAD');
+    expect(git(repo, 'rev-parse', 'main')).not.toBe(remote);
+    expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(remote);
+    // The local main is not moved.
+    expect(git(repo, 'rev-parse', 'main')).not.toBe(remote);
+  });
+
+  it('starts from the last origin/main known when the fetch fails', async () => {
+    git(repo, 'fetch', '-q', 'origin', 'main');
+    const known = git(repo, 'rev-parse', 'origin/main');
+    expect(known).not.toBe(git(repo, 'rev-parse', 'main'));
+    git(repo, 'remote', 'set-url', 'origin', join(root, 'absent.git'));
+    const [agent] = await launch(await createManager(), [draft()]);
+    expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(known);
+  });
+
+  it('respects an explicit baseBranch', async () => {
+    git(repo, 'branch', 'develop');
+    writeFileSync(join(repo, 'dev.txt'), 'dev\n');
+    git(repo, 'checkout', '-q', 'develop');
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-m', 'develop work');
+    git(repo, 'checkout', '-q', 'main');
+    const [agent] = await launch(await createManager(), [draft({ baseBranch: 'develop' })]);
+    expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(
+      git(repo, 'rev-parse', 'develop'),
+    );
+  });
+
+  // A remote that does not answer must not hold a launch: it waits a short time, then starts
+  // from the last origin/main known. The fetch itself is never really waited for.
+  it('starts from the last origin/main known when the fetch does not answer in time', async () => {
+    git(repo, 'fetch', '-q', 'origin', 'main');
+    const known = git(repo, 'rev-parse', 'origin/main');
+    class Silent extends GitService {
+      override fetchOrigin = () => new Promise<boolean>(() => undefined);
+    }
+    const manager = await createManager({
+      gitService: new Silent({ env: gitEnv }),
+      fetchTimeoutMs: 20,
+    });
+    const [agent] = await launch(manager, [draft()]);
+    expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(known);
+  });
+
+  it('waits once for a silent remote whatever the number of agents', async () => {
+    git(repo, 'fetch', '-q', 'origin', 'main');
+    const known = git(repo, 'rev-parse', 'origin/main');
+    const fetches: string[] = [];
+    class Silent extends GitService {
+      override fetchOrigin = (_cwd: string, branch: string) => {
+        fetches.push(branch);
+        return new Promise<boolean>(() => undefined);
+      };
+    }
+    const manager = await createManager({
+      gitService: new Silent({ env: gitEnv }),
+      fetchTimeoutMs: 150,
+    });
+    const agents = await launch(manager, [draft(), draft(), draft()]);
+    // One fetch, so one wait: a wait per agent would have asked three times.
+    expect(fetches).toHaveLength(1);
+    for (const agent of agents) {
+      expect(git(agent.worktreePath, 'rev-parse', 'HEAD')).toBe(known);
+    }
   });
 });

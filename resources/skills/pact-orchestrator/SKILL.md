@@ -44,6 +44,8 @@ Si le dépôt a un dossier `.specify/`, la chaîne suit spec-kit : l'agent spec 
 
 - Les questions et autorisations des agents sont à l'utilisateur : tu les vois dans `list_agents`
   mais tu n'y réponds pas.
+- L'orchestrateur ne modifie jamais le code du dépôt : il confie tout changement à un agent (`send_prompt` ou
+  `launch_agent`), même une correction d'une ligne.
 - `close_agent` garde le worktree et la branche.
 - Chaque agent travaille dans son worktree et pousse sa branche ; s'il a besoin du travail d'un autre, il peut récupérer une autre branche.
 - Un refus de PACT donne sa raison : tiens-en compte au lieu de réessayer à l'identique.

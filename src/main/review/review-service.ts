@@ -43,6 +43,7 @@ type Options = {
     | 'currentBranch'
     | 'diffBlobs'
     | 'mergeTree'
+    | 'remoteBranchExists'
   >;
   workspaces: WorkspaceAccess;
   onChanged?: (snapshot: ReviewSnapshot) => void;
@@ -276,22 +277,28 @@ export class ReviewService {
    * (FR-002, FR-003). Announced with `review:pending`.
    */
   async updatePending(workspaceId: string): Promise<string[]> {
+    return Object.keys(await this.pendingFiles(workspaceId));
+  }
+
+  /** The same, with the number of changed files of each agent, in the order of the tiles. */
+  async pendingFiles(workspaceId: string): Promise<Record<string, number>> {
     const run = (this.pendingRuns.get(workspaceId) ?? 0) + 1;
     this.pendingRuns.set(workspaceId, run);
     const workspace = this.workspaces.get(workspaceId);
-    if (!workspace) return [];
-    const agentIds: string[] = [];
+    if (!workspace) return {};
+    const files: Record<string, number> = {};
     const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
     for (const agent of agents) {
-      if (!READY.includes(agent.state)) continue;
+      // The orchestrator changes no code: nothing of it is « à relire » (its view still shows it).
+      if (!READY.includes(agent.state) || agent.role === 'orchestrator') continue;
       const snapshot = await this.compute(agent.id).catch(() => undefined);
       if (snapshot && !snapshot.missing && snapshot.files.length > 0) {
-        agentIds.push(agent.id);
+        files[agent.id] = snapshot.files.length;
       }
     }
-    if (this.pendingRuns.get(workspaceId) !== run) return agentIds;
-    this.onPending({ workspaceId, agentIds });
-    return agentIds;
+    if (this.pendingRuns.get(workspaceId) !== run) return files;
+    this.onPending({ workspaceId, agentIds: Object.keys(files), files });
+    return files;
   }
 
   /** What the tests of an agent run: its worktree and port, the command, the tree shown (R8). */
@@ -359,17 +366,23 @@ export class ReviewService {
       return missing(agent);
     }
     try {
+      // The base is origin/<main> when it is known: the local main may lag far behind it.
+      const main = (await this.git.remoteBranchExists(cwd, workspace.mainBranch))
+        ? `refs/remotes/origin/${workspace.mainBranch}`
+        : workspace.mainBranch;
       const [mainHead, base, { commit, tree }, branch] = await Promise.all([
-        this.git.revParse(cwd, workspace.mainBranch),
-        this.git.mergeBase(cwd, workspace.mainBranch, 'HEAD'),
+        this.git.revParse(cwd, main),
+        this.git.mergeBase(cwd, main, 'HEAD'),
         this.git.snapshot(cwd),
         this.git.currentBranch(cwd),
       ]);
-      const [files, merged] = await Promise.all([
+      const [changed, merged] = await Promise.all([
         this.git.changedFiles(cwd, base, tree),
         // Checked on each snapshot: main moving changes `mainHead`, so the review is sent again.
         this.git.mergeTree(cwd, mainHead, commit),
       ]);
+      // The working files of PACT are no change to review.
+      const files = changed.filter((file) => !isPactFile(file));
       let added = 0;
       let removed = 0;
       for (const file of files) {
@@ -420,6 +433,8 @@ export class ReviewService {
     throw new IpcFailure('NOT_FOUND', 'Agent inconnu.');
   }
 }
+
+const isPactFile = ({ path }: ChangedFile) => path.startsWith('.pact/');
 
 function missing(agent: Agent): ReviewSnapshot {
   return {

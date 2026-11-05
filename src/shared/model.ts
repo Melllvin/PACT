@@ -99,6 +99,17 @@ export const agentSchema = z.object({
   role: roleSchema.nullable().default(null),
   /** 004 R2 — `null`: the CLI's own. */
   effort: effortSchema.nullable().default(null),
+  /**
+   * The last hand-off report of the agent, with or without a loop: « ◆ Décider » reads it. Cleared
+   * when the agent works again; absent in workspace files saved before.
+   */
+  lastReport: z
+    .object({
+      status: z.enum(['done', 'blocked', 'defects']),
+      questions: z.array(z.string()),
+    })
+    .nullable()
+    .optional(),
 });
 
 /** 004 R2 — what an agent of a role is launched with; `null` model: the CLI's own. */
@@ -314,9 +325,12 @@ export type TodoItem = {
   publish?: { requestId: string };
   /** 005 FR-011 — the account near its limit, for `usage-limit`. */
   usage?: { cliId: string; account: string; level: 'warn' | 'critical' };
+  /** The questions of an agent stopped on a `blocked` report, for `decide`. */
+  decide?: { questions: string[] };
 };
 export type TodoKind =
   | 'answer'
+  | 'decide'
   | 'integration-request'
   | 'publish-issues'
   | 'loop-escalated'
