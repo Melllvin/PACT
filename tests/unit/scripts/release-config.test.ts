@@ -5,6 +5,11 @@ import { describe, expect, it } from 'vitest';
 // from the release workflow on a tag or from `npm run release` on a Mac or a PC.
 
 const read = (path: string) => readFileSync(path, 'utf8');
+const code = (path: string) =>
+  read(path)
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n');
 const pkg = JSON.parse(read('package.json')) as {
   version: string;
   author?: string;
@@ -75,7 +80,56 @@ describe('release configuration', () => {
     expect(workflow).toContain('contents: write');
     expect(workflow).toContain('macos-latest');
     expect(workflow).toContain('windows-latest');
-    expect(workflow).toContain('npm run release');
-    expect(workflow).toContain('GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}');
+    expect(workflow).toContain('electron-builder --mac --publish never');
+    expect(workflow).toContain('electron-builder --win --publish never');
+  });
+
+  it('refuses a tag that is not the version of package.json', () => {
+    const workflow = read('.github/workflows/release.yml');
+    expect(workflow).toContain('"v$version"');
+    expect(workflow).toContain('jq -r .version package.json');
+  });
+
+  it('refuses a tag whose commit is not on main, before creating the draft', () => {
+    const workflow = read('.github/workflows/release.yml');
+    const prepare = workflow.slice(workflow.indexOf('\n  prepare:'), workflow.indexOf('\n  mac:'));
+    expect(prepare).toContain('fetch-depth: 0');
+    expect(prepare).toContain('persist-credentials: false');
+    expect(prepare).toContain('git merge-base --is-ancestor HEAD origin/main');
+    expect(prepare.indexOf('is-ancestor')).toBeLessThan(prepare.indexOf('gh release create'));
+  });
+
+  it('publishes the draft only once it holds the .dmg, whatever Windows did', () => {
+    const workflow = read('.github/workflows/release.yml');
+    const publish = workflow.slice(workflow.indexOf('\n  publish:'));
+    expect(publish).toContain("needs.mac.result == 'success'");
+    expect(publish).not.toContain("needs.windows.result == 'success'");
+    expect(publish).toContain("grep -q '\\.dmg$'");
+    expect(publish).toContain('--draft=false');
+    // Everything before the publish job leaves the release a draft.
+    expect(workflow.slice(0, workflow.indexOf('\n  publish:'))).toContain('--draft');
+  });
+
+  it('builds a manual run without any release, and never runs for a pull request', () => {
+    const workflow = code('.github/workflows/release.yml');
+    expect(workflow).toContain('workflow_dispatch');
+    expect(workflow).toContain('actions/upload-artifact');
+    expect(workflow).not.toMatch(/^\s*pull_request/m);
+    expect(workflow).not.toContain('pull_request_target');
+    expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
+  });
+
+  it('keeps the symptom of #63 out of the package: no node-pty bin cache, no darwin prebuilds', () => {
+    const files = (JSON.parse(read('electron-builder.json')) as { files: string[] }).files;
+    expect(files).toContain('!node_modules/node-pty/bin/**');
+    expect(files).toContain('!node_modules/node-pty/prebuilds/darwin-*/**');
+  });
+
+  it('verifies the universal Mac build in CI, only for changes that reach the packaging', () => {
+    const ci = code('.github/workflows/ci.yml');
+    expect(ci).toContain('mac-build-changes');
+    expect(ci).toContain("needs.mac-build-changes.outputs.build == 'true'");
+    expect(ci).toContain('bash scripts/verify-mac-universal.sh');
+    expect(ci).not.toContain('pull_request_target');
   });
 });

@@ -174,12 +174,21 @@ Specifications live in `specs/` (the security review is in
 
 1. Set the version in `package.json` (`npm version 1.0.1 --no-git-tag-version`), merge it into
    `main`, then tag it: `git tag v1.0.1 && git push origin v1.0.1`.
-2. Either way, the installers go to a **draft** GitHub Release named after the tag:
-   - **GitHub Actions**: the tag runs `.github/workflows/release.yml`, which builds the macOS and
-     Windows installers on their own runners.
-   - **Locally**, without Actions: on a Mac, then on a Windows PC, from the tagged commit, run
-     `npm ci` then `npm run release` with a `GH_TOKEN` that can write to the repository's
-     contents. Each machine adds its installers to the same draft.
-3. Check the draft on GitHub (both installers present), write the notes, publish.
+2. That is all. The tag runs `.github/workflows/release.yml`, which refuses a tag that is not
+   `v` + the version of `package.json` or whose commit is not on `main`, builds the universal macOS `.dmg` and the Windows
+   installers on their own runners, adds them to a draft release named after the tag, and
+   publishes it as soon as the `.dmg` is there. If the Windows build fails, the run turns red and
+   the release is published without the Windows installers; if the macOS build fails, the draft
+   stays unpublished, with what was built. Nothing visible is ever published without the `.dmg`.
+3. Edit the notes on the release afterwards if you want to; they are generated from the commits.
 
-`npm run dist` builds the same installers into `dist/` without publishing anything.
+The `.dmg` is signed ad hoc and not notarized: macOS blocks the first launch of the downloaded
+app. Open it with right click, then Open, or run `xattr -dr com.apple.quarantine /Applications/PACT.app`.
+
+- **Build without publishing**: `npm run dist` builds the same installers into `dist/` for the
+  current OS. In Actions, "Run workflow" on `release.yml` does the same and keeps the installers as
+  run artifacts (7 days): no release, not even a draft.
+- **Pull requests**: a change to `package.json`, the lockfile, `electron-builder.json` or the
+  workflows also builds the universal macOS app in CI (`mac-build`) and checks that node-pty is
+  universal and opens a pty, so a packaging break shows before the tag. The release workflow
+  never runs on a pull request.
