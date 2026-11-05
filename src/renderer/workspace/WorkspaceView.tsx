@@ -52,6 +52,8 @@ export type AgentActions = {
   onRefusePublish?: (requestId: string) => void;
   /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
   onOpenTerminal?: (agentId: string) => void;
+  /** « ◆ Décider »: the answer of the user to an agent stopped with questions, as a prompt. */
+  onDecide?: (agentId: string, text: string) => void;
   /** 005 — « Détail » of a usage alert: opens the detail of its gauge (`usage:<cli>:<account>`). */
   onUsageDetail?: (key: string) => void;
 };
@@ -60,6 +62,8 @@ export type AgentActions = {
 export type ReviewBinding = {
   /** The agents of this workspace with changes to review. */
   pending: readonly string[];
+  /** Their number of changed files (the title of the À faire item); absent: unknown. */
+  files?: Readonly<Record<string, number>>;
   snapshot: ReviewSnapshot | null;
   selected: string | null;
   diff: FileDiff | null;
@@ -121,6 +125,8 @@ type Props = {
   actionError?: string | null;
   /** The place the tab bar keeps for the views (1b); without it they sit above the tiles. */
   toolbarSlot?: HTMLElement | null;
+  /** A clicked notification: the view goes to this agent (a new object each click). */
+  focusRequest?: { workspaceId: string; agentId: string } | null;
   /** 005 — the usage of every CLI account read so far. */
   usage?: readonly UsageState[];
   /** 005 FR-010 — the alert thresholds of the gauges, and their change. */
@@ -163,6 +169,7 @@ export function WorkspaceView({
   loopReports = [],
   orchestration,
   preview,
+  focusRequest,
 }: Props) {
   const available = workspace.status === 'available';
   const launch = available ? onAddAgents : undefined;
@@ -179,7 +186,7 @@ export function WorkspaceView({
   const todos = deriveTodos(
     workspace,
     cliName,
-    pending,
+    Object.fromEntries(pending.map((id) => [id, review?.files?.[id] ?? 0])),
     usageThresholds && { states: usage, thresholds: usageThresholds, now },
   );
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
@@ -262,11 +269,27 @@ export function WorkspaceView({
     setFocusedId(agentId);
     setFocusTab('terminal');
   };
+  // A clicked notification moves the view once, to the terminal of its agent.
+  const [seenFocus, setSeenFocus] = useState(focusRequest);
+  if (focusRequest !== seenFocus) {
+    setSeenFocus(focusRequest);
+    if (
+      focusRequest?.workspaceId === workspace.id &&
+      agents.some((agent) => agent.id === focusRequest.agentId)
+    ) {
+      openTerminal(focusRequest.agentId);
+    }
+  }
   const reviewActions: AgentActions = {
     ...actions,
     onReview: openReview,
     onOpenTerminal: openTerminal,
     onUsageDetail: setUsageDetail,
+    ...(review && {
+      onDecide: (agentId: string, text: string) => {
+        review.send(agentId, 'request', text);
+      },
+    }),
   };
   const backToTiles = () => {
     setFocusedId(null);

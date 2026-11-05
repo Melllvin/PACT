@@ -81,6 +81,8 @@ export type AppState = {
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
   selectWorkspace: (id: string) => void;
+  /** A notification was clicked: the workspace is shown, and its view goes to this agent. */
+  focusRequest: { workspaceId: string; agentId: string } | null;
   openHome: () => void;
   /** Leaves the home tab for the workspace shown before it (or the last one). */
   closeHome: () => void;
@@ -196,6 +198,9 @@ const applyState =
   ({ awaiting: _previous, ...agent }: Agent): Agent => ({
     ...agent,
     state: event.state,
+    // Working again, the agent has answered what it was asked: its last report is behind it.
+    ...(event.lastReport ? { lastReport: event.lastReport } : {}),
+    ...(event.state === 'working' ? { lastReport: null } : {}),
     ...(event.lastError === undefined ? {} : { lastError: event.lastError }),
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
     // Each event tells whether the agent asks a question: absent, it does not (FR-024a).
@@ -281,6 +286,7 @@ export function createAppStore(api: PactApi) {
       status: 'loading',
       error: null,
       workspaces: [],
+      focusRequest: null,
       recents: [],
       clis: [],
       permission: null,
@@ -343,7 +349,11 @@ export function createAppStore(api: PactApi) {
             set({ orchestratorPrompted: { ...get().orchestratorPrompted, [agentId]: 'queued' } });
           }),
           // 003 FR-015 — agents launched by an orchestrator: their tiles appear too.
-          api.on('workspace:agentsLaunched', () => {
+          api.on('workspace:agentsLaunched', ({ workspaceId, focusAgentId }) => {
+            if (focusAgentId !== undefined) {
+              get().selectWorkspace(workspaceId);
+              set({ focusRequest: { workspaceId, agentId: focusAgentId } });
+            }
             void api
               .invoke('app:getState')
               .then(({ workspaces }) => {

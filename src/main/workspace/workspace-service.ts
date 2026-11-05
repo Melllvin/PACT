@@ -111,7 +111,7 @@ export class WorkspaceService {
       id,
       path: root,
       name: basename(root),
-      mainBranch: await this.git.currentBranch(root),
+      mainBranch: await this.git.defaultBranch(root),
       lastOpenedAt: this.now().toISOString(),
       status: 'available',
     };
@@ -161,6 +161,8 @@ export class WorkspaceService {
       const id = workspaceId(path);
       const saved = await this.stores.workspace(id).read();
       const available = (await isDirectory(path)) && (await this.git.isRepo(path));
+      // The main branch is the one of origin, whatever was saved (and whatever the root is on).
+      const mainBranch = available ? await this.git.defaultBranch(path) : (saved?.mainBranch ?? '');
       this.open_.set(id, {
         agents: [],
         freeTerminals: [],
@@ -173,9 +175,9 @@ export class WorkspaceService {
         loops: [],
         testPaths: [...DEFAULT_TEST_PATHS],
         publishRequests: [],
-        mainBranch: '',
         lastOpenedAt: this.now().toISOString(),
         ...saved,
+        mainBranch,
         id,
         path,
         name: basename(path),

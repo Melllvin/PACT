@@ -56,7 +56,15 @@ type Options = {
     /** 004 — every CLI, for the default role profiles. */
     list(): CliDefinition[];
   };
-  git: Pick<GitService, 'addWorktree' | 'branchExists' | 'currentBranch' | 'removeWorktree'> &
+  git: Pick<
+    GitService,
+    | 'addWorktree'
+    | 'branchExists'
+    | 'currentBranch'
+    | 'removeWorktree'
+    | 'fetchOrigin'
+    | 'remoteBranchExists'
+  > &
     Partial<Pick<GitService, 'exclude'>>;
   pty: PtyManager;
   hooks: Pick<HookServer, 'register' | 'unregister'>;
@@ -617,10 +625,19 @@ export class AgentManager {
         (await allocatePort(position, usedPorts, { inUse: (p) => this.isPortInUse(p) }));
       usedPorts.add(port);
       const baseBranch = draft.baseBranch ?? workspace.mainBranch;
+      // Without a chosen base, the worktree starts from origin/<main>, fetched first (a failed
+      // fetch keeps the last one known); a lagging local main is no base.
+      let start = baseBranch;
+      if (draft.baseBranch === null) {
+        await this.git.fetchOrigin(workspace.path, workspace.mainBranch);
+        if (await this.git.remoteBranchExists(workspace.path, workspace.mainBranch)) {
+          start = `origin/${workspace.mainBranch}`;
+        }
+      }
       const worktree = await this.git.addWorktree(workspace.path, {
         cli: draft.cliId,
         position,
-        base: baseBranch,
+        base: start,
         ...(draft.branch === null ? {} : { branch: draft.branch }),
       });
       const role = draftRole(draft);

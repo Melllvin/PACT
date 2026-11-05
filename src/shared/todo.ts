@@ -1,9 +1,10 @@
-import type { Agent, TileAction, TodoItem, TodoKind, Workspace } from './model';
+import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
 import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
 const ORDER: TodoKind[] = [
   'answer',
+  'decide',
   'integration-request',
   'publish-issues',
   'loop-escalated',
@@ -14,8 +15,29 @@ const ORDER: TodoKind[] = [
   'info',
 ];
 
+const plural = (count: number, word: string) => `${String(count)} ${word}${count > 1 ? 's' : ''}`;
+
+/** « <CLI> <number> · <role> »: which agent, and what it does. */
+const who = (agent: Agent, cli: string) =>
+  [`${cli} ${String(agent.position)}`, ...(agent.role ? [agent.role] : [])].join(' · ');
+
+/** Who gets no « Changements à relire »: the orchestrator, and the agents of a loop until it ends. */
+function reviewedLater(agent: Agent, loops: readonly Loop[]): boolean {
+  if (agent.role === 'orchestrator') return true;
+  return loops.some(
+    (loop) =>
+      loop.testAgentId === agent.id ||
+      (loop.devAgentId === agent.id && (loop.state === 'running' || loop.state === 'escalated')),
+  );
+}
+
 /** What an agent needs from the user, if anything, with the same actions as its tile (FR-028). */
-function agentTodo(agent: Agent, cli: string, toReview: boolean): TodoItem | null {
+function agentTodo(
+  agent: Agent,
+  cli: string,
+  files: number | undefined,
+  loops: readonly Loop[],
+): TodoItem | null {
   const item = (kind: TodoKind, title: string, actions: TileAction[]): TodoItem => ({
     id: `${agent.id}:${kind}`,
     agentId: agent.id,
@@ -27,13 +49,30 @@ function agentTodo(agent: Agent, cli: string, toReview: boolean): TodoItem | nul
     const question = agent.awaiting === 'question';
     return item('answer', '◆ Répondre', question ? ['open-terminal'] : ['allow', 'deny']);
   }
+  // A blocked report with questions, once the agent stopped: the user decides.
+  const ready = agent.state === 'done' || agent.state === 'awaiting-prompt';
+  const report = agent.lastReport;
+  if (ready && report?.status === 'blocked' && report.questions.length > 0) {
+    return {
+      ...item(
+        'decide',
+        `◆ Décider · ${who(agent, cli)} · ${plural(report.questions.length, 'question')}`,
+        [],
+      ),
+      decide: { questions: report.questions },
+    };
+  }
   if (agent.state === 'error' && agent.lastError?.kind === 'rate-limit') {
     return item('rate-limit', `✕ Limite de débit · ${cli}`, ['log', 'restart', 'resume']);
   }
   // 002 FR-002: done with changes; its review comes before a new prompt. A pending list that
   // lags behind a state change offers nothing to an agent working again.
-  const ready = agent.state === 'done' || agent.state === 'awaiting-prompt';
-  if (toReview && ready) return item('review', `Changements à relire · ${cli}`, ['review']);
+  if (files !== undefined && ready && !reviewedLater(agent, loops)) {
+    const size = files > 0 ? [plural(files, 'fichier')] : [];
+    return item('review', ['Changements à relire', who(agent, cli), ...size].join(' · '), [
+      'review',
+    ]);
+  }
   if (agent.state === 'awaiting-prompt') {
     return item('prompt', `Donner une consigne · ${cli} · tapez dans le terminal`, []);
   }
@@ -48,14 +87,20 @@ export function deriveTodos(
   workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'mainBranch'> &
     Partial<Pick<Workspace, 'integrationRequests' | 'loops' | 'issues' | 'publishRequests'>>,
   names: (cliId: string) => string,
-  /** The agents with changes to review (`review:pending`). */
-  toReview: readonly string[] = [],
+  /** The agents with changes to review, with their number of changed files (`review:pending`). */
+  toReview: Readonly<Record<string, number>> | readonly never[] = {},
   /** 005 — the usage of the CLI accounts, read with the thresholds at `now`. */
   usage?: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   const todos = agents.flatMap(
-    (agent) => agentTodo(agent, names(agent.cliId), toReview.includes(agent.id)) ?? [],
+    (agent) =>
+      agentTodo(
+        agent,
+        names(agent.cliId),
+        (toReview as Readonly<Record<string, number | undefined>>)[agent.id],
+        workspace.loops ?? [],
+      ) ?? [],
   );
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
   // « ◎ Intégrer <agent> → <main> ? »: the orchestrator asks, the user decides (003 FR-017).

@@ -53,6 +53,9 @@ export function gitErrorOutput(error: unknown): string {
   return failure.stderr?.trim() || failure.stdout?.trim() || failure.message;
 }
 
+/** A call to the network gives up after this long. */
+const REMOTE_TIMEOUT_MS = 30_000;
+
 const exitCode = (error: unknown) => (error as { code?: unknown }).code;
 
 /** Git prints `/`-separated and sometimes 8.3 short paths on Windows: compare canonical paths. */
@@ -74,9 +77,10 @@ export class GitService {
     return (await this.run(cwd, args, env)).stdout;
   }
 
-  private run(cwd: string, args: string[], env: Env = {}) {
+  private run(cwd: string, args: string[], env: Env = {}, timeout?: number) {
     return execFileAsync('git', ['-c', 'core.quotePath=false', ...args], {
       cwd,
+      ...(timeout === undefined ? {} : { timeout }),
       env: { ...(this.env ?? process.env), ...env, LC_ALL: 'C' },
       encoding: 'utf8',
       maxBuffer: MAX_OUTPUT,
@@ -97,6 +101,73 @@ export class GitService {
 
   async currentBranch(path: string): Promise<string> {
     return this.git(path, ['branch', '--show-current']);
+  }
+
+  /**
+   * The main branch of a repository, never the branch its root folder happens to be on: the
+   * default branch of origin (`origin/HEAD`, else asked to origin once), then `main` or `master`
+   * on origin, then locally, and only then the current branch (fix-todo-diff-notifications).
+   */
+  async defaultBranch(path: string): Promise<string> {
+    const quiet = async (args: string[], timeout?: number) => {
+      try {
+        return (await this.run(path, args, { GIT_TERMINAL_PROMPT: '0' }, timeout)).stdout.trim();
+      } catch {
+        return '';
+      }
+    };
+    const known = await quiet(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
+    if (known.startsWith('origin/')) return known.slice('origin/'.length);
+    if ((await quiet(['remote'])).split('\n').includes('origin')) {
+      const shown = /^\s*HEAD branch: (\S+)\s*$/m.exec(
+        await quiet(['remote', 'show', 'origin'], REMOTE_TIMEOUT_MS),
+      )?.[1];
+      if (shown && shown !== '(unknown)') return shown;
+      for (const name of ['main', 'master']) {
+        if (await this.remoteBranchExists(path, name)) return name;
+      }
+    }
+    for (const name of ['main', 'master']) {
+      if (await this.branchExists(path, name)) return name;
+    }
+    return this.currentBranch(path);
+  }
+
+  /** Whether `origin/<branch>` is known here. */
+  async remoteBranchExists(repo: string, branch: string): Promise<boolean> {
+    try {
+      await this.git(repo, ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Brings `origin/<branch>` up to date, that branch only: no local branch, HEAD or worktree moves.
+   * `false`, without throwing, when it fails (network down, no origin): the last one known stays.
+   */
+  async fetchOrigin(cwd: string, branch: string): Promise<boolean> {
+    try {
+      await this.run(
+        cwd,
+        [
+          '-c',
+          'gc.auto=0',
+          'fetch',
+          '--no-tags',
+          '--no-recurse-submodules',
+          '--quiet',
+          'origin',
+          `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
+        ],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async initRepo(path: string): Promise<void> {

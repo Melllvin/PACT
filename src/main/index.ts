@@ -3,8 +3,9 @@ import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification, protocol, shell } from 'electron';
 import { IpcFailure } from '../shared/ipc';
+import { deriveTodos } from '../shared/todo';
 import { PREVIEW_SCHEME } from '../shared/preview';
 import { createAdapters } from './agents/adapters';
 import { AgentManager } from './agents/agent-manager';
@@ -13,6 +14,8 @@ import { FreeTerminals } from './agents/free-terminals';
 import { HookServer } from './agents/hook-server';
 import { PermissionService } from './agents/permission-service';
 import { guardQuit, quitQuestion } from './app-lifecycle';
+import { chooseNotify, NotificationService } from './notifications';
+import { OriginSync } from './origin-sync';
 import { UsageService } from './usage/usage-service';
 import { createUsageServices } from './ipc/usage-handlers';
 import { createAppServices, devServerUrl, trustedSenderCheck } from './app-services';
@@ -37,6 +40,7 @@ import { createPreviewHandler } from './preview/preview-protocol';
 import { PreviewService } from './preview/preview-service';
 import { ReviewService, watchRecursive } from './review/review-service';
 import { TestRunner } from './review/test-runner';
+import type { HandoffReport } from '../shared/report';
 import { BUILD_INFO } from '../shared/build-info';
 import { applyTestMode, isBackgroundTest, testClock } from './test-mode';
 import { createMainWindow, RENDERER_HTML } from './window';
@@ -124,7 +128,17 @@ void app.whenReady().then(async () => {
       : join(app.getAppPath(), 'resources', 'skills'),
     // 004 US2 — the hand-off reports of the agents with a role go to their loop.
     agentTools: (agentId) =>
-      createAgentTools({ onReport: (id, report) => loops.report(id, report) }, agentId),
+      createAgentTools(
+        {
+          onReport: async (id, report) => {
+            const refused = await loops.report(id, report);
+            // « ◆ Décider » reads the last report of an agent, with or without a loop.
+            if (refused === null) await keepReport(id, report);
+            return refused;
+          },
+        },
+        agentId,
+      ),
     onTurnFinished: (agentId) => {
       loops.turnFinished(agentId);
     },
@@ -157,6 +171,7 @@ void app.whenReady().then(async () => {
     thresholds: (await stores.state.read()).usageThresholds,
     onState: (state) => {
       emit('usage:state', state);
+      syncTodos();
     },
   });
   const agents: AgentManager = new AgentManager({
@@ -182,6 +197,9 @@ void app.whenReady().then(async () => {
     },
     onState: (event) => {
       emit('agent:state', event);
+      // Working again, an agent has left its last report behind it.
+      if (event.state === 'working') void keepReport(event.agentId, null);
+      syncTodos();
       // 003 R5 — what the orchestrator of the workspace waits for.
       orchestrator.agentState(event);
       requests.agentState(event);
@@ -214,6 +232,8 @@ void app.whenReady().then(async () => {
     },
     onPending: (event) => {
       emit('review:pending', event);
+      pendingFiles.set(event.workspaceId, event.files ?? {});
+      syncTodos();
     },
     prompts: agents,
     tests: { latest: (agentId) => tests.latest(agentId) },
@@ -240,6 +260,7 @@ void app.whenReady().then(async () => {
     },
     onChange: (workspaceId, change) => {
       emit('workspace:loops', { workspaceId, ...change });
+      syncTodos();
     },
   });
   // 004 US4 — the Aperçu: an agent's worktree only, refreshed as its files change.
@@ -275,6 +296,7 @@ void app.whenReady().then(async () => {
     },
     onChange: (workspaceId, change) => {
       emit('workspace:issues', { workspaceId, ...change });
+      syncTodos();
     },
   });
   const integration = new IntegrationService({
@@ -309,6 +331,7 @@ void app.whenReady().then(async () => {
     },
     onChange: (workspaceId, list) => {
       emit('workspace:integrationRequests', { workspaceId, requests: list });
+      syncTodos();
     },
   });
   // Integrations in progress do not outlive the app (R9): neither do their editor copies.
@@ -319,14 +342,80 @@ void app.whenReady().then(async () => {
     resolveEnv: resolveShellEnv,
     platform: process.platform,
   });
+  // fix-todo-diff-notifications — the last report of an agent, kept for « ◆ Décider ».
+  const keepReport = async (agentId: string, report: HandoffReport | null) => {
+    const workspace = workspaces
+      .list()
+      .find((ws) => ws.agents.some((agent) => agent.id === agentId));
+    const agent = workspace?.agents.find((a) => a.id === agentId);
+    if (!workspace || !agent || (report === null && !agent.lastReport)) return;
+    const lastReport = report && { status: report.status, questions: report.questions };
+    await workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === agentId ? { ...a, lastReport } : a)),
+    }));
+    if (lastReport) {
+      emit('agent:state', {
+        agentId,
+        state: agent.state,
+        ...(agent.awaiting ? { awaiting: agent.awaiting } : {}),
+        lastReport,
+      });
+    }
+    syncTodos();
+  };
+  // A system notification for each new item that needs the user, while PACT is in the background.
+  const { notify, sent } = chooseNotify(process.env, (notification) => {
+    if (!Notification.isSupported()) return;
+    const shown = new Notification({ title: notification.title });
+    shown.on('click', notification.onClick);
+    shown.show();
+  });
+  if (process.env.PACT_TEST_MODE === '1')
+    Object.assign(globalThis, { pactTestNotifications: sent });
+  const notifications = new NotificationService({
+    notify,
+    isForeground: () => BrowserWindow.getAllWindows().some((win) => win.isFocused()),
+    activate: ({ workspaceId, agentId }) => {
+      const [window] = BrowserWindow.getAllWindows();
+      if (window?.isMinimized()) window.restore();
+      window?.show();
+      window?.focus();
+      emit('workspace:agentsLaunched', { workspaceId, focusAgentId: agentId });
+    },
+  });
+  const pendingFiles = new Map<string, Record<string, number>>();
+  const cliNameOf = (cliId: string) =>
+    registry.list().find((cli) => cli.id === cliId)?.name ?? cliId;
+  function syncTodos() {
+    for (const workspace of workspaces.list()) {
+      notifications.update(
+        workspace.id,
+        deriveTodos(workspace, cliNameOf, pendingFiles.get(workspace.id) ?? {}, {
+          states: usage.list(),
+          thresholds: usage.getThresholds(),
+          now: clock?.now() ?? new Date(),
+        }),
+      );
+    }
+  }
+  // The main branch of origin, fetched when a workspace opens and every minute.
+  const origin = new OriginSync({
+    workspaces: () =>
+      workspaces.list().map((ws) => ({ ...ws, available: ws.status === 'available' })),
+    fetchOrigin: (cwd, branch) => git.fetchOrigin(cwd, branch),
+    refresh: (id) => review.updatePending(id),
+  });
   const prepareWorkspace = async (id: string) => {
     await agents.restore(id);
     await freeTerminals.restore(id);
     void review.updatePending(id);
+    void origin.sync(id);
   };
 
   for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
   workspaces.startWatching(AVAILABILITY_CHECK_MS);
+  origin.start();
   const clones = new CloneJobs({
     git,
     workspaces,
@@ -407,6 +496,7 @@ void app.whenReady().then(async () => {
     },
     // Agent states stay saved as they are; the processes end with the app (FR-038).
     shutdown: async () => {
+      origin.stop();
       workspaces.dispose();
       review.dispose();
       preview.dispose();
