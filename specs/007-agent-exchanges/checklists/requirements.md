@@ -13,8 +13,8 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
-- [ ] Requirements are testable and unambiguous
+- [x] No [NEEDS CLARIFICATION] markers remain
+- [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [ ] Success criteria are technology-agnostic (no implementation details)
 - [x] All acceptance scenarios are defined
@@ -24,7 +24,7 @@
 
 ## Feature Readiness
 
-- [ ] All functional requirements have clear acceptance criteria
+- [x] All functional requirements have clear acceptance criteria
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [ ] No implementation details leak into specification
@@ -32,5 +32,5 @@
 ## Notes
 
 - Les outils, hooks et défauts sont nommés par la demande elle-même : les cases sur les détails d'implémentation restent décochées.
-- 1 question ouverte attend l'utilisateur (Q13) : les 12 autres sont décidées.
+- Aucune question ouverte : les 13 sont décidées.
 - FR-012 (hooks PostToolUse et Stop sur le CLI installé) n'est pas validée à ce stade.

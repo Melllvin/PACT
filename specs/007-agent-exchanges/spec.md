@@ -108,7 +108,7 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
   `publish`, `mockup` ; `info` pour `turn-finished`, `closed`, `awaiting-answer`, `overlap`.
 - Q5: Qui écrit à qui ? → A: le dev et le testeur ne s'écrivent dans aucun sens, ni message ni `send_message` : seuls le verdict
   structuré et git passent entre eux. L'orchestrateur écrit à tous, `ask_orchestrator` pour tout agent, `send_message` entre les autres
-  agents de rôle avec copie à l'orchestrateur ; sans orchestrateur, envoi refusé avec sa raison. (Voir Q13.)
+  agents de rôle avec copie à l'orchestrateur ; sans orchestrateur, envoi refusé avec sa raison. (Précisé par Q13.)
 - Q6: Après l'escalade d'une boucle ? → A: les messages entre ces deux agents sont refusés jusqu'à la décision de l'utilisateur
   (« Laisser reprendre » ou « Couper ») ; les autres échanges continuent.
 - Q7: Quelle limite coupe les réveils ? → A: le niveau `critical` de 005 tant que 009 n'est pas là, puis le seuil d'arrêt de 009. Les
@@ -124,15 +124,12 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
 - Q12: Le shell d'un agent ? → A: les skills interdisent de lire le contenu d'un tiers, et les règles d'autorisation de PACT font passer ces
   commandes par la décision de l'utilisateur, sur les CLI qui ont ces règles. Sur les autres, la garantie reste partielle, et c'est dit à
   l'utilisateur.
+- Q13: Qui peut écrire au testeur, et à qui écrit-il ? → A: le testeur ne reçoit de messages que de l'orchestrateur, de personne d'autre, et n'en envoie qu'à
+  l'orchestrateur (`ask_orchestrator`), le verdict structuré restant à part. Les autres agents de rôle s'écrivent entre eux, avec copie à l'orchestrateur. Cela ferme le relais dev → tiers → testeur.
 
 ## Questions ouvertes
 
-Une seule question, née de la décision Q5 : l'agent spec ne la tranche pas.
-
-- **Q13 — Le dev et le testeur peuvent-ils utiliser `send_message` vers un autre rôle ?** « Entre les autres agents de rôle » se lit de deux
-  façons : (a) toutes les paires sauf dev ↔ testeur, donc un testeur peut écrire au design, et deux devs entre eux ; (b) seuls les rôles autres
-  que dev et testeur ont l'outil. *Proposition* : (a), car la règle vise la paire dev ↔ testeur ; à noter qu'un tiers pourrait alors servir de
-  relais entre eux, ce qui reste visible par la copie à l'orchestrateur.
+Aucune.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -162,8 +159,9 @@ qu'aucun appel à `wait_for_agents` n'est nécessaire.
 5. **Given** l'utilisateur qui écrit dans l'invite d'un agent inactif, **When** un événement `action`
    arrive, **Then** PACT n'écrit rien ; le pointeur part une fois l'invite vide ou la saisie envoyée.
 6. **Given** une saisie laissée dans l'invite, **When** 2 minutes passent, **Then** l'utilisateur est prévenu qu'un réveil attend, et PACT n'écrit toujours rien.
-7. **Given** une consigne multi-ligne de l'orchestrateur, **When** elle part, **Then** l'agent reçoit une seule ligne dans son invite, et lit la consigne par `get_events`, sans
-   emballage.
+7. **Given** une consigne multi-ligne de l'orchestrateur, **When** elle part, **Then** l'agent reçoit une seule ligne dans son invite, et lit la consigne par `get_events`, sans emballage.
+8. **Given** un agent à 20 réveils dans l'heure, ou la limite de consommation atteinte, **When** un événement `action` arrive, **Then** il n'est pas réveillé, l'événement reste lisible, et le pointeur part à la reprise ; une consigne de sauvegarde de 009 passe quand même.
+9. **Given** un journal avec des événements non lus, **When** PACT redémarre, **Then** le journal est là, et les non-lus repartent par un pointeur.
 
 ---
 
@@ -217,6 +215,7 @@ journal, le refus au-delà du plafond, le refus du testeur, l'escalade à l'util
 4. **Given** un agent qui a atteint son plafond de messages pour ce tour, **When** il en envoie un de plus,
    **Then** il est refusé avec sa raison ; le compteur repart à son tour suivant.
 5. **Given** un testeur ou un dev, **When** il appelle `send_message` vers l'autre, **Then** l'appel est refusé, et la raison renvoie au verdict de `submit_report` et à git.
+   Given un agent de rôle quelconque, When il appelle `send_message` vers un testeur, Then l'appel est refusé ; Given un testeur, When il appelle `send_message` vers un agent quelconque, Then l'appel est refusé, et la raison renvoie à `ask_orchestrator`.
 6. **Given** deux agents qui se renvoient des messages sans nouveau commit, **When** ils atteignent 3 allers-retours, **Then** l'utilisateur voit une escalade qui nomme les deux agents et le dernier échange, et leurs messages sont refusés
    jusqu'à sa décision (« Laisser reprendre » ou « Couper »).
 7. **Given** un agent qui demande une autorisation par message, **When** l'orchestrateur lit ce message,
@@ -226,8 +225,8 @@ journal, le refus au-delà du plafond, le refus du testeur, l'escalade à l'util
    **Then** ce texte n'y figure pas, ni au journal, et aucun agent n'est réveillé à cause de cette PR.
 9. **Given** une PR suivie (008) qu'un tiers commente, **When** l'orchestrateur lit ses événements, **Then** il voit l'état de la
    PR et de ses checks, jamais le texte du commentaire.
-10. **Given** une consigne, un skill ou une réponse d'outil de PACT, **When** un agent la lit, **Then** elle ne l'invite jamais à
-    lire une PR, une issue ou un commentaire d'un tiers.
+10. **Given** une consigne, un skill ou une réponse d'outil de PACT, **When** un agent la lit, **Then** elle ne l'invite jamais à lire une PR, une issue ou un commentaire d'un tiers.
+11. **Given** un dev et un agent de design, **When** l'un écrit à l'autre, **Then** le message passe, avec copie à l'orchestrateur ; **Given** un testeur, **When** l'orchestrateur lui écrit, **Then** le message passe.
 
 ---
 
@@ -313,9 +312,9 @@ l'outil, puis le skill livré.
 
 **Messages**
 
-- **FR-001**: PACT MUST donner à tout agent de rôle les outils `ask_orchestrator` et `get_events`. L'orchestrateur MUST pouvoir écrire à tous. `send_message`
-  MUST relier les autres agents de rôle, avec copie à l'orchestrateur [NEEDS CLARIFICATION: Q13 — portée pour le dev et le testeur]. Sans orchestrateur dans le
-  workspace, l'envoi MUST être refusé avec sa raison.
+- **FR-001**: PACT MUST donner à tout agent de rôle les outils `ask_orchestrator` et `get_events`. L'orchestrateur MUST pouvoir écrire à tous. Le testeur MUST ne recevoir de messages que de l'orchestrateur, et n'en
+  envoyer qu'à lui, par `ask_orchestrator` ; son verdict structuré reste à part. Les autres agents de rôle MUST s'écrire par `send_message`, avec copie à l'orchestrateur. Sans orchestrateur dans le workspace, l'envoi MUST être
+  refusé avec sa raison. Les consignes et événements émis par PACT lui-même (FR-021, 008, 009, 010) ne sont pas des messages d'agent.
 - **FR-002**: Un message MUST être typé `action` ou `info`, avoir un expéditeur, un destinataire, une heure, et tenir en 500 caractères.
 - **FR-003**: `ask_orchestrator` et `send_message` MUST rendre la main aussitôt : aucune attente bloquante.
 - **FR-004**: Tout message entre agents MUST être copié à l'orchestrateur du workspace et inscrit au journal, et l'utilisateur MUST pouvoir lire ce journal dans PACT. Le
@@ -323,8 +322,8 @@ l'outil, puis le skill livré.
 - **FR-005**: PACT MUST refuser, avec sa raison, un message au-delà de 5 par agent et par tour.
 - **FR-006**: À 3 allers-retours entre les deux mêmes agents sans nouveau commit, PACT MUST escalader à l'utilisateur, et refuser les messages entre ces deux agents jusqu'à sa
   décision (« Laisser reprendre » ou « Couper ») ; les autres échanges continuent.
-- **FR-007**: Le dev et le testeur MUST ne s'écrire dans aucun sens : `send_message` entre eux est refusé, seuls le verdict structuré et git passent. Un verdict `defects` accepté par
-  PACT MUST parvenir au dev comme un message `action`.
+- **FR-007**: Le dev et le testeur MUST ne s'écrire dans aucun sens : tout `send_message` vers ou depuis un testeur est refusé, ce qui ferme aussi le relais par un tiers ; seuls le verdict structuré et git passent. Un verdict `defects` accepté
+  par PACT MUST parvenir au dev comme un message `action`.
 - **FR-008**: Aucun outil d'échange ne MUST permettre d'accorder une autorisation ou de prendre une décision de
   l'utilisateur : ces demandes restent dans sa zone d'action.
 - **FR-009**: `get_events` MUST rendre les événements non lus de l'agent, une seule fois, 20 au plus, avec un résumé de 200 caractères au plus, et permettre de relire le détail du
@@ -400,7 +399,7 @@ l'outil, puis le skill livré.
 - **SC-004**: Aucun texte d'agent n'apparaît dans l'invite d'un autre agent au titre d'un réveil.
 - **SC-005**: 100 % des messages entre agents figurent au journal et en copie à l'orchestrateur.
 - **SC-006**: Un testeur recalé sur main obtient l'acceptation de son verdict du premier coup.
-- **SC-007**: Un agent lancé sans branche de départ part toujours du `origin/main` obtenu par un `fetch` réussi.
+- **SC-007**: Quand le `fetch` réussit, un agent lancé sans branche de départ part toujours du `origin/main` ainsi obtenu.
 - **SC-008**: Ce que rend `wait_for_agents` tient sous la borne fixée, quelle que soit la longueur des sorties de test.
 - **SC-009**: Sur 100 % des scénarios de test, une chaîne témoin d'injection placée dans une PR tierce n'apparaît dans aucun message, événement,
   pointeur ni entrée de journal.

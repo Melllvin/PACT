@@ -31,5 +31,5 @@
 
 ## Notes
 
-- 2 questions ouvertes attendent l'utilisateur (Q9, Q10) : les 8 autres sont décidées.
+- 1 question ouverte attend l'utilisateur (Q11) : les 10 autres sont décidées.
 - Dépend de 007 et 008 : leurs réponses peuvent changer FR-014 à FR-016.

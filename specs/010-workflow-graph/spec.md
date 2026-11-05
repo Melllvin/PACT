@@ -47,6 +47,7 @@ cette spec décrit, lui, le déroulé prévu : les deux ne doivent pas porter le
   automatiques ne multiplient les tours.
 - 008 avant 010 : un workflow doit pouvoir nommer une vraie étape de livraison.
 - Les quatre modifient `workspaceSchema`, `tools.ts` et le skill orchestrateur : à livrer l'une après l'autre, pas en parallèle.
+- 011 vient après 008, dont elle reprend les critères d'un élément sûr.
 
 ## Périmètre
 
@@ -80,28 +81,26 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
 Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
 
 - Q1: Texte déclaratif ou code ? → A: un fichier déclaratif, sans code exécutable, à un chemin fixe : `.pact/workflow.yaml`.
-- Q2: Qui fait avancer le workflow ? → A: PACT garde l'état, ne permet que les transitions du graphe et refuse les autres avec leur raison ; l'orchestrateur lance les agents et donne les consignes.
-  (Voir Q10.)
+- Q2: Qui fait avancer le workflow ? → A: PACT garde l'état, ne permet que les transitions du graphe et refuse les autres avec leur raison ; l'orchestrateur lance les agents et donne les consignes. (Précisé par Q10.)
 - Q3: Combien de workflows ? → A: un par projet en première phase ; le format nomme son workflow, pour en permettre plusieurs plus tard.
 - Q4: Quelle version fait foi ? → A: le fichier de la branche principale à jour ; un agent ne peut pas le changer pour lui-même ; une exécution en cours garde la version de son démarrage ; un changement
   s'applique à la suivante.
 - Q5: Avec les réglages de 008 ? → A: le fichier est la seule source pour le plafond et les passes, et les paramètres du projet l'éditent ; le mode de fusion est un réglage de projet versionné dans ce
-  fichier ; le toggle Auto reste local. (Voir Q9.)
+  fichier ; le toggle Auto reste local. (Précisé par Q9.)
 - Q6: Modèle d'une étape ? → A: le plafond du profil de rôle s'applique toujours ; un modèle absent ou trop élevé rend le workflow invalide sur cette machine, avec sa raison, sans remplacement silencieux.
 - Q7: Quelles étapes ? → A: les rôles existants (spec, design, dev, test, recap), plus peaufinage et PR, avec une consigne libre par étape ; pas d'étape sur mesure.
 - Q8: La mise en page ? → A: les positions sont optionnelles dans le fichier, sans influence sur le comportement ; l'éditeur les écrit seulement si l'utilisateur déplace un nœud ; la disposition automatique
   sert sinon.
+- Q9: Où va un enregistrement ? → A: l'enregistrement de l'éditeur ou des paramètres crée une branche et une PR, toujours relue par l'utilisateur ; la version courante s'applique jusqu'à sa fusion ; pour un projet sans fichier, le premier enregistrement est le seul geste qui en crée un.
+  La reprise des réglages de 008, livrée avant, est écrite ici de façon cohérente avec cette décision (FR-020).
+- Q10: Qui envoie les consignes de départ ? → A: PACT envoie la consigne de l'étape écrite dans le workflow, comme 007 ; l'orchestrateur ajoute le reste.
 
 ## Questions ouvertes
 
-Deux questions, nées de ces décisions : l'agent spec ne les tranche pas.
+Une question, née de Q9 : l'agent spec ne la tranche pas.
 
-- **Q9 — Où va un enregistrement de l'éditeur ou des paramètres du projet ?** Q5 fait du fichier la seule source, édité par les paramètres. Q4 ne retient que la branche principale. Or `main` peut être protégée, et un
-  projet sans fichier ne doit rien voir écrit dans son dépôt (FR-011). Un clic sur un réglage ne peut donc pas atteindre la version qui fait foi. *Proposition* : l'enregistrement crée une branche et une PR, toujours
-  relue par l'utilisateur ; la version courante s'applique jusqu'à sa fusion ; pour un projet sans fichier, le premier enregistrement est le seul geste qui en crée un. Reste la reprise des réglages déjà faits dans 008,
-  livrée avant, et des consignes de peaufinage de 008.
-- **Q10 — Qui envoie les consignes de départ d'une boucle ?** 007 (FR-021) les fait envoyer par PACT à `start_loop`. La proposition 010-Q2 acceptée dit que l'orchestrateur donne les consignes, et la confirmation de
-  l'utilisateur ne cite que « l'orchestrateur lance les agents ». *Proposition* : PACT envoie la consigne de l'étape écrite dans le workflow, comme 007 ; l'orchestrateur ajoute le reste.
+- **Q11 — Où va un enregistrement quand aucune PR n'est possible ?** Q9 passe par une PR. Or un dépôt sans remote n'a pas de PR, et 008 ne donne aucune voie de livraison à un remote non GitHub ou sans `gh`. Dans ces cas, l'éditeur et les paramètres ne pourraient plus rien enregistrer.
+  *Proposition* : sans remote, l'enregistrement passe par le geste « Fusionner sans verdict » de 008 ; remote non GitHub ou `gh` absent, il est refusé avec sa raison, et l'utilisateur modifie le fichier lui-même avec Git ; les réglages restent lisibles.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -120,6 +119,8 @@ désormais à quelle étape on est.
    dans le dépôt.
 2. **Given** une issue en cours, **When** un événement de 007 change d'étape, **Then** l'étape en cours est à jour dans le suivi de l'issue.
 3. **Given** le workflow par défaut, **When** l'étape PR est atteinte, **Then** c'est la demande de livraison de 008 qui s'exécute.
+4. **Given** un projet sans fichier avec des réglages de 008, **When** 010 est livrée, **Then** ces réglages s'appliquent toujours, sans fichier écrit ni action de l'utilisateur.
+5. **Given** une étape dont le workflow porte une consigne, **When** elle démarre, **Then** PACT envoie cette consigne, et l'orchestrateur peut ajouter la sienne.
 
 ---
 
@@ -137,10 +138,12 @@ nombre de tours de la boucle, et enregistre.
 1. **Given** l'éditeur, **When** l'utilisateur ajoute une étape et la relie, **Then** le graphe et la forme texte montrent le même changement.
 2. **Given** une étape, **When** il choisit un rôle et un modèle, **Then** seuls ceux permis par le plafond du rôle sont proposés.
    Un fichier qui nomme un modèle absent ou trop élevé est invalide sur cette machine, avec sa raison.
-3. **Given** une boucle dev ↔ test, **When** il règle le nombre maximum de tours, **Then** le réglage s'applique à cette boucle.
+3. **Given** une boucle dev ↔ test, **When** il règle le nombre maximum de tours, **Then** le réglage s'applique à cette boucle, une fois la PR de l'enregistrement fusionnée.
 4. **Given** un graphe invalide (étape isolée, pas d'arrivée, boucle sans plafond), **When** il enregistre, **Then** l'enregistrement est refusé
    avec l'étape en cause.
 5. **Given** le clavier seul, **When** il crée et relie une étape, **Then** il y parvient, et un lecteur d'écran annonce le changement.
+6. **Given** un workflow valide modifié, **When** il enregistre, **Then** PACT crée une branche et une PR, à relire même Auto activé, et la version courante s'applique jusqu'à la fusion.
+7. **Given** un projet sans fichier avec des réglages de 008, **When** il enregistre pour la première fois, **Then** la PR crée le fichier avec ces valeurs ; une fois fusionnée, le fichier fait foi.
 
 ---
 
@@ -160,8 +163,8 @@ invalide.
 3. **Given** un fichier invalide, **When** PACT le lit, **Then** il garde la dernière version valide pour les exécutions, et affiche l'erreur avec sa
    ligne.
 4. **Given** une issue en cours, **When** le fichier change, **Then** l'issue garde sa version, et le changement s'applique à l'exécution suivante, une fois sur la branche principale.
-5. **Given** un fichier avec une étape parallèle ou une condition (seconde phase), **When** PACT de première phase le lit, **Then** il refuse de
-   l'exécuter en le disant clairement, et ne perd rien de son contenu à l'enregistrement.
+5. **Given** un fichier avec une étape parallèle ou une condition (seconde phase), **When** PACT de première phase le lit, **Then** il refuse de l'exécuter en le disant clairement, et ne perd rien de son contenu à l'enregistrement.
+6. **Given** un fichier sur la branche principale et un réglage local de 008 différent, **When** PACT l'ouvre, **Then** le fichier l'emporte, et PACT dit que le réglage local est ignoré.
 
 ---
 
@@ -224,13 +227,16 @@ L'orchestrateur tente de passer à la PR alors que le workflow exige un peaufina
 **Exécution**
 
 - **FR-012**: PACT MUST tenir, par issue, l'étape en cours et la version du workflow, enregistrées, et les restaurer à un redémarrage.
-- **FR-013**: PACT MUST garder l'état, ne permettre que les transitions du workflow, et refuser les autres avec leur raison. L'orchestrateur lance les agents [NEEDS CLARIFICATION: Q10 — qui envoie les consignes de départ].
+- **FR-013**: PACT MUST garder l'état, ne permettre que les transitions du workflow, et refuser les autres avec leur raison. L'orchestrateur lance les agents. PACT MUST envoyer la consigne de l'étape écrite dans le workflow, comme 007 FR-021 ; l'orchestrateur ajoute le reste.
 - **FR-014**: Les changements d'étape MUST venir des événements de 007 et réveiller l'orchestrateur par un message `action`.
 - **FR-015**: L'étape PR MUST exécuter la demande de livraison de 008, sans redéfinir ses barrières ni son déroulé.
-- **FR-016**: Le fichier du workflow MUST être la seule source du plafond de tours, des passes de peaufinage et du mode de fusion, et les paramètres du projet MUST l'éditer ; le toggle Auto reste local
-  [NEEDS CLARIFICATION: Q9 — où va un enregistrement].
+- **FR-016**: Dès qu'un fichier existe, il MUST être la seule source du plafond de tours, des passes de peaufinage et du mode de fusion, et les paramètres du projet MUST l'éditer par FR-019 ; le toggle Auto reste local.
 - **FR-017**: Les plafonds de modèle du profil de rôle MUST continuer à s'appliquer ; un modèle absent ou trop élevé MUST rendre le workflow invalide sur cette machine, avec sa raison, sans remplacement silencieux.
 - **FR-018**: Le skill `pact-orchestrator` MUST lire le workflow du projet, au lieu d'un ordre écrit en dur.
+- **FR-019**: Un enregistrement de l'éditeur ou des paramètres du projet MUST créer une branche et une PR, toujours relue par l'utilisateur, même Auto activé, selon les règles de la PR sans verdict de 008. La version courante s'applique jusqu'à sa fusion. Pour un projet sans fichier, ce premier
+  enregistrement est le seul geste qui en crée un [NEEDS CLARIFICATION: Q11 — quand aucune PR n'est possible].
+- **FR-020**: À la livraison de 010, un projet sans fichier MUST garder ses réglages enregistrés par 008 (mode de fusion, plafond, passes, consigne de peaufinage) comme valeurs de son workflow par défaut, sans rien écrire dans le dépôt. Son premier enregistrement MUST les reprendre dans le fichier ; une
+  fois la PR fusionnée, le fichier fait seul foi, et ces valeurs locales ne servent plus. Avec un fichier sur la branche principale, le fichier l'emporte, et PACT MUST dire qu'un réglage local différent est ignoré. La consigne de peaufinage devient la consigne de l'étape de peaufinage.
 
 ### Key Entities
 

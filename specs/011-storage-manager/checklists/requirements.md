@@ -32,4 +32,4 @@
 ## Notes
 
 - L'inventaire cite les fichiers du code, à la demande de l'utilisateur : les cases sur les détails d'implémentation restent décochées.
-- 14 questions ouvertes attendent l'utilisateur. Q6 et Q7 touchent à la sécurité des suppressions.
+- 2 questions ouvertes attendent l'utilisateur (Q15, Q16), nées des décisions : les 14 autres sont décidées.
