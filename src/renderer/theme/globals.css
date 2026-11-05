@@ -53,7 +53,7 @@
     calc(min(var(--enter-index, 0), 10) * 45ms) backwards;
   /* FR-042: after the particles of a change of view, the tile comes in, then its border lights. */
   --animate-tile-enter:
-    view-enter 480ms cubic-bezier(0.2, 0.8, 0.2, 1)
+    view-enter-in-place 480ms cubic-bezier(0.2, 0.8, 0.2, 1)
       calc(80ms + min(var(--enter-index, 0), 10) * 70ms) backwards,
     border-in 420ms ease-out calc(560ms + min(var(--enter-index, 0), 10) * 70ms) backwards;
 
@@ -61,6 +61,14 @@
     from {
       opacity: 0;
       transform: translateY(10px);
+      filter: blur(6px);
+    }
+  }
+
+  /* No slide: a tile in the grid is measured at once (006 T020), it must already be in place. */
+  @keyframes view-enter-in-place {
+    from {
+      opacity: 0;
       filter: blur(6px);
     }
   }

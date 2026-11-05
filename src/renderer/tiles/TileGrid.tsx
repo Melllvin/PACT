@@ -3,70 +3,69 @@ import { cn } from '@/lib/utils';
 
 type Props = {
   children: ReactNode;
-  /** Opens the add menu from a free slot; without it, free slots stay empty. */
+  /** Opens the add menu from the free slot; without it, no slot is offered. */
   onAdd: (() => void) | undefined;
-  /** 003 — the orchestrator's tile, on top; the others go below (R10, 004 R11). */
+  /** 003 — the orchestrator's tile, on 2 columns × 2 rows top left (006 FR-010). */
   lead?: ReactNode;
 };
-
-/** Six agents in all: with the lead on top, five at most below. */
-const BELOW_LEAD = 5;
 
 const SLOT =
   'grid place-items-center rounded-[14px] border border-dashed border-white/10 text-[28px] font-extralight text-dim transition-[border-color,color] duration-300';
 
-/** FR-019: 2×2 up to 4 tiles, 3×2 for 5 or 6; free slots offer « + » (screens 1f, 1l). */
+/** Rows of half the visible height, less half of the gap between two rows (`gap-3` = 0.75rem). */
+const HALF_ROWS = 'auto-rows-[calc((100%_-_0.75rem)/2)]';
+
+/** Without an orchestrator: 1 column for 1 tile, 2 for 2 or 4, 3 for the others (FR-010a). */
+const plainColumns = (count: number) => (count === 4 ? 2 : Math.min(3, Math.max(1, count)));
+
+/**
+ * FR-010, FR-010a, FR-010b: one grid of at most 3 columns whose rows take half of the visible
+ * height, so 3×2 tiles show at most and the rest is reached by scrolling vertically. One « + » only,
+ * when the last row has a place left (screens 1f, 1l).
+ */
 export function TileGrid({ children, onAdd, lead }: Props) {
   const count = Children.count(children);
+  const base = cn('grid h-full min-h-0 gap-3 overflow-y-auto overflow-x-hidden', HALF_ROWS);
   if (lead) {
-    const free = Math.max(0, BELOW_LEAD - count);
-    const columns = Math.min(3, Math.max(1, count + free));
+    // The right column of the orchestrator takes the first two agents, rows of 3 follow.
+    const free = count < 2 || (count - 2) % 3 !== 0;
     return (
       <div
         role="region"
         aria-label="Tuiles"
         data-layout="lead"
-        className="grid h-full grid-cols-[minmax(0,1fr)] grid-rows-[minmax(240px,3fr)_minmax(180px,2fr)] gap-3"
+        className={base}
+        style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
       >
-        {/* 004 FR-006a: the full width and 3/5 of the height, so always the largest tile. */}
-        <section aria-label="Orchestrateur" className="flex min-h-0 min-w-0">
-          <div className="flex min-h-0 min-w-0 w-full flex-col *:flex-1">{lead}</div>
-        </section>
-        <section
-          aria-label="Agents dirigés"
-          className="grid min-h-0 auto-rows-[minmax(180px,1fr)] gap-3"
-          style={{ gridTemplateColumns: `repeat(${String(columns)}, minmax(0, 1fr))` }}
-        >
-          {children}
-          {Array.from({ length: free }, (_, i) => (
-            <FreeSlot key={i} onAdd={onAdd} />
-          ))}
-        </section>
+        <div className="col-span-2 row-span-2 flex min-h-0 min-w-0 flex-col *:flex-1">{lead}</div>
+        {children}
+        {free && onAdd && <FreeSlot onAdd={onAdd} />}
       </div>
     );
   }
-  const layout = count <= 4 ? '2x2' : '3x2';
-  const free = Math.max(0, (layout === '2x2' ? 4 : 6) - count);
+  const columns = plainColumns(count);
+  const free = count % columns !== 0;
+  const rows = Math.ceil((count + (free && onAdd ? 1 : 0)) / columns);
   return (
     <div
       role="region"
       aria-label="Tuiles"
-      data-layout={layout}
-      className={cn(
-        'grid h-full auto-rows-[minmax(200px,1fr)] gap-3',
-        layout === '2x2' ? 'grid-cols-2' : 'grid-cols-3',
-      )}
+      data-layout={count <= 4 ? '2x2' : '3x2'}
+      className={base}
+      style={{
+        gridTemplateColumns: `repeat(${String(columns)}, minmax(0, 1fr))`,
+        // Up to two rows, they share the height: one tile takes the whole grid.
+        ...(rows <= 2 && { gridTemplateRows: `repeat(${String(rows)}, minmax(0, 1fr))` }),
+      }}
     >
       {children}
-      {Array.from({ length: free }, (_, i) => (
-        <FreeSlot key={i} onAdd={onAdd} />
-      ))}
+      {free && onAdd && <FreeSlot onAdd={onAdd} />}
     </div>
   );
 }
 
-function FreeSlot({ onAdd }: { onAdd: (() => void) | undefined }) {
-  return onAdd ? (
+function FreeSlot({ onAdd }: { onAdd: () => void }) {
+  return (
     <button
       className={cn(
         SLOT,
@@ -77,7 +76,5 @@ function FreeSlot({ onAdd }: { onAdd: (() => void) | undefined }) {
     >
       +
     </button>
-  ) : (
-    <div className={SLOT} aria-hidden />
   );
 }
