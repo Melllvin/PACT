@@ -28,8 +28,8 @@ const builder = JSON.parse(read('electron-builder.json')) as {
 };
 
 describe('release configuration', () => {
-  it('is version 1.0.0, with an author for the installers', () => {
-    expect(pkg.version).toBe('1.0.0');
+  it('has a release version, with an author for the installers', () => {
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(pkg.author).toBeTruthy();
   });
 

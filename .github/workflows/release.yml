@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a version tag (v1.0.1) builds the macOS .dmg and the Windows installers, adds them to a
+# Pushing a version tag (v0.6.0) builds the macOS .dmg and the Windows installers, adds them to a
 # draft GitHub Release named after the tag, and publishes it once the .dmg is there. A Windows
 # failure does not hold the release back: the run stays red, the release goes out without it.
 # A manual run (workflow_dispatch) builds the installers and keeps them as run artifacts only:
