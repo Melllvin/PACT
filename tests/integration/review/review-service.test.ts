@@ -88,7 +88,9 @@ const setState = (state: AgentState) =>
     agents: ws.agents.map((a) => ({ ...a, state })),
   }));
 
-const waitFor = async (check: () => boolean, what: string, timeoutMs = 3000) => {
+// A condition, not a delay: it ends as soon as the check holds. The bound only decides when to give
+// up, and a machine under heavy load (git processes queued behind other work) needs far more than 3 s.
+const waitFor = async (check: () => boolean, what: string, timeoutMs = 20_000) => {
   const start = Date.now();
   while (!check()) {
     if (Date.now() - start > timeoutMs) throw new Error(what);
@@ -171,6 +173,7 @@ describe('ReviewService following the worktree (R3)', () => {
     await waitFor(
       () => paths(changed.at(-1))?.includes('nouveau.ts') === true,
       'no review:changed for nouveau.ts',
+      3_000, // SC-006 is the point of this test: the one wait that keeps its bound
     );
   });
 

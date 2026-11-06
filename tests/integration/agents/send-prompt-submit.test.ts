@@ -65,7 +65,7 @@ const waitFor = async (check: () => boolean, what: string, timeoutMs = 10_000) =
 const enters = () => writes.filter((w) => w.data === '\r').length;
 const texts = () => writes.filter((w) => w.data !== '\r').map((w) => w.data);
 
-const setup = async (opts: { strict: boolean; scenario: string }) => {
+const setup = async (opts: { strict: boolean; scenario: string; timeoutMs?: number }) => {
   root = realpathSync.native(await mkdtemp(join(tmpdir(), 'pact-submit-')));
   const repo = join(root, 'Développement');
   await mkdir(repo, { recursive: true });
@@ -112,7 +112,7 @@ const setup = async (opts: { strict: boolean; scenario: string }) => {
     isPortInUse: () => Promise.resolve(false),
     onState: (event) => events.push(event),
     submitDelayMs: DELAY,
-    submitTimeoutMs: TIMEOUT,
+    submitTimeoutMs: opts.timeoutMs ?? TIMEOUT,
   });
   const [agent] = await manager.launch({
     workspaceId: workspace.id,
@@ -221,10 +221,14 @@ describe('a prompt sent to an agent is submitted (fix-send-prompt)', { timeout: 
   });
 
   it('Given a prompt submitted in time, When the agent works, Then there is no second Enter and nothing is resent', async () => {
-    const agent = await setup({ strict: false, scenario: 'echo-prompt' });
+    // A budget far above the 400 ms of the other tests: a slow machine must not look like an agent
+    // that never started working. The wait below still outlasts it, so a second Enter would show.
+    const budget = 3_000;
+    const agent = await setup({ strict: false, scenario: 'echo-prompt', timeoutMs: budget });
     await manager.sendPrompt(agent.id, 'Une seule fois', 'orchestrator');
     await waitFor(() => pty.history(agent.id).includes('Reçu : Une seule fois'), 'not typed');
-    await sleep(TIMEOUT * 3);
+    await waitFor(() => states(agent.id).includes('working'), 'never working');
+    await sleep(budget + DELAY * 4);
     expect(states(agent.id)).toContain('working');
     expect(enters()).toBe(1);
     expect(texts()).toEqual(['Une seule fois']);
