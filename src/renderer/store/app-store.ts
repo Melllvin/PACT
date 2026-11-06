@@ -28,7 +28,7 @@ import {
 /** 004 US2 — a report, a missing one, the end of a loop, as the « Rapports » band shows it. */
 export type LoopReport = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup';
+  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup' | 'question';
   summary: string;
   at: string;
 };
@@ -403,6 +403,13 @@ export function createAppStore(api: PactApi) {
             set({
               workspaces: get().workspaces.map((w) =>
                 w.id === workspaceId ? { ...w, loops, issues } : w,
+              ),
+            });
+          }),
+          api.on('workspace:exchanges', ({ workspaceId, exchanges }) => {
+            set({
+              workspaces: get().workspaces.map((w) =>
+                w.id === workspaceId ? { ...w, exchanges } : w,
               ),
             });
           }),

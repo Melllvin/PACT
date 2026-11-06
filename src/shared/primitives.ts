@@ -23,3 +23,13 @@ export type Role = z.infer<typeof roleSchema>;
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export const effortSchema = z.enum(EFFORTS);
 export type Effort = z.infer<typeof effortSchema>;
+
+export const agentStateSchema = z.enum([
+  'starting',
+  'awaiting-prompt',
+  'working',
+  'awaiting-answer',
+  'done',
+  'error',
+  'closed',
+]);

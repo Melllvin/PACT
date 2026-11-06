@@ -186,6 +186,8 @@ export class AgentManager {
   private readonly hookUrl: () => string;
   private readonly resolveEnv: () => Promise<ResolvedEnv>;
   private readonly fetchTimeoutMs: number;
+  /** 007 R13 — what the launch of an agent has to say, read once by `launch_agent`. */
+  private readonly warnings = new Map<string, string[]>();
   private readonly isPortInUse: (port: number) => Promise<boolean>;
   private readonly onState: NonNullable<Options['onState']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
@@ -681,6 +683,13 @@ export class AgentManager {
     this.onBranch({ agentId: id, branch });
   }
 
+  /** The warnings of the launch of an agent (the fetch), given once. */
+  launchWarnings(agentId: string): string[] {
+    const found = this.warnings.get(agentId) ?? [];
+    this.warnings.delete(agentId);
+    return found;
+  }
+
   private async launchNow({ workspaceId, agents: drafts, counters, launchedBy }: LaunchRequest) {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
@@ -697,8 +706,19 @@ export class AgentManager {
 
     const env = await this.resolveEnv();
     // One wait per launch, not per agent: a silent remote costs at most `fetchTimeoutMs` in all.
+    let fetchWarning: string | null = null;
     if (drafts.some((draft) => draft.baseBranch === null)) {
-      await within(this.git.fetchOrigin(workspace.path, workspace.mainBranch), this.fetchTimeoutMs);
+      const fetched = await within(
+        this.git.fetchOrigin(workspace.path, workspace.mainBranch),
+        this.fetchTimeoutMs,
+      );
+      // 007 R13 — failed or late: said once. Without an origin branch, nothing was expected.
+      if (
+        fetched !== true &&
+        (await this.git.remoteBranchExists(workspace.path, workspace.mainBranch))
+      ) {
+        fetchWarning = `Le fetch d’origin a échoué ou expiré : l’agent part du dernier origin/${workspace.mainBranch} connu, peut-être en retard.`;
+      }
     }
     const launched: Agent[] = [];
     for (const [index, draft] of drafts.entries()) {
@@ -708,6 +728,7 @@ export class AgentManager {
         (await allocatePort(position, usedPorts, { inUse: (p) => this.isPortInUse(p) }));
       usedPorts.add(port);
       const baseBranch = draft.baseBranch ?? workspace.mainBranch;
+      const warned = draft.baseBranch === null ? fetchWarning : null;
       // Without a chosen base, the worktree starts from origin/<main>, fetched first (a failed
       // fetch keeps the last one known); a lagging local main is no base.
       let start = baseBranch;
@@ -751,6 +772,7 @@ export class AgentManager {
         launchedBy: launchedBy ?? null,
         closedWhileWorking: false,
       };
+      if (warned !== null) this.warnings.set(agent.id, [warned]);
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
       // Saved before the process starts: its first hook must find the agent.

@@ -8,6 +8,6 @@
       "tool": "request_integration",
       "arguments": { "agent": "{{prompt.0}}", "message": "feat: la fonction" }
     },
-    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 90 } }
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 60 } }
   ]
 }

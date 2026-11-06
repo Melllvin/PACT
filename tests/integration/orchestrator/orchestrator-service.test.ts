@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { callTool, createHarness, type Harness } from './harness';
+import { GitService } from '../../../src/main/git/git-service';
+import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
+import { callTool, createHarness, gitEnv, type Harness } from './harness';
 
 // 003 T009 — the orchestrator's session: role, token, plugin, one per workspace (R2, R3, R8).
 
@@ -122,7 +124,8 @@ describe('OrchestratorService notices', () => {
       h.orchestrator.notice(h.workspace.id, { agentId, kind: 'loop', summary: 'a.ts' });
     }
     const { events } = await h.orchestrator.wait(leadId, [workerId, unknown], 1000);
-    expect(events.map(({ agentId, kind, state }) => ({ agentId, kind, state }))).toEqual([
+    // 007: the events come from the journal, where the agent concerned is `about`.
+    expect(events.map(({ about, kind, state }) => ({ agentId: about, kind, state }))).toEqual([
       { agentId: workerId, kind: 'loop', state: 'closed' },
       { agentId: unknown, kind: 'loop', state: 'closed' },
     ]);
@@ -131,10 +134,92 @@ describe('OrchestratorService notices', () => {
   it('ignores the state of an agent of no workspace, and a wait with no session', async () => {
     const unknown = '00000000-0000-4000-8000-0000000000fe';
     h.orchestrator.agentState({ agentId: unknown, state: 'done', lastError: null });
-    expect(await h.orchestrator.wait(unknown, undefined, 10)).toEqual({
+    expect(await h.orchestrator.wait(unknown, undefined, 10)).toMatchObject({
       events: [],
       timedOut: false,
       replaced: true,
     });
+  });
+});
+
+// 007 T006 — what the orchestrator hears goes through the journal of the workspace (research R2):
+// written for the orchestrator of the workspace, never about itself save `publish`, typed by
+// `typeOf`, and read again when the workspace reloads.
+describe('OrchestratorService writes to the journal', () => {
+  const event = (agentId: string, kind: 'report' | 'closed' | 'publish', summary = 'Fait') => ({
+    at: new Date().toISOString(),
+    agentId,
+    kind,
+    state: 'done' as const,
+    summary,
+  });
+
+  it('records an event for the orchestrator of the workspace, from PACT, about the agent', async () => {
+    const [lead, worker] = await h.launch([h.draft({ orchestrator: true }), h.draft()]);
+    h.orchestrator.push(h.workspace.id, event(worker?.id ?? '', 'report', 'Rapport reçu'));
+    await h.waitFor(() => h.journal().some((m) => m.kind === 'report'), 'nothing recorded');
+    expect(h.journal().find((m) => m.kind === 'report')).toMatchObject({
+      from: 'pact',
+      to: lead?.id,
+      about: worker?.id,
+      type: 'action',
+      text: 'Rapport reçu',
+      unreadBy: [lead?.id],
+    });
+  });
+
+  it('gives the type of typeOf: a closing is info, a report an action', async () => {
+    const [, worker] = await h.launch([h.draft({ orchestrator: true }), h.draft()]);
+    h.orchestrator.push(h.workspace.id, event(worker?.id ?? '', 'closed', ''));
+    await h.waitFor(() => h.journal().some((m) => m.kind === 'closed'), 'nothing recorded');
+    expect(h.journal().find((m) => m.kind === 'closed')?.type).toBe('info');
+  });
+
+  it('records nothing about the orchestrator itself, save the answer to its publish request', async () => {
+    const [lead] = await h.launch([h.draft({ orchestrator: true })]);
+    const id = lead?.id ?? '';
+    h.orchestrator.push(h.workspace.id, event(id, 'report', 'sur lui-même'));
+    h.orchestrator.push(h.workspace.id, event(id, 'publish', 'issues publiées'));
+    await h.waitFor(() => h.journal().length > 0, 'nothing recorded');
+    await new Promise((r) => setTimeout(r, 100));
+    expect(h.journal().map((m) => m.kind)).toEqual(['publish']);
+  });
+
+  it('records nothing in a workspace with no orchestrator', async () => {
+    const [worker] = await h.launch([h.draft()]);
+    h.orchestrator.push(h.workspace.id, event(worker?.id ?? '', 'report'));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(h.journal()).toEqual([]);
+  });
+
+  it('turns a change of state into an event of the journal (turn-finished is info)', async () => {
+    const [, worker] = await h.launch([h.draft({ orchestrator: true }), h.draft()]);
+    h.orchestrator.agentState({ agentId: worker?.id ?? '', state: 'done', lastError: null });
+    await h.waitFor(() => h.journal().some((m) => m.kind === 'turn-finished'), 'no event');
+    expect(h.journal().find((m) => m.kind === 'turn-finished')).toMatchObject({
+      type: 'info',
+      about: worker?.id,
+      state: 'done',
+    });
+  });
+
+  it('reads the journal again when the workspace reloads its state (FR-004)', async () => {
+    const [lead, worker] = await h.launch([h.draft({ orchestrator: true }), h.draft()]);
+    h.orchestrator.push(h.workspace.id, event(worker?.id ?? '', 'report', 'À relire'));
+    await h.waitFor(() => h.journal().some((m) => m.kind === 'report'), 'nothing recorded');
+    // The state file as the app finds it at its next start.
+    await h.stores.workspace(h.workspace.id).read();
+    const reloaded = new WorkspaceService({
+      git: new GitService({ env: gitEnv }),
+      stores: h.stores,
+    });
+    try {
+      const again = await reloaded.open(h.repo);
+      const kept = reloaded.get(again.id)?.exchanges.messages ?? [];
+      expect(kept.map((m) => m.text)).toContain('À relire');
+      expect(kept.find((m) => m.text === 'À relire')?.unreadBy).toEqual([lead?.id]);
+    } finally {
+      reloaded.dispose();
+    }
   });
 });

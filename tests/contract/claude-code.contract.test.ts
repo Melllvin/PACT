@@ -297,6 +297,40 @@ describe('Claude Code with another role (004 T042)', () => {
   });
 });
 
+// 007 T009, research R15 — an agent with the access to PACT's MCP reads its events with
+// `get_events`: its tools are allowed as the orchestrator's are, or each wake would ask the user.
+describe('Claude Code with the access to PACT’s tools (007 R15)', () => {
+  const pluginDir = '/Users/me/Library/Application Support/PACT/roles/a 3/plugin';
+  const skills = {
+    role: 'dev' as const,
+    pluginDir,
+    skills: [{ name: 'pact-dev', file: `${pluginDir}/skills/pact-dev/SKILL.md` }],
+    contract: `${pluginDir}/skills/pact-dev/pact-contract.md`,
+  };
+  const agentMcp = { url: 'http://127.0.0.1:4567/mcp', token: 'b'.repeat(64), skills };
+  const launch = (permissionLevel: LaunchInput['permissionLevel']) =>
+    create().buildLaunch({ ...input, permissionLevel, agentMcp, skills });
+
+  it.each(['always-allow', 'ask-sensitive'] as const)(
+    'allows the PACT tools without a prompt at the level « %s »',
+    (level) => {
+      expect(settingsOf(launch(level).args).permissions?.allow).toEqual([
+        'mcp__plugin_pact_pact__*',
+      ]);
+    },
+  );
+
+  it('keeps the asks of « actions sensibles » next to the allowed tools', () => {
+    const permissions = settingsOf(launch('ask-sensitive').args).permissions;
+    expect(permissions?.ask).toContain('Bash(rm *)');
+  });
+
+  it('allows nothing for an agent with no access to the tools', () => {
+    const spec = create().buildLaunch({ ...input, permissionLevel: 'always-allow' });
+    expect(settingsOf(spec.args).permissions?.allow).toBeUndefined();
+  });
+});
+
 describe('Claude Code hook payloads (captured in T049)', () => {
   const common = {
     session_id: input.sessionId,

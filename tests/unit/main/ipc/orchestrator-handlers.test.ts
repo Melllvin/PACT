@@ -180,3 +180,37 @@ describe('preview channels (004 T035)', () => {
     );
   });
 });
+
+// 007 T009 — exchange:decide (contracts/ui.md): « Laisser reprendre » and « Couper ».
+describe('exchange:decide (007)', () => {
+  const escalationId = '00000000-0000-4000-8000-0000000000e1';
+
+  it.each(['resume', 'cut'] as const)(
+    'passes the user’s decision « %s » to the journal',
+    async (decision) => {
+      const exchanges = { decide: vi.fn(() => Promise.resolve()) };
+      const services = createOrchestratorServices({ exchanges } as never);
+      await expect(
+        services['exchange:decide']({ workspaceId: 'w1', escalationId, decision }),
+      ).resolves.toBeUndefined();
+      expect(exchanges.decide).toHaveBeenCalledWith('w1', escalationId, decision);
+    },
+  );
+
+  it('passes on why a decision cannot be taken', async () => {
+    const exchanges = {
+      decide: vi.fn(() => Promise.reject(new IpcFailure('NOT_FOUND', 'Escalade introuvable.'))),
+    };
+    const services = createOrchestratorServices({ exchanges } as never);
+    await expect(
+      services['exchange:decide']({ workspaceId: 'w1', escalationId, decision: 'cut' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('does nothing without the journal', async () => {
+    const services = createOrchestratorServices({} as never);
+    await expect(
+      services['exchange:decide']({ workspaceId: 'w1', escalationId, decision: 'resume' }),
+    ).resolves.toBeUndefined();
+  });
+});

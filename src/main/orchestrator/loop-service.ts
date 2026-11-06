@@ -49,6 +49,15 @@ export function globToRegExp(glob: string): RegExp {
 export const isTestPath = (path: string, patterns: readonly string[]): boolean =>
   patterns.some((pattern) => globToRegExp(pattern).test(path));
 
+/** 007 R8 — a report with questions reaches the orchestrator as a question, with the questions. */
+function reportNotice(agentId: string, report: HandoffReport): LoopEvent {
+  if (report.questions.length === 0) {
+    return { agentId, kind: 'report', summary: report.summary };
+  }
+  const questions = report.questions.map((q, i) => `${String(i + 1)}. ${q}`).join('\n');
+  return { agentId, kind: 'question', summary: `${report.summary}\n${questions}` };
+}
+
 export class LoopService {
   /** The tree of the tester's worktree when its round began, by `<workspace>/<issue>`. */
   private readonly testerStart = new Map<string, string>();
@@ -204,7 +213,12 @@ export class LoopService {
   async report(agentId: string, report: HandoffReport): Promise<string | null> {
     this.reported.add(agentId);
     const found = this.find(agentId);
-    if (!found) return null;
+    if (!found) {
+      // 007 FR-010 — out of a loop, the orchestrator hears of the report too.
+      const ws = this.deps.workspaces.list().find((w) => w.agents.some((a) => a.id === agentId));
+      if (ws) this.deps.notify(ws.id, reportNotice(agentId, report));
+      return null;
+    }
     const { ws, loop, agent } = found;
     const role = agent.role === 'test' ? 'test' : 'dev';
     const stored: StoredReport = { ...report, agentId, role, round: loop.round, at: this.now() };
@@ -223,7 +237,7 @@ export class LoopService {
     }
 
     await this.saveRound(ws.id, loop.issueId, (r) => ({ ...r, reports: [...r.reports, stored] }));
-    this.deps.notify(ws.id, { agentId, kind: 'report', summary: report.summary });
+    this.deps.notify(ws.id, reportNotice(agentId, report));
 
     if (role === 'test' && report.verdict?.result === 'accepted') {
       const { target, command } = await this.deps.review.testPlan(loop.devAgentId);
@@ -297,7 +311,7 @@ export class LoopService {
     this.deps.notify(ws.id, {
       agentId: run.agentId,
       kind: 'loop',
-      summary: `${loop.issueId} : pas encore fini, ${why}.\n${run.outputTail}`,
+      summary: `${loop.issueId} : pas encore fini, ${why}.`,
     });
   }
 

@@ -1,8 +1,17 @@
 import { z } from 'zod';
-import { effortSchema, gitIdSchema, isoDate, repoPathSchema, roleSchema } from './primitives';
+import { exchangesSchema } from './exchanges';
+import {
+  agentStateSchema,
+  effortSchema,
+  gitIdSchema,
+  isoDate,
+  repoPathSchema,
+  roleSchema,
+} from './primitives';
 import { storedReportSchema } from './report';
 
 export {
+  agentStateSchema,
   EFFORTS,
   ROLES,
   effortSchema,
@@ -19,16 +28,6 @@ export const MAX_AGENTS = 6;
 export const MAX_RECENT_PROJECTS = 20;
 
 export const agentColorSchema = z.enum(AGENT_COLORS);
-
-export const agentStateSchema = z.enum([
-  'starting',
-  'awaiting-prompt',
-  'working',
-  'awaiting-answer',
-  'done',
-  'error',
-  'closed',
-]);
 
 /** An agent still at work: integrating it asks for a confirmation first (002 FR-025). */
 export const WORKING_STATES: readonly z.infer<typeof agentStateSchema>[] = [
@@ -120,6 +119,8 @@ export const agentSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** 007 — a wake held back and signalled: `deriveTodos` reads it (data-model). */
+  wakeNotice: z.enum(['input', 'cap']).nullable().optional(),
 });
 
 /** 004 R2 — what an agent of a role is launched with; `null` model: the CLI's own. */
@@ -245,6 +246,8 @@ export const workspaceSchema = z
     testPaths: z.array(z.string().min(1)).default(() => [...DEFAULT_TEST_PATHS]),
     /** At most one: a new one replaces the old one. */
     publishRequests: z.array(publishRequestSchema).max(1).default([]),
+    /** 007 — the journal of the exchanges between the agents; old files load without it. */
+    exchanges: exchangesSchema,
     lastOpenedAt: isoDate,
     status: z.enum(['available', 'unavailable']),
   })
@@ -344,8 +347,10 @@ export type TodoKind =
   | 'integration-request'
   | 'publish-issues'
   | 'loop-escalated'
+  | 'exchange-escalated'
   | 'rate-limit'
   | 'usage-limit'
+  | 'wake-held'
   | 'review'
   | 'prompt'
   | 'info';

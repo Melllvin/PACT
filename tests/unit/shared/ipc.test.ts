@@ -204,6 +204,15 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       { workspaceId: 'w1', issueId: '0012-connexion', decision: 'retry' },
     ],
   },
+  // 007 contracts/ui.md — the user's decision on two agents that write to each other in a loop.
+  'exchange:decide': {
+    valid: { workspaceId: 'w1', escalationId: integrationId, decision: 'resume' },
+    invalid: [
+      { workspaceId: 'w1', escalationId: 'x', decision: 'resume' },
+      { workspaceId: 'w1', escalationId: integrationId, decision: 'retry' },
+      { workspaceId: 'w1', decision: 'cut' },
+    ],
+  },
   'publishRequest:confirm': {
     valid: { requestId: '6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b' },
     invalid: [{ requestId: 'r1' }, {}],
@@ -301,6 +310,7 @@ describe('IPC event schemas', () => {
     expect(Object.keys(ipcEvents).sort()).toEqual([
       'agent:branch',
       'agent:state',
+      'agent:wakeNotice',
       'clone:progress',
       'integration:state',
       'orchestrator:action',
@@ -314,11 +324,37 @@ describe('IPC event schemas', () => {
       'term:exit',
       'usage:state',
       'workspace:agentsLaunched',
+      'workspace:exchanges',
       'workspace:integrationRequests',
       'workspace:issues',
       'workspace:loops',
       'workspace:status',
     ]);
+  });
+
+  // 007 contracts/ui.md.
+  it('announce the journal of a workspace and the wake held for an agent', () => {
+    const exchanges = ipcEvents['workspace:exchanges'];
+    expect(
+      exchanges.safeParse({ workspaceId: 'w1', exchanges: { messages: [], escalations: [] } })
+        .success,
+    ).toBe(true);
+    expect(exchanges.safeParse({ workspaceId: 'w1' }).success).toBe(false);
+    const wake = ipcEvents['agent:wakeNotice'];
+    for (const notice of ['input', 'cap', null]) {
+      expect(wake.safeParse({ agentId, notice }).success).toBe(true);
+    }
+    expect(wake.safeParse({ agentId, notice: 'busy' }).success).toBe(false);
+    expect(wake.safeParse({ agentId: 'x', notice: null }).success).toBe(false);
+  });
+
+  // 007 research R8: a question of a report reaches the loop reports of the renderer too.
+  it('announce a question of a report as a report kind', () => {
+    const schema = ipcEvents['orchestrator:report'];
+    const base = { workspaceId: 'w1', agentId, summary: 'Quel format ?' };
+    expect(schema.safeParse({ ...base, kind: 'question' }).success).toBe(true);
+    expect(schema.safeParse({ ...base, kind: 'report' }).success).toBe(true);
+    expect(schema.safeParse({ ...base, kind: 'gossip' }).success).toBe(false);
   });
 
   it('announce the agents to review per workspace (FR-002)', () => {

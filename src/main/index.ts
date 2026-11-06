@@ -29,6 +29,7 @@ import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
 import { IntegrationRequests } from './orchestrator/integration-requests';
+import { ExchangeService } from './orchestrator/exchange-service';
 import { OrchestratorService } from './orchestrator/orchestrator-service';
 import type { McpTool } from './orchestrator/mcp';
 import { createOrchestratorTools } from './orchestrator/tools';
@@ -120,10 +121,18 @@ void app.whenReady().then(async () => {
   // The e2e harness moves this clock itself from the main process (T106).
   const clock = testClock(process.env);
   if (clock) Object.assign(globalThis, { pactTestClock: clock });
+  // 007 — the journal of the exchanges of each workspace, where the orchestrator's events are kept.
+  const exchanges = new ExchangeService({
+    workspaces,
+    onChange: (workspaceId, journal) => {
+      emit('workspace:exchanges', { workspaceId, exchanges: journal });
+    },
+  });
   // 003 — the orchestrator of a workspace reaches PACT through its session plugin (R2).
   const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
     workspaces,
+    exchanges,
     onAction: (orchestratorId, action) => {
       emit('orchestrator:action', { ...action, orchestratorId });
     },
@@ -136,6 +145,7 @@ void app.whenReady().then(async () => {
     agentTools: (agentId) =>
       createAgentTools(
         {
+          exchanges,
           onReport: async (id, report) => {
             const refused = await loops.report(id, report);
             // « ◆ Décider » reads the last report of an agent, with or without a loop.
@@ -158,6 +168,7 @@ void app.whenReady().then(async () => {
           pending: (workspaceId) => review.updatePending(workspaceId),
           review,
           tests,
+          exchanges,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
           loops,
@@ -477,6 +488,7 @@ void app.whenReady().then(async () => {
       ...createOrchestratorServices({
         requests,
         orchestrator,
+        exchanges,
         agents,
         workspaces,
         loops,

@@ -36,7 +36,10 @@ const SENSITIVE_RULES = [
 /** 003 R2 — the tools of the session plugin's MCP server, as Claude Code names them. */
 const PACT_TOOLS = 'mcp__plugin_pact_pact__*';
 
-/** 003 R5 — above the longest wait_for_agents (600 s), so Claude Code does not give up on it. */
+/**
+ * 003 R5 — far above the longest wait_for_agents (60 s since 007), so that Claude Code never gives up
+ * on a tool call; kept as it was, a looser bound costing nothing.
+ */
 const MCP_TOOL_TIMEOUT_MS = '660000';
 
 const ORCHESTRATOR_PROMPT = `Tu es l'orchestrateur de ce workspace PACT : tu diriges les autres agents avec le skill ${SKILL_NAME} et les outils du serveur MCP « pact ».`;
@@ -250,16 +253,16 @@ export class ClaudeCodeAdapter implements CliAdapter {
         StopFailure: hook(http),
         PermissionRequest: hook({ ...http, timeout: PERMISSION_HOOK_TIMEOUT_S }),
       },
-      ...permissions(level, input.orchestrator != null),
+      ...permissions(level, input.orchestrator != null || input.agentMcp != null),
     };
   }
 }
 
 /** Only a question needs the user: what a teammate or subagent asks waits in the lead's terminal. */
-/** « Actions sensibles » asks (R5 of 001); an orchestrator also uses PACT's tools freely (003 R2). */
-function permissions(level: PermissionLevel, orchestrator: boolean) {
+/** « Actions sensibles » asks (R5 of 001); whoever has the access to PACT's tools uses them freely: the orchestrator (003 R2), and an agent that reads its events with get_events (007 R15). */
+function permissions(level: PermissionLevel, pactTools: boolean) {
   const rules = {
-    ...(orchestrator ? { allow: [PACT_TOOLS] } : {}),
+    ...(pactTools ? { allow: [PACT_TOOLS] } : {}),
     ...(level === 'ask-sensitive' ? { ask: SENSITIVE_RULES } : {}),
   };
   return Object.keys(rules).length === 0 ? {} : { permissions: rules };

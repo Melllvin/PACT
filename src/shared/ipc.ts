@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { exchangesPayloadSchema } from './exchanges';
 import { orchestratorActionSchema } from './orchestrator';
 import { previewFileSchema } from './preview';
 import {
@@ -263,6 +264,15 @@ export const ipcRequests = {
     }),
     none,
   ),
+  /** 007 — the user's decision on two agents that write to each other in a loop. */
+  'exchange:decide': request(
+    z.object({
+      workspaceId: z.string(),
+      escalationId: z.uuid(),
+      decision: z.enum(['resume', 'cut']),
+    }),
+    none,
+  ),
   /** 004 US1 — the role profiles of a workspace; a weaker test warns without blocking (FR-004). */
   /** 004 US3 — « ◎ Créer N issues ? »: publish with gh, or keep them local (FR-023). */
   'publishRequest:confirm': request(
@@ -361,11 +371,18 @@ export const ipcEvents = {
     /** A clicked notification: the view goes to this agent too. */
     focusAgentId: z.string().optional(),
   }),
-  /** 004 US2 — a report, a missing one or the end of a loop. */
+  /** 007 — the journal of the exchanges of a workspace, as it is now. */
+  'workspace:exchanges': z.object({ workspaceId: z.string(), exchanges: exchangesPayloadSchema }),
+  /** 007 — a wake held back for this agent, or released. */
+  'agent:wakeNotice': z.object({
+    agentId: z.uuid(),
+    notice: z.enum(['input', 'cap']).nullable(),
+  }),
+  /** 004 US2 — a report, a missing one or the end of a loop; 007 — or a question of a report. */
   'orchestrator:report': z.object({
     workspaceId: z.string(),
     agentId: z.uuid(),
-    kind: z.enum(['report', 'report-missing', 'loop', 'publish', 'mockup']),
+    kind: z.enum(['report', 'report-missing', 'loop', 'publish', 'mockup', 'question']),
     summary: z.string(),
   }),
 } as const;

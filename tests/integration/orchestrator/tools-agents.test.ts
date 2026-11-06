@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callTool, createHarness, git, type Harness } from './harness';
 
@@ -172,4 +173,58 @@ describe('close_agent', () => {
     expect((await tool('close_agent', { agent: 'Faux CLI 9' })).isError).toBe(true);
     expect(h.current(orchestratorId)).toBeDefined();
   });
+});
+
+// 007 T008 — launch_agent says it when the fetch failed (FR-022, US4 sc.5 to 7).
+describe('launch_agent: the warning of the fetch', () => {
+  let origin: string;
+
+  beforeEach(() => {
+    origin = join(h.root, 'origin.git');
+    git(h.root, 'init', '--bare', '-b', 'main', origin);
+    git(h.repo, 'remote', 'add', 'origin', origin);
+    git(h.repo, 'push', '-q', 'origin', 'main');
+    git(h.repo, 'fetch', '-q', 'origin');
+  });
+
+  it('adds a warning to its answer when the fetch fails, and starts from the last origin/main known', async () => {
+    const known = git(h.repo, 'rev-parse', 'origin/main');
+    git(h.repo, 'remote', 'set-url', 'origin', join(h.root, 'absent.git'));
+    const { isError, text, json } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(false);
+    expect(text).toMatch(/fetch|origin/i);
+    const { agent } = json as Launched;
+    expect(git(others()[0]?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(known);
+    expect(agent.name).toBe('Faux CLI 2');
+  }, 30_000);
+
+  it('adds no warning when the fetch succeeds', async () => {
+    const { isError, text } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(false);
+    expect(text).not.toMatch(/fetch|origin/i);
+  }, 30_000);
+
+  it('adds no warning without a remote', async () => {
+    git(h.repo, 'remote', 'remove', 'origin');
+    const { isError, text } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(false);
+    expect(text).not.toMatch(/fetch|origin/i);
+  }, 30_000);
+
+  it('adds no warning with an explicit baseBranch, which is respected', async () => {
+    git(h.repo, 'branch', 'socle');
+    git(h.repo, 'remote', 'set-url', 'origin', join(h.root, 'absent.git'));
+    const { isError, text } = await tool('launch_agent', { cli: 'Faux CLI', baseBranch: 'socle' });
+    expect(isError).toBe(false);
+    expect(text).not.toMatch(/fetch|origin/i);
+    expect(others()[0]?.baseBranch).toBe('socle');
+  }, 30_000);
+
+  it('keeps the warning of the usage next to it', async () => {
+    h.usageWarnings.fake = 'Limite 5 h à 85 %';
+    git(h.repo, 'remote', 'set-url', 'origin', join(h.root, 'absent.git'));
+    const { text } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(text).toContain('Limite 5 h à 85 %');
+    expect(text).toMatch(/fetch|origin/i);
+  }, 30_000);
 });

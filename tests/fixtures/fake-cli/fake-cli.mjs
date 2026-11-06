@@ -40,6 +40,20 @@
 //                                   Codex token_count to $CODEX_HOME/sessions/AAAA/MM/JJ/
 //                                   rollout-<time>-<session>.jsonl; an array gives one per turn
 //   signal: object                  final hook payload (default { type: 'turn-finished' })
+//   agentMcp: { tool, arguments }[] calls these PACT tools when it is an agent of a role (007 R16),
+//                                   on PACT_AGENT_MCP_URL with its token, and prints
+//                                   `MCP <tool> : <text>`; `{{prompt}}` is filled as for `mcp`
+//   toolHook: boolean               posts `{ type: 'post-tool' }` (a PostToolUse) during the turn and
+//                                   prints `Contexte : <additionalContext>` when PACT answers one
+//
+// A line that is a PACT pointer (« N événement(s), lis get_events » or « …, lis <file> ») is not a
+// prompt (007 R16): with PACT_AGENT_MCP_URL or PACT_ORCHESTRATOR_URL the CLI calls `get_events`,
+// then `get_events({ id })` on the first `instruction`, and plays the turn with that text, as if it
+// had been typed; without MCP it reads `.pact/events.md` and plays its content. A pointer with no
+// instruction plays as itself. Scenarios keep their `{{prompt}}`.
+//
+// A final hook answered `{ decision: 'block', reason }` (Stop prolonged by a wake) prints
+// `Prolongé : <reason>` and plays one more turn with the reason, which is a pointer.
 //   exitCode: number                exits with this code after the turn
 //
 // A bracketed paste (ESC[200~ … ESC[201~) is one prompt, its line breaks included, as in the
@@ -160,6 +174,59 @@ async function callTool(
   } catch (error) {
     return `injoignable (${error.message})`;
   }
+}
+
+/** `tools/call` with the text and the JSON PACT answers (`get_events` gives both). */
+async function callToolFull(tool, args) {
+  const url = process.env.PACT_AGENT_MCP_URL ?? process.env.PACT_ORCHESTRATOR_URL;
+  const token = process.env.PACT_AGENT_MCP_URL
+    ? process.env.PACT_AGENT_MCP_TOKEN
+    : process.env.PACT_ORCHESTRATOR_TOKEN;
+  try {
+    const response = await fetch(url ?? '', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'x-pact-token': token ?? '',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: { name: tool, arguments: args },
+      }),
+    });
+    if (!response.ok) return { text: `HTTP ${String(response.status)}`, json: null };
+    const reply = await response.json();
+    const [text, json] = (reply.result?.content ?? []).map((c) => c.text);
+    return {
+      text: text ?? JSON.stringify(reply.error ?? reply),
+      json: json ? JSON.parse(json) : null,
+    };
+  } catch (error) {
+    return { text: `injoignable (${error.message})`, json: null };
+  }
+}
+
+const POINTER = /^\d+ événements?, lis \S+$/;
+
+/** What a pointer makes the CLI play: the first instruction it reads, else the pointer itself. */
+async function readPointer(line) {
+  if (!process.env.PACT_AGENT_MCP_URL && !process.env.PACT_ORCHESTRATOR_URL) {
+    try {
+      return readFileSync(join(process.cwd(), '.pact', 'events.md'), 'utf8').trim() || line;
+    } catch {
+      return line;
+    }
+  }
+  const list = await callToolFull('get_events', {});
+  console.log(`MCP get_events : ${list.text}`);
+  const first = (list.json?.events ?? []).find((event) => event.kind === 'instruction');
+  if (!first) return line;
+  const detail = await callToolFull('get_events', { id: first.id });
+  console.log(`MCP get_events : ${detail.text}`);
+  return detail.json?.event?.text ?? line;
 }
 
 /** Fills `{{prompt}}` and `{{prompt.N}}` in every string of a value, at any depth. */
@@ -372,6 +439,16 @@ async function runTurn(line) {
         : JSON.parse(fillDeep(step.json, line));
     console.log(`MCP ${tool} : ${await callTool(tool, args)}`);
   }
+  if (scenario.toolHook) {
+    const reply = await hook({ type: 'post-tool' });
+    const context = reply?.hookSpecificOutput?.additionalContext;
+    if (context) console.log(`Contexte : ${context}`);
+  }
+  for (const step of process.env.PACT_AGENT_MCP_URL ? (scenario.agentMcp ?? []) : []) {
+    const args = fillArguments(step.arguments, line);
+    const { text } = await callToolFull(step.tool, args);
+    console.log(`MCP ${step.tool} : ${text}`);
+  }
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);
   writeRoleFiles();
@@ -391,8 +468,18 @@ async function runTurn(line) {
     execFileSync('git', ['branch', '-m', scenario.renameBranch], { stdio: 'ignore' });
   }
 
-  await hook(scenario.signal ?? { type: 'turn-finished' });
+  const end = await hook(scenario.signal ?? { type: 'turn-finished' });
   if (scenario.exitCode !== undefined) process.exit(scenario.exitCode);
+  // A Stop prolonged by a wake: the reason is a pointer, and the turn goes on.
+  if (end?.decision === 'block' && typeof end.reason === 'string') {
+    console.log(`Prolongé : ${end.reason}`);
+    await play(end.reason);
+  }
+}
+
+/** A line typed or a reason given: a pointer is read, anything else is the prompt. */
+async function play(line) {
+  await runTurn(POINTER.test(line) ? await readPointer(line) : line);
 }
 
 console.log(resumed ? `Session reprise ${resumed}` : `Session ${sessionId}`);
@@ -400,5 +487,5 @@ await hook({ type: 'session-started', sessionId });
 for (;;) {
   prompt();
   const line = await nextPrompt();
-  if (line) await runTurn(line);
+  if (line) await play(line);
 }
