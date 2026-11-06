@@ -8,7 +8,7 @@ import {
 import { DEFAULT_TEST_PATHS, type Workspace } from '../../../../src/shared/model';
 import { agent } from '../tiles/fixtures';
 
-// fix-todo-diff-notifications — « ◆ Décider » in À faire, the size of a review, a clicked notification.
+// fix-todo-diff-notifications — « ◆ Décider » in the Agents column, the size of a review, a clicked notification.
 
 const workspaceOf = (agents: Workspace['agents']): Workspace => ({
   id: 'w1',
@@ -67,14 +67,14 @@ const blocked = agent(1, {
   lastReport: { status: 'blocked', questions: ['Quelle base ?', 'Quel nom ?'] },
 });
 
-describe('« ◆ Décider » in À faire', () => {
+describe('« ◆ Décider » in the Agents column', () => {
   it('shows the questions and sends the answer to the agent as a prompt', async () => {
     const user = userEvent.setup();
     const review = binding();
     render(
       <WorkspaceView workspace={workspaceOf([blocked])} terminals={terminals} review={review} />,
     );
-    const item = screen.getByRole('complementary', { name: 'À faire' });
+    const item = screen.getByRole('complementary', { name: 'Agents' });
     expect(within(item).getByText('Quelle base ?')).toBeDefined();
     expect(within(item).getByText('Quel nom ?')).toBeDefined();
     const send = within(item).getByRole('button', { name: 'Envoyer' });

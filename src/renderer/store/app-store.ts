@@ -6,6 +6,7 @@ import {
   type IpcOutput,
   type PactApi,
 } from '../../shared/ipc';
+import { agentsLaunchedBy } from '../../shared/agents-view';
 import { countsOf, toAgentDrafts, type LaunchDraft } from '../../shared/launch-draft';
 import type {
   Agent,
@@ -72,6 +73,8 @@ export type AppState = {
   log: { agentId: string; text: string } | null;
   /** Agent whose close dialog is open (FR-037). */
   closingAgentId: string | null;
+  /** 006 — closed agent whose restart dialog is open (FR-025). */
+  restartingAgentId: string | null;
   /** 005 — the usage of each CLI account, by `<cliId>\0<account>`. */
   usage: Record<string, UsageState>;
   /** 005 FR-010 — the alert thresholds of the gauges. */
@@ -105,7 +108,11 @@ export type AppState = {
   /** `always`: « Toujours pour ce worktree » (FR-034). */
   answerAgent: (agentId: string, answer: 'allow' | 'deny', always?: boolean) => Promise<void>;
   resumeAgent: (agentId: string) => Promise<void>;
-  restartAgent: (agentId: string) => Promise<void>;
+  restartAgent: (agentId: string, options?: { resumeWork: boolean }) => Promise<void>;
+  /** 006 — « Relancer » on a closed tile asks first: « Reprendre le travail » (FR-026). */
+  requestRestartAgent: (agentId: string) => void;
+  cancelRestartAgent: () => void;
+  confirmRestartAgent: (resumeWork: boolean) => Promise<void>;
   /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
   cancelAutoResume: (agentId: string) => Promise<void>;
   /** 003 US3 — the user's answer to an integration the orchestrator asks for (FR-018). */
@@ -300,6 +307,7 @@ export function createAppStore(api: PactApi) {
       actionError: null,
       log: null,
       closingAgentId: null,
+      restartingAgentId: null,
       usage: {},
       usageThresholds: DEFAULT_USAGE_THRESHOLDS,
       correcting: {},
@@ -338,7 +346,7 @@ export function createAppStore(api: PactApi) {
             const { workspaces } = get();
             set({
               workspaces:
-                event.state === 'closed'
+                event.state === 'closed' && event.kept !== true
                   ? withoutAgent(workspaces, event.agentId)
                   : updateAgent(workspaces, event.agentId, applyState(event)),
               correcting: followCorrection(get().correcting, event),
@@ -585,7 +593,20 @@ export function createAppStore(api: PactApi) {
           }),
         ),
       resumeAgent: (agentId) => act(() => api.invoke('agent:resume', { agentId })),
-      restartAgent: (agentId) => act(() => api.invoke('agent:restart', { agentId })),
+      restartAgent: (agentId, options) =>
+        act(() => api.invoke('agent:restart', { agentId, ...options })),
+      requestRestartAgent(agentId) {
+        set({ restartingAgentId: agentId });
+      },
+      cancelRestartAgent() {
+        set({ restartingAgentId: null });
+      },
+      async confirmRestartAgent(resumeWork) {
+        const agentId = get().restartingAgentId;
+        if (agentId === null) return;
+        set({ restartingAgentId: null });
+        await get().restartAgent(agentId, { resumeWork });
+      },
       cancelAutoResume: (agentId) => act(() => api.invoke('agent:cancelAutoResume', { agentId })),
 
       confirmIntegrationRequest: (requestId, message) =>
@@ -655,8 +676,26 @@ export function createAppStore(api: PactApi) {
         if (agentId === null) return;
         set({ closingAgentId: null });
         await act(async () => {
+          const workspace = get().workspaces.find((ws) => ws.agents.some((a) => a.id === agentId));
+          const agent = workspace?.agents.find((a) => a.id === agentId);
           await api.invoke('agent:close', { agentId, removeWorktree });
-          set({ workspaces: withoutAgent(get().workspaces, agentId) });
+          // 006 FR-023: an orchestrator closes the agents it launched; kept, they stay, closed.
+          const group =
+            workspace && agent?.role === 'orchestrator'
+              ? agentsLaunchedBy(workspace, agentId).map((a) => a.id)
+              : [];
+          const kept = !removeWorktree && group.length > 0 && agent?.state !== 'closed';
+          const ids = new Set([agentId, ...group]);
+          set({
+            workspaces: kept
+              ? get().workspaces.map((ws) => ({
+                  ...ws,
+                  agents: ws.agents.map((a) =>
+                    ids.has(a.id) && a.state !== 'closed' ? { ...a, state: 'closed' as const } : a,
+                  ),
+                }))
+              : [...ids].reduce((all, id) => withoutAgent(all, id), get().workspaces),
+          });
         });
       },
 

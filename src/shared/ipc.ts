@@ -175,7 +175,8 @@ export const ipcRequests = {
     none,
   ),
   'agent:resume': request(agentRef, none),
-  'agent:restart': request(agentRef, none),
+  /** `resumeWork`: a closed agent that was working gets a resume prompt (006 FR-026). */
+  'agent:restart': request(agentRef.extend({ resumeWork: z.boolean().optional() }), none),
   'agent:close': request(agentRef.extend({ removeWorktree: z.boolean() }), none),
   'agent:cancelAutoResume': request(agentRef, none),
   'agent:log': request(agentRef, z.string()),
@@ -301,6 +302,8 @@ export const ipcEvents = {
     scheduledResume: scheduledResumeSchema.nullable().optional(),
     /** Sent with an `awaiting-answer` state when the agent asks a question (FR-024a). */
     awaiting: z.enum(['question']).optional(),
+    /** `closed` with `kept`: the tile stays, closed, to be restarted (006 FR-025). */
+    kept: z.boolean().optional(),
     /** Sent when the agent gives a report (« ◆ Décider » reads its questions). */
     lastReport: z
       .object({

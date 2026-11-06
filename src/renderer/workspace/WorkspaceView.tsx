@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MAX_AGENTS, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
 import type { OrchestratorAction } from '../../shared/orchestrator';
+import { agentRows } from '../../shared/agents-view';
 import { deriveTodos } from '../../shared/todo';
 import { Toolbar, type WorkspaceViewMode } from '../app/Toolbar';
 import { FocusView, type FocusTab } from '../focus/FocusView';
@@ -25,7 +26,7 @@ import type { ReviewSendKind } from '../store/app-store';
 import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
-import { TodoColumn } from '../todo/TodoColumn';
+import { AgentsColumn } from '../agents/AgentsColumn';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { EmptyWorkspace } from './EmptyWorkspace';
 
@@ -189,6 +190,7 @@ export function WorkspaceView({
     Object.fromEntries(pending.map((id) => [id, review?.files?.[id] ?? 0])),
     usageThresholds && { states: usage, thresholds: usageThresholds, now },
   );
+  const agentsView = agentRows(workspace, todos, cliName, now);
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
@@ -366,7 +368,7 @@ export function WorkspaceView({
   // The À faire column and its button appear with the first agent (FR-006).
   const toolbar = (
     <Toolbar
-      todoCount={todos.filter((todo) => todo.kind !== 'info').length}
+      todoCount={agentsView.pendingCount}
       showTodo={hasAgents}
       todoOpen={todoOpen}
       onToggleTodo={() => {
@@ -589,7 +591,8 @@ export function WorkspaceView({
             }}
           />
         ) : (
-          hasAgents && todoOpen && <TodoColumn todos={todos} agents={agents} {...reviewActions} />
+          hasAgents &&
+          todoOpen && <AgentsColumn view={agentsView} onOpen={openTerminal} {...reviewActions} />
         )}
       </div>
     </>

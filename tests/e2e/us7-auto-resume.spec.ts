@@ -96,7 +96,7 @@ test('resumes a rate-limited agent at the reset time, unless cancelled', async (
     await expect(tile(n)).toHaveAttribute('data-state', 'error');
     await expect(tile(n)).toContainText(`reprise auto à ${time}`);
   }
-  const column = page.getByRole('complementary', { name: 'À faire' });
+  const column = page.getByRole('complementary', { name: 'Agents' });
   await expect(column.getByText(`reprise auto à ${time}`)).toHaveCount(2);
 
   // « Annuler » on agent 2: no resume any more, the manual actions stay.

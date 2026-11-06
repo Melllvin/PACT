@@ -62,6 +62,8 @@ const agent = (role: Role | null = null): Agent => ({
   review: { seen: {}, comments: [] },
   role,
   effort: null,
+  launchedBy: null,
+  closedWhileWorking: false,
 });
 
 const useAgent = (role: Role | null = null) =>

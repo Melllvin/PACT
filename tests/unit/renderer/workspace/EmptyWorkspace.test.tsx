@@ -47,8 +47,8 @@ describe('empty workspace (1b)', () => {
 
   it('has no À faire column nor button before the first agent (FR-006)', () => {
     render(<WorkspaceView workspace={workspace()} onAddAgents={vi.fn()} />);
-    expect(screen.queryByRole('complementary', { name: 'À faire' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /À faire/ })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Agents' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Agents \d/ })).toBeNull();
   });
 
   it('keeps Comparer and Revue visible but greyed out (FR-006)', () => {

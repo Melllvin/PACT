@@ -1,0 +1,9 @@
+{
+  "echo": true,
+  "permission": "rm fichier.txt",
+  "permissionOn": "DEMANDE",
+  "mcp": [
+    { "tool": "launch_agent", "arguments": { "cli": "Faux CLI", "branch": "{{prompt.0}}" } },
+    { "tool": "launch_agent", "arguments": { "cli": "Faux CLI", "branch": "{{prompt.1}}" } }
+  ]
+}

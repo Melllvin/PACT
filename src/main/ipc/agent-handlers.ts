@@ -14,7 +14,7 @@ type Dependencies = {
     launch(request: LaunchRequest): Promise<Agent[]>;
     answer(id: string, answer: 'allow' | 'deny', always: boolean): Promise<void>;
     resume(id: string): Promise<void>;
-    restart(id: string): Promise<void>;
+    restart(id: string, options?: { resumeWork?: boolean }): Promise<void>;
     close(id: string, options: { removeWorktree: boolean }): Promise<void>;
     log(id: string): string;
     cancelAutoResume(id: string): Promise<void>;
@@ -52,7 +52,8 @@ export function createAgentServices({
     'agent:answer': ({ agentId, answer, always }: IpcInput<'agent:answer'>) =>
       agents.answer(agentId, answer, always ?? false),
     'agent:resume': ({ agentId }: IpcInput<'agent:resume'>) => agents.resume(agentId),
-    'agent:restart': ({ agentId }: IpcInput<'agent:restart'>) => agents.restart(agentId),
+    'agent:restart': ({ agentId, resumeWork }: IpcInput<'agent:restart'>) =>
+      resumeWork === undefined ? agents.restart(agentId) : agents.restart(agentId, { resumeWork }),
     'agent:close': ({ agentId, removeWorktree }: IpcInput<'agent:close'>) =>
       agents.close(agentId, { removeWorktree }),
     'agent:log': ({ agentId }: IpcInput<'agent:log'>) => agents.log(agentId),

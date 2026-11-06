@@ -1,0 +1,13 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "launch_agent",
+      "arguments": { "cli": "Faux CLI", "branch": "{{prompt.0}}", "prompt": "{{prompt.2}}" }
+    },
+    {
+      "tool": "launch_agent",
+      "arguments": { "cli": "Faux CLI", "branch": "{{prompt.1}}", "prompt": "{{prompt.2}}" }
+    }
+  ]
+}

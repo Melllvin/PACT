@@ -54,7 +54,7 @@ test('opens a repository, goes back to its tab, clones another and restores both
     'true',
   );
   await expect(page.getByRole('button', { name: /Ajouter des agents/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /À faire/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Agents \d/ })).toHaveCount(0);
 
   // Scenarios 3 and 4: « + » opens the home tab; reopening switches to the existing tab.
   await page.getByRole('button', { name: 'Nouvel onglet' }).click();
