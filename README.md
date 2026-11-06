@@ -172,8 +172,8 @@ Specifications live in `specs/` (the security review is in
 
 ## Publishing a release
 
-1. Set the version in `package.json` (`npm version 1.0.1 --no-git-tag-version`), merge it into
-   `main`, then tag it: `git tag v1.0.1 && git push origin v1.0.1`.
+1. Set the version in `package.json` (`npm version 0.6.0 --no-git-tag-version`), merge it into
+   `main`, then tag it: `git tag v0.6.0 && git push origin v0.6.0`.
 2. That is all. The tag runs `.github/workflows/release.yml`, which refuses a tag that is not
    `v` + the version of `package.json` or whose commit is not on `main`, builds the universal macOS `.dmg` and the Windows
    installers on their own runners, adds them to a draft release named after the tag, and
