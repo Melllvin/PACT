@@ -1,13 +1,23 @@
 import { appendFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CodexRollout,
   findRollout,
   ROLLOUT_INTERVAL_MS,
 } from '../../../src/main/usage/codex-rollout';
 import type { UsageSample } from '../../../src/main/usage/sample';
+
+// `stat` can be told to lie once, to play what Windows does while Codex is appending.
+const realStat = vi.hoisted(() => ({
+  fn: undefined as undefined | ((p: string) => Promise<unknown>),
+}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  realStat.fn = actual.stat;
+  return { ...actual, stat: vi.fn(actual.stat) };
+});
 
 // 005 T009 — the rollout of a Codex session, found by its id under CODEX_HOME and followed, read
 // only (R2).
@@ -90,6 +100,32 @@ describe('CodexRollout', () => {
     expect(samples).toHaveLength(2);
     expect((await stat(file)).mode).toBe(before);
     expect(await readdir(join(home, 'sessions', '2026', '11', '03'))).toHaveLength(1);
+  });
+
+  it('sends nothing again when stat shows an intermediate size of an append (Windows)', async () => {
+    const samples: UsageSample[] = [];
+    const file = await session('2026-11-03', 'abc');
+    await appendFile(file, count(12));
+    rollout = new CodexRollout({
+      codexHome: home,
+      sessionId: 'abc',
+      onSample: (s) => samples.push(s),
+      intervalMs: 20,
+    });
+    rollout.start();
+    await until(() => samples.length === 1);
+
+    // Codex appends a line; stat sees the file mid-write (a size no whole line ends at), then whole.
+    const { stat: mocked } = await import('node:fs/promises');
+    vi.mocked(mocked).mockImplementationOnce((async (path: string) => {
+      const real = (await realStat.fn?.(path)) as { size: number };
+      return { ...real, size: real.size + 17 };
+    }) as never);
+    await appendFile(file, count(40));
+    await until(() => samples.length === 2);
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(samples.map((s) => s.windows?.[0]?.usedPercent)).toEqual([12, 40]);
   });
 
   it('reads at most every 10 s by default', () => {
