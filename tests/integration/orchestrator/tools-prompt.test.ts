@@ -1,5 +1,8 @@
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { callTool, createHarness, type Harness } from './harness';
+import { callTool, createHarness, git, type Harness } from './harness';
 
 // 003 T017 — list_agents and send_prompt (FR-008, FR-009, FR-011, contracts/mcp-tools.md).
 
@@ -152,5 +155,132 @@ describe('send_prompt to an agent in error', () => {
     expect(isError).toBe(true);
     expect(text).toContain('est en erreur : l’utilisateur doit le reprendre.');
     expect(h.typed.some((t) => t.agentId === dead)).toBe(false);
+  });
+});
+
+// 007 T020 — an instruction goes through the journal, never through the prompt (FR-015, FR-024,
+// SC-004, R11). The harness must wire the wake as the app does, so that a pointer reaches the agent.
+const INSTRUCTION = 'Ligne un\nLigne deux\n\n  Ligne quatre avec <balise> et `code`';
+
+const instructions = () => h.journal().filter((m) => m.kind === 'instruction');
+const quiet = () => new Promise((r) => setTimeout(r, 600));
+
+describe('send_prompt records an instruction (007 R11, FR-015, FR-024)', () => {
+  it('Given a multi-line text, When the orchestrator sends it, Then one action instruction is recorded, whole and identical', async () => {
+    const { isError, json } = await tool('send_prompt', { agent: 'Faux CLI 2', text: INSTRUCTION });
+    expect(isError).toBe(false);
+    // The answer keeps its format.
+    expect(json).toMatchObject({ queued: true });
+    expect(typeof (json as { position: unknown }).position).toBe('number');
+    const [message, ...others] = instructions();
+    expect(others).toEqual([]);
+    expect(message).toMatchObject({
+      from: lead,
+      to: second,
+      type: 'action',
+      kind: 'instruction',
+      text: INSTRUCTION,
+      unreadBy: [second],
+    });
+  });
+
+  it('Given that instruction, When the agent reads it by id, Then the text is given back identical, without any wrapping', async () => {
+    await tool('send_prompt', { agent: 'Faux CLI 2', text: INSTRUCTION });
+    const id = instructions()[0]?.id ?? '';
+    const { isError, json } = await tool('get_events', { id });
+    expect(isError).toBe(false);
+    const { event } = json as { event: { id: string; kind: string; text: string } };
+    expect(event).toMatchObject({ id, kind: 'instruction' });
+    expect(event.text).toBe(INSTRUCTION);
+    expect(event.text).not.toMatch(/pasted_content|\x1b\[200~/);
+  });
+
+  it('Given an instruction, When PACT wakes the agent, Then none of its text reaches the terminal of the agent as a prompt', async () => {
+    await tool('send_prompt', { agent: 'Faux CLI 2', text: INSTRUCTION });
+    await quiet();
+    expect(h.typed.filter((t) => t.origin === 'orchestrator')).toEqual([]);
+    const history = h.pty.history(second);
+    // The fake CLI replays what it reads by `get_events` or in the file, which is its own business:
+    // what PACT typed is a pointer, and the pointer holds no word of the text.
+    expect(history).not.toContain('Ligne un\nLigne deux');
+    expect(history).not.toContain('\x1b[200~');
+  });
+
+  it('Given an instruction asked at once for two agents, When both are read, Then each one has its own message', async () => {
+    await tool('send_prompt', { agent: 'Faux CLI 2', text: 'Pour deux' });
+    await tool('send_prompt', { agent: 'Faux CLI 3', text: 'Pour trois' });
+    expect(instructions().map((m) => [m.to, m.text])).toEqual([
+      [second, 'Pour deux'],
+      [third, 'Pour trois'],
+    ]);
+  });
+
+  it('Given a text over 8000 characters, When it is sent, Then it is refused and nothing is recorded', async () => {
+    const { isError } = await tool('send_prompt', { agent: 'Faux CLI 2', text: 'x'.repeat(8001) });
+    expect(isError).toBe(true);
+    expect(instructions()).toEqual([]);
+  });
+
+  it('Given an agent in error, When a prompt is sent, Then it is refused and nothing is recorded', async () => {
+    const [dead = ''] = (await h.launch([h.draft()], 'crash-exit-1')).map((a) => a.id);
+    h.pty.write(dead, 'Plante\r');
+    await h.waitForState(dead, 'error');
+    const { isError } = await tool('send_prompt', { agent: dead, text: 'Reprends' });
+    expect(isError).toBe(true);
+    expect(instructions()).toEqual([]);
+  });
+});
+
+describe('launch_agent with a prompt records an instruction (007 R11)', () => {
+  it('Given a multi-line prompt, When the agent is launched, Then its first message is an instruction, whole', async () => {
+    const { isError, json } = await tool('launch_agent', {
+      cli: 'Faux CLI',
+      branch: 'feat/consigne',
+      prompt: INSTRUCTION,
+    });
+    expect(isError).toBe(false);
+    const launched = (json as { agent: { id: string } }).agent.id;
+    const [message, ...others] = instructions();
+    expect(others).toEqual([]);
+    expect(message).toMatchObject({
+      from: lead,
+      to: launched,
+      kind: 'instruction',
+      text: INSTRUCTION,
+    });
+    await quiet();
+    expect(h.typed.filter((t) => t.origin === 'orchestrator')).toEqual([]);
+    expect(h.pty.history(launched)).not.toContain('Ligne un\nLigne deux');
+  });
+});
+
+describe('an agent without MCP reads .pact/events.md (007 R11)', () => {
+  const eventsFile = (id: string) => join(h.current(id)?.worktreePath ?? '', '.pact', 'events.md');
+
+  it('Given an agent without role, When an instruction is sent, Then .pact/events.md holds the whole text and git ignores it', async () => {
+    expect(h.current(second)?.role).toBeNull();
+    await tool('send_prompt', { agent: 'Faux CLI 2', text: INSTRUCTION });
+    // The wake groups for 5 s: the file is written with the pointer.
+    await h.waitFor(() => existsSync(eventsFile(second)), 'no .pact/events.md', second, 20_000);
+    const content = await readFile(eventsFile(second), 'utf8');
+    expect(content).toContain(INSTRUCTION);
+    const worktree = h.current(second)?.worktreePath ?? '';
+    expect(git(worktree, 'status', '--porcelain', '--untracked-files=all')).not.toContain(
+      'events.md',
+    );
+    expect(git(worktree, 'check-ignore', '.pact/events.md')).toContain('events.md');
+  });
+
+  it('Given an agent without role, When the file is written, Then the unread are counted as read: get_events has nothing new for it', async () => {
+    await tool('send_prompt', { agent: 'Faux CLI 2', text: INSTRUCTION });
+    await h.waitFor(() => existsSync(eventsFile(second)), 'no .pact/events.md', second, 20_000);
+    expect(instructions()[0]?.unreadBy).toEqual([]);
+  });
+
+  it('Given an agent of a role, When an instruction is sent, Then it has MCP and no .pact/events.md is written for it', async () => {
+    const [dev = ''] = (await h.launch([h.draft({ role: 'dev' })], 'echo-prompt')).map((a) => a.id);
+    await tool('send_prompt', { agent: dev, text: INSTRUCTION });
+    await h.waitFor(() => h.pty.history(dev).includes('Reçu'), 'never woken', dev, 20_000);
+    expect(existsSync(eventsFile(dev))).toBe(false);
   });
 });

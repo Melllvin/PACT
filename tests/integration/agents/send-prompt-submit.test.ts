@@ -235,3 +235,113 @@ describe('a prompt sent to an agent is submitted (fix-send-prompt)', { timeout: 
     expect(undelivered(agent.id)).toBe(0);
   });
 });
+
+// 007 T019 — the guard on the prompt (R5, R6): PACT never types into a prompt that holds something,
+// whatever the origin of the text, and a pointer typed but never submitted is not typed twice.
+//
+// API fixed for the dev:
+//   - `PromptOrigin` gains 'wake' (the pointer of the wake), counted like the others by
+//     `undeliveredPrompts(id, 'wake')` and `waitingPrompts(id, 'wake')`;
+//   - `AgentManager.typed(id, data)` follows the draft (agent-state.ts `applyTyped`), and the prompts
+//     held are released when the draft becomes empty (erased) and the agent is ready, or at the next
+//     ready state; `prompt-submitted` empties the draft;
+//   - a pointer given up after two Enters marks the draft `stuck`: the next wake sends Enter alone.
+const send = (id: string, text: string, origin: string) =>
+  manager.sendPrompt(id, text, origin as never);
+const undeliveredFor = (id: string, origin: string) =>
+  (
+    manager as unknown as { undeliveredPrompts(id: string, origin: string): number }
+  ).undeliveredPrompts(id, origin);
+
+describe('PACT does not write into a prompt that holds something (007 FR-014, SC-003)', () => {
+  it.each(['review', 'orchestrator', 'wake', 'resume'])(
+    'Given a draft typed by the user, When a prompt of origin « %s » is sent, Then nothing is written until the user empties the prompt',
+    async (origin) => {
+      const agent = await setup({ strict: false, scenario: 'echo-prompt' });
+      manager.typed(agent.id, 'abc');
+      await send(agent.id, 'Retenu', origin);
+      await sleep(DELAY * 4);
+      expect(writes).toEqual([]);
+      expect(pty.history(agent.id)).not.toContain('Reçu : Retenu');
+      manager.typed(agent.id, '\x7f\x7f\x7f');
+      await waitFor(() => pty.history(agent.id).includes('Reçu : Retenu'), 'never released');
+      expect(texts()).toEqual(['Retenu']);
+    },
+  );
+
+  it('Given a pasted draft (unknown content), When a prompt is sent, Then nothing is written, even after erasing', async () => {
+    const agent = await setup({ strict: false, scenario: 'echo-prompt' });
+    manager.typed(agent.id, '\x1b[200~collé\x1b[201~');
+    await send(agent.id, 'Retenu', 'orchestrator');
+    manager.typed(agent.id, '\x7f\x7f\x7f\x7f\x7f');
+    await sleep(DELAY * 4);
+    expect(writes).toEqual([]);
+  });
+
+  it('Given a held prompt, When the user submits his draft, Then the draft is played first and the held prompt comes after it, whole', async () => {
+    const agent = await setup({ strict: false, scenario: 'echo-prompt' });
+    manager.typed(agent.id, 'abc');
+    await send(agent.id, 'Retenu', 'review');
+    await sleep(DELAY * 2);
+    expect(writes).toEqual([]);
+    pty.write(agent.id, 'go\r');
+    await waitFor(() => pty.history(agent.id).includes('Reçu : Retenu'), 'never released', 15_000);
+    const history = pty.history(agent.id);
+    expect(history.indexOf('Reçu : go')).toBeGreaterThanOrEqual(0);
+    expect(history.indexOf('Reçu : go')).toBeLessThan(history.indexOf('Reçu : Retenu'));
+    expect(history).not.toContain('goRetenu');
+  });
+
+  it('Given keys typed while the agent awaits an answer, When it has been answered, Then they do not count as a draft', async () => {
+    const agent = await setup({ strict: false, scenario: 'ask-then-echo' });
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitFor(() => current(agent.id)?.state === 'awaiting-answer', 'no question');
+    manager.typed(agent.id, 'oui');
+    await manager.answer(agent.id, 'allow');
+    await waitFor(() => current(agent.id)?.state === 'done', 'never done');
+    writes.length = 0;
+    await send(agent.id, 'Après', 'orchestrator');
+    await waitFor(() => texts().includes('Après'), 'held by keys that answered a question');
+  });
+});
+
+describe('a pointer typed but never submitted (007 R6)', () => {
+  it('Given a wake pointer whose two Enters are lost, When the next wake comes, Then only Enter is sent: no second pointer is typed', async () => {
+    const agent = await setup({ strict: false, scenario: 'echo-prompt' });
+    dropEnters = 2;
+    await send(agent.id, '1 événement, lis get_events', 'wake');
+    await waitFor(() => undeliveredFor(agent.id, 'wake') === 1, 'not given up', 5_000);
+    writes.length = 0;
+    dropEnters = 0;
+
+    await send(agent.id, '2 événements, lis get_events', 'wake');
+    await waitFor(
+      () => pty.history(agent.id).includes('Reçu : 1 événement, lis get_events'),
+      'the first pointer was not submitted',
+    );
+    expect(texts()).toEqual([]);
+    expect(enters()).toBeGreaterThanOrEqual(1);
+    expect(pty.history(agent.id)).not.toContain('2 événements, lis get_events');
+  });
+
+  it('Given a stuck pointer, When another origin sends a prompt, Then it is held: the prompt is not empty', async () => {
+    const agent = await setup({ strict: false, scenario: 'echo-prompt' });
+    dropEnters = 2;
+    await send(agent.id, '1 événement, lis get_events', 'wake');
+    await waitFor(() => undeliveredFor(agent.id, 'wake') === 1, 'not given up', 5_000);
+    writes.length = 0;
+    await send(agent.id, 'Commentaire de revue', 'review');
+    await sleep(DELAY * 4);
+    expect(texts()).toEqual([]);
+  });
+
+  it('Given a pointer submitted in time, When the next wake comes, Then its text is typed normally', async () => {
+    const agent = await setup({ strict: false, scenario: 'echo-prompt', timeoutMs: 3_000 });
+    await send(agent.id, '1 événement, lis get_events', 'wake');
+    await waitFor(() => current(agent.id)?.state === 'done', 'first pointer never played');
+    writes.length = 0;
+    await send(agent.id, '2 événements, lis get_events', 'wake');
+    await waitFor(() => texts().includes('2 événements, lis get_events'), 'second never typed');
+    expect(undeliveredFor(agent.id, 'wake')).toBe(0);
+  });
+});
