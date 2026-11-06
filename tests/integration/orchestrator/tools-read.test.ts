@@ -194,7 +194,8 @@ describe('get_events (contracts/mcp-tools.md)', () => {
       about: worker,
       type: 'action',
       kind: 'report',
-      state: 'done',
+      // data-model.md: `state` is the agent’s state at the time of the event; the worker played no turn.
+      state: 'awaiting-prompt',
     });
     expect(typeof events[0]?.id).toBe('string');
     expect(typeof events[0]?.at).toBe('string');

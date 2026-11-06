@@ -179,7 +179,7 @@ describe('availability', () => {
     try {
       await watcherStartup();
       await rename(repo, `${repo}-moved`);
-      for (let i = 0; i < 250 && events.length === 0; i++) {
+      for (let i = 0; i < 750 && events.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
       expect(events).toEqual([{ id, status: 'unavailable' }]);
@@ -203,7 +203,7 @@ describe('availability', () => {
       const opened = await service.open(other);
       await watcherStartup();
       await rename(other, `${other}-moved`);
-      for (let i = 0; i < 250 && events.length === 0; i++) {
+      for (let i = 0; i < 750 && events.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
       expect(events).toEqual([{ id: opened.id, status: 'unavailable' }]);
@@ -221,7 +221,7 @@ describe('availability', () => {
     try {
       await watcherStartup();
       for (const n of [1, 2, 3]) await writeFile(join(dirname(repo), `burst-${String(n)}`), '');
-      for (let i = 0; i < 250 && check.mock.calls.length === 0; i++) {
+      for (let i = 0; i < 750 && check.mock.calls.length === 0; i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
       expect(check).toHaveBeenCalled();

@@ -107,6 +107,7 @@ export class CodexRollout {
   private timer: ReturnType<typeof setInterval> | undefined;
   private file: string | null = null;
   private size = -1;
+  private last = '';
   private reading = false;
   private stopped = false;
 
@@ -146,7 +147,12 @@ export class CodexRollout {
       if (size === this.size) return;
       this.size = size;
       const sample = lastRolloutSample(await readFile(this.file, 'utf8'));
-      if (sample && !this.stopped) this.options.onSample(sample);
+      // An append seen half-way (stat of Windows) reads the same sample again: send it once.
+      const key = JSON.stringify(sample);
+      if (sample && !this.stopped && key !== this.last) {
+        this.last = key;
+        this.options.onSample(sample);
+      }
     } catch {
       // The file may be rotated or locked for a moment: the next read tries again.
     } finally {
