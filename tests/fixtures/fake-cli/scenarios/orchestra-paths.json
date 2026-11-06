@@ -13,6 +13,6 @@
       "tool": "request_integration",
       "arguments": { "agent": "Faux CLI 2", "message": "feat: données à jour" }
     },
-    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 90 } }
+    { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 60 } }
   ]
 }

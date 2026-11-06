@@ -233,13 +233,17 @@ export class ExchangeService {
 
   /**
    * Picks the unread of the reader inside the update, which is synchronous: two readers cannot
-   * take the same event. `guard` lets a wait refuse once it has ended.
+   * take the same event. `taken` runs in that same step, so a wait answers at once and never loses
+   * what it marked read to a slow write of the file; `guard` lets a wait refuse once it has ended.
    */
   private async take(
     workspaceId: string,
     readerId: string,
     agentIds: readonly string[] | undefined,
-    guard: () => boolean = () => true,
+    {
+      guard = () => true,
+      taken,
+    }: { guard?: () => boolean; taken?: (result: ReadResult) => void } = {},
   ): Promise<ReadResult | null> {
     if (!this.options.workspaces.get(workspaceId)) return null;
     let result: ReadResult | null = null;
@@ -253,6 +257,7 @@ export class ExchangeService {
       const picked = unread.slice(-MAX_EVENTS);
       result = { events: picked.map(summaryOf), remaining: unread.length - picked.length };
       if (picked.length === 0) return ws;
+      taken?.(result);
       const ids = new Set(picked.map((m) => m.id));
       return {
         ...ws,
@@ -271,11 +276,12 @@ export class ExchangeService {
   }
 
   private async attempt(waiting: Waiting): Promise<void> {
-    const active = () => this.waits.get(waiting.readerId) === waiting;
-    const result = await this.take(waiting.workspaceId, waiting.readerId, waiting.agentIds, active);
-    if (result && result.events.length > 0 && active()) {
-      this.end(waiting.readerId, { ...result, timedOut: false });
-    }
+    await this.take(waiting.workspaceId, waiting.readerId, waiting.agentIds, {
+      guard: () => this.waits.get(waiting.readerId) === waiting,
+      taken: (result) => {
+        this.end(waiting.readerId, { ...result, timedOut: false });
+      },
+    });
   }
 
   private end(readerId: string, result: WaitResult) {
