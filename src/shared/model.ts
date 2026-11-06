@@ -100,6 +100,16 @@ export const agentSchema = z.object({
   /** 004 R2 — `null`: the CLI's own. */
   effort: effortSchema.nullable().default(null),
   /**
+   * 006 R4 — id (uuid) of the orchestrator that launched it; `null`: launched by the user. Defaulted
+   * so that older workspace files load without a migration. Set once, at launch; never changed after.
+   */
+  launchedBy: z.string().nullable().default(null),
+  /**
+   * 006 FR-026 — the agent was at work (`WORKING_STATES`) when it was closed with its orchestrator:
+   * « Reprendre le travail » gives it a resume prompt. Defaulted to false so that older files load.
+   */
+  closedWhileWorking: z.boolean().default(false),
+  /**
    * The last hand-off report of the agent, with or without a loop: « ◆ Décider » reads it. Cleared
    * when the agent works again; absent in workspace files saved before.
    */

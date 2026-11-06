@@ -54,7 +54,7 @@ test('integrates what the orchestrator asks for once the user confirms it', asyn
 
   await typeIn(page, lead, 'Faux CLI 2|Écris la fonction');
   await expect(lead).toContainText('MCP request_integration :');
-  const column = page.getByRole('complementary', { name: 'À faire' });
+  const column = page.getByRole('complementary', { name: 'Agents' });
   const request = column
     .getByRole('listitem')
     .filter({ hasText: '◎ Intégrer Faux CLI 2 → main ?' });

@@ -78,6 +78,8 @@ const agent = (id: string, worktreePath: string, state: AgentState = 'done'): Ag
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  launchedBy: null,
+  closedWhileWorking: false,
   effort: null,
 });
 

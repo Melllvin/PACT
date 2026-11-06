@@ -7,7 +7,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { answerFolderPickers, launchApp, type LaunchedApp } from './helpers/launch-app';
 
-// US4 end to end with the fake CLI: the À faire column sorted, answering from it, and the
+// US4 end to end with the fake CLI: the Agents column sorted, answering from it, and the
 // ◆ then ✕ on the tab of a workspace left in the background (T083).
 const gitEnv = {
   ...process.env,
@@ -87,13 +87,14 @@ test('handles the requests of the agents from the À faire column', async () => 
   // Two agents ask: two « ◆ Répondre » before the « Donner une consigne » (US4 scenario 1).
   await typeIn(page, tile(1), 'Supprime le fichier');
   await typeIn(page, tile(2), 'Supprime le fichier');
-  const column = page.getByRole('complementary', { name: 'À faire' });
-  const items = column.getByRole('listitem');
+  const column = page.getByRole('complementary', { name: 'Agents' });
+  // 006: one row per agent; the two that ask come first, then the one that waits for a prompt.
+  const items = column.getByRole('list', { name: 'Agents du workspace' }).getByRole('listitem');
   await expect(items).toHaveCount(3);
   await expect(items.nth(0)).toContainText('◆ Répondre');
   await expect(items.nth(1)).toContainText('◆ Répondre');
-  await expect(items.nth(2)).toHaveText('Donner une consigne · Faux CLI · tapez dans le terminal');
-  await expect(page.getByRole('button', { name: /À faire/ })).toContainText('3');
+  await expect(items.nth(2)).toContainText('Donner une consigne');
+  await expect(page.getByRole('button', { name: /^Agents \d/ })).toContainText('3');
 
   // Answered from the column: gone from the tile too, in under a second (scenario 2).
   await items.nth(0).getByRole('button', { name: '✓ Autoriser' }).click();

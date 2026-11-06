@@ -134,7 +134,7 @@ test('shows a question of any of 6 agents in À faire in under 2 s (SC-003)', as
   test.setTimeout(120_000);
   const { page, tile } = await launchSix('ask-permission');
   const answers = page
-    .getByRole('complementary', { name: 'À faire' })
+    .getByRole('complementary', { name: 'Agents' })
     .getByRole('listitem')
     .filter({ hasText: '◆ Répondre' });
 

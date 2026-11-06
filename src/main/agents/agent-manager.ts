@@ -6,11 +6,13 @@ import { draftRole, IpcFailure, type AgentDraft, type IpcEvent } from '../../sha
 import { freeColors, freePositions } from '../../shared/launch-draft';
 import {
   MAX_AGENTS,
+  WORKING_STATES,
   type Agent,
   type CliDefinition,
   type ScheduledResume,
   type Workspace,
 } from '../../shared/model';
+import { agentsLaunchedBy } from '../../shared/agents-view';
 import { profilesOf } from '../../shared/roles';
 import type { GitService } from '../git/git-service';
 import { allocatePort, isPortInUse as defaultIsPortInUse } from '../ports/port-allocator';
@@ -121,7 +123,7 @@ type Options = {
 };
 
 /** Who asked for a prompt: the review (002) or the orchestrator of the workspace (003 R4). */
-export type PromptOrigin = 'review' | 'orchestrator';
+export type PromptOrigin = 'review' | 'orchestrator' | 'resume';
 
 type QueuedPrompt = { text: string; origin: PromptOrigin };
 
@@ -139,6 +141,8 @@ export type LaunchRequest = {
   workspaceId: string;
   agents: AgentDraft[];
   counters: Workspace['quickLaunchCounters'];
+  /** 006 R4 — the orchestrator that asks for the launch; absent: the user. */
+  launchedBy?: string;
 };
 
 type Running = {
@@ -162,6 +166,10 @@ const PASTE_END = '\x1b[201~';
 /** What the terminal sends for Shift+Enter (see xterm-factory). */
 const LINE_BREAK = '\x1b\r';
 const isReady = (state: Agent['state']) => state === 'awaiting-prompt' || state === 'done';
+
+/** 006 FR-026 — typed to an agent that was at work when it was closed, once it is ready. */
+export const RESUME_PROMPT =
+  'PACT a relancé cette session après sa fermeture. Reprends le travail là où tu t’étais arrêté.';
 
 const RESTORED_MESSAGE = 'PACT a redémarré : agent à reprendre.';
 const UNAVAILABLE_MESSAGE = 'Dossier du workspace introuvable : agent arrêté.';
@@ -379,11 +387,36 @@ export class AgentManager {
 
   /** « Relancer »: a new session. The initial prompt is not typed again: an agent that has one has
    * already begun, and the queued prompts (review, orchestrator) stay delivered in order. */
-  async restart(id: string): Promise<void> {
-    const { workspace, agent } = this.inError(id);
+  async restart(id: string, options?: { resumeWork?: boolean }): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    if (agent.state === 'closed') {
+      await this.restartClosed(workspace, agent, options?.resumeWork === true);
+      return;
+    }
+    this.inError(id);
     this.resumes.forget(id);
     await this.stop(id);
     await this.startAgain(workspace, agent, null);
+  }
+
+  /**
+   * 006 FR-025, FR-026 — a closed agent starts again on its worktree, in its session; a closed
+   * orchestrator brings back the agents closed with it, itself first. With `resumeWork`, those that
+   * were at work get the resume prompt: queued, it is typed once the agent is ready.
+   */
+  private async restartClosed(workspace: Workspace, agent: Agent, resumeWork: boolean) {
+    const group = [
+      agent,
+      ...(agent.role === 'orchestrator'
+        ? agentsLaunchedBy(workspace, agent.id).filter((a) => a.state === 'closed')
+        : []),
+    ];
+    for (const closed of group) {
+      await this.startAgain(workspace, closed, closed.sessionId);
+      if (resumeWork && closed.closedWhileWorking) {
+        await this.sendPrompt(closed.id, RESUME_PROMPT, 'resume');
+      }
+    }
   }
 
   /**
@@ -458,9 +491,26 @@ export class AgentManager {
     return this.pty.history(id);
   }
 
-  /** Stops the agent and forgets it; its worktree and branch go only when asked (FR-037). */
+  /**
+   * Stops the agent and forgets it; its worktree and branch go only when asked (FR-037). The
+   * orchestrator closes the agents it launched with it (006 FR-023): the choice applies to all, and
+   * kept, they stay in the workspace, closed, to be restarted with it (FR-025). Any other agent
+   * closes alone (FR-024).
+   */
   async close(id: string, { removeWorktree }: { removeWorktree: boolean }): Promise<void> {
     const { workspace, agent } = this.find(id);
+    const launched = agent.role === 'orchestrator' ? agentsLaunchedBy(workspace, id) : [];
+    // Closing what is closed already forgets it: that is how a closed tile goes.
+    const keep = !removeWorktree && agent.state !== 'closed';
+    for (const member of launched) await this.closeOne(member.id, removeWorktree, keep);
+    // An orchestrator that launched nobody closes as any agent does.
+    await this.closeOne(id, removeWorktree, keep && launched.length > 0);
+  }
+
+  private async closeOne(id: string, removeWorktree: boolean, keepTile: boolean) {
+    const { workspace, agent } = this.find(id);
+    // Closed with its orchestrator before: it stays as it is.
+    if (keepTile && agent.state === 'closed') return;
     this.resumes.forget(id);
     this.prompts.delete(id);
     this.undelivered.delete(id);
@@ -475,6 +525,26 @@ export class AgentManager {
         branch: current || agent.branch,
         force: true,
       });
+    }
+    if (keepTile) {
+      const closedWhileWorking = WORKING_STATES.includes(agent.state);
+      await this.workspaces.update(workspace.id, (ws) => ({
+        ...ws,
+        agents: ws.agents.map((a) =>
+          a.id === id
+            ? {
+                ...a,
+                state: 'closed' as const,
+                closedWhileWorking,
+                lastError: null,
+                scheduledResume: null,
+                awaiting: undefined,
+              }
+            : a,
+        ),
+      }));
+      this.emit({ ...agent, state: 'closed' }, true);
+      return;
     }
     await this.workspaces.update(workspace.id, (ws) => ({
       ...ws,
@@ -540,6 +610,7 @@ export class AgentManager {
       sessionId,
       lastError: null,
       scheduledResume: null,
+      closedWhileWorking: false,
     } as const;
     await this.workspaces.update(workspace.id, (ws) => ({
       ...ws,
@@ -610,7 +681,7 @@ export class AgentManager {
     this.onBranch({ agentId: id, branch });
   }
 
-  private async launchNow({ workspaceId, agents: drafts, counters }: LaunchRequest) {
+  private async launchNow({ workspaceId, agents: drafts, counters, launchedBy }: LaunchRequest) {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');
     const clis = drafts.map((draft) => this.installedCli(draft.cliId));
@@ -677,6 +748,8 @@ export class AgentManager {
         review: { seen: {}, comments: [] },
         role,
         effort: draft.effort ?? fromProfile?.effort ?? null,
+        launchedBy: launchedBy ?? null,
+        closedWhileWorking: false,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
@@ -710,8 +783,16 @@ export class AgentManager {
 
   /** The whole batch is checked before any worktree exists (FR-011 scenario 5). */
   private async validate(workspace: Workspace, drafts: AgentDraft[]) {
-    if (workspace.agents.length + drafts.length > MAX_AGENTS) {
+    // A closed agent keeps its worktree and its place (006): it is no live agent, it does not count.
+    const live = workspace.agents.filter((agent) => agent.state !== 'closed').length;
+    if (live + drafts.length > MAX_AGENTS) {
       throw new IpcFailure('LIMIT', `Six agents au plus par projet.`);
+    }
+    if (freePositions(workspace.agents, drafts.length).length < drafts.length) {
+      throw new IpcFailure(
+        'LIMIT',
+        'Des agents fermés gardent leur place : relancez-les ou supprimez-les.',
+      );
     }
     const branches = new Set(workspace.agents.map((agent) => agent.branch));
     for (const { branch } of drafts) {
@@ -1010,7 +1091,7 @@ export class AgentManager {
           return;
         }
         this.submissions.delete(id);
-        const counts = this.undelivered.get(id) ?? { review: 0, orchestrator: 0 };
+        const counts = this.undelivered.get(id) ?? { review: 0, orchestrator: 0, resume: 0 };
         this.undelivered.set(id, { ...counts, [origin]: counts[origin] + 1 });
         this.promptTyped.delete(id);
         this.flushPrompt(id);
@@ -1025,13 +1106,14 @@ export class AgentManager {
     this.submissions.delete(id);
   }
 
-  private emit({ id, state, lastError, scheduledResume, awaiting }: Agent) {
+  private emit({ id, state, lastError, scheduledResume, awaiting }: Agent, kept = false) {
     this.onState({
       agentId: id,
       state,
       lastError,
       scheduledResume,
       ...(awaiting ? { awaiting } : {}),
+      ...(kept ? { kept } : {}),
     });
   }
 }

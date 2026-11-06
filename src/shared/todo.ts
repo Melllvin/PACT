@@ -2,7 +2,7 @@ import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './m
 import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
-const ORDER: TodoKind[] = [
+export const ORDER: TodoKind[] = [
   'answer',
   'decide',
   'integration-request',
@@ -182,7 +182,10 @@ function usageTodos(
     now,
   }: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
 ): TodoItem[] {
-  const clis = new Set(workspace.agents.map((agent) => agent.cliId));
+  // A closed agent uses no quota: its CLI alone raises no alert (006).
+  const clis = new Set(
+    workspace.agents.filter((agent) => agent.state !== 'closed').map((agent) => agent.cliId),
+  );
   return states.flatMap((state): TodoItem[] => {
     const alert = clis.has(state.cliId) ? usageAlert(state, thresholds, now) : null;
     if (!alert) return [];

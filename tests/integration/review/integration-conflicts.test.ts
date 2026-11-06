@@ -86,6 +86,8 @@ const agent = (): Agent => ({
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  launchedBy: null,
+  closedWhileWorking: false,
   effort: null,
 });
 

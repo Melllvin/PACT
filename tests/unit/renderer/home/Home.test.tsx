@@ -29,6 +29,8 @@ const agent = (n: number, state: Agent['state'], color: Agent['color']): Agent =
   scheduledResume: null,
   review: { seen: {}, comments: [] },
   role: null,
+  launchedBy: null,
+  closedWhileWorking: false,
   effort: null,
 });
 

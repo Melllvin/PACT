@@ -5,11 +5,12 @@ import { DetectedClis } from '../home/DetectedClis';
 import { Home } from '../home/Home';
 import { PermissionsDialog } from '../launch/PermissionsDialog';
 import { LaunchPanel } from '../launch/LaunchPanel';
+import { agentsLaunchedBy } from '../../shared/agents-view';
 import type { Agent } from '../../shared/model';
 import type { AppStore } from '../store/app-store';
 import type { PreviewApi } from '../focus/PreviewTab';
 import { idleReviewStore, type ReviewStore } from '../store/review-store';
-import { CloseAgentDialog } from '../tiles/CloseAgentDialog';
+import { CloseAgentDialog, RestartGroupDialog } from '../tiles/CloseAgentDialog';
 import { LogPanel } from '../tiles/LogPanel';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { AmbientCanvas } from '../effects/AmbientCanvas';
@@ -76,6 +77,16 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
   const agentName = (agent: Agent) =>
     `${state.clis.find((c) => c.id === agent.cliId)?.name ?? agent.cliId} ${String(agent.position)}`;
   const closing = state.closingAgentId === null ? undefined : agentsById.get(state.closingAgentId);
+  const restarting =
+    state.restartingAgentId === null ? undefined : agentsById.get(state.restartingAgentId);
+  // 006: what closes, or restarts, with an orchestrator are the agents it launched.
+  const groupOf = (agent: Agent, only?: Agent['state']) =>
+    (agent.role === 'orchestrator'
+      ? agentsLaunchedBy({ agents: [...agentsById.values()] }, agent.id)
+      : []
+    )
+      .filter((member) => only === undefined || member.state === only)
+      .map((member) => ({ id: member.id, name: agentName(member) }));
   const logged = state.log === null ? undefined : agentsById.get(state.log.agentId);
 
   return (
@@ -143,7 +154,11 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               actions={{
                 onAnswer: (id, answer, always) => void state.answerAgent(id, answer, always),
                 onResume: (id) => void state.resumeAgent(id),
-                onRestart: (id) => void state.restartAgent(id),
+                onRestart: (id) => {
+                  // 006: a closed tile asks « Reprendre le travail » first (FR-026).
+                  if (agentsById.get(id)?.state === 'closed') state.requestRestartAgent(id);
+                  else void state.restartAgent(id);
+                },
                 onLog: (id) => void state.openLog(id),
                 onCancelAutoResume: (id) => void state.cancelAutoResume(id),
                 onClose: state.requestCloseAgent,
@@ -215,8 +230,17 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
             <CloseAgentDialog
               name={agentName(closing)}
               branch={closing.branch}
+              subAgents={groupOf(closing)}
               onConfirm={(removeWorktree) => void state.closeAgent(removeWorktree)}
               onCancel={state.cancelCloseAgent}
+            />
+          )}
+          {restarting && (
+            <RestartGroupDialog
+              name={agentName(restarting)}
+              subAgents={groupOf(restarting, 'closed')}
+              onConfirm={(resumeWork) => void state.confirmRestartAgent(resumeWork)}
+              onCancel={state.cancelRestartAgent}
             />
           )}
           {state.log && logged && (
