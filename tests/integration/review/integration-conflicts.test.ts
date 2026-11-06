@@ -1,14 +1,29 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitService } from '../../../src/main/git/git-service';
 import { IntegrationService } from '../../../src/main/review/integration-service';
 import type { IpcFailure } from '../../../src/shared/ipc';
 import type { Agent, Workspace } from '../../../src/shared/model';
 import type { Integration } from '../../../src/shared/review';
+
+// While `reads` is an array, every readFile is kept in it: a test can then wait for the read of the
+// edited copy itself instead of sleeping for as long as it hopes the file watcher takes.
+const spy = vi.hoisted(() => ({ reads: null as Promise<unknown>[] | null }));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    readFile: ((...args: Parameters<typeof actual.readFile>) => {
+      const read = actual.readFile(...args);
+      spy.reads?.push(read);
+      return read;
+    }) as typeof actual.readFile,
+  };
+});
 
 // 002 T044 — resolving a conflict with main, in PACT or by the agent (research R6, FR-027…FR-031).
 
@@ -324,9 +339,16 @@ describe('IntegrationService and the external editor (FR-029)', () => {
     await service.openInEditor(id, 'a.txt');
     const copy = join(userData, 'conflicts', id, 'a.txt');
     const seen = states.length;
+    const text = await readFile(copy, 'utf8');
     // Saved as it is: a new modification time, the same text.
-    await writeFile(copy, await readFile(copy, 'utf8'));
-    await new Promise((r) => setTimeout(r, 300));
+    const reads: Promise<unknown>[] = [];
+    spy.reads = reads;
+    await writeFile(copy, text);
+    await utimes(copy, new Date(), new Date(Date.now() + 5000));
+    await waitFor(() => reads.length > 0, 'the saved copy was not read');
+    await reads[0]; // the service reads it, compares it, and stops there
+    spy.reads = null;
+    await new Promise((r) => setTimeout(r, 0));
     expect(states).toHaveLength(seen);
     expect(states.at(-1)?.conflicts[0]?.resolved).toBe(false);
   });
