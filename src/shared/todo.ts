@@ -81,6 +81,22 @@ function agentTodo(
   return null;
 }
 
+/** 007 FR-014, FR-016 — « ◆ Réveil en attente »: a wake held back and said, on the row of its agent. */
+function wakeHeld(agent: Agent, cli: string): TodoItem | null {
+  if (!agent.wakeNotice || agent.state === 'closed') return null;
+  const input = agent.wakeNotice === 'input';
+  return {
+    id: `${agent.id}:wake-held`,
+    agentId: agent.id,
+    kind: 'wake-held',
+    title: `◆ Réveil en attente · ${who(agent, cli)} · ${input ? 'saisie en cours' : 'plafond atteint'}`,
+    actions: input ? ['open-terminal'] : [],
+    detail: input
+      ? 'Videz l’invite ou envoyez votre saisie.'
+      : '20 réveils cette heure : les événements restent lisibles.',
+  };
+}
+
 /** `/bin/zsh` → zsh, `C:\…\pwsh.exe` → pwsh. */
 const shellName = (path: string) => path.replace(/^.*[\\/]/, '').replace(/\.exe$/i, '');
 
@@ -165,7 +181,8 @@ export function deriveTodos(
   }));
   const limits = usage ? usageTodos(workspace, names, usage) : [];
   // Array.prototype.sort is stable: the tile order holds within a kind.
-  return [...todos, ...requests, ...publish, ...loops, ...limits, ...terminals].sort(
+  const held = agents.flatMap((agent) => wakeHeld(agent, names(agent.cliId)) ?? []);
+  return [...todos, ...held, ...requests, ...publish, ...loops, ...limits, ...terminals].sort(
     (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind),
   );
 }

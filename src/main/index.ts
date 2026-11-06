@@ -30,6 +30,7 @@ import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
 import { IntegrationRequests } from './orchestrator/integration-requests';
 import { ExchangeService } from './orchestrator/exchange-service';
+import { WakeService, eventsFile } from './orchestrator/wake-service';
 import { OrchestratorService } from './orchestrator/orchestrator-service';
 import type { McpTool } from './orchestrator/mcp';
 import { createOrchestratorTools } from './orchestrator/tools';
@@ -199,6 +200,10 @@ void app.whenReady().then(async () => {
     hooks,
     orchestrator,
     usage,
+    onWakeNotice: (agentId, notice) => {
+      emit('agent:wakeNotice', { agentId, notice });
+      syncTodos();
+    },
     onPromptTyped: (agentId, origin) => {
       if (origin === 'orchestrator') emit('orchestrator:prompted', { agentId });
     },
@@ -239,6 +244,21 @@ void app.whenReady().then(async () => {
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
     ...(clock ? { clock } : {}),
+  });
+  // 007 — the wake: an action event for an agent becomes one pointer line, typed once it is ready.
+  const wake = new WakeService({
+    workspaces,
+    type: (agentId, line) => agents.sendPrompt(agentId, line, 'wake'),
+    inputBusy: (agentId) => agents.promptState(agentId) === 'busy',
+    setNotice: (agentId, notice) => {
+      void agents.setWakeNotice(agentId, notice).catch(() => undefined);
+    },
+    usageCritical: (cliId) => usage.critical(cliId),
+    file: eventsFile({ exchanges, agents }),
+  });
+  agents.setWake(wake);
+  exchanges.onRecorded((workspaceId, message) => {
+    wake.notify(workspaceId, message);
   });
   // 002 US1 — the review of each agent's changes.
   const review = new ReviewService({
@@ -438,6 +458,7 @@ void app.whenReady().then(async () => {
   };
 
   for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
+  wake.restore();
   workspaces.startWatching(AVAILABILITY_CHECK_MS);
   origin.start();
   const clones = new CloneJobs({
@@ -528,6 +549,7 @@ void app.whenReady().then(async () => {
       tests.dispose();
       integration.dispose();
       orchestrator.dispose();
+      wake.dispose();
       usage.stop();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();

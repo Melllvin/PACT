@@ -16,7 +16,7 @@ import type { AgentManager } from '../agents/agent-manager';
 import type { PermissionService } from '../agents/permission-service';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
-import type { EventSummary, WaitResult } from './exchange-service';
+import type { EventSummary, ExchangeService, WaitResult } from './exchange-service';
 import type { IntegrationRequests } from './integration-requests';
 import type { IssueService } from './issues';
 import type { LoopService } from './loop-service';
@@ -37,6 +37,7 @@ export type ToolDependencies = {
     | 'launch'
     | 'close'
     | 'launchWarnings'
+    | 'rememberInitialPrompt'
   >;
   /** The CLIs PACT knows, installed or not (US4). */
   clis: () => CliDefinition[];
@@ -51,7 +52,7 @@ export type ToolDependencies = {
   /** The next events of these agents (all when undefined), or none after `timeoutMs` (R5). */
   wait: (agentIds: readonly string[] | undefined, timeoutMs: number) => Promise<WaitResult>;
   /** 007 — the shared reading of the journal, for `get_events`. */
-  exchanges?: ExchangeReads;
+  exchanges?: ExchangeReads & Pick<ExchangeService, 'record'>;
   /** The integrations waiting for the user (US3). */
   requests: Pick<IntegrationRequests, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
@@ -205,6 +206,31 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     }
   };
 
+  /**
+   * 007 R11, FR-015, FR-024 — a consigne is an `instruction` of the journal: the agent is woken by a
+   * pointer and reads the text itself, whole. Nothing of it is typed. Gives the number of events
+   * already waiting for the agent.
+   */
+  const instruct = async (agent: Agent, text: string): Promise<number> => {
+    const journal = deps.exchanges;
+    if (!journal) return deps.agents.sendPrompt(agent.id, text, 'orchestrator');
+    const workspaceId = journal.workspaceOf(agent.id);
+    if (workspaceId === undefined) throw new Refusal(`${nameOf(agent)} n’est plus ouvert.`);
+    const waiting = deps.workspaces
+      .list()
+      .flatMap((ws) => (ws.id === workspaceId ? ws.exchanges.messages : []))
+      .filter((m) => m.type === 'action' && m.unreadBy.includes(agent.id)).length;
+    await journal.record(workspaceId, {
+      from: orchestratorId,
+      to: agent.id,
+      kind: 'instruction',
+      text,
+      unreadBy: [agent.id],
+    });
+    await deps.agents.rememberInitialPrompt(agent.id, text);
+    return waiting;
+  };
+
   const entryOf = (name: string, args: unknown, result: ToolResult): ActionEntry => {
     const text = result.content[0]?.text ?? '';
     const refusedHere = result.isError === true;
@@ -266,9 +292,9 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             // 007 R8 — the whole questions of a blocked report, the journal keeping 2000 characters.
             questions: agent.lastReport?.questions ?? [],
             toReview: toReview.has(agent.id),
-            waitingPrompts: deps.agents.waitingPrompts(agent.id, 'orchestrator'),
+            waitingPrompts: deps.agents.waitingPrompts(agent.id, 'wake'),
             // Typed but never submitted, even after a second Enter.
-            undeliveredPrompts: deps.agents.undeliveredPrompts(agent.id, 'orchestrator'),
+            undeliveredPrompts: deps.agents.undeliveredPrompts(agent.id, 'wake'),
           }));
         const lines = agents.map(
           (a) => `${a.name}${a.role ? ` [${a.role}]` : ''} (${a.cli}, ${a.branch}) : ${a.state}`,
@@ -278,7 +304,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'send_prompt',
-      'Envoie une consigne à un agent. Elle est envoyée dans son invite dès qu’il est prêt, jamais pendant qu’il travaille ou attend une réponse de l’utilisateur, puis validée par Entrée ; rien ne garantit qu’il l’ait prise : list_agents indique (undeliveredPrompts) les consignes non soumises. Donne une consigne précise et autonome.',
+      'Envoie une consigne à un agent. Elle est inscrite au journal ; PACT réveille l’agent par une ligne d’invite (« N événements, lis get_events ») quand il est prêt, jamais pendant qu’il travaille, et il lit la consigne entière par get_events. Rien ne garantit qu’il ait pris le pointeur : list_agents indique (undeliveredPrompts) ceux qui n’ont pas été soumis. Donne une consigne précise et autonome.',
       { agent: agentArgument, text: { type: 'string', minLength: 1, maxLength: MAX_PROMPT } },
       ['agent', 'text'],
       async (args) => {
@@ -290,11 +316,11 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         if (agent.state === 'error') {
           throw new Refusal(`${nameOf(agent)} est en erreur : l’utilisateur doit le reprendre.`);
         }
-        const position = await deps.agents.sendPrompt(agent.id, text, 'orchestrator');
+        const position = await instruct(agent, text);
         return reply(
           position === 0
-            ? `Consigne envoyée à ${nameOf(agent)} ; list_agents dira si elle n’a pas été soumise.`
-            : `Consigne en file pour ${nameOf(agent)}, en position ${String(position)}.`,
+            ? `Consigne enregistrée pour ${nameOf(agent)} ; il la lira à son réveil (get_events). list_agents dira si le pointeur n’a pas été soumis.`
+            : `Consigne enregistrée pour ${nameOf(agent)} derrière ${String(position)} événement(s) non lu(s).`,
           { queued: true, position },
         );
       },
@@ -441,7 +467,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
           }),
         );
         if (!agent) throw new Refusal('Aucun agent lancé.');
-        if (prompt !== null) await deps.agents.sendPrompt(agent.id, prompt, 'orchestrator');
+        if (prompt !== null) await instruct(agent, prompt);
         const name = nameOf(agent);
         const warning = deps.usageWarning?.(cli.id) ?? null;
         const launched = `${name} lancé sur ${agent.branch}, port ${String(agent.port)}.`;

@@ -353,6 +353,14 @@ export function createAppStore(api: PactApi) {
               orchestratorPrompted: followCorrection(get().orchestratorPrompted, event),
             });
           }),
+          api.on('agent:wakeNotice', ({ agentId, notice }) => {
+            set({
+              workspaces: updateAgent(get().workspaces, agentId, (a) => ({
+                ...a,
+                wakeNotice: notice,
+              })),
+            });
+          }),
           api.on('orchestrator:prompted', ({ agentId }) => {
             set({ orchestratorPrompted: { ...get().orchestratorPrompted, [agentId]: 'queued' } });
           }),

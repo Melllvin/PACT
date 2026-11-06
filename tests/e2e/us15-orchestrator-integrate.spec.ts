@@ -53,7 +53,7 @@ test('integrates what the orchestrator asks for once the user confirms it', asyn
   await expect(worker).toHaveAttribute('data-state', 'awaiting-prompt');
 
   await typeIn(page, lead, 'Faux CLI 2|Écris la fonction');
-  await expect(lead).toContainText('MCP request_integration :');
+  await expect(lead).toContainText('MCP request_integration :', { timeout: 20_000 });
   const column = page.getByRole('complementary', { name: 'Agents' });
   const request = column
     .getByRole('listitem')

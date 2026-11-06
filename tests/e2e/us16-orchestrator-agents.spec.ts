@@ -48,8 +48,8 @@ test('launches an agent for the orchestrator, then closes it and keeps its workt
   await typeIn(page, lead, 'feat/lancé|Écris la fonction');
   // The agent is launched, does its turn and is closed in a few hundred milliseconds.
   await expect(lead).toContainText('MCP launch_agent : Faux CLI 2 lancé sur feat/lancé');
-  await expect(lead).toContainText('Faux CLI 2 a fini son tour.');
-  await expect(lead).toContainText('MCP close_agent : Faux CLI 2 fermé');
+  await expect(lead).toContainText('Faux CLI 2 a fini son tour.', { timeout: 20_000 });
+  await expect(lead).toContainText('MCP close_agent : Faux CLI 2 fermé', { timeout: 20_000 });
   await expect(page.getByRole('article', { name: /^Faux CLI 2,/ })).toHaveCount(0);
   expect(git(repo, 'branch', '--list', 'feat/lancé')).toContain('feat/lancé');
   expect(git(repo, 'worktree', 'list')).toContain('[feat/lancé]');

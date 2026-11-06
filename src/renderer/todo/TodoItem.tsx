@@ -67,6 +67,7 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           <span>{hints.join(SEPARATOR)}</span>
         </span>
       )}
+      {todo.detail !== undefined && <span className="text-[12px] text-dim">{todo.detail}</span>}
       <TodoActions todo={todo} agent={agent} {...handlers} />
     </li>
   );

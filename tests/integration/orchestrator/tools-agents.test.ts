@@ -73,14 +73,18 @@ describe('launch_agent', () => {
     });
   });
 
-  it('types the first prompt as the orchestrator’s', async () => {
+  it('wakes the agent for the first prompt of the orchestrator, by a pointer', async () => {
     const { json } = await tool('launch_agent', { cli: 'Faux CLI', prompt: 'Écris la fonction' });
     const { id } = (json as Launched).agent;
+    // 007 R11: the prompt is an instruction of the journal; a pointer is typed, never its text.
+    await h.waitForState(id, 'awaiting-prompt');
+    h.wake?.deliver(id);
     await h.waitFor(
-      () => h.typed.some((t) => t.agentId === id && t.origin === 'orchestrator'),
-      'the prompt was not typed',
+      () => h.typed.some((t) => t.agentId === id && t.origin === 'wake'),
+      'the pointer was not typed',
       id,
     );
+    expect(h.typed.some((t) => t.agentId === id && t.origin === 'orchestrator')).toBe(false);
   });
 
   it('is refused without a permission level chosen in PACT', async () => {

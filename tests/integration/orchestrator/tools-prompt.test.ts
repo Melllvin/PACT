@@ -89,6 +89,8 @@ describe('list_agents undeliveredPrompts (fix-send-prompt)', () => {
       if (data !== '\r') write(id, data);
     });
     await tool('send_prompt', { agent: second, text: 'Perdue' });
+    // 007: the instruction is read by the pointer; the window of 5 s is skipped.
+    h.wake?.deliver(second);
     const start = Date.now();
     let listed: { agents: { undeliveredPrompts: number; waitingPrompts: number }[] } = {
       agents: [],
@@ -107,26 +109,32 @@ describe('send_prompt', () => {
     const { isError, json } = await tool('send_prompt', { agent: 'faux cli 2', text: 'Tâche A' });
     expect(isError).toBe(false);
     expect(json).toEqual({ queued: true, position: 0 });
-    await h.waitFor(() => h.pty.history(second).includes('Reçu : Tâche A'), 'not typed', second);
-    expect(h.typed).toContainEqual({ agentId: second, origin: 'orchestrator' });
+    // 007 R11: the text is not typed; the wake types a pointer, and the agent reads the text.
+    h.wake?.deliver(second);
+    await h.waitFor(() => h.pty.history(second).includes('Tâche A'), 'not read', second);
+    expect(h.typed).toContainEqual({ agentId: second, origin: 'wake' });
+    expect(h.typed.some((t) => t.origin === 'orchestrator')).toBe(false);
+    expect(h.pty.history(second)).toContain('1 événement, lis .pact/events.md');
   });
 
   it('designates an agent by its id too', async () => {
     await tool('send_prompt', { agent: third, text: 'Tâche B' });
-    await h.waitFor(() => h.pty.history(third).includes('Reçu : Tâche B'), 'not typed', third);
+    h.wake?.deliver(third);
+    await h.waitFor(() => h.pty.history(third).includes('Tâche B'), 'not read', third);
   });
 
   it('waits for an agent to answer its question, then types it', async () => {
     h.pty.write(second, 'Supprime le fichier\r');
     await h.waitForState(second, 'awaiting-answer');
     const { json } = await tool('send_prompt', { agent: 'Faux CLI 2', text: 'Ensuite' });
-    expect(json).toEqual({ queued: true, position: 1 });
-    const listed = (await tool('list_agents')).json as { agents: { waitingPrompts: number }[] };
-    expect(listed.agents[0]?.waitingPrompts).toBe(1);
+    expect(json).toEqual({ queued: true, position: 0 });
+    // 007: the instruction waits in the journal; the wake is held while the agent waits for an answer.
+    h.wake?.deliver(second);
     await new Promise((r) => setTimeout(r, 200));
     expect(h.pty.history(second)).not.toContain('Ensuite');
+    expect(h.typed.some((t) => t.agentId === second && t.origin === 'wake')).toBe(false);
     await h.manager.answer(second, 'allow');
-    await h.waitFor(() => h.pty.history(second).includes('Reçu : Ensuite'), 'not typed', second);
+    await h.waitFor(() => h.pty.history(second).includes('Ensuite'), 'not read', second);
   });
 
   it('refuses itself, an unknown agent, an agent in error and an empty or too long text', async () => {
