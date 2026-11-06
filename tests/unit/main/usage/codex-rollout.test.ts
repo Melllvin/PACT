@@ -202,7 +202,8 @@ describe('CodexRollout, driven call by call', () => {
     const gate = deferred<{ size: number }>();
     const stat = vi.fn(() => gate.promise);
     fsHooks.stat = stat;
-    fsHooks.readFile = () => Promise.resolve(sample(10));
+    let percent = 10;
+    fsHooks.readFile = () => Promise.resolve(sample(percent++));
     const samples: UsageSample[] = [];
     const watcher = make(samples);
 
@@ -248,6 +249,24 @@ describe('CodexRollout, driven call by call', () => {
     expect(samples).toHaveLength(1);
   });
 
+  it('ignores a sample identical to the previous one, whatever size stat shows', async () => {
+    wire();
+    let size = 3;
+    fsHooks.stat = () => Promise.resolve({ size });
+    fsHooks.readFile = () => Promise.resolve(sample(30));
+    const samples: UsageSample[] = [];
+    const watcher = make(samples);
+    await watcher.read();
+    size = 4; // an append seen half-way: the size moved, the last whole line did not
+    await watcher.read();
+    expect(samples).toHaveLength(1);
+
+    size = 5;
+    fsHooks.readFile = () => Promise.resolve(sample(31));
+    await watcher.read();
+    expect(samples).toHaveLength(2);
+  });
+
   it('gives nothing when the rollout has no token_count, and keeps the size', async () => {
     wire();
     fsHooks.stat = () => Promise.resolve({ size: 2 });
@@ -286,7 +305,7 @@ describe('CodexRollout, driven call by call', () => {
     wire();
     let size = 1;
     fsHooks.stat = () => Promise.resolve({ size: size++ });
-    fsHooks.readFile = () => Promise.resolve(sample(50));
+    fsHooks.readFile = () => Promise.resolve(sample(50 + size));
     const samples: UsageSample[] = [];
     const watcher = make(samples);
 
@@ -307,7 +326,7 @@ describe('CodexRollout, driven call by call', () => {
     wire();
     let size = 1;
     fsHooks.stat = () => Promise.resolve({ size: size++ });
-    fsHooks.readFile = () => Promise.resolve(sample(60));
+    fsHooks.readFile = () => Promise.resolve(sample(60 + size));
     const samples: UsageSample[] = [];
     const watcher = make(samples, 50);
     watcher.start();
