@@ -30,6 +30,7 @@ const agent = (n: number, state: Agent['state'], color: Agent['color']): Agent =
   review: { seen: {}, comments: [] },
   role: null,
   launchedBy: null,
+  closedWhileWorking: false,
   effort: null,
 });
 

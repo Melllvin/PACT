@@ -75,6 +75,17 @@ export function TileActions({
       </span>
     );
   }
+  // 006 FR-025: closed with its orchestrator, the tile stays and can start again.
+  if (state === 'closed') {
+    return (
+      <span className={GROUP}>
+        <Button onClick={onLog}>Journal</Button>
+        <Button variant="primary" onClick={onRestart}>
+          Relancer
+        </Button>
+      </span>
+    );
+  }
   if (state === 'error') {
     return (
       <span className={GROUP}>
