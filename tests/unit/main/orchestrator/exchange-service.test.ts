@@ -47,7 +47,7 @@ const create = () =>
       },
     },
     onChange: (_workspaceId: string, exchanges: unknown) => changes.push(exchanges),
-  } as never);
+  });
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -320,7 +320,7 @@ describe('decide', () => {
           },
         ],
       },
-    } as Workspace;
+    };
     changes.length = 0;
   };
 

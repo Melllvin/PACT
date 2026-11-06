@@ -11,20 +11,17 @@ import {
   type Workspace,
 } from '../../shared/model';
 import { beyondCeiling, profilesOf } from '../../shared/roles';
-import {
-  ORCHESTRATOR_ACTION_TOOLS,
-  type OrchestratorAction,
-  type OrchestratorEvent,
-} from '../../shared/orchestrator';
+import { ORCHESTRATOR_ACTION_TOOLS, type OrchestratorAction } from '../../shared/orchestrator';
 import type { AgentManager } from '../agents/agent-manager';
 import type { PermissionService } from '../agents/permission-service';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
-import type { WaitResult } from './events';
+import type { EventSummary, WaitResult } from './exchange-service';
 import type { IntegrationRequests } from './integration-requests';
 import type { IssueService } from './issues';
 import type { LoopService } from './loop-service';
 import type { McpTool, ToolResult } from './mcp';
+import { createEventsTool, type ExchangeReads } from './agent-tools';
 
 // 003 contracts/mcp-tools.md — the tools of the pact MCP server, for one orchestrator. A refusal
 // is a result marked as an error with its reason (FR-022), never a protocol error.
@@ -33,7 +30,13 @@ export type ToolDependencies = {
   workspaces: { list(): Workspace[] };
   agents: Pick<
     AgentManager,
-    'sendPrompt' | 'waitingPrompts' | 'undeliveredPrompts' | 'questionOf' | 'launch' | 'close'
+    | 'sendPrompt'
+    | 'waitingPrompts'
+    | 'undeliveredPrompts'
+    | 'questionOf'
+    | 'launch'
+    | 'close'
+    | 'launchWarnings'
   >;
   /** The CLIs PACT knows, installed or not (US4). */
   clis: () => CliDefinition[];
@@ -47,6 +50,8 @@ export type ToolDependencies = {
   tests: Pick<TestRunner, 'run' | 'latest'>;
   /** The next events of these agents (all when undefined), or none after `timeoutMs` (R5). */
   wait: (agentIds: readonly string[] | undefined, timeoutMs: number) => Promise<WaitResult>;
+  /** 007 — the shared reading of the journal, for `get_events`. */
+  exchanges?: ExchangeReads;
   /** The integrations waiting for the user (US3). */
   requests: Pick<IntegrationRequests, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
@@ -64,10 +69,10 @@ export type ActionEntry = Omit<OrchestratorAction, 'id' | 'at'>;
 const ACTIONS: readonly string[] = ORCHESTRATOR_ACTION_TOOLS;
 const MAX_SUMMARY = 200;
 
-// Claude Code's HTTP MCP requests fail after 300 s without an answer (« timeout MCP »), whatever
-// MCP_TOOL_TIMEOUT says: a wait answers before, with `timedOut`, and the orchestrator waits again.
-const DEFAULT_WAIT_S = 240;
-const MAX_WAIT_S = 240;
+// 007 FR-019 — a wait answers within a minute, with `timedOut`, and the orchestrator waits again:
+// far below the 300 s after which Claude Code's HTTP MCP requests fail.
+const DEFAULT_WAIT_S = 60;
+const MAX_WAIT_S = 60;
 
 const MAX_PROMPT = 8000;
 const MAX_MESSAGE = 4000;
@@ -236,6 +241,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
   };
 
   return [
+    ...(deps.exchanges ? [createEventsTool(deps.exchanges, orchestratorId)] : []),
     tool(
       'list_agents',
       'Liste les autres agents du workspace : nom, CLI, branche, état, question en attente de l’utilisateur, changements à relire, consignes de toi en attente.',
@@ -257,6 +263,8 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             loop: loopOf(ws, agent.id),
             state: agent.state,
             question: agent.state === 'awaiting-answer' ? deps.agents.questionOf(agent.id) : null,
+            // 007 R8 — the whole questions of a blocked report, the journal keeping 2000 characters.
+            questions: agent.lastReport?.questions ?? [],
             toReview: toReview.has(agent.id),
             waitingPrompts: deps.agents.waitingPrompts(agent.id, 'orchestrator'),
             // Typed but never submitted, even after a second Enter.
@@ -437,7 +445,11 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const name = nameOf(agent);
         const warning = deps.usageWarning?.(cli.id) ?? null;
         const launched = `${name} lancé sur ${agent.branch}, port ${String(agent.port)}.`;
-        return reply(warning === null ? launched : `${launched} ${warning}.`, {
+        const warnings = [
+          ...deps.agents.launchWarnings(agent.id),
+          ...(warning === null ? [] : [`${warning}.`]),
+        ];
+        return reply([launched, ...warnings].join(' '), {
           agent: {
             id: agent.id,
             name,
@@ -465,7 +477,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'request_integration',
-      'Demande à l’utilisateur d’intégrer le travail d’un agent dans la branche principale, avec un message de commit. Rien n’est intégré sans sa confirmation ; l’issue arrive par wait_for_agents. Lis get_changes et les tests avant.',
+      'Demande à l’utilisateur d’intégrer le travail d’un agent dans la branche principale, avec un message de commit. Rien n’est intégré sans sa confirmation ; l’issue arrive dans tes événements (get_events). Lis get_changes et les tests avant.',
       {
         agent: agentArgument,
         message: { type: 'string', minLength: 1, maxLength: MAX_MESSAGE },
@@ -495,7 +507,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'wait_for_agents',
-      'Attend la fin de tour, une question, une erreur, une fermeture ou l’issue d’une intégration chez les agents donnés (tous par défaut), au plus timeoutSeconds. Préfère-le à des appels répétés de list_agents.',
+      'Attend la fin de tour, une question, une erreur, une fermeture ou l’issue d’une intégration chez les agents donnés (tous par défaut), 60 secondes au plus. Rend 20 événements au plus, résumés à 200 caractères : get_events({ id }) donne le texte entier, et remaining dit ce qui reste. Les agents te réveillent par un pointeur : tu n’as pas besoin d’attendre en boucle.',
       {
         agents: { type: 'array', items: agentArgument },
         timeoutSeconds: { type: 'integer', minimum: 1, maximum: MAX_WAIT_S },
@@ -513,16 +525,16 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         ) {
           throw new Refusal(`Délai de 1 à ${String(MAX_WAIT_S)} secondes attendu.`);
         }
-        const { events, timedOut, replaced } = await deps.wait(ids, seconds * 1000);
+        const { events, remaining, timedOut, replaced } = await deps.wait(ids, seconds * 1000);
         const names = new Map(workspace().agents.map((a) => [a.id, nameOf(a)]));
         const text = replaced
           ? 'Attente remplacée par une autre.'
           : timedOut
             ? 'Aucun changement.'
             : events
-                .map((event) => describe(event, names.get(event.agentId) ?? event.agentId))
+                .map((event) => describe(event, names.get(event.about ?? event.from) ?? event.from))
                 .join('\n');
-        return reply(text, { events, timedOut });
+        return reply(text, { events, remaining, timedOut });
       },
     ),
     tool(
@@ -568,7 +580,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'publish_issues',
-      'Demande à l’utilisateur de publier des issues prêtes sur le dépôt distant ; rien n’est publié avant sa confirmation. Le résultat arrive par wait_for_agents (événement publish).',
+      'Demande à l’utilisateur de publier des issues prêtes sur le dépôt distant ; rien n’est publié avant sa confirmation. Le résultat arrive dans tes événements (get_events, événement publish).',
       {
         ids: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 20 },
       },
@@ -631,7 +643,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
 }
 
 /** One line per event, for the orchestrator to read. */
-function describe(event: OrchestratorEvent, name: string): string {
+function describe(event: EventSummary, name: string): string {
   switch (event.kind) {
     case 'turn-finished':
       return `${name} a fini son tour.`;
@@ -645,13 +657,13 @@ function describe(event: OrchestratorEvent, name: string): string {
       return `${name} : intégration ${event.integration?.outcome ?? ''}. ${event.summary}`;
     case 'report':
       return `${name} a rendu son rapport : ${event.summary}`;
+    case 'question':
+      return `${name} pose une question : ${event.summary}`;
     case 'report-missing':
       return `${name} a fini son tour sans rapport.`;
-    case 'loop':
-      return `${name} : ${event.summary}`;
     case 'publish':
       return event.summary;
-    case 'mockup':
+    default:
       return `${name} : ${event.summary}`;
   }
 }

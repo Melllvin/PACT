@@ -2,7 +2,6 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IpcFailure } from '../../../src/shared/ipc';
-import type { OrchestratorEvent } from '../../../src/shared/orchestrator';
 import { callTool, createHarness, git, type Harness } from './harness';
 
 // 003 T030 — request_integration, then the user's confirmation or refusal, and the outcome the
@@ -43,9 +42,17 @@ const ask = async (message = 'feat: données à jour') => {
 };
 
 /** The integration events the orchestrator reads with wait_for_agents. */
+/** 007: an event of the journal, as `wait_for_agents` gives it. */
+type JournalEvent = {
+  kind: string;
+  about?: string;
+  summary: string;
+  integration?: { outcome: string; commit?: string; files?: string[] };
+};
+
 const heard = async () => {
   const { json } = await tool('wait_for_agents', { timeoutSeconds: 5 });
-  return (json as { events: OrchestratorEvent[] }).events.filter((e) => e.kind === 'integration');
+  return (json as { events: JournalEvent[] }).events.filter((e) => e.kind === 'integration');
 };
 
 describe('request_integration', () => {
@@ -99,8 +106,9 @@ describe('the user’s answer', () => {
     expect(git(h.repo, 'log', '-1', '--format=%s', 'main')).toBe('feat: relu');
     expect(requestsOf()).toEqual([]);
     const [event] = await heard();
+    // 007: the events come from the journal, where the agent concerned is `about`.
     expect(event).toMatchObject({
-      agentId: worker,
+      about: worker,
       integration: { outcome: 'integrated', commit: git(h.repo, 'rev-parse', 'main') },
     });
     // R6: the tile is closed, the worktree kept.
@@ -115,7 +123,7 @@ describe('the user’s answer', () => {
     expect(requestsOf()).toEqual([]);
     expect(git(h.repo, 'rev-parse', 'main')).toBe(main);
     expect(await heard()).toEqual([
-      expect.objectContaining({ agentId: worker, integration: { outcome: 'refused' } }),
+      expect.objectContaining({ about: worker, integration: { outcome: 'refused' } }),
     ]);
     await expect(h.requests.refuse({ requestId })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });

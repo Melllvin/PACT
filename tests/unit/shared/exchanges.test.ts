@@ -10,7 +10,7 @@ import {
   pointerText,
   typeOf,
 } from '../../../src/shared/exchanges';
-import { workspaceSchema, type Workspace } from '../../../src/shared/model';
+import { workspaceSchema } from '../../../src/shared/model';
 
 // 007 T003 — the shared rules of the exchanges: bounds, types, who may write to whom, the pointer
 // (data-model.md, contracts/mcp-tools.md, research R3, R10).
@@ -99,12 +99,12 @@ describe('exchangesSchema', () => {
       lastOpenedAt: '2026-11-06T10:00:00.000Z',
       status: 'available',
     };
-    const loaded = workspaceSchema.parse(old) as Workspace;
+    const loaded = workspaceSchema.parse(old);
     expect(loaded.exchanges).toEqual({ messages: [], escalations: [] });
     const kept = workspaceSchema.parse({
       ...old,
       exchanges: { messages: [message('report', 'Fait', { from: 'pact' })], escalations: [] },
-    }) as Workspace;
+    });
     expect(kept.exchanges.messages).toHaveLength(1);
   });
 });

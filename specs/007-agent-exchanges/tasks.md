@@ -13,7 +13,7 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Créer `007-agent-exchanges` depuis `origin/006-agents-view` (ou `origin/main` si 006 y est fusionnée) avec `specs/007-agent-exchanges/` et `.specify/feature.json`, puis lancer `npm ci`
+- [x] T001 Créer `007-agent-exchanges` depuis `origin/006-agents-view` (ou `origin/main` si 006 y est fusionnée) avec `specs/007-agent-exchanges/` et `.specify/feature.json`, puis lancer `npm ci`
 - [ ] T002 Étendre `tests/fixtures/fake-cli/fake-cli.mjs` (R16) : ligne reconnue comme pointeur → avec `PACT_AGENT_MCP_URL` ou `PACT_ORCHESTRATOR_URL`, appel de `get_events`, puis `get_events({ id })` sur la première `instruction`, et tour joué avec ce texte ; sans MCP, lecture de `.pact/events.md` ; champ `agentMcp` (outils d'un agent de rôle, imprime `MCP <tool> : <texte>`) ; champ `toolHook` (poste `{ type: 'post-tool' }`, imprime `Contexte : <additionalContext>`) ; une réponse `{ decision: 'block', reason }` à son signal de fin imprime `Prolongé : <reason>` et joue un tour de plus
 
 ---
@@ -34,14 +34,14 @@
 
 ### Implémentation
 
-- [ ] T010 Créer `src/shared/exchanges.ts` selon data-model (constantes, schémas, `typeOf`, `canSend`, `pointerText`, `isPointer`) ; ajouter `exchanges` à `workspaceSchema`, `wakeNotice` à `agentSchema`, `exchange-escalated` et `wake-held` à `TodoKind` dans `src/shared/model.ts` ; les insérer dans `ORDER` de `src/shared/todo.ts` ; ajouter les canaux à `src/shared/ipc.ts` ; étendre le schéma d'événement dans `src/shared/orchestrator.ts`
-- [ ] T011 Créer `src/main/orchestrator/exchange-service.ts` : `record`, `read`, `detail`, `wait`, `decide`, éviction, émission `workspace:exchanges`, listener `onRecorded`, `cancelWait`, retrait d'un agent fermé
-- [ ] T012 Dans `src/main/orchestrator/orchestrator-service.ts` : `push`, `notice` et `wait` passent par `ExchangeService` ; retirer `Session.events` et supprimer `src/main/orchestrator/events.ts`
-- [ ] T013 Dans `src/main/orchestrator/loop-service.ts` : `report` notifie aussi hors boucle, `reportNotice` choisit `question` ou `report` ; ajouter `message` aux deps ; retirer `outputTail` de `testRun`
-- [ ] T014 Dans `src/main/orchestrator/agent-tools.ts` et `src/main/orchestrator/tools.ts` : outil `get_events` pour tous ; `wait_for_agents` branché sur le journal, `DEFAULT_WAIT_S` et `MAX_WAIT_S` à 60 ; `describe` lit les nouveaux kinds ; `list_agents` rend `questions` ; descriptions de `request_integration` et `publish_issues` sans `wait_for_agents` comme suite normale ; `launch_agent` rend l'avertissement du `fetch`
-- [ ] T015 Dans `src/main/agents/agent-manager.ts` : garder le résultat de `within(fetchOrigin)` et exposer `launchWarnings(agentId)`, lu une fois (R13)
-- [ ] T016 Dans `src/main/agents/adapters/claude-code.ts` : `permissions()` autorise `PACT_TOOLS` dès que l'agent a l'accès MCP ; mettre à jour le commentaire de `MCP_TOOL_TIMEOUT_MS`, ici et dans `src/main/agents/adapters/codex.ts`
-- [ ] T017 Dans `src/main/ipc/orchestrator-handlers.ts`, `src/main/index.ts` et `src/renderer/store/app-store.ts` : handler `exchange:decide`, instanciation de `ExchangeService` passée à `tools`, `agentTools`, `LoopService` et aux handlers ; le store suit `workspace:exchanges`
+- [x] T010 Créer `src/shared/exchanges.ts` selon data-model (constantes, schémas, `typeOf`, `canSend`, `pointerText`, `isPointer`) ; ajouter `exchanges` à `workspaceSchema`, `wakeNotice` à `agentSchema`, `exchange-escalated` et `wake-held` à `TodoKind` dans `src/shared/model.ts` ; les insérer dans `ORDER` de `src/shared/todo.ts` ; ajouter les canaux à `src/shared/ipc.ts` ; étendre le schéma d'événement dans `src/shared/orchestrator.ts`
+- [x] T011 Créer `src/main/orchestrator/exchange-service.ts` : `record`, `read`, `detail`, `wait`, `decide`, éviction, émission `workspace:exchanges`, listener `onRecorded`, `cancelWait`, retrait d'un agent fermé
+- [x] T012 Dans `src/main/orchestrator/orchestrator-service.ts` : `push`, `notice` et `wait` passent par `ExchangeService` ; retirer `Session.events` et supprimer `src/main/orchestrator/events.ts`
+- [x] T013 Dans `src/main/orchestrator/loop-service.ts` : `report` notifie aussi hors boucle, `reportNotice` choisit `question` ou `report` ; ajouter `message` aux deps ; retirer `outputTail` de `testRun`
+- [x] T014 Dans `src/main/orchestrator/agent-tools.ts` et `src/main/orchestrator/tools.ts` : outil `get_events` pour tous ; `wait_for_agents` branché sur le journal, `DEFAULT_WAIT_S` et `MAX_WAIT_S` à 60 ; `describe` lit les nouveaux kinds ; `list_agents` rend `questions` ; descriptions de `request_integration` et `publish_issues` sans `wait_for_agents` comme suite normale ; `launch_agent` rend l'avertissement du `fetch`
+- [x] T015 Dans `src/main/agents/agent-manager.ts` : garder le résultat de `within(fetchOrigin)` et exposer `launchWarnings(agentId)`, lu une fois (R13)
+- [x] T016 Dans `src/main/agents/adapters/claude-code.ts` : `permissions()` autorise `PACT_TOOLS` dès que l'agent a l'accès MCP ; mettre à jour le commentaire de `MCP_TOOL_TIMEOUT_MS`, ici et dans `src/main/agents/adapters/codex.ts`
+- [x] T017 Dans `src/main/ipc/orchestrator-handlers.ts`, `src/main/index.ts` et `src/renderer/store/app-store.ts` : handler `exchange:decide`, instanciation de `ExchangeService` passée à `tools`, `agentTools`, `LoopService` et aux handlers ; le store suit `workspace:exchanges`
 
 **Checkpoint** : `npm run check` et e2e verts, comportement du réveil inchangé ; PR « 007 Phase 1-2 ».
 

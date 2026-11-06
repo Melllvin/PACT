@@ -72,6 +72,7 @@ const base = (): Workspace => ({
   loops: [],
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
+  exchanges: { messages: [], escalations: [] },
   lastOpenedAt: '2026-11-03T00:00:00.000Z',
   status: 'available',
 });

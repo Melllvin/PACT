@@ -50,6 +50,7 @@ const atelier: Workspace = {
   loops: [],
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
+  exchanges: { messages: [], escalations: [] },
   lastOpenedAt: now.toISOString(),
   status: 'available',
 };

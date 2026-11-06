@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { roleProfileSchema, roleSchema, type CliDefinition } from '../../shared/model';
 import { profileWarnings, profilesOf } from '../../shared/roles';
 import type { AgentManager } from '../agents/agent-manager';
+import type { ExchangeService } from '../orchestrator/exchange-service';
 import type { IntegrationRequests } from '../orchestrator/integration-requests';
 import type { IssueService } from '../orchestrator/issues';
 import type { LoopService } from '../orchestrator/loop-service';
@@ -15,6 +16,8 @@ import type { WorkspaceService } from '../workspace/workspace-service';
 type Dependencies = {
   requests: Pick<IntegrationRequests, 'confirm' | 'refuse'>;
   orchestrator: Pick<OrchestratorService, 'actions'>;
+  /** 007 — the journal; absent in the suites that do not use it. */
+  exchanges?: Pick<ExchangeService, 'decide'>;
   agents: Pick<AgentManager, 'revokeOrchestrator'>;
   /** 004 — the role profiles. */
   workspaces: Pick<WorkspaceService, 'update' | 'list'>;
@@ -28,6 +31,7 @@ type Dependencies = {
 export function createOrchestratorServices({
   requests,
   orchestrator,
+  exchanges,
   agents,
   workspaces,
   clis,
@@ -51,6 +55,13 @@ export function createOrchestratorServices({
     'loop:decide': async ({ workspaceId, issueId, decision }: IpcInput<'loop:decide'>) => {
       if (!loops) return;
       await loops.decide(workspaceId, issueId, decision);
+    },
+    'exchange:decide': async ({
+      workspaceId,
+      escalationId,
+      decision,
+    }: IpcInput<'exchange:decide'>) => {
+      await exchanges?.decide(workspaceId, escalationId, decision);
     },
     'publishRequest:confirm': async ({ requestId }: IpcInput<'publishRequest:confirm'>) => {
       if (!issues) return { issues: [] };

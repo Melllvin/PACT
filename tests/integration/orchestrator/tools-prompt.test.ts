@@ -46,6 +46,8 @@ describe('list_agents', () => {
           loop: null,
           state: 'awaiting-prompt',
           question: null,
+          // 007 R8: the questions of a blocked report.
+          questions: [],
           toReview: false,
           waitingPrompts: 0,
           // fix-send-prompt: prompts typed but never submitted.
