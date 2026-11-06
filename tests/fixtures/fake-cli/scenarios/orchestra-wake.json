@@ -1,0 +1,41 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "send_prompt",
+      "arguments": { "agent": "{{prompt.0}}", "text": "Consigne ligne un\nConsigne ligne deux" }
+    }
+  ],
+  "agentMcp": [
+    {
+      "tool": "submit_report",
+      "arguments": {
+        "issue": "0001-wake",
+        "status": "done",
+        "summary": "{{prompt.0}}",
+        "files": [],
+        "checks": [{ "command": "npm test", "exitCode": 0 }]
+      }
+    },
+    {
+      "tool": "submit_report",
+      "arguments": {
+        "issue": "0001-wake",
+        "status": "done",
+        "summary": "{{prompt.1}}",
+        "files": [],
+        "checks": [{ "command": "npm test", "exitCode": 0 }]
+      }
+    },
+    {
+      "tool": "submit_report",
+      "arguments": {
+        "issue": "0001-wake",
+        "status": "done",
+        "summary": "{{prompt.2}}",
+        "files": [],
+        "checks": [{ "command": "npm test", "exitCode": 0 }]
+      }
+    }
+  ]
+}

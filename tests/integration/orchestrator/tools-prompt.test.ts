@@ -192,7 +192,8 @@ describe('send_prompt records an instruction (007 R11, FR-015, FR-024)', () => {
     const { event } = json as { event: { id: string; kind: string; text: string } };
     expect(event).toMatchObject({ id, kind: 'instruction' });
     expect(event.text).toBe(INSTRUCTION);
-    expect(event.text).not.toMatch(/pasted_content|\x1b\[200~/);
+    expect(event.text).not.toContain('pasted_content');
+    expect(event.text).not.toContain('[200~');
   });
 
   it('Given an instruction, When PACT wakes the agent, Then none of its text reaches the terminal of the agent as a prompt', async () => {
@@ -233,12 +234,13 @@ describe('send_prompt records an instruction (007 R11, FR-015, FR-024)', () => {
 
 describe('launch_agent with a prompt records an instruction (007 R11)', () => {
   it('Given a multi-line prompt, When the agent is launched, Then its first message is an instruction, whole', async () => {
-    const { isError, json } = await tool('launch_agent', {
+    await h.permissions.set({ level: 'ask-sensitive', autoResume: true, scope: 'global' });
+    const { isError, json, text } = await tool('launch_agent', {
       cli: 'Faux CLI',
       branch: 'feat/consigne',
       prompt: INSTRUCTION,
     });
-    expect(isError).toBe(false);
+    expect(isError, text).toBe(false);
     const launched = (json as { agent: { id: string } }).agent.id;
     const [message, ...others] = instructions();
     expect(others).toEqual([]);

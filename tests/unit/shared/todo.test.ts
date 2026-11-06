@@ -586,7 +586,7 @@ describe('wake-held (007)', () => {
         kind: 'wake-held',
         title: '◆ Réveil en attente · Claude Code 1 · saisie en cours',
         actions: ['open-terminal'],
-        detail: expect.stringMatching(/^Videz l['’]invite ou envoyez votre saisie\.$/),
+        detail: expect.stringMatching(/^Videz l['’]invite ou envoyez votre saisie\.$/) as string,
       },
     ]);
   });
