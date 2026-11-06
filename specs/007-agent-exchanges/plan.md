@@ -114,7 +114,7 @@ tests/
 | Suivi des frappes trop prudent : invite vide vue comme occupée | Signal à 2 min ; Entrée sur l'invite remet à zéro |
 | Une question trop longue tronquée au journal | `list_agents` rend `questions` en entier (R8) |
 | Migration e2e de `send_prompt` | Le faux CLI lit le pointeur, les scénarios gardent leur sens (R16) |
-| Agents de Codex en mode manuel : approbation des outils MCP | Vérifié par le contrat de l'adapter ; à défaut, le pointeur reste lisible et l'agent demande l'accord à l'utilisateur |
+| Agents de Codex en mode manuel : approbation des outils MCP, non vérifiable sans vrai CLI | Au pire, chaque `get_events` demande un accord à l'utilisateur ; rien n'est perdu |
 
 ## Complexity Tracking
 

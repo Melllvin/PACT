@@ -324,7 +324,7 @@ l'outil, puis le skill livré.
 - **FR-001**: PACT MUST donner à tout agent de rôle les outils `ask_orchestrator` et `get_events`. L'orchestrateur MUST pouvoir écrire à tous. Le testeur MUST ne recevoir de messages que de l'orchestrateur, et n'en
   envoyer qu'à lui, par `ask_orchestrator` ; son verdict structuré reste à part. Les autres agents de rôle MUST s'écrire par `send_message`, avec copie à l'orchestrateur. Sans orchestrateur dans le workspace, l'envoi MUST être
   refusé avec sa raison. Les consignes et événements émis par PACT lui-même (FR-021, 008, 009, 010) ne sont pas des messages d'agent.
-- **FR-002**: Un message MUST être typé `action` ou `info`, avoir un expéditeur, un destinataire, une heure, et tenir en 500 caractères.
+- **FR-002**: Un message MUST être typé `action` ou `info`, avoir un expéditeur, un destinataire, une heure. Écrit par un agent, il MUST tenir en 500 caractères ; une consigne de l'orchestrateur garde sa limite de 8000 caractères, et un événement de PACT est tronqué à 2000.
 - **FR-003**: `ask_orchestrator` et `send_message` MUST rendre la main aussitôt : aucune attente bloquante.
 - **FR-004**: Tout message entre agents MUST être copié à l'orchestrateur du workspace et inscrit au journal, et l'utilisateur MUST pouvoir lire ce journal dans PACT. Le
   journal MUST être gardé dans le workspace, 500 messages par workspace, et les événements non lus MUST repartir par un pointeur à la reprise.
