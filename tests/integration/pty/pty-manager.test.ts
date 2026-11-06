@@ -36,6 +36,9 @@ const diagnostics = (id: string) =>
     `output:\n${stripAnsi(output.get(id) ?? '')}`,
   ].join('\n');
 
+// The fake CLI prints "> "; a Windows terminal may hold or drop the trailing space, so match the ">" only.
+const PROMPT = '>';
+
 const waitFor = async (id: string, text: string, timeoutMs = 10_000) => {
   const start = Date.now();
   while (!stripAnsi(output.get(id) ?? '').includes(text)) {
@@ -96,7 +99,7 @@ describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
 
   it('forwards keystrokes and runs a full turn of the fake CLI', async () => {
     manager.start('agent', { file: process.execPath, args: [FAKE_CLI], env: env(), cwd: dir });
-    await waitFor('agent', '> ');
+    await waitFor('agent', PROMPT);
     manager.write('agent', 'Ajoute un test\r');
     await waitFor('agent', 'Terminé');
   });
@@ -108,7 +111,7 @@ describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
       env: env('ask-permission'),
       cwd: dir,
     });
-    await waitFor('ask', '> ');
+    await waitFor('ask', PROMPT);
     manager.write('ask', 'Nettoie\r');
     await waitFor('ask', '(allow/deny)');
     manager.write('ask', 'allow\r');
@@ -122,7 +125,7 @@ describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
       env: env('crash-exit-1'),
       cwd: dir,
     });
-    await waitFor('crash', '> ');
+    await waitFor('crash', PROMPT);
     manager.write('crash', 'go\r');
     expect(await waitForExit('crash')).toBe(1);
     expect(stripAnsi(manager.history('crash'))).toContain('Erreur simulée');
@@ -159,7 +162,7 @@ describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
 
   it('stops a running CLI', async () => {
     manager.start('long', { file: process.execPath, args: [FAKE_CLI], env: env(), cwd: dir });
-    await waitFor('long', '> ');
+    await waitFor('long', PROMPT);
     await manager.kill('long');
     expect(manager.has('long')).toBe(false);
     expect(exits.has('long')).toBe(true);
@@ -169,7 +172,7 @@ describe('PtyManager with a real pseudo-terminal', { timeout: 30_000 }, () => {
   // may already have given it to another process.
   it('kills no process late after stopping a CLI', { timeout: 20_000 }, async () => {
     manager.start('late', { file: process.execPath, args: [FAKE_CLI], env: env(), cwd: dir });
-    await waitFor('late', '> ');
+    await waitFor('late', PROMPT);
     const late: unknown[] = [];
     const kill = process.kill.bind(process);
     const stoppedAt = Date.now();
