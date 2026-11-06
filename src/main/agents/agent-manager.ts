@@ -25,13 +25,24 @@ import type {
   OrchestratorLaunch,
   ResolvedEnv,
 } from './adapters/types';
-import { applyExit, applySignal } from './agent-state';
+import type { WakeService } from '../orchestrator/wake-service';
+import {
+  applyExit,
+  applySignal,
+  applyTyped,
+  draftAfterSignal,
+  EMPTY_DRAFT,
+  isDraftEmpty,
+  markStuck,
+  type Draft,
+} from './agent-state';
 import { AutoResume, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
 import { TerminalText } from './terminal-text';
 import { accountOf, type UsageSource } from '../usage/usage-service';
+import { mkdir, writeFile } from 'node:fs/promises';
 import {
   ROLE_FILE,
   ROLE_FILE_PROMPT,
@@ -103,6 +114,8 @@ type Options = {
    * « working » (its hook goes through a network round trip) without leaving a lost Enter long.
    */
   submitTimeoutMs?: number;
+  /** 007 — a wake held back for this agent, or released (`agent:wakeNotice`). */
+  onWakeNotice?: (agentId: string, notice: 'input' | 'cap' | null) => void;
   /** 003 R4 — a prompt was typed into the agent, with where it came from. */
   onPromptTyped?: (agentId: string, origin: PromptOrigin) => void;
   /** 003 — the session plugin and token of an orchestrator, prepared before each start (R2). */
@@ -123,7 +136,7 @@ type Options = {
 };
 
 /** Who asked for a prompt: the review (002) or the orchestrator of the workspace (003 R4). */
-export type PromptOrigin = 'review' | 'orchestrator' | 'resume';
+export type PromptOrigin = 'review' | 'orchestrator' | 'resume' | 'wake';
 
 type QueuedPrompt = { text: string; origin: PromptOrigin };
 
@@ -152,6 +165,8 @@ type Running = {
   idle?: ReturnType<typeof setTimeout>;
   /** 004 R3 — typed into a generic CLI with a role at its first output, before anything else. */
   roleFilePrompt?: boolean;
+  /** 007 R11 — the agent reaches PACT by MCP; if not, its events are read in `.pact/events.md`. */
+  mcp?: boolean;
   /** 005 — who reports the usage of this agent's CLI account, and where Codex writes. */
   usage?: { source: UsageSource; codexHome: string };
 };
@@ -160,6 +175,9 @@ type InstalledCli = { adapter: CliAdapter; executablePath: string };
 /** Set by the Claude Code session PACT may be started from; an agent must not inherit them. */
 const isParentClaudeVariable = (name: string) =>
   name === 'CLAUDECODE' || name.startsWith('CLAUDE_CODE_');
+
+/** 007 R11 — where an agent without MCP finds its events. */
+const EVENTS_FILE = '.pact/events.md';
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
@@ -209,6 +227,10 @@ export class AgentManager {
   private readonly questions = new Map<string, string>();
   private readonly onPromptTyped: NonNullable<Options['onPromptTyped']>;
   private readonly onClosing: NonNullable<Options['onClosing']>;
+  private readonly onWakeNotice: NonNullable<Options['onWakeNotice']>;
+  /** 007 R5 — what the prompt of each agent holds, from the keys the user typed. */
+  private readonly drafts = new Map<string, Draft>();
+  private wake: WakeService | null = null;
   /** Agents a prompt was typed to, until they leave the ready state. */
   private readonly promptTyped = new Set<string>();
   /** The prompt typed to each agent whose submission is not confirmed yet. */
@@ -237,6 +259,7 @@ export class AgentManager {
     this.onLaunched = options.onLaunched ?? (() => undefined);
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
     this.onClosing = options.onClosing ?? (() => undefined);
+    this.onWakeNotice = options.onWakeNotice ?? (() => undefined);
     this.idleMs = options.idleMs ?? IDLE_QUESTION_MS;
     this.submitDelayMs = options.submitDelayMs ?? 150;
     this.submitTimeoutMs = options.submitTimeoutMs ?? 5_000;
@@ -378,13 +401,67 @@ export class AgentManager {
    * of CLIs without a prompt hook (FR-036). Free terminals are no agents: nothing to do.
    */
   typed(id: string, data: string): void {
-    // Shift+Enter (ESC + CR) inserts a line break: it sends no line.
-    if (data === LINE_BREAK || !data.includes('\r')) return;
     const found = this.workspaces
       .list()
       .flatMap((workspace) => workspace.agents)
       .find((agent) => agent.id === id);
+    if (found) this.follow(id, applyTyped(this.drafts.get(id) ?? EMPTY_DRAFT, data, found.state));
+    // Shift+Enter (ESC + CR) inserts a line break: it sends no line.
+    if (data === LINE_BREAK || !data.includes('\r')) return;
     if (found?.scheduledResume) void this.cancelAutoResume(id);
+  }
+
+  /** 007 R5 — the draft of the prompt changed: what was held for an empty prompt goes out. */
+  private follow(id: string, draft: Draft) {
+    const before = this.drafts.get(id) ?? EMPTY_DRAFT;
+    if (JSON.stringify(before) === JSON.stringify(draft)) return;
+    if (isDraftEmpty(draft)) this.drafts.delete(id);
+    else this.drafts.set(id, draft);
+    if (isDraftEmpty(draft) && this.running.has(id)) this.flushPrompt(id);
+    this.wake?.agentChanged(id);
+  }
+
+  /** 007 R5 — « busy »: the prompt holds something; « stuck »: only a pointer never submitted. */
+  promptState(id: string): 'empty' | 'busy' | 'stuck' {
+    const draft = this.drafts.get(id) ?? EMPTY_DRAFT;
+    if (isDraftEmpty(draft)) return 'empty';
+    return draft.stuck && draft.count === 0 && !draft.unknown ? 'stuck' : 'busy';
+  }
+
+  /** 007 R11 — the first instruction an orchestrator gives is the initial prompt of the agent. */
+  async rememberInitialPrompt(id: string, text: string): Promise<void> {
+    const { workspace } = this.find(id);
+    await this.change(workspace.id, id, (agent) =>
+      agent.initialPrompt ? agent : { ...agent, initialPrompt: text },
+    );
+  }
+
+  /** 007 R11 — whether the agent reaches the journal by `get_events`, or only by a file. */
+  hasMcp(id: string): boolean {
+    return this.running.get(id)?.mcp === true;
+  }
+
+  /** 007 R11 — the events of an agent without MCP, in a file git ignores like `ROLE.md`. */
+  async writeEventsFile(id: string, content: string): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    await mkdir(join(agent.worktreePath, '.pact'), { recursive: true });
+    await writeFile(join(agent.worktreePath, EVENTS_FILE), content);
+    await this.git.exclude?.(workspace.path, `/${EVENTS_FILE}`);
+  }
+
+  /** 007 T029 — the wake of the workspaces, told of each change of state and of the prompt. */
+  setWake(wake: WakeService): void {
+    this.wake = wake;
+  }
+
+  /** 007 FR-014, FR-016 — saves and announces why a wake is held, or that it is released. */
+  async setWakeNotice(id: string, notice: 'input' | 'cap' | null): Promise<void> {
+    const { workspace } = this.find(id);
+    await this.workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === id ? { ...a, wakeNotice: notice } : a)),
+    }));
+    this.onWakeNotice(id, notice);
   }
 
   /** « Relancer »: a new session. The initial prompt is not typed again: an agent that has one has
@@ -591,6 +668,7 @@ export class AgentManager {
   /** Ends the process without it counting as a crash: PACT asked for it. */
   private async stop(id: string) {
     this.promptTyped.delete(id);
+    this.drafts.delete(id);
     this.clearSubmission(id);
     this.pendingRule.delete(id);
     this.branches.unwatch(id);
@@ -933,6 +1011,7 @@ export class AgentManager {
       output: new TerminalText(),
       // No hook tells when a generic CLI is ready: its first output is its prompt.
       roleFilePrompt: adapter.id === 'generic' && skills !== null,
+      mcp: adapter.id !== 'generic' && (orchestrator !== null || agentMcp !== null),
       ...(usage ? { usage } : {}),
     });
     this.pty.start(agent.id, {
@@ -1000,6 +1079,7 @@ export class AgentManager {
     this.usage?.release(id);
     this.branches.unwatch(id);
     this.promptTyped.delete(id);
+    this.drafts.delete(id);
     this.clearSubmission(id);
     this.pendingRule.delete(id);
     await this.change(running.workspaceId, id, (agent) => applyExit(agent, code));
@@ -1028,6 +1108,9 @@ export class AgentManager {
         sessionId: signal.sessionId,
       });
     }
+    const draft = this.drafts.get(id) ?? EMPTY_DRAFT;
+    const emptied = draftAfterSignal(draft, signal);
+    if (emptied !== draft) this.drafts.delete(id);
     const source = running.usage?.source;
     const resetAt =
       signal.type !== 'failed'
@@ -1075,6 +1158,7 @@ export class AgentManager {
       this.promptTyped.delete(id);
       this.clearSubmission(id);
     }
+    this.wake?.agentChanged(id);
   }
 
   private flushPrompt(id: string) {
@@ -1082,10 +1166,20 @@ export class AgentManager {
     const state = this.find(id).agent.state;
     if (next === undefined || this.promptTyped.has(id) || !isReady(state) || !this.running.has(id))
       return;
+    // 007 R5, R6 — nothing is typed into a prompt that holds something, whatever the origin. A
+    // wake whose last pointer was left unsubmitted sends Enter alone, and types nothing new.
+    const prompt = this.promptState(id);
+    const enterOnly = prompt === 'stuck' && next.origin === 'wake';
+    if (prompt === 'busy' || (prompt === 'stuck' && !enterOnly)) return;
     if (rest.length === 0) this.prompts.delete(id);
     else this.prompts.set(id, rest);
     this.promptTyped.add(id);
     const { text, origin } = next;
+    if (enterOnly) {
+      this.clearSubmission(id);
+      this.submitEnter(id, origin, true);
+      return;
+    }
     // The Enter is its own write, after a pause: glued to a paste, it is swallowed.
     this.pty.write(id, text.includes('\n') ? `${PASTE_START}${text}${PASTE_END}` : text);
     this.onPromptTyped(id, origin);
@@ -1113,8 +1207,17 @@ export class AgentManager {
           return;
         }
         this.submissions.delete(id);
-        const counts = this.undelivered.get(id) ?? { review: 0, orchestrator: 0, resume: 0 };
+        const counts = this.undelivered.get(id) ?? {
+          review: 0,
+          orchestrator: 0,
+          resume: 0,
+          wake: 0,
+        };
         this.undelivered.set(id, { ...counts, [origin]: counts[origin] + 1 });
+        // A pointer left in the prompt: the next wake presses Enter, and nothing else is typed.
+        if (origin === 'wake') {
+          this.drafts.set(id, markStuck(this.drafts.get(id) ?? EMPTY_DRAFT));
+        }
         this.promptTyped.delete(id);
         this.flushPrompt(id);
       }, this.submitTimeoutMs),

@@ -14,6 +14,7 @@ import { IntegrationRequests } from '../../../src/main/orchestrator/integration-
 import { IssueService } from '../../../src/main/orchestrator/issues';
 import { LoopService } from '../../../src/main/orchestrator/loop-service';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
+import { WakeService, eventsFile } from '../../../src/main/orchestrator/wake-service';
 import { createOrchestratorTools } from '../../../src/main/orchestrator/tools';
 import { openStores, type Stores } from '../../../src/main/persistence/store';
 import { IntegrationService } from '../../../src/main/review/integration-service';
@@ -75,6 +76,30 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       })
     : undefined;
   const withExchanges = exchanges ? { exchanges } : {};
+  // 007 — the wake, wired as the app does: a message recorded for an agent types ONE pointer line.
+  const wake = exchanges
+    ? new WakeService({
+        workspaces,
+        type: (agentId, line) => manager.sendPrompt(agentId, line, 'wake'),
+        inputBusy: (agentId) => manager.promptState(agentId) === 'busy',
+        setNotice: (agentId, notice) => {
+          void manager.setWakeNotice(agentId, notice).catch(() => undefined);
+        },
+        usageCritical: () => false,
+        file: eventsFile({
+          exchanges,
+          agents: {
+            hasMcp: (id) => manager.hasMcp(id),
+            writeEventsFile: (id, text) => manager.writeEventsFile(id, text),
+          },
+        }),
+      })
+    : undefined;
+  if (exchanges && wake) {
+    exchanges.onRecorded((workspaceId, message) => {
+      wake.notify(workspaceId, message);
+    });
+  }
   const pty = new PtyManager();
   /** The environment each agent was last started with (004: its agent MCP access). */
   const envs = new Map<string, Record<string, string | undefined>>();
@@ -215,7 +240,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       stores,
     });
     await registry.detect();
-    return new AgentManager({
+    const created = new AgentManager({
       workspaces,
       registry,
       git: gitService,
@@ -238,6 +263,8 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       orchestrator,
       ...managerOptions,
     });
+    if (wake) created.setWake(wake);
+    return created;
   };
   // Assigned at once: the tools above only read it when an orchestrator calls them.
   let manager: AgentManager = await createManager();
@@ -342,6 +369,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     async dispose() {
       review.dispose();
       tests.dispose();
+      wake?.dispose();
       orchestrator.dispose();
       await manager.dispose();
       await pty.dispose();

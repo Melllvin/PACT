@@ -146,6 +146,28 @@ export class ExchangeService {
     return (await this.take(workspaceId, readerId, undefined)) ?? { events: [], remaining: 0 };
   }
 
+  /** The unread messages of a reader, whole, the most recent `limit` of them; nothing is read. */
+  unreadOf(workspaceId: string, readerId: string, limit = 50): ExchangeMessage[] {
+    const ws = this.options.workspaces.get(workspaceId);
+    return (ws?.exchanges.messages ?? []).filter((m) => m.unreadBy.includes(readerId)).slice(-limit);
+  }
+
+  /** The reader has read these messages by another way than `get_events` (the file of 007 R11). */
+  async markRead(workspaceId: string, readerId: string, ids: readonly string[]): Promise<void> {
+    if (!this.options.workspaces.get(workspaceId) || ids.length === 0) return;
+    const read = new Set(ids);
+    const updated = await this.options.workspaces.update(workspaceId, (ws) => ({
+      ...ws,
+      exchanges: {
+        ...ws.exchanges,
+        messages: ws.exchanges.messages.map((m) =>
+          read.has(m.id) ? { ...m, unreadBy: m.unreadBy.filter((id) => id !== readerId) } : m,
+        ),
+      },
+    }));
+    this.options.onChange(workspaceId, updated.exchanges);
+  }
+
   /** The whole message; only to its sender, its recipient and the orchestrator. Changes no reading. */
   detail(workspaceId: string, readerId: string, messageId: string): Promise<ExchangeMessage> {
     const ws = this.options.workspaces.get(workspaceId);
