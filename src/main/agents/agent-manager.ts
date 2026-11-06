@@ -413,7 +413,7 @@ export class AgentManager {
     ];
     for (const closed of group) {
       await this.startAgain(workspace, closed, closed.sessionId);
-      if (resumeWork && closed.closedWhileWorking === true) {
+      if (resumeWork && closed.closedWhileWorking) {
         await this.sendPrompt(closed.id, RESUME_PROMPT, 'resume');
       }
     }
@@ -749,6 +749,7 @@ export class AgentManager {
         role,
         effort: draft.effort ?? fromProfile?.effort ?? null,
         launchedBy: launchedBy ?? null,
+        closedWhileWorking: false,
       };
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');

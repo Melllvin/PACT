@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { agentSchema } from '../../../src/shared/model';
 import { RESUME_PROMPT } from '../../../src/main/agents/agent-manager';
 import { createHarness, git, type Harness } from '../orchestrator/harness';
 
@@ -73,9 +74,14 @@ describe('a closed agent at the start of PACT', () => {
     await h.manager.close(ids.lead, KEEP);
     await h.workspaces.update(h.workspace.id, (ws) => ({
       ...ws,
-      agents: ws.agents.map(({ closedWhileWorking: _old, ...rest }) => rest),
+      // As the schema reads an older file: the field is missing, it reads false.
+      agents: ws.agents.map((a) =>
+        agentSchema.parse(
+          Object.fromEntries(Object.entries(a).filter(([key]) => key !== 'closedWhileWorking')),
+        ),
+      ),
     }));
-    expect(h.current(ids.one)).not.toHaveProperty('closedWhileWorking');
+    expect(h.current(ids.one)?.closedWhileWorking).toBe(false);
     await h.manager.restart(ids.lead, { resumeWork: true });
     for (const id of Object.values(ids)) await h.waitForState(id, 'awaiting-prompt');
     await new Promise((r) => setTimeout(r, 300));

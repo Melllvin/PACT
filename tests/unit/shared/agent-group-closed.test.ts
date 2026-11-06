@@ -28,6 +28,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   review: { seen: {}, comments: [] },
   role: null,
   launchedBy: null,
+  closedWhileWorking: false,
   effort: null,
   ...overrides,
 });
@@ -57,11 +58,14 @@ describe('agentsLaunchedBy', () => {
 });
 
 describe('a workspace file saved before `closedWhileWorking`', () => {
-  it('still loads, without the field', () => {
-    const old: Partial<Agent> = agent(1, { state: 'closed' });
+  it('still loads, the field reading false', () => {
+    const old = Object.fromEntries(
+      Object.entries(agent(1, { state: 'closed' })).filter(([key]) => key !== 'closedWhileWorking'),
+    );
+    expect(old).not.toHaveProperty('closedWhileWorking');
     const parsed = agentSchema.parse(old);
     expect(parsed.state).toBe('closed');
-    expect(parsed.closedWhileWorking).toBeUndefined();
+    expect(parsed.closedWhileWorking).toBe(false);
   });
 
   it('keeps the field when it is there', () => {

@@ -27,6 +27,7 @@ const agent = (overrides: Partial<Agent> = {}): Agent => ({
   review: { seen: {}, comments: [] },
   role: null,
   launchedBy: null,
+  closedWhileWorking: false,
   effort: null,
   ...overrides,
 });
