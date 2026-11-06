@@ -1,6 +1,6 @@
 # Feature Specification: Échanges entre agents et réveil
 
-**Feature Branch**: `007-010-specs`
+**Feature Branch**: `007-plan`
 
 **Created**: 2026-11-05
 
@@ -29,12 +29,12 @@ emballées en pasted_content."
 Aujourd'hui, un agent de rôle ne dispose que de `submit_report` ; seul l'orchestrateur a d'autres outils
 (003, 004). L'orchestrateur apprend ce qui se passe en appelant `wait_for_agents`, qui le bloque au plus
 240 s puis recommence : il consomme des tours pour rien, et il reste aveugle entre deux attentes. Défauts
-constatés dans le code au moment de cette spec :
+constatés dans le code au moment de cette spec, revus sur `origin/006-agents-view` au plan :
 
 | Défaut | Où | Constat |
 | ------ | -- | ------- |
 | Aucune consigne au démarrage d'une boucle | `orchestrator/tools.ts`, `start_loop` | L'outil répond « Boucle démarrée : tour 1/3 » sans rien envoyer aux agents, et sans le dire. |
-| Départ depuis un main périmé | `agents/agent-manager.ts`, `launchNow` | La base est `draft.baseBranch ?? workspace.mainBranch`, locale, sans `fetch`. Le service Git n'a pas de `fetch`. |
+| Échec du `fetch` passé sous silence | `agents/agent-manager.ts`, `launchNow` | Depuis 006, un agent sans branche de départ part déjà de `origin/<main>` après `fetch`, y compris depuis le lanceur. Reste que le résultat du `fetch` est ignoré : la réponse de `launch_agent` ne dit pas que la base peut être en retard. |
 | Référence de départ du testeur en mémoire | `orchestrator/loop-service.ts`, `testerStart` | Fixée au tree du testeur au `start_loop` et à chaque `next_round`. Après un recalage du testeur, tous les fichiers venus de main comptent comme touchés : tout verdict est rejeté, sans issue. Après un redémarrage de PACT, la carte est vide et le contrôle saute en silence. |
 | Vieux événements, résumés énormes | `orchestrator/events.ts`, `loop-service.ts` | La file garde 100 événements jusqu'à la prochaine attente, et une notice de boucle contient la fin de sortie des tests (`outputTail`). |
 | Consignes multi-lignes emballées | `agents/agent-manager.ts`, `flushPrompt` | Un texte multi-ligne part en collage (bracketed paste) ; Claude Code le remet à l'agent emballé en `<pasted_content>`, qu'il traite comme une matière collée et non comme une consigne. |
@@ -58,7 +58,7 @@ US5). L'escalade est un élément de la zone d'action de l'utilisateur : « À f
 
 **Inclus** : les trois outils d'échange ; les messages typés `action` et `info` ; leur journal ; les
 plafonds ; l'escalade d'une boucle entre deux agents ; le réveil des agents ; la place de
-`wait_for_agents` et la réécriture du skill orchestrateur ; la correction des cinq défauts du contexte.
+`wait_for_agents` et la réécriture du skill orchestrateur ; la route des questions d'agent ; la correction des défauts du contexte.
 
 **Hors périmètre** :
 
@@ -78,7 +78,7 @@ Décisions données par l'utilisateur avec la demande, à ne pas rouvrir :
   copiés à l'orchestrateur, journal visible, plafond par agent et par tour, escalade si deux agents
   bouclent.
 - Q: Comment le code et les verdicts circulent-ils ? → A: le code par git ; le testeur ne parle au dev
-  que par verdict structuré ; autorisations et décisions vont à l'utilisateur.
+  que par verdict structuré ; les autorisations et les décisions qui lui reviennent vont à l'utilisateur (questions : voir Q14).
 - Q: Comment un agent attend-il ? → A: il n'attend pas. PACT le réveille sur un message `action`
   (question, rapport, erreur, fin de boucle) ; un message `info` ne réveille pas.
 - Q: Comment le réveil arrive-t-il ? → A: agent inactif, une ligne tapée dans son invite ; en plein tour,
@@ -126,6 +126,10 @@ Décisions de l'utilisateur sur les propositions, le 2026-11-05 :
   l'utilisateur.
 - Q13: Qui peut écrire au testeur, et à qui écrit-il ? → A: le testeur ne reçoit de messages que de l'orchestrateur, de personne d'autre, et n'en envoie qu'à
   l'orchestrateur (`ask_orchestrator`), le verdict structuré restant à part. Les autres agents de rôle s'écrivent entre eux, avec copie à l'orchestrateur. Cela ferme le relais dev → tiers → testeur.
+
+Décision de l'utilisateur à l'entrée du plan, le 2026-11-06 :
+
+- Q14: À qui va la question d'un agent ? → A: avec un orchestrateur dans le workspace, à lui d'abord (`ask_orchestrator`, ou rapport `blocked` avec `questions`) ; il ne la transmet à l'utilisateur que si la décision lui revient, et aucun « ◆ Décider » direct n'est créé. Sans orchestrateur, « ◆ Décider » reste comme aujourd'hui. Un agent qui attend une réponse dans son terminal garde « ◆ Répondre ». Les autorisations restent à l'utilisateur.
 
 ## Questions ouvertes
 
@@ -227,6 +231,10 @@ journal, le refus au-delà du plafond, le refus du testeur, l'escalade à l'util
    PR et de ses checks, jamais le texte du commentaire.
 10. **Given** une consigne, un skill ou une réponse d'outil de PACT, **When** un agent la lit, **Then** elle ne l'invite jamais à lire une PR, une issue ou un commentaire d'un tiers.
 11. **Given** un dev et un agent de design, **When** l'un écrit à l'autre, **Then** le message passe, avec copie à l'orchestrateur ; **Given** un testeur, **When** l'orchestrateur lui écrit, **Then** le message passe.
+12. **Given** un workspace avec orchestrateur, **When** un agent pose une question (`ask_orchestrator`, ou rapport `blocked` avec `questions`), **Then** elle va d'abord à l'orchestrateur, qui ne la transmet à l'utilisateur que si la décision lui revient.
+13. **Given** un workspace avec orchestrateur, **When** un agent rend un rapport `blocked` avec `questions`, **Then** aucun « ◆ Décider » direct n'est créé pour l'utilisateur.
+14. **Given** un workspace sans orchestrateur, **When** un agent rend ce rapport, **Then** « ◆ Décider » reste affiché comme aujourd'hui.
+15. **Given** un agent qui attend une réponse dans son terminal, **When** PACT le voit, **Then** « ◆ Répondre » reste affiché pour l'utilisateur.
 
 ---
 
@@ -303,6 +311,7 @@ l'outil, puis le skill livré.
   rejeté, et la raison lui dit de revenir à ses seuls tests.
 - Le `fetch` échoue ou le dépôt n'a pas de remote : voir FR-022.
 - Le `fetch` de `launch_agent` ne vise que la branche principale : aucune référence de PR tierce n'est récupérée.
+- L'orchestrateur est en erreur (plantage, limite de débit) quand un agent rend un rapport `blocked` avec `questions` : il ne peut pas la lire, donc « ◆ Décider » s'affiche pour l'utilisateur tant que dure l'erreur ; la question reste aussi au journal, et repart par un pointeur à sa reprise.
 - Un agent recopie dans un message un texte trouvé par lui-même : PACT ne peut pas le reconnaître. Le texte reste une donnée
   rapportée et bornée, et la source relève de FR-027.
 
@@ -324,8 +333,7 @@ l'outil, puis le skill livré.
   décision (« Laisser reprendre » ou « Couper ») ; les autres échanges continuent.
 - **FR-007**: Le dev et le testeur MUST ne s'écrire dans aucun sens : tout `send_message` vers ou depuis un testeur est refusé, ce qui ferme aussi le relais par un tiers ; seuls le verdict structuré et git passent. Un verdict `defects` accepté
   par PACT MUST parvenir au dev comme un message `action`.
-- **FR-008**: Aucun outil d'échange ne MUST permettre d'accorder une autorisation ou de prendre une décision de
-  l'utilisateur : ces demandes restent dans sa zone d'action.
+- **FR-008**: Aucun outil d'échange ne MUST permettre d'accorder une autorisation, ni de prendre à la place de l'utilisateur une décision qui lui revient : les autorisations restent dans sa zone d'action, et l'orchestrateur lui transmet ces décisions (FR-028).
 - **FR-009**: `get_events` MUST rendre les événements non lus de l'agent, une seule fois, 20 au plus, avec un résumé de 200 caractères au plus, et permettre de relire le détail du
   journal.
 
@@ -378,12 +386,20 @@ l'outil, puis le skill livré.
 - **FR-027**: Les skills et les consignes de PACT MUST interdire à un agent de lire ou de récupérer ce contenu, et les règles d'autorisation de PACT MUST faire passer ces commandes par la décision de
   l'utilisateur, sur les CLI qui ont ces règles. Sur les autres, la garantie reste partielle, et PACT MUST le dire à l'utilisateur.
 
+**Questions**
+
+- **FR-028**: Dans un workspace avec orchestrateur, la question d'un agent (`ask_orchestrator`, ou rapport `blocked` avec `questions`, dans une boucle ou hors boucle) MUST aller d'abord à l'orchestrateur, comme un message `action`. L'orchestrateur MUST ne la transmettre à l'utilisateur que si la décision lui revient.
+- **FR-029**: Dans un workspace avec orchestrateur, un rapport `blocked` avec `questions` MUST ne pas créer de « ◆ Décider » direct, sauf tant que l'orchestrateur est en erreur.
+- **FR-030**: Dans un workspace sans orchestrateur, ce rapport MUST afficher « ◆ Décider » comme aujourd'hui.
+- **FR-031**: Un agent qui attend une réponse dans son terminal MUST garder « ◆ Répondre », avec ou sans orchestrateur.
+- **FR-032**: Le skill `pact-orchestrator` et le contrat commun MUST dire que les questions des agents vont d'abord à l'orchestrateur, et que les autorisations restent à l'utilisateur.
+
 ### Key Entities
 
 - **Message** : expéditeur, destinataire, type (`action`, `info`), sous-type (question, rapport, erreur, fin de
   boucle…), texte court, heure, état de lecture.
 - **Journal des échanges** : les messages d'un workspace, lisibles par l'utilisateur et par l'orchestrateur.
-- **Curseur de lecture** : ce qu'un agent a déjà lu ; partagé entre `get_events` et `wait_for_agents`.
+- **État de lecture** : ce qu'un agent n'a pas encore lu ; partagé entre `get_events` et `wait_for_agents`.
 - **Réveil** : un pointeur pour un destinataire, sa voie (invite, hook de fin d'outil, hook de fin de tour, fin de
   tour), son compteur horaire.
 - **Escalade d'échange** : deux agents, le dernier échange, la décision de l'utilisateur.
@@ -403,11 +419,12 @@ l'outil, puis le skill livré.
 - **SC-008**: Ce que rend `wait_for_agents` tient sous la borne fixée, quelle que soit la longueur des sorties de test.
 - **SC-009**: Sur 100 % des scénarios de test, une chaîne témoin d'injection placée dans une PR tierce n'apparaît dans aucun message, événement,
   pointeur ni entrée de journal.
+- **SC-010**: Dans 100 % des scénarios de test avec un orchestrateur disponible, une question d'agent l'atteint, et aucun « ◆ Décider » direct n'apparaît ; sans orchestrateur, il apparaît toujours.
 
 ## Assumptions
 
 - « Projet » et « workspace » désignent la même chose (voir 006).
 - Les tests automatisés utilisent le faux CLI ; aucun test ne pilote un vrai CLI avec des touches simulées.
 - Les 10 s de SC-002 sont une proposition de l'agent spec, cohérente avec le regroupement de 5 s décidé.
-- Le service Git gagnera `fetch` ; `gh` reste réservé à 004 et 008.
+- Le service Git a déjà `fetchOrigin` (006) ; `gh` reste réservé à 004 et 008.
 - Le contrat MCP des outils existants ne change que là où cette spec le dit.
