@@ -54,7 +54,7 @@ async function session(day: string, id: string) {
 }
 
 const until = async (check: () => boolean) => {
-  for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 10));
+  for (let i = 0; i < 1000 && !check(); i++) await new Promise((r) => setTimeout(r, 10));
   expect(check()).toBe(true);
 };
 

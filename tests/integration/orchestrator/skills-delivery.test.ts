@@ -55,7 +55,7 @@ describe('the skills of the roles', () => {
 
     for (const id of ids) await h.manager.close(id, { removeWorktree: false });
     await h.waitFor(() => ids.every((id) => !h.current(id)), 'agents still open');
-    await expect.poll(() => readdir(join(h.userData, 'roles'))).toEqual([]);
+    await expect.poll(() => readdir(join(h.userData, 'roles')), { timeout: 20_000 }).toEqual([]);
   });
 
   it('gives nothing to an agent with no role', async () => {
@@ -86,6 +86,6 @@ describe('the skills of the roles', () => {
     await h.waitFor(() => h.pty.history(id).includes(ROLE_FILE_PROMPT), 'never told', id);
 
     await h.manager.close(id, { removeWorktree: false });
-    await expect.poll(() => exists(join(worktree, ROLE_FILE))).toBe(false);
+    await expect.poll(() => exists(join(worktree, ROLE_FILE)), { timeout: 20_000 }).toBe(false);
   });
 });

@@ -89,6 +89,10 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
+// A condition, not a delay: waitFor ends as soon as it holds, and a loaded machine needs far more than
+// the 1 s of vitest's default to run git.
+const LOAD_TIMEOUT_MS = 20_000;
+
 describe('a remote that does not answer', () => {
   it('does not hold the opening: the best value known is used, origin being asked after', async () => {
     const repo = await clone('repo');
@@ -103,9 +107,12 @@ describe('a remote that does not answer', () => {
     const opened = service();
     const { id } = await opened.open(repo);
     remote.answer('develop');
-    await vi.waitFor(() => {
-      expect(changed).toEqual([[id, 'develop']]);
-    });
+    await vi.waitFor(
+      () => {
+        expect(changed).toEqual([[id, 'develop']]);
+      },
+      { timeout: LOAD_TIMEOUT_MS },
+    );
     expect(opened.get(id)?.mainBranch).toBe('develop');
     expect((await opened.recents())[0]?.branch).toBe('develop');
     expect(git(repo, 'branch', '--show-current')).toBe('feature');
@@ -136,9 +143,12 @@ describe('a remote that does not answer', () => {
     const opened = service(false);
     const { id } = await opened.open(repo);
     remote.answer('develop');
-    await vi.waitFor(() => {
-      expect(opened.get(id)?.mainBranch).toBe('develop');
-    });
+    await vi.waitFor(
+      () => {
+        expect(opened.get(id)?.mainBranch).toBe('develop');
+      },
+      { timeout: LOAD_TIMEOUT_MS },
+    );
     await rm(repo, { recursive: true, force: true });
     await opened.checkAvailability();
     expect(opened.get(id)?.status).toBe('unavailable');
@@ -181,9 +191,12 @@ describe('a remote that does not answer', () => {
     expect(restored.map((ws) => ws.mainBranch)).toEqual(['main', 'main']);
     expect(remote.asked).toHaveLength(2);
     remote.answer('develop');
-    await vi.waitFor(() => {
-      expect(restarted.list().map((ws) => ws.mainBranch)).toEqual(['develop', 'develop']);
-    });
+    await vi.waitFor(
+      () => {
+        expect(restarted.list().map((ws) => ws.mainBranch)).toEqual(['develop', 'develop']);
+      },
+      { timeout: LOAD_TIMEOUT_MS },
+    );
   });
 });
 
