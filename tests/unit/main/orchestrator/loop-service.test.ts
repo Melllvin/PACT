@@ -291,7 +291,8 @@ describe('the proof (FR-019)', () => {
     await loops.testRun(finished('failed'));
     expect(state()).toBe('in-progress');
     expect(notify.mock.calls.at(-1)?.[1]).toMatchObject({ kind: 'loop' });
-    expect((notify.mock.calls.at(-1)?.[1] as { summary: string }).summary).toContain(
+    // 007 FR-025: the end of the output is read on demand, not carried by the event.
+    expect((notify.mock.calls.at(-1)?.[1] as { summary: string }).summary).not.toContain(
       'FAIL connexion.test.ts',
     );
     devTree = OTHER_TREE;
@@ -350,5 +351,77 @@ describe('the orchestrator’s role withdrawn', () => {
     await loops.closeAll('w1');
     expect(loop()?.state).toBe('closed');
     expect(current.agents).toHaveLength(4);
+  });
+});
+
+// 007 T005 — what the orchestrator hears of a report, in a loop or not (FR-028, R8), and the
+// summaries without the output of the tests (FR-025).
+describe('reports out of a loop (007 FR-010)', () => {
+  it('tells the orchestrator a report of an agent that is in no loop', async () => {
+    await expect(loops.report(plain.id, report())).resolves.toBeNull();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({ agentId: plain.id, kind: 'report', summary: 'Fait' }),
+    );
+  });
+
+  it('tells it the report of a dev whose loop is not running', async () => {
+    await expect(loops.report(dev.id, report())).resolves.toBeNull();
+    expect(kinds()).toEqual(['report']);
+  });
+});
+
+describe('questions in a report (007 FR-028, research R8)', () => {
+  const blocked = report({
+    status: 'blocked',
+    summary: 'Je ne peux pas continuer',
+    questions: ['Quel format pour la date ?', 'Faut-il garder l’ancien endpoint ?'],
+  });
+
+  it.each([
+    ['out of a loop', () => plain.id],
+    ['in a loop', () => dev.id],
+  ])('tells the orchestrator every question, as a question, %s', async (where, who) => {
+    if (where === 'in a loop') await start();
+    notify.mockClear();
+    await loops.report(who(), blocked);
+    expect(kinds()).toEqual(['question']);
+    const { summary } = notify.mock.calls[0]?.[1] as { summary: string };
+    expect(summary).toContain('Quel format pour la date ?');
+    expect(summary).toContain('Faut-il garder l’ancien endpoint ?');
+    expect(notify.mock.calls[0]?.[1]).toMatchObject({ agentId: who() });
+  });
+
+  it('tells the questions of the tester of a loop too', async () => {
+    await start();
+    notify.mockClear();
+    await loops.report(tester.id, report({ status: 'blocked', questions: ['Quel jeu de test ?'] }));
+    expect(kinds()).toEqual(['question']);
+    expect((notify.mock.calls[0]?.[1] as { summary: string }).summary).toContain(
+      'Quel jeu de test ?',
+    );
+  });
+
+  it('keeps a plain report a report when it has no question', async () => {
+    await loops.report(plain.id, report({ status: 'blocked', summary: 'Bloqué', questions: [] }));
+    expect(kinds()).toEqual(['report']);
+  });
+});
+
+describe('summaries without the output of the tests (007 FR-025)', () => {
+  it('carries neither the output tail nor a list of files when the tests of a loop fail', async () => {
+    await start();
+    await loops.report(tester.id, accepted);
+    notify.mockClear();
+    await loops.testRun({
+      ...finished('failed'),
+      outputTail: 'FAIL src/connexion.ts\nExpected 2, got 3',
+    });
+    const { summary } = notify.mock.calls.at(-1)?.[1] as { summary: string };
+    expect(summary).toContain('0012-connexion');
+    expect(summary).not.toContain('FAIL');
+    expect(summary).not.toContain('Expected 2');
+    expect(summary).not.toContain('src/connexion.ts');
   });
 });
