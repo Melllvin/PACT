@@ -22,7 +22,7 @@ import { TestRunner } from '../../../src/main/review/test-runner';
 import { PtyManager } from '../../../src/main/pty/pty-manager';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
 import type { AgentDraft } from '../../../src/shared/ipc';
-import type { AgentState } from '../../../src/shared/model';
+import type { AgentState, Workspace } from '../../../src/shared/model';
 import type { IntegrationRequest, OrchestratorAction } from '../../../src/shared/orchestrator';
 import type { Integration } from '../../../src/shared/review';
 import { FAKE_CLI, scenarioPath } from '../../fixtures/fake-cli/paths';
@@ -43,6 +43,8 @@ export const git = (cwd: string, ...args: string[]) =>
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
+type ExchangesModule = typeof import('../../../src/main/orchestrator/exchange-service');
+
 /** `managerOptions`: extra AgentManager options (fix-send-prompt: submitDelayMs, submitTimeoutMs). */
 export async function createHarness(managerOptions: Record<string, unknown> = {}) {
   const root = realpathSync.native(await mkdtemp(join(tmpdir(), 'pact-orchestrator-')));
@@ -58,6 +60,21 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
   const gitService = new GitService({ env: gitEnv });
   const workspaces = new WorkspaceService({ git: gitService, stores });
   const workspace = await workspaces.open(repo);
+  // 007 — the journal of the workspace. Loaded when the module exists, so that the suites that
+  // do not use it keep running while it is being written.
+  const exchangesPath = '../../../src/main/orchestrator/exchange-service';
+  const exchangesModule = (await import(/* @vite-ignore */ exchangesPath).catch(
+    () => null,
+  )) as ExchangesModule | null;
+  /** What `workspace:exchanges` announced, in order. */
+  const exchangesHeard: unknown[] = [];
+  const exchanges = exchangesModule
+    ? new exchangesModule.ExchangeService({
+        workspaces,
+        onChange: (_workspaceId: string, journal: unknown) => exchangesHeard.push(journal),
+      })
+    : undefined;
+  const withExchanges = exchanges ? { exchanges } : {};
   const pty = new PtyManager();
   /** The environment each agent was last started with (004: its agent MCP access). */
   const envs = new Map<string, Record<string, string | undefined>>();
@@ -93,9 +110,13 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     workspaces,
     rolesDir: join(userData, 'roles'),
     skillsDir: 'resources/skills',
+    ...withExchanges,
     onAction: (orchestratorId, action) => actionsHeard.push({ ...action, orchestratorId }),
     agentTools: (agentId) =>
-      createAgentTools({ onReport: (id, report) => loops.report(id, report) }, agentId),
+      createAgentTools(
+        { onReport: (id, report) => loops.report(id, report), ...withExchanges },
+        agentId,
+      ),
     onTurnFinished: (agentId) => {
       loops.turnFinished(agentId);
     },
@@ -115,6 +136,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
           clis: () => registry.list(),
           usageWarning: (cliId) => usageWarnings[cliId] ?? null,
           permissions,
+          ...withExchanges,
           log: (entry) => {
             orchestrator.record(orchestratorId, entry);
           },
@@ -290,6 +312,16 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     issues,
     gh,
     issueChanges,
+    exchanges,
+    exchangesHeard,
+    /** The messages of the journal of the workspace, as they are now. */
+    journal() {
+      const kept = (
+        workspaces.get(workspace.id) as { exchanges?: Workspace['exchanges'] } | undefined
+      )?.exchanges?.messages;
+      if (!kept) throw new Error('007 : workspace.exchanges absent (src/shared/exchanges.ts)');
+      return kept;
+    },
     get manager() {
       return manager;
     },
