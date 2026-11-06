@@ -532,7 +532,10 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
           : timedOut
             ? 'Aucun changement.'
             : events
-                .map((event) => describe(event, names.get(event.about ?? event.from) ?? event.from))
+                .map((event) => {
+                  const who = event.about ?? event.from;
+                  return describe(event, names.get(who) ?? who);
+                })
                 .join('\n');
         return reply(text, { events, remaining, timedOut });
       },
