@@ -119,7 +119,9 @@ const failure = (promise: Promise<unknown>) =>
     (error: unknown) => error as IpcFailure,
   );
 
-const waitFor = async (check: () => boolean, what: string, timeoutMs = 3000) => {
+// A condition, not a delay: it ends as soon as the check holds. The bound only decides when to give
+// up, and a machine under heavy load (git processes queued behind other work) needs far more than 3 s.
+const waitFor = async (check: () => boolean, what: string, timeoutMs = 20_000) => {
   const begin = Date.now();
   while (!check()) {
     if (Date.now() - begin > timeoutMs) throw new Error(what);
