@@ -121,7 +121,7 @@ export function applyTyped(draft: Draft, data: string, state: AgentState): Draft
   const text = skipPastes(data);
   const chars = Array.from(text);
   for (let i = 0; i < chars.length; i++) {
-    const char = chars[i] ?? '';
+    const char = chars[i] as string;
     if (char === '\r') next = EMPTY_DRAFT;
     else if (char === '\x1b') {
       // ESC + CR is Shift+Enter: a line break, so something is there. Any other sequence (paste,
