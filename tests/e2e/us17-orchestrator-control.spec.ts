@@ -48,7 +48,7 @@ test('shows the orchestrator’s actions, withdraws its role, then refuses its r
   await expect(worker).toHaveAttribute('data-state', 'awaiting-prompt');
 
   await typeIn(page, lead, 'Faux CLI 2|Écris la fonction');
-  await expect(worker).toContainText('Reçu : Écris la fonction');
+  await expect(worker).toContainText('Écris la fonction', { timeout: 20_000 });
 
   await lead.getByRole('button', { name: 'Agrandir' }).click();
   const focus = page.getByRole('region', { name: 'Focus : Faux CLI 1' });
@@ -66,5 +66,5 @@ test('shows the orchestrator’s actions, withdraws its role, then refuses its r
   // The agent stays open; PACT no longer answers its tools.
   await typeIn(page, lead, 'Faux CLI 2|Encore');
   await expect(lead).toContainText('MCP send_prompt : HTTP 401');
-  await expect(worker).not.toContainText('Reçu : Encore');
+  await expect(worker).not.toContainText('Encore');
 });

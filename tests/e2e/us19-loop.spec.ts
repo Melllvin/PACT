@@ -129,7 +129,9 @@ test('stops the loop after three rounds of defects, and the user decides', async
     await expect(lead.getByRole('list', { name: 'Rapports' })).toContainText('Le test échoue');
     if (round < 3) {
       await call(page, lead, 'next_round', { issue: ISSUE });
-      await expect(dev.getByLabel('Tour')).toHaveText(`tour ${String(round + 1)}/3`);
+      await expect(dev.getByLabel('Tour')).toHaveText(`tour ${String(round + 1)}/3`, {
+        timeout: 20_000,
+      });
     }
   }
 

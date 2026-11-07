@@ -263,3 +263,26 @@ describe('TodoItem usage alert', () => {
     expect(screen.getByRole('listitem').className).toContain('border-destructive/30');
   });
 });
+
+describe('TodoItem « Réveil en attente » (007 FR-014)', () => {
+  it('shows the sentence under the title', () => {
+    const held = agent(1, { state: 'awaiting-prompt' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: `${held.id}:wake-held`,
+            agentId: held.id,
+            kind: 'wake-held',
+            title: '◆ Réveil en attente · Claude Code · saisie en cours',
+            actions: [],
+            detail: 'Videz l’invite ou envoyez votre saisie.',
+          }}
+          agent={held}
+          {...actions()}
+        />
+      </ul>,
+    );
+    expect(screen.getByText('Videz l’invite ou envoyez votre saisie.')).toBeTruthy();
+  });
+});

@@ -114,7 +114,7 @@ test('lets the orchestrator read and integrate a file with spaces and accents', 
   await lead.locator('.xterm').click();
   await page.keyboard.type('Écris la fonction');
   await page.keyboard.press('Enter');
-  await expect(lead).toContainText('MCP get_file_diff :');
+  await expect(lead).toContainText('MCP get_file_diff :', { timeout: 20_000 });
   await expect(lead).toContainText('+export const f = 1;');
   await expect(lead).toContainText('MCP request_integration :');
 

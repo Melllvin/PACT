@@ -431,7 +431,10 @@ async function runTurn(line) {
   }
 
   // Only the orchestrator gets PACT's tools; the agents it leads skip these steps.
-  for (const step of process.env.PACT_ORCHESTRATOR_URL ? (scenario.mcp ?? []) : []) {
+  // A pointer that led to no instruction (a report, a verdict…) is no prompt: the scripted calls,
+  // written for a prompt of the user, do not run on it.
+  const scripted = process.env.PACT_ORCHESTRATOR_URL && !POINTER.test(line);
+  for (const step of scripted ? (scenario.mcp ?? []) : []) {
     const tool = fillDeep(step.tool, line);
     const args =
       step.json === undefined
