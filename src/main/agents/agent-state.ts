@@ -147,16 +147,17 @@ export function draftAfterSignal(draft: Draft, signal: AgentSignal): Draft {
 export const markStuck = (draft: Draft): Draft => ({ ...draft, stuck: true });
 
 const PASTE_OPEN = '\x1b[200~';
+const PASTE_MARK = '\x1b\x00';
 const PASTE_CLOSE = '\x1b[201~';
 
-/** Each bracketed paste is cut down to its opening mark, which then counts as a sequence. */
+/** Each bracketed paste is cut down to a mark that leaves the content unknown, and counts as no key. */
 function skipPastes(data: string): string {
   let out = '';
   let rest = data;
   for (;;) {
     const start = rest.indexOf(PASTE_OPEN);
     if (start < 0) return out + rest;
-    out += rest.slice(0, start) + PASTE_OPEN;
+    out += rest.slice(0, start) + PASTE_MARK;
     const end = rest.indexOf(PASTE_CLOSE, start);
     if (end < 0) return out;
     rest = rest.slice(end + PASTE_CLOSE.length);
