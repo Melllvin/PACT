@@ -123,6 +123,10 @@ export type AppState = {
   loadOrchestratorActions: (agentId: string) => Promise<void>;
   /** « Retirer le rôle d'orchestrateur » (FR-004): the agent stays, as an ordinary one. */
   revokeOrchestrator: (agentId: string) => Promise<void>;
+  /** 006 US5 — « Faire orchestrateur »: refused with its reason, shown as the other actions'. */
+  promoteAgent: (agentId: string) => Promise<void>;
+  /** 006 #45 — « Renommer ». */
+  renameAgent: (agentId: string, name: string) => Promise<void>;
   /** 004 US2 — what the loops told, by workspace, the latest last (« Rapports »). */
   loopReports: Record<string, LoopReport[]>;
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
@@ -675,6 +679,30 @@ export function createAppStore(api: PactApi) {
             workspaces: get().workspaces.map((w) => ({
               ...w,
               agents: w.agents.map((a) => (a.id === agentId ? { ...a, role: null } : a)),
+            })),
+          });
+        }),
+
+      promoteAgent: (agentId) =>
+        act(async () => {
+          await api.invoke('orchestrator:promote', { agentId });
+          set({
+            workspaces: get().workspaces.map((w) => ({
+              ...w,
+              agents: w.agents.map((a) =>
+                a.id === agentId ? { ...a, role: 'orchestrator' as const } : a,
+              ),
+            })),
+          });
+        }),
+
+      renameAgent: (agentId, name) =>
+        act(async () => {
+          await api.invoke('agent:rename', { agentId, name });
+          set({
+            workspaces: get().workspaces.map((w) => ({
+              ...w,
+              agents: w.agents.map((a) => (a.id === agentId ? { ...a, name: name.trim() } : a)),
             })),
           });
         }),

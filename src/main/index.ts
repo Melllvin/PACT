@@ -1,3 +1,4 @@
+import { agentName } from '../shared/agent-name';
 import { execFile } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -444,7 +445,7 @@ void app.whenReady().then(async () => {
         .list()
         .find((w) => w.id === workspaceId)
         ?.agents.find((a) => a.id === agentId);
-      return agent ? `${cliNameOf(agent.cliId)} ${String(agent.position)}` : null;
+      return agent ? agentName(agent, cliNameOf) : null;
     },
     activate: ({ workspaceId, agentId }) => {
       const [window] = BrowserWindow.getAllWindows();
@@ -537,6 +538,7 @@ void app.whenReady().then(async () => {
         orchestrator,
         exchanges,
         agents,
+        identity: agents,
         workspaces,
         loops,
         issues,

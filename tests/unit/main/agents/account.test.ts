@@ -22,6 +22,10 @@ describe('accountFolder', () => {
     expect(accountFolder(true, { HOME: '/h', CLAUDE_CONFIG_DIR: '/h/.claude' })).toBeUndefined();
     expect(accountFolder(false, { HOME: '/h', CODEX_HOME: '/h/.codex' })).toBeUndefined();
   });
+
+  it('knows the CLI’s own folder written with a trailing slash', () => {
+    expect(accountFolder(true, { HOME: '/h', CLAUDE_CONFIG_DIR: '/h/.claude/' })).toBeUndefined();
+  });
 });
 
 describe('countsInAccount', () => {

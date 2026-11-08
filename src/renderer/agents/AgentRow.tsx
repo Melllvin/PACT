@@ -5,6 +5,8 @@ import type { AgentActions } from '../workspace/WorkspaceView';
 
 type Props = Omit<AgentActions, 'onClose'> & {
   row: Row;
+  /** #46 — the color of the agent among its workspace's. */
+  color?: string;
   onOpen: (agentId: string) => void;
 };
 
@@ -14,7 +16,7 @@ const SEPARATOR = ' · ';
  * One agent of the column: the main button opens it; the buttons of its request, when it has one,
  * sit beside it, never inside (contracts/ui.md).
  */
-export function AgentRow({ row, onOpen, ...actions }: Props) {
+export function AgentRow({ row, color, onOpen, ...actions }: Props) {
   const { agent, todo } = row;
   const label = [
     row.name,
@@ -25,7 +27,7 @@ export function AgentRow({ row, onOpen, ...actions }: Props) {
   const [what, , ...hints] = todo?.title.split(SEPARATOR) ?? [];
   return (
     <li
-      style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}
+      style={{ '--agent-color': color ?? `var(--agent-${agent.color})` } as CSSProperties}
       className="flex flex-col gap-2 rounded-xl border border-white/6 bg-surface p-3"
     >
       <button

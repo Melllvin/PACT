@@ -1,3 +1,4 @@
+import { agentName } from '../../shared/agent-name';
 import { within } from '../timeout';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -62,6 +63,8 @@ type WorkspaceAccess = {
   get(id: string): Workspace | undefined;
   list(): Workspace[];
   update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace>;
+  /** Whether a permission level was chosen for the workspace; absent in minimal fakes. */
+  hasPermissionChoice?(id: string): Promise<boolean>;
 };
 
 type Options = {
@@ -137,6 +140,9 @@ type Options = {
     resetAt?(cliId: string, account: string): Date | undefined;
   };
 };
+
+/** How long « Faire orchestrateur » waits for the restarted CLI to be up. */
+const PROMOTE_WAIT_MS = 15_000;
 
 /** Who asked for a prompt: the review (002) or the orchestrator of the workspace (003 R4). */
 export type PromptOrigin = 'review' | 'orchestrator' | 'resume' | 'wake';
@@ -622,6 +628,81 @@ export class AgentManager {
     this.orchestrator?.release(id);
     for (const other of workspace.agents) this.cancelPrompts(other.id, 'orchestrator');
     await this.change(workspace.id, id, (a) => ({ ...a, role: null }));
+  }
+
+  /**
+   * 006 US5, FR-027, FR-028 — « Faire orchestrateur »: an agent already open takes the role. It is
+   * refused, with its reason, when the workspace has an orchestrator or the CLI cannot be one;
+   * otherwise it restarts in its own session with the access an orchestrator gets at launch.
+   */
+  async promoteToOrchestrator(id: string): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
+    const current = workspace.agents.find((a) => a.role === 'orchestrator');
+    if (current) {
+      throw new IpcFailure(
+        'INVALID_INPUT',
+        `${this.nameOf(current)} est déjà l’orchestrateur de ce workspace.`,
+      );
+    }
+    const cli = this.installedCli(agent.cliId);
+    if (!cli.adapter.supportsOrchestrator) {
+      throw new IpcFailure('INVALID_INPUT', 'Ce CLI ne peut pas être orchestrateur.');
+    }
+    const promoted: Agent = { ...agent, role: 'orchestrator' };
+    // The agents it will launch need a level to start with (launch_agent): with none chosen yet, the
+    // level the user gave this agent is the project's.
+    const chosen = (await this.workspaces.hasPermissionChoice?.(workspace.id)) ?? true;
+    await this.workspaces.update(workspace.id, (ws) => ({
+      ...ws,
+      ...(chosen
+        ? {}
+        : {
+            permissionOverride: {
+              level: agent.permissionLevel,
+              autoResume: false,
+              scope: 'project' as const,
+            },
+          }),
+      agents: ws.agents.map((a) => (a.id === id ? promoted : a)),
+    }));
+    this.resumes.forget(id);
+    await this.stop(id);
+    await this.startAgain(workspace, promoted, agent.sessionId);
+    await this.untilStarted(id);
+  }
+
+  /** Waits (a few seconds at most) for a restarted agent to leave `starting`: its CLI is up. */
+  private async untilStarted(id: string, timeoutMs = PROMOTE_WAIT_MS) {
+    const until = Date.now() + timeoutMs;
+    while (
+      this.workspaces
+        .list()
+        .some((w) => w.agents.some((a) => a.id === id && a.state === 'starting'))
+    ) {
+      if (this.disposed || Date.now() > until) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  /**
+   * 006 #45 — the user's name for an agent. Refused when empty or taken (case ignored, the default
+   * names « <CLI> <position> » included); saved trimmed.
+   */
+  async renameAgent(id: string, name: string): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    const wanted = name.trim();
+    if (wanted === '') throw new IpcFailure('INVALID_INPUT', 'Le nom ne peut pas être vide.');
+    const taken = workspace.agents.some(
+      (other) => other.id !== id && this.nameOf(other).toLowerCase() === wanted.toLowerCase(),
+    );
+    if (taken) throw new IpcFailure('INVALID_INPUT', `Le nom « ${wanted} » est déjà pris.`);
+    if (agent.name === wanted) return;
+    await this.change(workspace.id, id, (a) => ({ ...a, name: wanted }));
+  }
+
+  private nameOf(agent: Agent) {
+    return agentName(agent, (cliId) => this.registry.get(cliId)?.definition.name ?? cliId);
   }
 
   /** 003 FR-011 — what the agent asks, while it waits for an answer. */
@@ -1113,7 +1194,7 @@ export class AgentManager {
     const source: UsageSource = {
       agentId: agent.id,
       workspaceId: agent.workspaceId,
-      label: `${name} ${String(agent.position)}`,
+      label: agentName(agent, () => name),
       role: agent.role,
       cliId: agent.cliId,
       account: accountOf(folder),

@@ -2,7 +2,16 @@ import type { UsageState, UsageThresholds } from '../../shared/usage';
 import { UsageGauges, useUsageClock } from './UsageGauge';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MAX_AGENTS, type Agent, type CliDefinition, type Workspace } from '../../shared/model';
+import {
+  MAX_AGENTS,
+  WORKING_STATES,
+  type Agent,
+  type CliDefinition,
+  type Workspace,
+} from '../../shared/model';
+import { agentName } from '../../shared/agent-name';
+import { agentColor } from '../../shared/agent-color';
+import type { TileMenu } from '../tiles/TileActions';
 import type { OrchestratorAction } from '../../shared/orchestrator';
 import { agentRows } from '../../shared/agents-view';
 import { deriveTodos } from '../../shared/todo';
@@ -54,6 +63,10 @@ export type AgentActions = {
   /** 004 FR-023 — « Créer » / « Refuser » of the issues the orchestrator asks to publish. */
   onConfirmPublish?: (requestId: string) => void;
   onRefusePublish?: (requestId: string) => void;
+  /** 006 US5 — « Faire orchestrateur » of the ⋮ menu, once confirmed. */
+  onPromote?: (agentId: string) => void;
+  /** 006 #45 — « Renommer » of the ⋮ menu. */
+  onRename?: (agentId: string, name: string) => void;
   /** « Répondre dans le terminal ↗ »: opens the Focus on the agent's terminal (FR-024a). */
   onOpenTerminal?: (agentId: string) => void;
   /** « ◆ Décider »: the answer of the user to an agent stopped with questions, as a prompt. */
@@ -226,6 +239,11 @@ export function WorkspaceView({
     if (journalOf !== null) loader.current?.(journalOf);
   }, [journalOf]);
   const reviewedAgent = agents.find((agent) => agent.id === reviewed);
+  // #43 — Changements is offered once the agent has files to review.
+  const changedFilesOf = (agentId: string) =>
+    review?.snapshot?.agentId === agentId
+      ? review.snapshot.files.length
+      : (review?.files?.[agentId] ?? (review?.pending.includes(agentId) ? 1 : 0));
 
   // The conflict screen opens by itself once « Intégrer » meets a conflict.
   const conflictId = integration?.state === 'conflicted' ? integration.id : null;
@@ -337,9 +355,44 @@ export function WorkspaceView({
     workspace.loops.find(
       (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
     )?.round ?? null;
+  // 006 — the ⋮ menu of a tile and of the Focus: « Faire orchestrateur » (US5), « Renommer » (#45).
+  const menuOf = (agent: Agent): TileMenu => {
+    const { onPromote, onRename } = actions;
+    const canBe = clis.find((cli) => cli.id === agent.cliId)?.orchestrator;
+    const reason =
+      lead && lead.id !== agent.id
+        ? `${agentName(lead, cliName)} est déjà l’orchestrateur`
+        : canBe === false
+          ? 'Ce CLI ne sait pas être orchestrateur'
+          : agent.state === 'closed'
+            ? 'L’agent est fermé'
+            : null;
+    return {
+      promote:
+        onPromote && agent.role !== 'orchestrator'
+          ? {
+              reason,
+              working: WORKING_STATES.includes(agent.state),
+              onConfirm: () => {
+                onPromote(agent.id);
+              },
+            }
+          : undefined,
+      rename: onRename
+        ? {
+            name: agentName(agent, cliName),
+            onRename: (next) => {
+              onRename(agent.id, next);
+            },
+          }
+        : undefined,
+    };
+  };
   const tileOf = (agent: Agent) => (
     <Tile
       key={agent.id}
+      menu={menuOf(agent)}
+      color={agentColor(agent, agents)}
       fromOrchestrator={fromOrchestrator[agent.id] !== undefined}
       round={roundOf(agent.id)}
       reports={loopReports}
@@ -443,6 +496,8 @@ export function WorkspaceView({
               name={cliName}
               terminals={terminals}
               pills={pills}
+              menu={focusedAgent && menuOf(focusedAgent)}
+              changedFiles={changedFilesOf(focused)}
               onSelect={(agentId) => {
                 if (inReview) openReview(agentId);
                 else setFocusedId(agentId);

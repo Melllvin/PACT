@@ -9,7 +9,7 @@
 ```sh
 npm run check                                     # typecheck, lint, format, unitaires, couverture
 npx playwright test tests/e2e/us28-agents-column.spec.ts tests/e2e/us29-lead-tiles.spec.ts \
-  tests/e2e/us30-graph.spec.ts tests/e2e/layout.spec.ts
+  tests/e2e/us34-graph.spec.ts tests/e2e/us31-orchestrator-group.spec.ts tests/e2e/us35-promote-orchestrator.spec.ts tests/e2e/layout.spec.ts
 ```
 
 Attendu :

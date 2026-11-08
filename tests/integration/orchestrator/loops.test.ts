@@ -115,8 +115,13 @@ describe('a loop', () => {
     const loop = await tool('get_loop', { issue: '0012-connexion' });
     expect(loop.text).toBe('0012-connexion : tour 2/3, passed.');
     expect(current()?.loops[0]?.rounds[1]?.proof).toMatchObject({ exitCode: 0 });
-    const { text: proved } = await tool('wait_for_agents', { agents: [devId], timeoutSeconds: 10 });
-    expect(proved).toContain('0012-connexion : tests passés par PACT au tour 2.');
+    // Earlier events of the dev (its turn ending) can come first: read until the proof arrives.
+    const proof = '0012-connexion : tests passés par PACT au tour 2.';
+    let proved = '';
+    for (let i = 0; i < 5 && !proved.includes(proof); i++) {
+      proved += (await tool('wait_for_agents', { agents: [devId], timeoutSeconds: 5 })).text;
+    }
+    expect(proved).toContain(proof);
   }, 30_000);
 
   it('escalates the dev to its ceiling, in the same session (FR-007)', async () => {

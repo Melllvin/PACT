@@ -1,3 +1,4 @@
+import { agentName } from '../../shared/agent-name';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from 'zustand';
@@ -74,8 +75,8 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
     activeTab.kind === 'workspace' ? workspaces.find((w) => w.id === activeTab.id) : undefined;
   const launching = launcher && workspaces.find((w) => w.id === launcher.workspaceId);
   const agentsById = new Map(workspaces.flatMap((w) => w.agents).map((a) => [a.id, a]));
-  const agentName = (agent: Agent) =>
-    `${state.clis.find((c) => c.id === agent.cliId)?.name ?? agent.cliId} ${String(agent.position)}`;
+  const nameOfAgent = (agent: Agent) =>
+    agentName(agent, (cliId) => state.clis.find((c) => c.id === cliId)?.name ?? cliId);
   const closing = state.closingAgentId === null ? undefined : agentsById.get(state.closingAgentId);
   const restarting =
     state.restartingAgentId === null ? undefined : agentsById.get(state.restartingAgentId);
@@ -86,7 +87,7 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
       : []
     )
       .filter((member) => only === undefined || member.state === only)
-      .map((member) => ({ id: member.id, name: agentName(member) }));
+      .map((member) => ({ id: member.id, name: nameOfAgent(member) }));
   const logged = state.log === null ? undefined : agentsById.get(state.log.agentId);
 
   return (
@@ -162,6 +163,8 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onLog: (id) => void state.openLog(id),
                 onCancelAutoResume: (id) => void state.cancelAutoResume(id),
                 onClose: state.requestCloseAgent,
+                onPromote: (id) => void state.promoteAgent(id),
+                onRename: (id, name) => void state.renameAgent(id, name),
                 onConfirmIntegration: (id, message) =>
                   void state.confirmIntegrationRequest(id, message),
                 onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
@@ -230,7 +233,7 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
           )}
           {closing && (
             <CloseAgentDialog
-              name={agentName(closing)}
+              name={nameOfAgent(closing)}
               branch={closing.branch}
               subAgents={groupOf(closing)}
               onConfirm={(removeWorktree) => void state.closeAgent(removeWorktree)}
@@ -239,14 +242,14 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
           )}
           {restarting && (
             <RestartGroupDialog
-              name={agentName(restarting)}
+              name={nameOfAgent(restarting)}
               subAgents={groupOf(restarting, 'closed')}
               onConfirm={(resumeWork) => void state.confirmRestartAgent(resumeWork)}
               onCancel={state.cancelRestartAgent}
             />
           )}
           {state.log && logged && (
-            <LogPanel name={agentName(logged)} text={state.log.text} onClose={state.closeLog} />
+            <LogPanel name={nameOfAgent(logged)} text={state.log.text} onClose={state.closeLog} />
           )}
           {launcher?.step === 'counts' && launching && (
             <LaunchPanel
