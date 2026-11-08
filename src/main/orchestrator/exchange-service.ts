@@ -18,7 +18,8 @@ import {
   type Exchanges,
 } from '../../shared/exchanges';
 import { IpcFailure } from '../../shared/ipc';
-import type { AgentState, Workspace } from '../../shared/model';
+import { agentName } from '../../shared/agent-name';
+import type { Agent, AgentState, Workspace } from '../../shared/model';
 import type { IntegrationRequest } from '../../shared/orchestrator';
 
 // 007 research R2 — the journal of a workspace: the messages of the agents and the events of PACT,
@@ -179,8 +180,8 @@ export class ExchangeService {
     return this.deliver(workspaceId, input.from, input.to, input.text, input.type);
   }
 
-  private nameOf(cliId: string, position: number): string {
-    return `${this.options.name?.(cliId) ?? cliId} ${String(position)}`;
+  private nameOf(agent: Pick<Agent, 'name' | 'cliId' | 'position'>): string {
+    return agentName(agent, (cliId) => this.options.name?.(cliId) ?? cliId);
   }
 
   private async deliver(
@@ -202,7 +203,7 @@ export class ExchangeService {
       const wanted = toRef.trim().toLowerCase();
       const found =
         ws.agents.find((a) => a.id === toRef) ??
-        ws.agents.find((a) => this.nameOf(a.cliId, a.position).toLowerCase() === wanted);
+        ws.agents.find((a) => this.nameOf(a).toLowerCase() === wanted);
       if (!found) throw invalid(`Aucun agent « ${toRef.slice(0, 60)} » dans ce workspace.`);
       to = found;
       const allowed = canSend(from, to, lead.id);
@@ -326,7 +327,7 @@ export class ExchangeService {
     if (!ws || !lead) return;
     const label = (id: string) => {
       const found = ws.agents.find((a) => a.id === id);
-      return found ? this.nameOf(found.cliId, found.position) : id;
+      return found ? this.nameOf(found) : id;
     };
     const [a = '', b = ''] = agents.map(label);
     await this.record(workspaceId, { from: 'pact', to: lead.id, kind, text: text(a, b) });
