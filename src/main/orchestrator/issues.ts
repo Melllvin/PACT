@@ -241,24 +241,15 @@ export class IssueService {
 const KNOWN_FAILURES: [RegExp, (match: RegExpExecArray) => string][] = [
   [/no git remotes found/i, () => 'no git remotes found'],
   [/\bHTTP (\d{3})\b/, (match) => `HTTP ${match[1] ?? ''}`],
+  // Anything else: no text of `gh`, which can quote what a third party wrote (FR-026).
+  [/^/, () => 'gh a échoué'],
 ];
 
-/**
- * A generic motive, never the text of `gh` (FR-026): its stderr can quote what a third party wrote
- * (a title, a comment). Only a known category, with its own wording, or the exit status is kept.
- */
 const reason = (error: unknown) => {
-  const { code, stderr, message } = error as {
-    code?: unknown;
-    stderr?: unknown;
-    message?: unknown;
-  };
-  const text = [stderr, message].filter((part) => typeof part === 'string').join('\n');
-  for (const [pattern, wording] of KNOWN_FAILURES) {
+  const { stderr, message } = error as { stderr?: unknown; message?: unknown };
+  const text = `${String(stderr)}\n${String(message)}`;
+  return KNOWN_FAILURES.flatMap(([pattern, wording]) => {
     const match = pattern.exec(text);
-    if (match) return wording(match);
-  }
-  if (code === 'ENOENT') return 'gh est introuvable';
-  if (typeof code === 'number') return `gh a échoué (code de sortie ${String(code)})`;
-  return 'gh a échoué';
+    return match ? [wording(match)] : [];
+  })[0] as string;
 };
