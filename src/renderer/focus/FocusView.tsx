@@ -1,3 +1,4 @@
+import { agentName } from '../../shared/agent-name';
 import {
   useEffect,
   useLayoutEffect,
@@ -11,7 +12,9 @@ import { exchangeMessageSchema, type ExchangeMessage } from '../../shared/exchan
 import type { OrchestratorAction } from '../../shared/orchestrator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TerminalView } from '../tiles/TerminalView';
-import { TileActions } from '../tiles/TileActions';
+import { TileActions, type TileMenu } from '../tiles/TileActions';
+import { visibleTabs } from './visible-tabs';
+import { agentColor } from '../../shared/agent-color';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import type { AgentActions } from '../workspace/WorkspaceView';
 import { AgentPills } from './AgentPills';
@@ -21,6 +24,12 @@ import { ROLE_LABELS } from '../../shared/roles';
 export type FocusTab = 'terminal' | 'changes' | 'conflicts' | 'actions' | 'reports' | 'preview';
 
 type Props = Omit<AgentActions, 'onClose'> & {
+  /** Given by the workspace along with the other actions; the Focus has no use for it. */
+  onClose?: AgentActions['onClose'];
+  /** 006 — the ⋮ menu of the footer: « Faire orchestrateur » and « Renommer ». */
+  menu?: TileMenu | undefined;
+  /** #43 — files of the diff of the agent; absent: `changes` given means there are some. */
+  changedFiles?: number;
   tab?: FocusTab;
   onTab?: (tab: FocusTab) => void;
   /** The Changements tab (002 US1), shown above the same terminal. */
@@ -49,6 +58,14 @@ type Props = Omit<AgentActions, 'onClose'> & {
   terminals: Pick<TerminalRegistry, 'attach'> | undefined;
   onSelect: (agentId: string) => void;
   onBack: () => void;
+};
+
+const TAB_LABELS: Record<Exclude<FocusTab, 'conflicts'>, string> = {
+  terminal: 'Terminal',
+  preview: 'Aperçu',
+  changes: 'Changements',
+  actions: '◎ Actions',
+  reports: '◎ Rapports',
 };
 
 const TAB =
@@ -81,6 +98,8 @@ export function FocusView({
   onRestart,
   onLog,
   onCancelAutoResume,
+  menu,
+  changedFiles,
 }: Props) {
   const terminalBox = useRef<HTMLDivElement>(null);
   const back = useRef(onBack);
@@ -91,7 +110,9 @@ export function FocusView({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      // Escape belongs to the CLI in its terminal, and to a dialog when one is open.
+      // Escape belongs to the CLI in its terminal, to a field being typed in, and to a dialog.
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+        return;
       if (event.target instanceof Node && terminalBox.current?.contains(event.target)) return;
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
       back.current();
@@ -104,14 +125,35 @@ export function FocusView({
 
   const agent = agents.find((a) => a.id === agentId);
   if (!agent) return null;
-  const title = `${name(agent.cliId)} ${String(agent.position)}`;
+  const title = agentName(agent, name);
+  // #43 — a tab shows once it has something to show; the one open stays while its panel is given.
+  const panels: Record<FocusTab, boolean> = {
+    terminal: true,
+    preview: preview !== undefined,
+    changes: changes !== undefined,
+    conflicts: conflicts !== undefined,
+    actions: orchestration !== undefined,
+    reports: reports !== undefined,
+  };
+  const conflictCount = conflicts?.count ?? 0;
+  const offered = visibleTabs(agent, {
+    served: preview !== undefined,
+    changedFiles: changedFiles ?? (changes !== undefined ? 1 : 0),
+    // The journal is read when its tab opens: the orchestrator's tab is offered before it is loaded.
+    actions: orchestration ? 1 : 0,
+    reports: reports !== undefined ? 1 : 0,
+    conflicts: conflictCount,
+  });
+  const shownTabs = offered.includes(tab) || !panels[tab] ? offered : [...offered, tab];
+  // The open tab went away with its content: back to the terminal.
+  const active = panels[tab] ? tab : 'terminal';
   const failed = agent.state === 'error';
   return (
     <section
       data-fx-shield
       aria-label={`Focus : ${title}`}
       data-state={agent.state}
-      style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}
+      style={{ '--agent-color': agentColor(agent, agents) } as CSSProperties}
       className="flex h-full min-h-0 animate-enter flex-col overflow-hidden rounded-[14px] border border-[color-mix(in_srgb,var(--agent-color)_55%,transparent)] bg-surface motion-reduce:animate-none"
     >
       <header className="flex h-12 flex-none items-center gap-3 border-b border-white/6 px-3.5">
@@ -124,35 +166,16 @@ export function FocusView({
         <AgentPills agents={pills} current={agent.id} name={name} onSelect={onSelect} />
         <span aria-hidden className="h-[18px] w-px bg-white/8" />
         <Tabs
-          value={tab}
+          value={active}
           // Only the tabs below can be chosen.
           onValueChange={(value) => onTab?.(value as FocusTab)}
         >
           <TabsList variant="line" className="h-auto gap-4 p-0">
-            <TabsTrigger value="terminal" className={TAB}>
-              Terminal
-            </TabsTrigger>
-            <TabsTrigger value="preview" disabled={preview === undefined} className={TAB}>
-              Aperçu
-            </TabsTrigger>
-            <TabsTrigger value="changes" className={TAB}>
-              Changements
-            </TabsTrigger>
-            {conflicts && (
-              <TabsTrigger value="conflicts" className={TAB}>
-                Conflits · {conflicts.count}
+            {shownTabs.map((value) => (
+              <TabsTrigger key={value} value={value} className={TAB}>
+                {value === 'conflicts' ? `Conflits · ${String(conflictCount)}` : TAB_LABELS[value]}
               </TabsTrigger>
-            )}
-            {orchestration && (
-              <TabsTrigger value="actions" className={TAB}>
-                ◎ Actions
-              </TabsTrigger>
-            )}
-            {reports !== undefined && (
-              <TabsTrigger value="reports" className={TAB}>
-                ◎ Rapports
-              </TabsTrigger>
-            )}
+            ))}
           </TabsList>
         </Tabs>
         <span className="flex-1" />
@@ -169,26 +192,28 @@ export function FocusView({
           ⎇ {agent.branch} · :{agent.port}
         </span>
       </header>
-      <div className="flex min-h-0 flex-1 flex-col">
-        {tab === 'changes' && changes}
-        {tab === 'conflicts' && conflicts?.content}
-        {tab === 'actions' && orchestration && (
-          <ActionsJournal {...orchestration} name={(id) => nameOf(agents, id, name)} />
-        )}
-        {tab === 'reports' && reports}
-        {tab === 'preview' && preview}
-        {/* Same place in the tree on both tabs: the terminal stays attached, its session kept. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* #42 — under another tab the terminal is hidden, not unmounted: its session is kept, and
+            the panel has the whole tile. */}
         <div
           ref={terminalBox}
+          aria-hidden={active !== 'terminal'}
           className={cn(
             'flex min-h-0 flex-col',
-            tab === 'terminal' ? 'flex-1' : 'h-[32%] flex-none border-t border-white/6',
+            active === 'terminal' ? 'flex-1' : 'pointer-events-none invisible absolute inset-0',
           )}
         >
           {terminals && (
             <TerminalView termId={agent.id} registry={terminals} label={`Terminal de ${title}`} />
           )}
         </div>
+        {active === 'changes' && changes}
+        {active === 'conflicts' && conflicts?.content}
+        {active === 'actions' && orchestration && (
+          <ActionsJournal {...orchestration} name={(id) => nameOf(agents, id, name)} />
+        )}
+        {active === 'reports' && reports}
+        {active === 'preview' && preview}
       </div>
       <footer className="flex flex-none items-center justify-end gap-2 border-t border-white/6 px-3.5 py-2.5 text-[13px]">
         {failed && agent.lastError && (
@@ -221,6 +246,7 @@ export function FocusView({
           onCancelAutoResume={() => {
             onCancelAutoResume(agent.id);
           }}
+          menu={menu}
         />
       </footer>
     </section>
@@ -229,7 +255,7 @@ export function FocusView({
 
 const nameOf = (agents: Agent[], id: string | null, name: (cliId: string) => string) => {
   const agent = agents.find((a) => a.id === id);
-  return agent ? `${name(agent.cliId)} ${String(agent.position)}` : null;
+  return agent ? agentName(agent, name) : null;
 };
 
 const TIME = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });

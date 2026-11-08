@@ -60,13 +60,13 @@ describe('FocusView', () => {
     expect(within(focus()).getByText('agent/pg-sessions · :3001', { exact: false })).toBeDefined();
   });
 
-  it('has the Terminal tab active, Changements enabled and Aperçu still disabled (FR-001)', async () => {
+  // #43: a tab without content is not offered, so Aperçu is no longer shown, even disabled.
+  it('has the Terminal tab active, Changements enabled and no Aperçu while nothing is served (FR-001, #43)', async () => {
     const user = userEvent.setup();
     const { props } = setup();
     const terminal = screen.getByRole('tab', { name: 'Terminal' });
     expect(terminal.getAttribute('aria-selected')).toBe('true');
-    const preview = screen.getByRole('tab', { name: 'Aperçu' });
-    expect((preview as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('tab', { name: 'Aperçu' })).toBeNull();
     const changes = screen.getByRole('tab', { name: 'Changements' });
     expect((changes as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByText('Liste des changements')).toBeNull();

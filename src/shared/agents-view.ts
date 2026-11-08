@@ -1,3 +1,4 @@
+import { agentName } from './agent-name';
 import type { Agent, Loop, TodoItem, Workspace } from './model';
 import type { Role } from './primitives';
 import { ORDER } from './todo';
@@ -119,7 +120,7 @@ export function agentRows(
     const first = [...items].sort((a, b) => rank(a) - rank(b))[0] ?? null;
     return {
       agent,
-      name: `${names(agent.cliId)} ${String(agent.position)}`,
+      name: agentName(agent, names),
       role: agent.role,
       stateLabel: agentStateLabel(agent, now),
       issueId: agentPhase(agent, workspace.loops)?.issueId ?? null,

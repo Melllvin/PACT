@@ -1,3 +1,5 @@
+import { agentColor } from '../../shared/agent-color';
+import { agentName } from '../../shared/agent-name';
 import type { CSSProperties } from 'react';
 import type { Agent } from '../../shared/model';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -28,8 +30,8 @@ export function AgentPills({ agents, current, name, onSelect }: Props) {
           <ToggleGroupItem
             key={agent.id}
             value={agent.id}
-            aria-label={`${name(agent.cliId)} ${String(agent.position)}${waiting ? ', attend votre réponse' : ''}`}
-            style={{ '--agent-color': `var(--agent-${agent.color})` } as CSSProperties}
+            aria-label={`${agentName(agent, name)}${waiting ? ', attend votre réponse' : ''}`}
+            style={{ '--agent-color': agentColor(agent, agents) } as CSSProperties}
             className="h-7 gap-1.5 rounded-lg border border-white/8 px-2 data-[state=on]:border-(--agent-color) data-[state=on]:bg-white/5"
           >
             <span aria-hidden className="size-2 rounded-full bg-(--agent-color)" />

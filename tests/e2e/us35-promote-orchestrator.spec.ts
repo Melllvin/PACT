@@ -58,6 +58,8 @@ test('makes an agent the orchestrator: restarted with its access, it launches a 
   expect(l && c && l.height > c.height * 1.5).toBe(true);
 
   // The link: the Agents column or the graph says who launched it.
-  await page.getByRole('button', { name: 'Graphe' }).click();
-  await expect(page.getByText('lancé par Faux CLI 1')).toBeVisible();
+  await page.getByRole('radio', { name: 'Graphe' }).click();
+  await expect(
+    page.getByRole('button', { name: /^Faux CLI 2, .*lancé par Faux CLI 1$/ }),
+  ).toBeVisible();
 });

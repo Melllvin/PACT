@@ -1,3 +1,4 @@
+import { agentColor } from '../../shared/agent-color';
 import type { AgentsView } from '../../shared/agents-view';
 import { TodoItem } from '../todo/TodoItem';
 import type { AgentActions } from '../workspace/WorkspaceView';
@@ -10,7 +11,8 @@ type Props = Omit<AgentActions, 'onClose'> & {
 
 /** The Agents column (contracts/ui.md): what waits on the user, then one row per agent. */
 export function AgentsColumn({ view, onOpen, ...actions }: Props) {
-  const byId = new Map(view.rows.map((row) => [row.agent.id, row.agent]));
+  const all = view.rows.map((row) => row.agent);
+  const byId = new Map(all.map((agent) => [agent.id, agent]));
   return (
     <aside
       aria-label="Agents"
@@ -33,7 +35,13 @@ export function AgentsColumn({ view, onOpen, ...actions }: Props) {
       )}
       <ul aria-label="Agents du workspace" className="m-0 flex list-none flex-col gap-2.5 p-0">
         {view.rows.map((row) => (
-          <AgentRow key={row.agent.id} row={row} onOpen={onOpen} {...actions} />
+          <AgentRow
+            key={row.agent.id}
+            row={row}
+            color={agentColor(row.agent, all)}
+            onOpen={onOpen}
+            {...actions}
+          />
         ))}
       </ul>
     </aside>

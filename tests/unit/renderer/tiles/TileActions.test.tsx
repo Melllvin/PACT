@@ -167,9 +167,9 @@ describe('TileActions menu « Renommer » (#45)', () => {
 
   it('Given the menu, When « Renommer » is chosen, Then a field holds the current name', async () => {
     await setup();
-    expect(
-      (screen.getByRole('textbox', { name: 'Nom de l’agent' }) as HTMLInputElement).value,
-    ).toBe('Claude Code 2');
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Nom de l’agent' }).value).toBe(
+      'Claude Code 2',
+    );
   });
 
   it('Given a new name, When validated, Then onRename gets it trimmed', async () => {
