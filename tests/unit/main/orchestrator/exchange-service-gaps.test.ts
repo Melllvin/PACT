@@ -141,6 +141,27 @@ describe('a write that fails', () => {
   });
 });
 
+describe('renamed agents (006 T045)', () => {
+  it('Given a renamed agent, When another sends to it by its new name, Then it is delivered; the default name no longer matches', async () => {
+    current = base();
+    current.agents = current.agents.map((a) => (a.id === SPEC ? { ...a, name: 'Zoé' } : a));
+    await say(DEV, 'zoé');
+    expect(journal()).toHaveLength(1);
+    await expect(say(DEV, 'Claude Code 3')).rejects.toThrow(/Aucun agent/);
+  });
+
+  it('Given a renamed pair that bounces, When PACT escalates, Then the entry of the journal names them by their new names', async () => {
+    current = base();
+    current.agents = current.agents.map((a) =>
+      a.id === DEV ? { ...a, name: 'Zoé' } : a.id === SPEC ? { ...a, name: 'Max' } : a,
+    );
+    for (let i = 0; i < 6; i++) await say(i % 2 ? SPEC : DEV, i % 2 ? DEV : SPEC);
+    const texts = journal().map((m) => m.text);
+    expect(texts.some((t) => t.includes('Zoé') && t.includes('Max'))).toBe(true);
+    expect(texts.join('\n')).not.toMatch(/Claude Code [23]/);
+  });
+});
+
 describe('forget', () => {
   it('Given a pair that bounced, When one of its agents is forgotten, Then the pair starts again from zero', async () => {
     await say(DEV, SPEC);

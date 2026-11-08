@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { GraphView } from '../../../../src/renderer/graph/GraphView';
 import type { Agent, Loop } from '../../../../src/shared/model';
+import { agentColor } from '../../../../src/shared/agent-color';
 import { agent } from '../tiles/fixtures';
 
 // 006 T024 — the « Graphe » view (contracts/ui.md « Graphe », FR-013 to FR-019): a region, a list of
@@ -180,5 +181,28 @@ describe('GraphView', () => {
   it('does not offer any action on a node: only the button that opens it (FR-019)', () => {
     setup();
     expect(screen.getAllByRole('button')).toHaveLength(5);
+  });
+
+  it('shows a renamed agent under its name, in its node and in « lancé par » (T045)', () => {
+    // Given the orchestrator renamed « Cheffe » and a dev renamed « Zoé »
+    const boss = { ...lead, name: 'Cheffe' };
+    const renamed = { ...dev, name: 'Zoé' };
+    setup([boss, renamed], []);
+    // Then the nodes carry the new names, and the dev is launched by « Cheffe »
+    expect(nodes().map((node) => node.getAttribute('aria-label'))).toEqual([
+      'Cheffe, orchestrateur, travaille, lancé par vous',
+      'Zoé, dev, travaille, lancé par Cheffe',
+    ]);
+    expect(screen.getByText('Zoé')).toBeDefined();
+  });
+
+  it('takes the color of agentColor for the node (T050)', () => {
+    // Given an orchestrator and a dev
+    const agents = [lead, dev];
+    setup(agents, []);
+    // Then each node carries the derived color, not the stored base color
+    const colors = nodes().map((node) => node.style.getPropertyValue('--agent-color'));
+    expect(colors).toEqual(agents.map((a) => agentColor(a, agents)));
+    expect(colors[0]).not.toBe('var(--agent-purple)');
   });
 });

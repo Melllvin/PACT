@@ -81,7 +81,6 @@ export class WorkspaceService {
     return this.open_.get(id);
   }
 
-  /** Changes an open workspace and saves it, keeping memory and disk in step. */
   /** Whether a permission level was chosen for the workspace: its own, or the global one (FR-012). */
   async hasPermissionChoice(id: string): Promise<boolean> {
     return (
@@ -90,6 +89,7 @@ export class WorkspaceService {
     );
   }
 
+  /** Changes an open workspace and saves it, keeping memory and disk in step. */
   async update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace> {
     const workspace = this.open_.get(id);
     if (!workspace) throw new IpcFailure('NOT_FOUND', 'Workspace inconnu.');

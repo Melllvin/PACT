@@ -1,6 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { Agent, Loop } from '../../shared/model';
 import { LOOP_ROUNDS, ROLE_LABELS, agentPhase, agentStateLabel } from '../../shared/agents-view';
+import { agentColor } from '../../shared/agent-color';
+import { agentName } from '../../shared/agent-name';
 import { graphLayout, type GraphNode } from './graph-layout';
 
 type Props = {
@@ -37,7 +39,7 @@ const SEPARATOR = ', ';
 export function GraphView({ agents, loops, names, now, onOpen }: Props) {
   const { nodes, edges } = graphLayout(agents, loops);
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  const nameOf = (agent: Agent) => `${names(agent.cliId)} ${String(agent.position)}`;
+  const nameOf = (agent: Agent) => agentName(agent, names);
   const at = new Map(nodes.map((node) => [node.agentId, node]));
 
   const columns = Math.max(0, ...nodes.map((node) => node.column + 1));
@@ -73,7 +75,7 @@ export function GraphView({ agents, loops, names, now, onOpen }: Props) {
         }}
         style={
           {
-            '--agent-color': `var(--agent-${agent.color})`,
+            '--agent-color': agentColor(agent, agents),
             width: CELL_W,
             height: CELL_H,
           } as CSSProperties
