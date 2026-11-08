@@ -34,7 +34,7 @@ export type LoopReport = {
 };
 
 export type ActiveTab = { kind: 'home' } | { kind: 'workspace'; id: string };
-export type View = 'tiles' | 'focus';
+export type View = 'tiles' | 'focus' | 'graph';
 /**
  * 1c or 1d, then 1m when no permission level is known yet (FR-012). The draft goes along, so a
  * refused launch or a failed choice brings the launcher back as it was.

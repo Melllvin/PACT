@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IpcEvent, IpcEventChannel, IpcOutput, PactApi } from '../../../../src/shared/ipc';
 import type { Agent, Workspace } from '../../../../src/shared/model';
-import { createAppStore } from '../../../../src/renderer/store/app-store';
+import { createAppStore, type View } from '../../../../src/renderer/store/app-store';
 import { DEFAULT_TEST_PATHS } from '../../../../src/shared/model';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -146,6 +146,16 @@ describe('app store', () => {
     expect(store.getState().view).toBe('tiles');
     store.getState().setView('focus');
     expect(store.getState().view).toBe('focus');
+  });
+
+  it('accepts the graph view (006 T025, FR-012)', () => {
+    const store = createAppStore(fakeApi().api);
+    // `View` itself lists 'graph': this line fails `tsc` until it does (the store holds any value).
+    const graph = 'graph' satisfies View;
+    store.getState().setView(graph);
+    expect(store.getState().view).toBe('graph');
+    store.getState().setView('tiles');
+    expect(store.getState().view).toBe('tiles');
   });
 
   it('shows the agents an orchestrator launched (003 FR-015)', async () => {

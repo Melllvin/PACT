@@ -23,7 +23,7 @@ type Props = {
   usage?: ReactNode;
 };
 
-export type WorkspaceViewMode = 'tiles' | 'review';
+export type WorkspaceViewMode = 'tiles' | 'review' | 'graph';
 
 /** Workspace views; Comparer stays visible but inactive until the Aperçus spec (FR-006). */
 export function Toolbar({
@@ -44,7 +44,7 @@ export function Toolbar({
         value={view}
         onValueChange={(value) => {
           // Pressing the current view again keeps it.
-          if (value === 'tiles' || value === 'review') onView?.(value);
+          if (value === 'tiles' || value === 'review' || value === 'graph') onView?.(value);
         }}
         aria-label="Vue"
         variant="segment"
@@ -63,6 +63,13 @@ export function Toolbar({
         >
           Revue
           {reviewCount > 0 && <Badge variant="waiting">{reviewCount}</Badge>}
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          value="graph"
+          className="w-[78px]"
+          disabled={!showTodo && view !== 'graph'}
+        >
+          Graphe
         </ToggleGroupItem>
       </ToggleGroup>
       {usage}
