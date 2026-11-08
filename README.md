@@ -91,8 +91,10 @@ configurations are never touched.
 
 - **Tools.** `list_agents`, `get_changes`, `get_file_diff`, `run_tests`, `send_prompt` (a prompt
   waits in a queue while the agent works or waits for an answer, and is marked « ◎ » in its
-  terminal), `wait_for_agents` (ends of turns, questions, errors, test results), `launch_agent`
-  and `close_agent` (the worktree and the branch are kept), and `request_integration`.
+  terminal), `get_events` (ends of turns, questions, errors, test results since its last read:
+  PACT wakes the orchestrator when something arrives, so it does not sit waiting),
+  `wait_for_agents` (only a fallback, no longer the normal way), `launch_agent` and `close_agent`
+  (the worktree and the branch are kept), and `request_integration`.
 - **Integrations are yours.** `request_integration` only puts « ◎ Intégrer <agent> → main ? » in
   « À faire », with the commit message the orchestrator proposed; you edit it, integrate or refuse,
   and the orchestrator hears the outcome (the commit, the conflicting files, or why it failed).
