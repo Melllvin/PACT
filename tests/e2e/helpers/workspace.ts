@@ -78,3 +78,20 @@ export const agentWorktree = (repo: string, n = 1) =>
     .filter((line) => line.startsWith('worktree '))
     .map((line) => line.slice('worktree '.length))
     .find((path) => path.endsWith(`/.worktrees/fake-${String(n)}`)) ?? '';
+
+/**
+ * Everything the agent at `position` (« Faux CLI 3 » is 3) has printed so far, from PACT's own log of its terminal. A tile
+ * shows only the rows in view, and on a small screen (a CI runner) a few turns push the earlier ones
+ * out: what a test counts or reads across several turns is read here, not in the tile.
+ */
+export async function outputOf(page: Page, position: number): Promise<string> {
+  return page.evaluate(async (at) => {
+    type Pact = { invoke(channel: string, input?: unknown): Promise<unknown> };
+    const pact = (window as unknown as { pact: Pact }).pact;
+    const state = (await pact.invoke('app:getState')) as {
+      workspaces: { agents: { id: string; position: number }[] }[];
+    };
+    const agent = state.workspaces.flatMap((w) => w.agents).find((a) => a.position === at);
+    return agent ? ((await pact.invoke('agent:log', { agentId: agent.id })) as string) : '';
+  }, position);
+}
