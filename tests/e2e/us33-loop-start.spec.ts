@@ -175,5 +175,14 @@ test('SC-001: a whole dev ↔ test loop runs with no wait_for_agents, the orches
     `${ISSUE} : tests passés par PACT au tour 2.`,
     { timeout: 30_000 },
   );
+  // The orchestrator was woken: the pointer reached its terminal, and get_events gave it the event
+  // (without this, the absence of wait_for_agents below would be true by construction).
+  await expect(lead).toContainText(/\d+ événements?, lis get_events/, { timeout: 30_000 });
+  await expect(lead).toContainText('MCP get_events :', { timeout: 30_000 });
+  // No wait_for_agents call was ever made: the fake CLI prints « MCP <tool> : » for each tool call it
+  // makes, and the PACT server has no counter to read (the tool itself would be the only trace).
   await expect(lead).not.toContainText('wait_for_agents');
+  await expect(lead).not.toContainText('MCP wait_for_agents');
+  await expect(dev).not.toContainText('wait_for_agents');
+  await expect(tester).not.toContainText('wait_for_agents');
 });

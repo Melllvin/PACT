@@ -176,6 +176,11 @@ Toutes les décisions ci-dessous sont vérifiées contre le code de `origin/006-
   de rôle demanderait donc une autorisation à chaque réveil. La règle `allow` passe à tout agent qui a l'accès MCP.
 - **`SENSITIVE_RULES`** gagne, en lecture seule : `gh pr view|diff|list|checkout`, `gh issue view|list`, `gh run view`, `gh api`, `git fetch origin refs/pull/*`.
   `gh pr create` reste libre, il sert aux agents.
+  Tour 2 : chaque verbe de lecture existe en deux formes, nue et avec `*` (la règle `Bash(gh pr view *)` ne couvre pas `gh pr view` seul), et la liste gagne `gh pr status`,
+  `gh issue status`, `gh run list` et `gh search`. Le motif `git fetch` couvre aussi les refspecs préfixés par `+` (`+refs/pull/*`).
+- **Limite des enveloppes** : les règles Claude Code comparent la commande telle qu'écrite. `command gh pr view 12`, `env gh pr view 12`, `gh  pr view` (espaces doubles) ou un
+  alias de shell passent à côté. Aucune règle ne règle cela sans bloquer des commandes légitimes ; c'est une limite assumée, pas un défaut à corriger par d'autres règles. La
+  garantie reste partielle : elle vaut pour la forme usuelle des commandes, pas contre un agent qui contourne.
 - **Choix pour « dire à l'utilisateur »** : une phrase dans `PermissionsDialog` et le lanceur. Les règles n'existent qu'au niveau `ask-sensitive` de Claude Code ; Codex et les autres
   gardent une garantie partielle.
 
