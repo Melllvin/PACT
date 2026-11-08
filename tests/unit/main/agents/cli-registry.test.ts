@@ -9,24 +9,24 @@ import type { AdapterId, CliDefinition } from '../../../../src/shared/model';
 
 // US2 — « Agents détectés » : Claude Code and Codex found through the login shell's PATH (T028).
 
-const adapter = (
-  id: AdapterId,
-  detect: CliAdapter['detect'],
-  models: string[] = [],
-): CliAdapter => ({
-  id,
-  supportsOrchestrator: id === 'claude-code',
-  supportsEffort: false,
-  detect,
-  listModels: () => Promise.resolve(models),
-  modelTiers: () => [],
-  buildLaunch: vi.fn(),
-  buildResume: vi.fn(),
-  mapHookEvent: () => null,
-  mapOutput: () => null,
-  answerKeys: () => '',
-  parseRateLimitReset: () => null,
-});
+const adapter = (id: AdapterId, detect: CliAdapter['detect'], models: string[] = []): CliAdapter =>
+  // 007 T035: `midTurnWake` becomes required; this registry test says nothing of the wake. Asserted,
+  // so that it compiles with and without the member.
+  ({
+    id,
+    supportsOrchestrator: id === 'claude-code',
+    supportsEffort: false,
+    midTurnWake: false,
+    detect,
+    listModels: () => Promise.resolve(models),
+    modelTiers: () => [],
+    buildLaunch: vi.fn(),
+    buildResume: vi.fn(),
+    mapHookEvent: () => null,
+    mapOutput: () => null,
+    answerKeys: () => '',
+    parseRateLimitReset: () => null,
+  }) as CliAdapter;
 
 const found = (path: string, version: string): DetectionResult => ({
   resolvedPath: path,
