@@ -1018,6 +1018,15 @@ export class AgentManager {
     const token = this.hooks.register(
       agent.id,
       (payload) => {
+        // 007 contracts/hooks.md — the wake is decided before the signal is applied: a hook that
+        // carries a pointer prolongs the turn, so its Stop is no end of turn (FR-018). Nothing is
+        // written in the terminal (Q10).
+        const point = adapter.midTurnWake ? adapter.isWakePoint?.(payload) : null;
+        if (point) {
+          const pointer = this.wake?.takeForHook(agent.id, point);
+          const reply = pointer ? adapter.wakeReply?.(payload, pointer) : null;
+          if (reply) return reply;
+        }
         const signal = adapter.mapHookEvent(payload);
         if (!signal) return {};
         if (this.alwaysAllowed(agent.id, signal)) {

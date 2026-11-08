@@ -26,7 +26,7 @@ const adapter = (id: AdapterId, detect: CliAdapter['detect'], models: string[] =
     mapOutput: () => null,
     answerKeys: () => '',
     parseRateLimitReset: () => null,
-  }) as CliAdapter;
+  });
 
 const found = (path: string, version: string): DetectionResult => ({
   resolvedPath: path,

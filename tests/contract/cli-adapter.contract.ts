@@ -162,7 +162,7 @@ export function runCliAdapterContract(
     it('7. without a hook that can carry it, has no wake point and no reply', () => {
       const wake = adapter as WakeCapable;
       expect(wake.midTurnWake).toBeTypeOf('boolean');
-      if (wake.midTurnWake === true) return;
+      if (wake.midTurnWake) return;
       for (const payload of [
         { hook_event_name: 'Stop' },
         { hook_event_name: 'PostToolUse' },
