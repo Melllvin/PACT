@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { answerFolderPickers, launchApp, type LaunchedApp } from './helpers/launch-app';
-import { createRepo, typeIn } from './helpers/workspace';
+import { createRepo, outputOf, typeIn } from './helpers/workspace';
 
 // 007 US1 end to end (T022): an orchestrator that is idle is woken by ONE line typed in its prompt
 // when an agent reports; PACT types nothing of the agent's text; it never writes over what the user
@@ -163,15 +163,17 @@ test('US1 sc.5: nothing is written over what the user typed; the pointer comes o
 
 test('US1 sc.7: a multi-line instruction reaches the agent as an instruction read by get_events, in one piece', async () => {
   test.setTimeout(150_000);
-  const { page, lead, dev } = await openTeam();
+  const { page, lead } = await openTeam();
 
   await typeIn(page, lead, 'Faux CLI 2');
   await expect(lead).toContainText('MCP send_prompt :');
-  // The dev was woken by the pointer, read it, and plays the instruction whole.
-  await expect(dev).toContainText('MCP get_events :', { timeout: 20_000 });
-  await expect(dev).toContainText('Reçu : Consigne ligne un', { timeout: 20_000 });
-  await expect(dev).toContainText('Consigne ligne deux');
-  await expect(dev).not.toContainText('pasted_content');
+  // The dev was woken by the pointer, read it, and plays the instruction whole. Read in its log, not
+  // in its tile: on a small screen the rows of this turn scroll out of view as they are printed.
+  const logged = () => outputOf(page, 2);
+  await expect.poll(logged, { timeout: 20_000 }).toContain('MCP get_events :');
+  await expect.poll(logged, { timeout: 20_000 }).toContain('Reçu : Consigne ligne un');
+  expect(await logged()).toContain('Consigne ligne deux');
+  expect(await logged()).not.toContain('pasted_content');
 });
 
 test('US1 sc.9: the journal survives a restart and the unread events are announced again', async () => {

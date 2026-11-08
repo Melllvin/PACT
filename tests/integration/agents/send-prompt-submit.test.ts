@@ -303,6 +303,17 @@ describe('PACT does not write into a prompt that holds something (007 FR-014, SC
     await send(agent.id, 'Après', 'orchestrator');
     await waitFor(() => texts().includes('Après'), 'held by keys that answered a question');
   });
+
+  it('Given an empty prompt, When the terminal answers by itself (position, focus), Then the draft stays empty and the wake types its pointer', async () => {
+    const agent = await setup({ strict: false, scenario: 'echo-prompt' });
+    // ConPTY asks for the cursor position as it starts; xterm answers through `onData`.
+    manager.typed(agent.id, '\x1b[1;1R');
+    manager.typed(agent.id, '\x1b[I\x1b[O');
+    expect(manager.promptState(agent.id)).toBe('empty');
+    writes.length = 0;
+    await send(agent.id, '1 événement, lis get_events', 'wake');
+    await waitFor(() => texts().includes('1 événement, lis get_events'), 'pointer never typed');
+  });
 });
 
 describe('a pointer typed but never submitted (007 R6)', () => {
