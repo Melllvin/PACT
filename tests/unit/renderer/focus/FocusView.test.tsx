@@ -309,3 +309,130 @@ describe('FocusView and the roles (004 T018, FR-006)', () => {
     expect(within(focus()).queryByLabelText('Rôle')).toBeNull();
   });
 });
+
+// 007 T043 — the journal « ◎ Actions » merges the messages of the exchanges with the actions of the
+// orchestrator, by time, the latest first (contracts/ui.md « Onglet ◎ Actions »).
+//
+// API fixed here for the dev (see the report, « API fixées »): `orchestration.messages?:
+// ExchangeMessage[]` (empty by default). A message is a `<li>` of the same list; it shows the time,
+// « <sender> → <recipient> » by the names of the agents (« PACT » for `pact`), its type (`action` or
+// `info`), its kind and its text; it carries `data-type="action" | "info"`, and an `info` is dimmed
+// by that attribute alone (state events: turn-finished, closed).
+describe('FocusView of the orchestrator — the exchanges in the journal', () => {
+  const uuidOf = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const message = (
+    n: number,
+    hour: number,
+    over: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    id: uuidOf(100 + n),
+    at: `2026-11-08T${String(hour).padStart(2, '0')}:00:00.000Z`,
+    from: agent(2).id,
+    to: agent(3).id,
+    type: 'action',
+    kind: 'message',
+    text: `Message ${String(n)}`,
+    unreadBy: [],
+    ...over,
+  });
+  const action = (n: number, hour: number) => ({
+    id: uuidOf(n),
+    at: `2026-11-08T${String(hour).padStart(2, '0')}:00:00.000Z`,
+    tool: 'send_prompt' as const,
+    agentId: agent(2).id,
+    summary: `Consigne ${String(n)}`,
+    outcome: 'ok' as const,
+    reason: null,
+  });
+
+  const renderJournal = (
+    messages: Record<string, unknown>[],
+    actions = [action(1, 8), action(2, 12)],
+  ) => {
+    const journal = { messages };
+    render(
+      <FocusView
+        agents={team({ role: 'orchestrator' })}
+        agentId={agent(1).id}
+        name={() => 'Claude Code'}
+        terminals={undefined}
+        tab="actions"
+        onTab={vi.fn()}
+        orchestration={{ actions, onRevoke: vi.fn(), ...journal }}
+        onSelect={vi.fn()}
+        onBack={vi.fn()}
+        onAnswer={vi.fn()}
+        onResume={vi.fn()}
+        onRestart={vi.fn()}
+        onLog={vi.fn()}
+        onCancelAutoResume={vi.fn()}
+      />,
+    );
+    return within(screen.getByRole('list', { name: 'Actions de l’orchestrateur' })).getAllByRole(
+      'listitem',
+    );
+  };
+
+  it('Given actions and messages, When the journal is shown, Then they are merged by time, the latest first', () => {
+    const items = renderJournal([message(1, 10), message(2, 14), message(3, 6)]);
+    expect(items.map((item) => /(Message|Consigne) \d/.exec(item.textContent)?.[0])).toEqual([
+      'Message 2',
+      'Consigne 2',
+      'Message 1',
+      'Consigne 1',
+      'Message 3',
+    ]);
+  });
+
+  it('Given a message between two agents, When it is shown, Then it has the sender, the recipient, the type, the kind and the text', () => {
+    const [item] = renderJournal([message(1, 10, { kind: 'question', text: 'Quelle base ?' })], []);
+    const text = item?.textContent ?? '';
+    expect(text).toMatch(/Claude Code 2\s*→\s*Claude Code 3/);
+    expect(text).toContain('action');
+    expect(text).toContain('question');
+    expect(text).toContain('Quelle base ?');
+    expect(item?.getAttribute('data-type')).toBe('action');
+  });
+
+  it('Given an event of PACT, When it is shown, Then the sender is PACT', () => {
+    const [item] = renderJournal(
+      [message(1, 10, { from: 'pact', kind: 'report', text: 'Fait' })],
+      [],
+    );
+    expect(item?.textContent).toMatch(/PACT\s*→\s*Claude Code 3/);
+  });
+
+  it('Given an info of state, When it is shown, Then it is there and marked info, to be dimmed', () => {
+    const items = renderJournal(
+      [
+        message(1, 10, { from: 'pact', type: 'info', kind: 'turn-finished', text: 'Tour fini' }),
+        message(2, 11),
+      ],
+      [],
+    );
+    const info = items.find((item) => item.textContent.includes('Tour fini'));
+    expect(info?.getAttribute('data-type')).toBe('info');
+    expect(info?.textContent).toContain('turn-finished');
+    expect(
+      items.find((item) => item.textContent.includes('Message 2'))?.getAttribute('data-type'),
+    ).toBe('action');
+  });
+
+  it('Given a text of an agent with markup, When it is shown, Then it is text, never HTML', () => {
+    const hostile = '<img src=x onerror="alert(1)"><b>gras</b>';
+    const items = renderJournal([message(1, 10, { text: hostile })], []);
+    expect(items[0]?.textContent).toContain(hostile);
+    expect(items[0]?.querySelector('img')).toBeNull();
+    expect(items[0]?.querySelector('b')).toBeNull();
+  });
+
+  it('Given no message, When the journal is shown, Then the actions alone are listed as before', () => {
+    const items = renderJournal([]);
+    expect(items).toHaveLength(2);
+  });
+
+  it('Given only messages, When the journal is shown, Then « Aucune action » is not shown', () => {
+    renderJournal([message(1, 10)], []);
+    expect(screen.queryByText('Aucune action pour l’instant.')).toBeNull();
+  });
+});
