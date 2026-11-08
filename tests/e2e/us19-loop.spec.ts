@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { answerFolderPickers, launchApp, type LaunchedApp } from './helpers/launch-app';
-import { createRepo, outputOf, typeIn } from './helpers/workspace';
+import { createRepo, reportsStoredFrom, typeIn } from './helpers/workspace';
 
 // 004 US2 end to end (T023): the orchestrator runs the dev ↔ test loop of an issue; PACT counts
 // the rounds, stops after the third « defects » for the user to decide, and calls the issue done
@@ -104,9 +104,9 @@ async function launchTeam(page: Page) {
 const call = (page: Page, lead: Locator, tool: string, args: Record<string, unknown>) =>
   typeIn(page, lead, `${tool}|${JSON.stringify(args)}`);
 
-// From the log of the agent, not its tile: on a small screen the tile has pushed the first report out.
-const reportsOf = async (page: Page, position: number) =>
-  (await outputOf(page, position)).split('MCP submit_report : Rapport reçu.').length - 1;
+// What PACT stored, not the words of the terminal: on a small screen the tile has pushed the first
+// report out, and the log of ConPTY (Windows) may cut a line it wraps once the screen is full.
+const reportsOf = reportsStoredFrom;
 
 /** The orchestrator has the test check the issue, and waits for its n-th report. */
 async function testRound(page: Page, lead: Locator, tester: Locator, n: number) {
