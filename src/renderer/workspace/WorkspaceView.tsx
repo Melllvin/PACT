@@ -27,6 +27,7 @@ import { FreeTerminalTile } from '../tiles/FreeTerminalTile';
 import { Tile } from '../tiles/Tile';
 import { TileGrid } from '../tiles/TileGrid';
 import { AgentsColumn } from '../agents/AgentsColumn';
+import { GraphView } from '../graph/GraphView';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { EmptyWorkspace } from './EmptyWorkspace';
 
@@ -196,6 +197,8 @@ export function WorkspaceView({
   const [focusTab, setFocusTab] = useState<FocusTab>('terminal');
   /** The Revue view: the Focus goes from one agent to review to the next (FR-003). */
   const [reviewView, setReviewView] = useState(false);
+  /** 006 US3 — the Graphe view, until an agent is opened or the tiles come back. */
+  const [graphView, setGraphView] = useState(false);
   const focused = agents.some((agent) => agent.id === focusedId) ? focusedId : null;
   // Screen 1q of the agent in Focus, while its integration is stopped on a conflict (FR-027).
   const integration = (focused !== null && review?.integrations[focused]) || null;
@@ -268,6 +271,7 @@ export function WorkspaceView({
   };
   const openTerminal = (agentId: string) => {
     setReviewView(false);
+    setGraphView(false);
     setFocusedId(agentId);
     setFocusTab('terminal');
   };
@@ -297,10 +301,18 @@ export function WorkspaceView({
     setFocusedId(null);
     setFocusTab('terminal');
     setReviewView(false);
+    setGraphView(false);
   };
   const changeView = (next: WorkspaceViewMode) => {
     if (next === 'tiles') {
       backToTiles();
+      return;
+    }
+    if (next === 'graph') {
+      setFocusedId(null);
+      setFocusTab('terminal');
+      setReviewView(false);
+      setGraphView(true);
       return;
     }
     // Revue is only enabled with an agent to review: the view opens on the first one.
@@ -310,6 +322,7 @@ export function WorkspaceView({
     }
   };
   const inReview = reviewView && focused !== null;
+  const graphShown = graphView && hasAgents && focused === null;
   const pills = inReview
     ? agents.filter((agent) => pending.includes(agent.id) || agent.id === focused)
     : agents;
@@ -376,7 +389,7 @@ export function WorkspaceView({
       }}
       onAddAgents={launch}
       reviewCount={review ? pending.length : 0}
-      view={inReview ? 'review' : 'tiles'}
+      view={inReview ? 'review' : graphShown ? 'graph' : 'tiles'}
       onView={changeView}
       usage={
         <UsageGauges
@@ -513,7 +526,16 @@ export function WorkspaceView({
               {...actions}
             />
           )}
-          {available && hasTiles && !focused && (
+          {available && graphShown && (
+            <GraphView
+              agents={agents}
+              loops={workspace.loops}
+              names={cliName}
+              now={now}
+              onOpen={openTerminal}
+            />
+          )}
+          {available && hasTiles && !focused && !graphShown && (
             <TileGrid onAdd={canAdd ? launch : undefined} lead={lead ? tileOf(lead) : undefined}>
               {agents.filter((agent) => agent !== lead).map(tileOf)}
               {workspace.freeTerminals.map((terminal) => (

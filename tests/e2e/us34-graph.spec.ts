@@ -67,36 +67,23 @@ async function openWithIssue(scenario: string): Promise<Page> {
   return page;
 }
 
-/** An orchestrator, a dev and a test, from the detailed launcher. */
+/** An orchestrator, which launches a dev and a test itself (`launch_agent`): « lancé par » shows. */
 async function launchTeam(page: Page) {
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
-  const quick = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  const plus = quick.getByRole('group', { name: 'Faux CLI' }).getByRole('button', { name: '+' });
-  await plus.click();
-  await plus.click();
-  await quick.getByRole('button', { name: 'Mode détaillé…' }).click();
-  const detailed = page.getByRole('dialog', { name: 'Lancer des agents' });
-  const agents = detailed.getByRole('list', { name: 'Agents' }).getByRole('listitem');
-  const inspector = detailed.getByRole('region', { name: 'Inspecteur' });
-  const pick = (n: number) =>
-    agents
-      .nth(n)
-      .getByRole('button', { name: /^Faux CLI/ })
-      .click();
-  await pick(0);
-  await inspector.getByRole('checkbox', { name: /Orchestrateur/ }).click();
-  await pick(1);
-  await inspector.getByRole('combobox', { name: 'Rôle' }).selectOption('dev');
-  await pick(2);
-  await inspector.getByRole('combobox', { name: 'Rôle' }).selectOption('test');
-  await detailed.getByRole('button', { name: 'Lancer 3 agents' }).click();
+  const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
+  await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
+  await launcher.getByRole('button', { name: 'Lancer 1 agent' }).click();
   await page.keyboard.press('Enter'); // 1m: « Toujours autoriser »
   const lead = page.getByRole('article', { name: /^Faux CLI 1,/ });
+  await expect(lead).toHaveAttribute('data-state', 'awaiting-prompt');
+  await typeIn(page, lead, `launch_agent|${JSON.stringify({ cli: 'Faux CLI', role: 'dev' })}`);
   const dev = page.getByRole('article', { name: /^Faux CLI 2,/ });
+  await expect(dev).toHaveAttribute('data-state', 'awaiting-prompt');
+  await expect(lead).not.toHaveAttribute('data-state', 'working');
+  await typeIn(page, lead, `launch_agent|${JSON.stringify({ cli: 'Faux CLI', role: 'test' })}`);
   const tester = page.getByRole('article', { name: /^Faux CLI 3,/ });
-  for (const tile of [lead, dev, tester]) {
-    await expect(tile).toHaveAttribute('data-state', 'awaiting-prompt');
-  }
+  await expect(tester).toHaveAttribute('data-state', 'awaiting-prompt');
+  await expect(lead).not.toHaveAttribute('data-state', 'working');
   return { lead, dev, tester };
 }
 
