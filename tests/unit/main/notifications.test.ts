@@ -211,3 +211,93 @@ describe('what a notification can carry, from the real À faire items', () => {
     expect(JSON.stringify(notify.mock.calls)).not.toContain('0001-piege');
   });
 });
+
+// 007 T043 — « ✕ Échanges en boucle » calls the user away like a stopped loop does (data-model
+// « TodoKind »: `exchange-escalated` joins NOTIFIED); the text of the last message never leaves PACT.
+describe('NotificationService — an exchange in a loop (007)', () => {
+  const escalated = (extra: Partial<TodoItem> = {}) =>
+    item('exchange-escalated', 'a2', {
+      title: '✕ Échanges en boucle · Claude Code 2 ↔ Claude Code 3 · 3 allers-retours',
+      ...extra,
+    });
+
+  it('notifies a new escalation once, in the background', () => {
+    const { service, notify } = setup();
+    service.update('w1', [escalated()]);
+    service.update('w1', [escalated()]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'w1', agentId: 'a2' }),
+    );
+    expect((notify.mock.calls[0]?.[0] as { title: string }).title).toContain('Échanges en boucle');
+  });
+
+  it('notifies nothing while PACT is in the foreground', () => {
+    const { service, notify } = setup(true);
+    service.update('w1', [escalated()]);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('notifies under a fixed title, completed by the name of the agent when PACT knows it', () => {
+    const notify = vi.fn();
+    const service = new NotificationService({
+      notify,
+      activate: vi.fn(),
+      isForeground: () => false,
+      agentLabel: () => 'Claude Code 2',
+    });
+    service.update('w1', [escalated()]);
+    expect((notify.mock.calls[0]?.[0] as { title: string }).title).toBe(
+      '✕ Échanges en boucle · Claude Code 2',
+    );
+    const bare = setup();
+    bare.service.update('w1', [escalated()]);
+    expect((bare.notify.mock.calls[0]?.[0] as { title: string }).title).toBe(
+      '✕ Échanges en boucle',
+    );
+  });
+
+  it('never carries the text of the last message, written by an agent', () => {
+    const { service, notify } = setup();
+    service.update('w1', [
+      escalated({
+        exchange: { escalationId: 'e1', text: 'SECRET du message de l’agent' },
+      } as never),
+    ]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(notify.mock.calls)).not.toContain('SECRET');
+  });
+
+  it('notifies from the derived items of a workspace with an escalation, and never for a held wake', () => {
+    const { service, notify } = setup();
+    const at = '2026-11-08T10:00:00.000Z';
+    const agentOf = (n: number, extra: Record<string, unknown> = {}) =>
+      ({
+        id: `a${String(n)}`,
+        position: n,
+        cliId: 'claude-code',
+        role: null,
+        state: 'done',
+        lastError: null,
+        ...extra,
+      }) as never;
+    const agents = [agentOf(2), agentOf(3, { wakeNotice: 'cap' })];
+    const todos = deriveTodos(
+      {
+        agents,
+        freeTerminals: [],
+        mainBranch: 'main',
+        exchanges: {
+          messages: [],
+          escalations: [
+            { id: 'e1', agents: ['a2', 'a3'], lastMessageId: 'm1', state: 'pending', at },
+          ],
+        },
+      } as never,
+      () => 'Claude Code',
+    );
+    service.update('w1', todos);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect((notify.mock.calls[0]?.[0] as { agentId: string }).agentId).toBe('a2');
+  });
+});
