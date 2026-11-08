@@ -27,7 +27,7 @@ type Notice = 'input' | 'cap' | null;
 type WakeLike = {
   notify(workspaceId: string, message: ExchangeMessage): void;
   agentChanged(agentId: string): void;
-  takeForHook?(agentId: string, point: 'tool' | 'stop'): string | null;
+  takeForHook?: (agentId: string, point: 'tool' | 'stop') => string | null;
   dispose(): void;
 };
 type WakeOptions = {
@@ -118,9 +118,8 @@ const setState = (id: string, state: Agent['state']) => {
 
 /** The reply of a hook: the pointer, or null. Fails on the missing method, not on a type error. */
 const take = (point: 'tool' | 'stop', id = LEAD): string | null => {
-  const take = wake.takeForHook;
-  if (typeof take !== 'function') throw new Error('WakeService.takeForHook is absent');
-  return take.call(wake, id, point);
+  if (typeof wake.takeForHook !== 'function') throw new Error('WakeService.takeForHook is absent');
+  return wake.takeForHook(id, point);
 };
 const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms);
 
