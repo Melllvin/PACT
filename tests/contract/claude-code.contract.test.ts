@@ -745,3 +745,76 @@ describe('Claude Code wake points (007 T031)', () => {
     expect(adapter.mapHookEvent(stop)).toEqual({ type: 'turn-finished' });
   });
 });
+
+// 007 T062, research R15 — FR-027: reading what a third party wrote goes through the user's
+// decision. The `ask` rules of « actions sensibles » gain the read-only commands of the forge.
+describe('Claude Code sensitive rules for third-party content (007 R15, FR-027)', () => {
+  const asks = () =>
+    settingsOf(create().buildLaunch({ ...input, permissionLevel: 'ask-sensitive' }).args)
+      .permissions?.ask ?? [];
+  /** Whether a `Bash(<pattern>)` rule covers the command, `*` standing for any text. */
+  const covers = (rule: string, command: string) => {
+    const pattern = /^Bash\((.*)\)$/.exec(rule)?.[1];
+    if (pattern === undefined) return false;
+    const source = pattern
+      .split('*')
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*');
+    return new RegExp(`^${source}$`).test(command);
+  };
+  const asked = (command: string) => asks().some((rule) => covers(rule, command));
+
+  it.each([
+    'gh pr view 12',
+    'gh pr view',
+    'gh pr diff 12',
+    'gh pr diff',
+    'gh pr list',
+    'gh pr list --state open',
+    'gh pr checkout 12',
+    'gh pr checkout',
+    'gh pr status',
+    'gh pr status --json number',
+    'gh issue view 7',
+    'gh issue view',
+    'gh issue list',
+    'gh issue status',
+    'gh issue status --json number',
+    'gh run view 99',
+    'gh run view',
+    'gh run list',
+    'gh run list --limit 5',
+    'gh search',
+    'gh search prs foo',
+    'gh api repos/pact/test/pulls/12/comments',
+  ])(
+    'Given the level « ask-sensitive », When an agent runs `%s`, Then the user is asked',
+    (command) => {
+      expect(asked(command)).toBe(true);
+    },
+  );
+
+  it('Given the level « ask-sensitive », When an agent fetches refs/pull, Then the user is asked', () => {
+    expect(asked('git fetch origin refs/pull/12/head')).toBe(true);
+    expect(asked('git fetch origin refs/pull/12/head:pr-12')).toBe(true);
+    expect(asked('git fetch origin +refs/pull/12/head')).toBe(true);
+    expect(asked('git fetch origin +refs/pull/*/head:refs/remotes/pr/*')).toBe(true);
+  });
+
+  it.each(['gh pr create --title "Ma PR" --body-file corps.md', 'gh pr create'])(
+    'Given the level « ask-sensitive », When an agent runs `%s`, Then it stays free (agents publish)',
+    (command) => {
+      expect(asked(command)).toBe(false);
+    },
+  );
+
+  it('keeps the rules of 001 R5 next to the new ones', () => {
+    expect(asks()).toEqual(
+      expect.arrayContaining(['Bash(rm *)', 'Bash(curl *)', 'Bash(git push *)', 'WebFetch']),
+    );
+  });
+
+  it('adds no rule at the level « always-allow »', () => {
+    expect(settingsOf(create().buildLaunch(input).args).permissions).toBeUndefined();
+  });
+});

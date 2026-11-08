@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { answerFolderPickers, launchApp, type LaunchedApp } from './helpers/launch-app';
-import { agentWorktree, createRepo, git, typeIn } from './helpers/workspace';
+import { agentWorktree, createRepo, git, reportsStoredFrom, typeIn } from './helpers/workspace';
 
 // 007 US4 end to end (T053): « start_loop » says what left. The tester gets the instruction to write
 // the tests, the dev its own at the first report of the tester (and the verdict as an action); the
@@ -149,4 +149,40 @@ test('US4 sc.2: a tester put back on a main that moved gets its verdict accepted
   await expect(tester).toContainText('MCP submit_report :', { timeout: 40_000 });
   await expect(tester).toContainText('MCP submit_report : Rapport reçu.');
   await expect(tester).not.toContainText('Verdict rejeté');
+});
+
+test('SC-001: a whole dev ↔ test loop runs with no wait_for_agents, the orchestrator is woken instead', async () => {
+  test.setTimeout(180_000);
+  // Given an orchestrator, a dev and a tester on a ready issue, whose tests fail once, then pass
+  const page = await openWithIssue('loop-passes');
+  const { lead, dev, tester } = await launchTeam(page);
+
+  // When the orchestrator runs both rounds of the loop, never calling wait_for_agents
+  const send = async (n: number) => {
+    await typeIn(page, lead, `send_prompt|${JSON.stringify({ agent: 'Faux CLI 3', text: ISSUE })}`);
+    await expect.poll(() => reportsStoredFrom(page, 3), { timeout: 30_000 }).toBe(n);
+    await expect(tester).not.toHaveAttribute('data-state', 'working');
+  };
+  await typeIn(page, lead, START);
+  await expect(lead).toContainText('MCP start_loop :', { timeout: 20_000 });
+  await send(1);
+  await typeIn(page, lead, `next_round|${JSON.stringify({ issue: ISSUE })}`);
+  await expect(dev.getByLabel('Tour')).toHaveText('tour 2/3', { timeout: 20_000 });
+  await send(2);
+
+  // Then PACT calls the issue done by its own run, and no wait was ever called
+  await expect(lead.getByRole('list', { name: 'Rapports' })).toContainText(
+    `${ISSUE} : tests passés par PACT au tour 2.`,
+    { timeout: 30_000 },
+  );
+  // The orchestrator was woken: the pointer reached its terminal, and get_events gave it the event
+  // (without this, the absence of wait_for_agents below would be true by construction).
+  await expect(lead).toContainText(/\d+ événements?, lis get_events/, { timeout: 30_000 });
+  await expect(lead).toContainText('MCP get_events :', { timeout: 30_000 });
+  // No wait_for_agents call was ever made: the fake CLI prints « MCP <tool> : » for each tool call it
+  // makes, and the PACT server has no counter to read (the tool itself would be the only trace).
+  await expect(lead).not.toContainText('wait_for_agents');
+  await expect(lead).not.toContainText('MCP wait_for_agents');
+  await expect(dev).not.toContainText('wait_for_agents');
+  await expect(tester).not.toContainText('wait_for_agents');
 });

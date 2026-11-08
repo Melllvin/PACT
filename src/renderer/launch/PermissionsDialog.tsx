@@ -109,6 +109,12 @@ export function PermissionsDialog({ agentCount, clis, onConfirm, onCancel }: Pro
               </label>
             ))}
           </RadioGroup>
+          {clis.some((cli) => cli.adapter !== 'claude-code') && (
+            <p className="text-[12px] leading-[1.4] text-muted-foreground">
+              Garantie partielle : PACT ne peut pas imposer votre accord avant la lecture d’une PR,
+              d’une issue ou d’un commentaire de tiers ; ce CLI suit ses propres réglages.
+            </p>
+          )}
           <div className="mt-1 flex items-center gap-2.5">
             <span id="permission-scope" className="flex-1 text-[12.5px] text-muted-foreground">
               S’applique à
