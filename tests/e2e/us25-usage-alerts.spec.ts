@@ -7,6 +7,26 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
 import { answerFolderPickers, launchApp, type LaunchedApp } from './helpers/launch-app';
 
+/** 009 — no stop before the limit itself: these scenarios read the gauge, not the pause. */
+const noStop = async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'pact-e2e-'));
+  await writeFile(
+    join(dir, 'state.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      data: {
+        openWorkspaces: [],
+        recents: [],
+        customClis: [],
+        permission: null,
+        usageStops: { fake: { 'five-hour': 100, week: 100 } },
+        usageLimit: { saves: [], overrides: [], declined: [], resumed: [] },
+      },
+    }),
+  );
+  return dir;
+};
+
 // 005 US2 end to end (T022): near a limit the gauge turns orange then red, À faire tells it once,
 // and the launcher warns before more agents of that CLI start, without stopping them.
 const gitEnv = {
@@ -56,6 +76,7 @@ const setCount = async (group: Locator, target: number) => {
 const launchOne = async (scenario: string): Promise<{ page: Page; tile: Locator }> => {
   const repo = await makeRepo();
   launched = await launchApp({
+    userDataDir: await noStop(),
     env: {
       PACT_FAKE_CLI: FAKE_CLI,
       PACT_FAKE_NODE: process.execPath,

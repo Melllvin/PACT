@@ -85,7 +85,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
         setNotice: (agentId, notice) => {
           void manager.setWakeNotice(agentId, notice).catch(() => undefined);
         },
-        usageCritical: () => false,
+        usageHeld: () => false,
         file: eventsFile({
           exchanges,
           agents: {

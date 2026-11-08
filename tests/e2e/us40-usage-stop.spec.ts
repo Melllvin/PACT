@@ -61,7 +61,7 @@ test('commits at 87 %, then is stopped at 90 % with its work saved and nothing p
   await typeIn(page, tile, 'Deuxième tour');
 
   await expect(tile).toHaveAttribute('data-state', 'paused', { timeout: 60_000 });
-  await expect(tile).toContainText(`Reprise prévue à ${time}`);
+  await expect(tile).toContainText(`en pause · reprise à ${time}`);
   await expect(tile).not.toContainText('non sauvegardé');
   // The agent committed in its worktree; PACT made no commit and pushed nothing.
   expect(git(agentWorktree(repo), 'status', '--porcelain')).toBe('');
@@ -90,5 +90,5 @@ test('an agent in the middle of a turn is stopped too, and its pause says so (sc
   await typeIn(page, tile, 'Deuxième tour');
 
   await expect(tile).toHaveAttribute('data-state', 'paused', { timeout: 60_000 });
-  await expect(tile).toContainText(`Reprise prévue à ${time}`);
+  await expect(tile).toContainText(`en pause · reprise à ${time}`);
 });

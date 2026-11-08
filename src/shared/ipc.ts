@@ -1,3 +1,4 @@
+import { usagePauseSchema } from './usage-limit';
 import { z } from 'zod';
 import { exchangesPayloadSchema } from './exchanges';
 import { orchestratorActionSchema } from './orchestrator';
@@ -314,6 +315,8 @@ export const ipcEvents = {
     state: agentStateSchema,
     lastError: agentErrorSchema.nullable().optional(),
     scheduledResume: scheduledResumeSchema.nullable().optional(),
+    /** 009 — the pause of a `paused` agent; null once it is over. */
+    pause: usagePauseSchema.nullable().optional(),
     /** Sent with an `awaiting-answer` state when the agent asks a question (FR-024a). */
     awaiting: z.enum(['question']).optional(),
     /** `closed` with `kept`: the tile stays, closed, to be restarted (006 FR-025). */

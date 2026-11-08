@@ -18,6 +18,7 @@ import { AmbientCanvas } from '../effects/AmbientCanvas';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { RoleProfilesDialog } from '../settings/RoleProfiles';
 import { launchWarning } from '../../shared/usage';
+import { pausesOf } from '../../shared/usage-limit';
 import { Button } from '@/components/ui/button';
 import { Legend } from './Legend';
 import { BUILD_INFO, formatBuildInfo } from '../../shared/build-info';
@@ -262,7 +263,13 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               localChanges={launcher.localChanges ?? false}
               profiles={launching.roleProfiles}
               usageWarning={(cliId) =>
-                launchWarning(Object.values(state.usage), cliId, state.usageThresholds, new Date())
+                launchWarning(
+                  Object.values(state.usage),
+                  cliId,
+                  state.usageThresholds,
+                  new Date(),
+                  pausesOf(workspaces),
+                )
               }
               onLaunch={(draft) => void state.requestLaunch(draft)}
               onClose={state.closeLauncher}
