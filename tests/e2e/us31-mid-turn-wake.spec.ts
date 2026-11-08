@@ -27,6 +27,8 @@ const baseEnv = {
 
 let root: string;
 let repo: string;
+/** A second repository, for the test that launches the app twice. */
+let other: { root: string; repo: string } | undefined;
 let launched: LaunchedApp | undefined;
 
 test.beforeEach(async () => {
@@ -37,6 +39,8 @@ test.afterEach(async () => {
   await launched?.close();
   launched = undefined;
   await rm(root, { recursive: true, force: true });
+  if (other) await rm(other.root, { recursive: true, force: true });
+  other = undefined;
 });
 
 const tiles = (page: Page) => ({
@@ -72,10 +76,10 @@ async function launchTeam(page: Page) {
   return team;
 }
 
-async function openTeam(env: Record<string, string> = {}) {
+async function openTeam(env: Record<string, string> = {}, repoPath = repo) {
   launched = await launchApp({ env: { ...baseEnv, ...env } });
   const page = await launched.app.firstWindow();
-  await answerFolderPickers(launched.app, repo);
+  await answerFolderPickers(launched.app, repoPath);
   await page.getByRole('button', { name: 'Choisir un dépôt Git…' }).click();
   const team = await launchTeam(page);
   // Every state the orchestrator's tile goes through, from now on: the end of a turn that PACT did
@@ -157,13 +161,27 @@ test('US2 sc.2, FR-018: a Stop that finds an event waiting is prolonged by the p
 
   // Nothing was typed: the pointer went by the reply of the hook, and is not announced again.
   await page.waitForTimeout(8_000);
-  expect(await countOf(lead, TYPED_POINTER)).toBe(0);
+  // The only `Reçu : <pointer>` is the CLI playing the reason of the block; a pointer typed besides
+  // would make two.
+  expect(await countOf(lead, TYPED_POINTER)).toBe(1);
   expect(await countOf(lead, /Prolongé : /g)).toBe(1);
 });
 
 test('US2 sc.3: a CLI without that hook is typed the pointer at the end of its turn', async () => {
-  test.setTimeout(180_000);
-  const { page, lead, dev } = await openTeam({ FAKE_CLI_NO_WAKE_HOOK: '1' });
+  test.setTimeout(240_000);
+
+  // The control: the same CLI with its hook gets the pointer in the middle of its turn, which is
+  // what FAKE_CLI_NO_WAKE_HOOK=1 turns off below.
+  const control = await openTeam();
+  await typeIn(control.page, control.lead, 'Faux CLI 2|24|0');
+  await expect(control.lead).toContainText('Contexte : 1 événement, lis get_events', {
+    timeout: 60_000,
+  });
+  await launched?.close();
+  launched = undefined;
+
+  other = await createRepo('pact-us31w2-', { 'README.md': '# test\n' });
+  const { page, lead, dev } = await openTeam({ FAKE_CLI_NO_WAKE_HOOK: '1' }, other.repo);
 
   await typeIn(page, lead, 'Faux CLI 2|24|0');
   await expect(lead).toHaveAttribute('data-state', 'working');
