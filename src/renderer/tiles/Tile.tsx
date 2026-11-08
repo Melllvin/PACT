@@ -1,8 +1,9 @@
+import { agentName } from '../../shared/agent-name';
 import { useState, type CSSProperties } from 'react';
 import type { Agent, AgentState } from '../../shared/model';
 import { BranchTooltip } from './BranchTooltip';
 import { TerminalView } from './TerminalView';
-import { TileActions, type TileActionHandlers } from './TileActions';
+import { TileActions, type TileActionHandlers, type TileMenu } from './TileActions';
 import type { TerminalRegistry } from './terminal-registry';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,10 @@ type Props = TileActionHandlers & {
   name: string;
   terminals: Pick<TerminalRegistry, 'attach'> | undefined;
   onClose: () => void;
+  /** 006 — the ⋮ menu: « Faire orchestrateur », « Renommer ». */
+  menu?: TileMenu | undefined;
+  /** 006 #46 — the color of the agent among its workspace's (a shade of its orchestrator's). */
+  color?: string | undefined;
   /** ⤢: opens the Focus on this agent (US5). */
   onExpand?: (() => void) | undefined;
   /** 003 FR-010 — the agent works on a prompt of the orchestrator. */
@@ -56,6 +61,8 @@ export function Tile({
   name,
   terminals,
   onClose,
+  menu,
+  color,
   onExpand,
   fromOrchestrator = false,
   round = null,
@@ -70,7 +77,7 @@ export function Tile({
     setPulses(pulses + 1);
   }
 
-  const title = `${name} ${String(agent.position)}`;
+  const title = agentName(agent, () => name);
   const failed = agent.state === 'error';
   // The buttons of the state show on hover or focus only, over the terminal (FR-022); the outline
   // says that one is due.
@@ -92,7 +99,7 @@ export function Tile({
       )}
       style={
         {
-          '--agent-color': `var(--agent-${agent.color})`,
+          '--agent-color': color ?? `var(--agent-${agent.color})`,
           '--pulse-color': PULSE_COLORS[agent.state] ?? 'var(--agent-color)',
           '--enter-index': String(agent.position - 1),
         } as CSSProperties
@@ -139,7 +146,10 @@ export function Tile({
             </span>
           )}
           {(agent.role === 'orchestrator' || fromOrchestrator) && (
-            <span className={BADGE}>
+            <span
+              {...(agent.role === 'orchestrator' && { 'aria-label': 'Rôle' })}
+              className={BADGE}
+            >
               {agent.role === 'orchestrator' ? '◎ Orchestrateur' : '◎ de l’orchestrateur'}
             </span>
           )}
@@ -160,7 +170,7 @@ export function Tile({
           ×
         </Button>
       </div>
-      {acting && (
+      {(acting || menu) && (
         // Hover on the tile, but focus on the buttons only: the terminal keeps the focus of the tile.
         <div className="group/actions absolute right-3 bottom-3 left-4">
           <div className="flex items-center justify-end gap-2 opacity-0 transition-opacity duration-200 group-focus-within/actions:opacity-100 group-hover:opacity-100">
@@ -173,6 +183,7 @@ export function Tile({
               state={agent.state}
               question={agent.awaiting === 'question'}
               scheduledResume={agent.scheduledResume}
+              menu={menu}
               {...actions}
             />
           </div>

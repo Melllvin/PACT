@@ -255,6 +255,10 @@ export const ipcRequests = {
   ),
   /** 003 US5 — « Retirer le rôle d'orchestrateur » (FR-004). */
   'orchestrator:revoke': request(z.object({ agentId: z.uuid() }), none),
+  /** 006 US5 — « Faire orchestrateur » (FR-027, FR-028). */
+  'orchestrator:promote': request(z.object({ agentId: z.uuid() }), none),
+  /** 006 #45 — « Renommer ». */
+  'agent:rename': request(z.object({ agentId: z.uuid(), name: z.string() }), none),
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
   'loop:decide': request(
     z.object({

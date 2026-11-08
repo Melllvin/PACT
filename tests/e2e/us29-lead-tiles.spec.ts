@@ -182,3 +182,31 @@ test('fills its tile with the terminal: the last line shows, and no button cover
   await buttons().first().focus();
   await expect.poll(shown).toBe(1);
 });
+
+// #42 (T043): a Focus tab other than Terminal fills the tile; the terminal under it is not visible.
+test('hides the terminal under the Actions tab of the Focus (T043, #42)', async () => {
+  test.setTimeout(120_000);
+  launched = await launchApp({ env: env('orchestra-two-agents') });
+  const page = await launched.app.firstWindow();
+  const lead = await launchOrchestrator(page, launched.app);
+  await typeIn(page, lead, 'feat/un|feat/deux|Écris la fonction');
+  await expect(lead).toContainText('Faux CLI 2 lancé sur feat/un');
+
+  await lead.getByRole('button', { name: 'Agrandir' }).click();
+  const focus = page.getByRole('region', { name: /^Focus/ });
+  await expect(focus.locator('.xterm-rows')).toContainText('Faux CLI 2 lancé sur feat/un');
+  await focus.getByRole('tab', { name: /Actions/ }).click();
+
+  // The last line of the fake CLI is no longer on screen, and the tab panel has the whole tile.
+  await expect(focus.locator('.xterm-rows')).toBeHidden();
+  await expect(
+    focus.getByText('Faux CLI 2 lancé sur feat/un', { exact: false }).first(),
+  ).toBeHidden();
+  const panel = await focus.getByRole('list', { name: 'Actions de l’orchestrateur' }).boundingBox();
+  const frame = await focus.boundingBox();
+  expect(panel && frame && panel.height > frame.height * 0.6).toBe(true);
+
+  // Back on Terminal: the session is still there, not recreated.
+  await focus.getByRole('tab', { name: 'Terminal' }).click();
+  await expect(focus.locator('.xterm-rows')).toContainText('Faux CLI 2 lancé sur feat/un');
+});

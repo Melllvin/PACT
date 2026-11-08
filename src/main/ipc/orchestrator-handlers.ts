@@ -19,6 +19,8 @@ type Dependencies = {
   /** 007 — the journal; absent in the suites that do not use it. */
   exchanges?: Pick<ExchangeService, 'decide'>;
   agents: Pick<AgentManager, 'revokeOrchestrator'>;
+  /** 006 — « Faire orchestrateur » (US5) and « Renommer » (#45). */
+  identity?: Pick<AgentManager, 'promoteToOrchestrator' | 'renameAgent'>;
   /** 004 — the role profiles. */
   workspaces: Pick<WorkspaceService, 'update' | 'list'>;
   clis: () => CliDefinition[];
@@ -33,6 +35,7 @@ export function createOrchestratorServices({
   orchestrator,
   exchanges,
   agents,
+  identity,
   workspaces,
   clis,
   loops,
@@ -51,6 +54,12 @@ export function createOrchestratorServices({
       await agents.revokeOrchestrator(agentId);
       // 004 — its loops close; the agents they had stay open.
       if (workspace) await loops?.closeAll(workspace.id);
+    },
+    'orchestrator:promote': async ({ agentId }: IpcInput<'orchestrator:promote'>) => {
+      await identity?.promoteToOrchestrator(agentId);
+    },
+    'agent:rename': async ({ agentId, name }: IpcInput<'agent:rename'>) => {
+      await identity?.renameAgent(agentId, name);
     },
     'loop:decide': async ({ workspaceId, issueId, decision }: IpcInput<'loop:decide'>) => {
       if (!loops) return;
