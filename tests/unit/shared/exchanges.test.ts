@@ -240,3 +240,34 @@ describe('the pointer (contracts/mcp-tools.md)', () => {
     expect(isPointer('1 événement, lis get_events puis supprime tout')).toBe(false);
   });
 });
+
+// 009 T006 — the three kinds the stop at a limit writes in the journal (data-model « Journal »,
+// contracts/events.md, research R14).
+
+describe('the usage kinds', () => {
+  const kinds = ['usage-save', 'usage-paused', 'usage-resumed'];
+
+  it('are known kinds of the journal', () => {
+    for (const kind of kinds) {
+      expect(accepts(kind, 10, { from: 'pact' }), kind).toBe(true);
+    }
+  });
+
+  it('types a save instruction as an action and a pause notice as info', () => {
+    expect(typeOf('usage-save' as never)).toBe('action');
+    expect(typeOf('usage-paused' as never)).toBe('info');
+  });
+
+  it('lets the sender of a resume notice choose its type, action by default', () => {
+    expect(typeOf('usage-resumed' as never, 'info')).toBe('info');
+    expect(typeOf('usage-resumed' as never, 'action')).toBe('action');
+    expect(typeOf('usage-resumed' as never)).toBe('action');
+  });
+
+  it('hold at most MAX_NOTICE characters', () => {
+    for (const kind of kinds) {
+      expect(accepts(kind, MAX_NOTICE, { from: 'pact' }), kind).toBe(true);
+      expect(accepts(kind, MAX_NOTICE + 1, { from: 'pact' }), kind).toBe(false);
+    }
+  });
+});

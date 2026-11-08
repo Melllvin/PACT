@@ -359,3 +359,59 @@ describe('agentRows — wake-held (007)', () => {
     expect(placed).toBe(items.length);
   });
 });
+
+// 009 T005 — the label of a paused agent (contracts/ui.md « Tuile et ligne d'agent », SC-003).
+
+describe('agentStateLabel of a paused agent', () => {
+  const resumeAt = '2026-11-03T15:07:00.000Z';
+  const hhmm = (() => {
+    const at = new Date(resumeAt);
+    return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+  })();
+  const pause = (over: Record<string, unknown> = {}) => ({
+    cliId: 'claude-code',
+    account: 'default',
+    cause: 'threshold',
+    windows: [{ id: 'week', label: 'semaine', percent: 91, resetsAt: resumeAt }],
+    resumeAt,
+    pausedAt: iso,
+    midTurn: true,
+    saved: true,
+    closedQuestion: null,
+    blocked: null,
+    ...over,
+  });
+  const paused = (pauseOver: Record<string, unknown> = {}, withResume = true) =>
+    agent(1, {
+      state: 'paused',
+      pause: pause(pauseOver),
+      scheduledResume: withResume ? { agentId: uuid(1), at: resumeAt, attempt: 0 } : null,
+    } as unknown as Partial<Agent>);
+
+  it('says « en pause · reprise à HH:MM » when a resume is planned', () => {
+    expect(agentStateLabel(paused(), now)).toBe(`en pause · reprise à ${hhmm}`);
+  });
+
+  it('names the window when the automatic resume is off or cancelled', () => {
+    expect(agentStateLabel(paused({}, false), now)).toBe('en pause · semaine');
+  });
+
+  it('says « en pause · reprise après réinitialisation » when the time is unknown', () => {
+    const backoff = paused({
+      resumeAt: null,
+      windows: [{ id: 'week', label: 'semaine', percent: 91, resetsAt: null }],
+    });
+    expect(agentStateLabel(backoff, now)).toBe('en pause · reprise après réinitialisation');
+  });
+
+  it('says « en pause · session inconnue » when the session is unknown', () => {
+    expect(agentStateLabel(paused({ blocked: 'session' }, false), now)).toBe(
+      'en pause · session inconnue',
+    );
+  });
+
+  it('never says « erreur » for a pause, whatever the case (SC-003)', () => {
+    const cases = [paused(), paused({}, false), paused({ blocked: 'session' }, false)];
+    for (const one of cases) expect(agentStateLabel(one, now)).not.toMatch(/erreur/);
+  });
+});
