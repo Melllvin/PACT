@@ -5,8 +5,9 @@ parallel, each in its own Git worktree, while keeping direct access to their ter
 
 - Open, create or clone a repository; launch up to 6 agents (Claude Code, Codex, or any other CLI
   you add), each on its own branch, worktree and port.
-- Every agent keeps a real terminal. The « À faire » column lists what needs you: a prompt to
-  give, a permission to grant, a crash, a rate limit (with optional automatic resume).
+- Every agent keeps a real terminal. The « Agents » column lists every agent with its role and
+  state, and what needs you comes first: a prompt to give, a permission to grant, a crash, a rate
+  limit (with optional automatic resume).
 - Workspaces and agents come back after a restart; quitting while agents run asks first.
 - Review each agent's work (« Revue → » or the Revue view): its changes against `main`, committed
   or not, file by file, with the files you have seen. Comment a line and the comment is typed
@@ -17,6 +18,32 @@ parallel, each in its own Git worktree, while keeping direct access to their ter
 - On a conflict with `main`, ask the agent to resolve it in its worktree, or resolve each
   conflict in PACT (keep `main`, keep the agent's version, both, or edit the file, in PACT or in
   your editor). `main` only moves once everything is resolved; cancelling leaves it untouched.
+
+## Agents column and Graphe view
+
+- **Agents column.** One row per agent: name, role, state (« travaille », « attend une réponse »,
+  « reprise à 14:30 »…) and its issue. A button shows on a row only when that agent needs you
+  (« ◆ Répondre », « Revue → », « Reprendre »…); the rows that need you come first, then the
+  orchestrator. Items that belong to no agent (integration requests, issues to create, usage
+  limits) stay at the top under « À traiter ». Click a row to open the agent's Focus. The toolbar
+  button shows how many items are waiting.
+- **Graphe view.** The « Graphe » choice of the toolbar draws the orchestrator linked to the
+  agents it launched, with a group per dev ↔ test loop and its round (« dev ↔ test 2/3 »). Nodes
+  follow the agents' states live; click one to open its Focus.
+- **Under the orchestrator.** Agents it launches get their tile at once, beside and under its
+  large one; the grid scrolls vertically past six tiles.
+- **Close and restart together.** Closing the orchestrator offers to close its agents too;
+  restarting it restarts them, and « Reprendre le travail » sends the resume prompt to the ones
+  that were working.
+- **Faire orchestrateur.** In the ⋮ menu of a tile or of the Focus, turns an agent into the
+  orchestrator: it restarts on its own session with the orchestrator access. Only one per
+  workspace, and only for a CLI that can lead; the menu says why when it cannot.
+- **Renommer.** Same menu. The new name must be unique in the workspace; the tile, the Focus, the
+  columns, the graph and the orchestrator's tools all use it.
+- **Focus tabs.** Terminal always; Aperçu, Changements, Actions and Rapports show only once they
+  have something to show. A tab other than Terminal fills the whole tile.
+- **Colors.** An orchestrator and the agents it launched share a hue family, each agent in its own
+  shade; two orchestrators get distant families. Agents launched by you keep their color.
 
 ## Review and integration
 
@@ -75,7 +102,7 @@ real agent or account is needed. CI runs `check` and `e2e` on macOS and Windows.
 PACT follows each Codex agent through hooks that relay its events to a local server bound to
 `127.0.0.1`, with a secret token per agent. Codex only runs hooks the user has trusted, and PACT
 never bypasses that check. On the first Codex launch, Codex shows « Hooks need review »: PACT
-lists it in « À faire », and you answer in the agent's terminal — `2. Trust all and continue`
+lists it in « À traiter », and you answer in the agent's terminal — `2. Trust all and continue`
 records the trust in `~/.codex/config.toml`, and it stays until PACT's hook command changes (for
 example after PACT moves). Choosing to continue without trusting still works, with less precise
 states (process exit and output heuristics).
@@ -96,7 +123,7 @@ configurations are never touched.
   `wait_for_agents` (only a fallback, no longer the normal way), `launch_agent` and `close_agent`
   (the worktree and the branch are kept), and `request_integration`.
 - **Integrations are yours.** `request_integration` only puts « ◎ Intégrer <agent> → main ? » in
-  « À faire », with the commit message the orchestrator proposed; you edit it, integrate or refuse,
+  « À traiter », with the commit message the orchestrator proposed; you edit it, integrate or refuse,
   and the orchestrator hears the outcome (the commit, the conflicting files, or why it failed).
   Nothing is integrated, pushed or opened as a PR without you.
 - **Access.** The server listens on `127.0.0.1` only, with a token per orchestrator session,
@@ -118,7 +145,7 @@ then hands it to agents with a role, each started with the skills of its role.
   cheaper models can do the development while a stronger one leads. Choose a role in the detailed
   launcher, or let the orchestrator launch the agent with `launch_agent`.
 - **Issues.** `register_issue` writes an issue in `.pact/issues/`, with its acceptance criteria;
-  `publish_issues` only asks « ◎ Créer N issues ? » in « À faire »: nothing reaches GitHub without
+  `publish_issues` only asks « ◎ Créer N issues ? » in « À traiter »: nothing reaches GitHub without
   you.
 - **Test and dev loop.** `start_loop` on a ready issue: the test agent writes the acceptance tests,
   the dev agent makes them pass, and PACT runs the tests itself between rounds (`next_round`,
@@ -148,7 +175,7 @@ or click. Nothing extra is asked of the CLI and you never log in again:
 A reading older than 15 minutes is greyed out with its age, and hidden after an hour.
 
 - **Alerts.** At 80 % the gauge turns orange, at 95 % red (« Seuils d’alerte… » in its detail), and
-  « À faire » holds one « ◆ Limite … » per account, with « Détail ». Launching agents of a CLI near
+  « À traiter » holds one « ◆ Limite … » per account, with « Détail ». Launching agents of a CLI near
   its limit warns in the launcher, and `launch_agent` tells the orchestrator, without refusing.
 - **Who consumes.** The detail gives the part of each agent of the workspace in the tokens PACT
   counted since the window began, the largest first, with its role; a closed agent keeps its part,
@@ -164,7 +191,7 @@ agent to work as a team lead. Teammates run in-process, in the agent's own termi
 with ↑/↓ in the agents panel under the prompt, Enter to view it, `x` to stop it, Ctrl+T for the
 task list. They share the agent's worktree, so its review and integration hold the whole team's
 work. The tile follows the lead: a teammate finishing does not mark the agent done, but a
-question a teammate asks shows in « À faire » like any other.
+question a teammate asks shows in « À traiter » like any other.
 
 ## Project docs
 
