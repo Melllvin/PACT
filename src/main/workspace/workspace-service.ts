@@ -11,6 +11,7 @@ import {
 } from '../../shared/model';
 import type { GitService } from '../git/git-service';
 import type { AppState, Stores } from '../persistence/store';
+import { defaultDeliverySettings } from '../../shared/delivery';
 import { DEFAULT_TEST_PATHS } from '../../shared/model';
 
 // US1 — repositories opened as workspaces, recent projects, availability (FR-003…FR-005).
@@ -122,6 +123,8 @@ export class WorkspaceService {
       permissionOverride: null,
       testCommand: null,
       integrationRequests: [],
+      delivery: defaultDeliverySettings(),
+      deliveries: [],
       roleProfiles: {},
       issues: [],
       loops: [],
@@ -213,6 +216,8 @@ export class WorkspaceService {
         permissionOverride: null,
         testCommand: null,
         integrationRequests: [],
+        delivery: defaultDeliverySettings(),
+        deliveries: [],
         roleProfiles: {},
         issues: [],
         loops: [],

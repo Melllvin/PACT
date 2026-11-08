@@ -131,6 +131,7 @@ describe('list_agents with roles', () => {
           rounds: [],
           state: 'running',
           escalatedModel: null,
+          polish: null,
         },
       ],
     }));

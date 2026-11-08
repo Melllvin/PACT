@@ -20,6 +20,7 @@ const loop = (overrides: Partial<Loop> = {}): Loop => ({
   rounds: [],
   state: 'running',
   escalatedModel: null,
+  polish: null,
   ...overrides,
 });
 
@@ -75,7 +76,7 @@ describe('graphLayout', () => {
           issueId: '0013-profil',
           devAgentId: dev2.id,
           testAgentId: test2.id,
-          state: 'passed',
+          state: 'merged',
         }),
       ],
     );

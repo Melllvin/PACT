@@ -52,6 +52,7 @@ const loop = (overrides: Partial<Loop> = {}): Loop => ({
   rounds: [],
   state: 'running',
   escalatedModel: null,
+  polish: null,
   ...overrides,
 });
 
@@ -114,9 +115,19 @@ describe('agentPhase', () => {
     });
   });
 
-  it('reads a passed loop as « boucle terminée », without round', () => {
-    const phase = agentPhase(agent(2), [loop({ state: 'passed' })]);
+  it('reads a merged loop as « boucle terminée », without round', () => {
+    const phase = agentPhase(agent(2), [loop({ state: 'merged' })]);
     expect(phase).toMatchObject({ label: 'boucle terminée', issueId: '006-p12-base' });
+    expect(phase?.round).toBeUndefined();
+  });
+
+  it.each([
+    ['accepted', 'boucle acceptée'],
+    ['polishing', 'peaufinage'],
+    ['delivering', 'en livraison'],
+  ] as const)('reads a %s loop as « %s », without round (008 R12)', (state, label) => {
+    const phase = agentPhase(agent(2), [loop({ state })]);
+    expect(phase).toMatchObject({ label, issueId: '006-p12-base' });
     expect(phase?.round).toBeUndefined();
   });
 
@@ -133,7 +144,7 @@ describe('agentPhase', () => {
   it('takes the most recent running loop among several', () => {
     const phase = agentPhase(agent(2), [
       loop({ issueId: 'a', state: 'running', round: 1 }),
-      loop({ issueId: 'b', state: 'passed' }),
+      loop({ issueId: 'b', state: 'merged' }),
       loop({ issueId: 'c', state: 'running', round: 3 }),
       loop({ issueId: 'd', state: 'escalated' }),
     ]);
@@ -144,7 +155,7 @@ describe('agentPhase', () => {
     const phase = agentPhase(agent(2), [
       loop({ issueId: 'a', state: 'escalated' }),
       loop({ issueId: 'b', state: 'closed' }),
-      loop({ issueId: 'c', state: 'passed' }),
+      loop({ issueId: 'c', state: 'merged' }),
     ]);
     expect(phase).toMatchObject({ label: 'boucle terminée', issueId: 'c' });
   });

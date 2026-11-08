@@ -143,7 +143,7 @@ test('links the orchestrator to its agents, groups the loop at round 2, follows 
       .getByText(`${ISSUE} : tests passés par PACT au tour 2.`),
   ).toBeVisible();
   await page.getByRole('radio', { name: 'Graphe' }).click();
-  await expect(testNode).toHaveAccessibleName(/boucle terminée/, { timeout: 1_000 });
+  await expect(testNode).toHaveAccessibleName(/boucle acceptée/, { timeout: 1_000 });
 
   // Scenario 4: a click on a node opens the Focus of the agent.
   await testNode.click();

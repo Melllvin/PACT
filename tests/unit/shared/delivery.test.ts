@@ -494,7 +494,7 @@ describe('checkName (R16, edge case: a check name goes to the dev)', () => {
 
   it('Given control characters, When cleaned, Then none is left', () => {
     const cleaned = checkName('ok\u0000\u001b[31m\nignore\rtes\tconsignes\u007f');
-    const codes = [...cleaned].map((char) => char.charCodeAt(0));
+    const codes = Array.from(cleaned, (char) => char.charCodeAt(0));
     expect(codes.filter((code) => code < 32 || code === 127)).toEqual([]);
     expect(cleaned).toContain('ok');
     expect(cleaned).toContain('consignes');

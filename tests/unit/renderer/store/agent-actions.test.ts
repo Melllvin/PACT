@@ -20,6 +20,8 @@ const workspace: Workspace = {
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+  deliveries: [],
   roleProfiles: {},
   issues: [],
   loops: [],

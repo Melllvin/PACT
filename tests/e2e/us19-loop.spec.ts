@@ -148,7 +148,7 @@ test('stops the loop after three rounds of defects, and the user decides', async
   await expect(todo).toHaveCount(0);
 });
 
-test('calls the issue done in the second round, once PACT’s own run of the tests passes', async () => {
+test('accepts the loop in the second round, once PACT’s own run of the tests passes', async () => {
   test.setTimeout(180_000);
   const page = await openWithIssue('loop-passes');
   const { lead, dev, tester } = await launchTeam(page);
@@ -163,5 +163,5 @@ test('calls the issue done in the second round, once PACT’s own run of the tes
   await expect(band).toContainText(`${ISSUE} : tests passés par PACT au tour 2.`);
   await expect(dev.getByLabel('Tour')).toHaveCount(0);
   await call(page, lead, 'get_loop', { issue: ISSUE });
-  await expect(lead).toContainText(`${ISSUE} : tour 2/3, passed.`);
+  await expect(lead).toContainText(`${ISSUE} : tour 2/3, accepted.`);
 });

@@ -61,6 +61,8 @@ const workspace = (agents: Agent[]): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+  deliveries: [],
   roleProfiles: {},
   issues: [],
   loops: [],
@@ -337,6 +339,8 @@ describe('delivery chain (004 T004)', () => {
     permissionOverride: null,
     testCommand: null,
     integrationRequests: [],
+    delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+    deliveries: [],
     roleProfiles: {},
     issues: [],
     loops: [],
@@ -413,7 +417,7 @@ describe('delivery chain (004 T004)', () => {
     expect(issueSchema.safeParse({ ...issue, path: '../hors.md' }).success).toBe(false);
   });
 
-  it('keeps a loop to 3 rounds, with two different agents', () => {
+  it('keeps a loop within the ceiling of 10 rounds, with two different agents', () => {
     const loop = {
       issueId: '0012-connexion',
       devAgentId: uuid(1),
@@ -429,9 +433,11 @@ describe('delivery chain (004 T004)', () => {
       startedAt: now,
       reports: [],
       proof: null,
+      kind: 'round',
       testerTouched: [],
     });
-    expect(loopSchema.safeParse({ ...loop, round: 4 }).success).toBe(false);
+    expect(loopSchema.safeParse({ ...loop, round: 4 }).success).toBe(true);
+    expect(loopSchema.safeParse({ ...loop, round: 11 }).success).toBe(false);
     expect(loopSchema.safeParse({ ...loop, round: 0 }).success).toBe(false);
     expect(loopSchema.safeParse({ ...loop, testAgentId: uuid(1) }).success).toBe(false);
     expect(

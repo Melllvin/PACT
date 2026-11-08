@@ -68,6 +68,8 @@ const base = (): Workspace => ({
   permissionOverride: null,
   testCommand: 'npm test',
   integrationRequests: [],
+  delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+  deliveries: [],
   roleProfiles: {},
   issues: [issue()],
   loops: [],
@@ -97,6 +99,9 @@ const deps = () => ({
     ),
     changedFiles: vi.fn(() => Promise.resolve(touched.map((path) => ({ path })))),
     mergeBase: vi.fn((_cwd: string, _a: string, b: string) => Promise.resolve(`base-${b}`)),
+    // 008 R3 — the head of the dev and its tree: a clean worktree is the one whose snapshot equals it.
+    revParse: vi.fn(() => Promise.resolve('c'.repeat(40))),
+    treeOf: vi.fn(() => Promise.resolve(TREE)),
   },
   review: {
     testPlan: vi.fn((agentId: string) =>
@@ -274,7 +279,7 @@ describe('reports', () => {
 });
 
 describe('the proof (FR-019)', () => {
-  it('runs the tests on the dev’s tree, and the issue is done only once they pass there', async () => {
+  it('runs the tests on the dev’s tree, and the loop is accepted only once they pass there (the issue is done at the merge, 008 FR-007)', async () => {
     await start();
     await loops.report(tester.id, accepted);
     expect(d.tests.run).toHaveBeenCalledWith(
@@ -284,8 +289,8 @@ describe('the proof (FR-019)', () => {
     );
     expect(state()).toBe('in-progress');
     await loops.testRun(finished('passed'));
-    expect(state()).toBe('done');
-    expect(loop()?.state).toBe('passed');
+    expect(state()).toBe('in-progress');
+    expect(loop()?.state).toBe('accepted');
     expect(loop()?.rounds[0]?.proof).toMatchObject({ tree: TREE, exitCode: 0 });
   });
 
@@ -596,7 +601,7 @@ describe('delivery chain (008)', () => {
         revParse: vi.fn(() => Promise.resolve(HEAD)),
         treeOf: vi.fn(() => Promise.resolve(headTree)),
       },
-    } as unknown as typeof d;
+    };
     loops = new LoopService(d as never);
     configure();
   });
