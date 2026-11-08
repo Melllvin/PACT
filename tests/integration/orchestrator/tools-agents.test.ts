@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clockTime } from '../../../src/shared/usage';
 import { callTool, createHarness, git, type Harness } from './harness';
 
 // 003 T037 — launch_agent and close_agent: the launcher's checks and permission level, the first
@@ -231,4 +232,47 @@ describe('launch_agent: the warning of the fetch', () => {
     expect(text).toContain('Limite 5 h à 85 %');
     expect(text).toMatch(/fetch|origin/i);
   }, 30_000);
+});
+
+// 009 T018 — FR-010, R12: during the pause of an account of the CLI, `launch_agent` is refused, with the text of
+// contracts/events.md « launch_agent ». The harness gives the tools `pausedFor(cliId)` (the pause of
+// `UsageLimitService`, or null) from `h.usagePauses`.
+describe('launch_agent during a pause at a limit (009 FR-010)', () => {
+  const RESET = '2030-01-01T11:00:00.000Z';
+
+  it('Given an account of the CLI in pause, When the orchestrator launches an agent of that CLI, Then it is refused with the text of the contract and nothing is launched', async () => {
+    h.usagePauses.fake = { windows: [{ label: '5 h' }], resumeAt: RESET };
+    const { isError, text } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(true);
+    expect(text).toBe(
+      `Refusé : PACT est en pause sur la limite 5 h de Faux CLI jusqu'à ${clockTime(RESET)}. Aucun agent de ce CLI ne peut être lancé avant la reprise.`,
+    );
+    expect(others()).toEqual([]);
+  });
+
+  it('Given a pause with no known reset, When the orchestrator launches an agent, Then the refusal says « jusqu’à sa réinitialisation »', async () => {
+    h.usagePauses.fake = { windows: [{ label: 'semaine' }], resumeAt: null };
+    const { isError, text } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(true);
+    expect(text).toBe(
+      "Refusé : PACT est en pause sur la limite semaine de Faux CLI jusqu'à sa réinitialisation. Aucun agent de ce CLI ne peut être lancé avant la reprise.",
+    );
+    expect(others()).toEqual([]);
+  });
+
+  it('Given the pause of another CLI, When the orchestrator launches an agent, Then it is launched as usual', async () => {
+    h.usagePauses.codex = { windows: [{ label: '5 h' }], resumeAt: RESET };
+    const { isError, json } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(false);
+    expect((json as Launched).agent.name).toBe('Faux CLI 2');
+  });
+
+  it('Given a pause that ended, When the orchestrator launches an agent, Then it is launched', async () => {
+    h.usagePauses.fake = { windows: [{ label: '5 h' }], resumeAt: RESET };
+    expect((await tool('launch_agent', { cli: 'Faux CLI' })).isError).toBe(true);
+    delete h.usagePauses.fake;
+    const { isError } = await tool('launch_agent', { cli: 'Faux CLI' });
+    expect(isError).toBe(false);
+    expect(others()).toHaveLength(1);
+  });
 });
