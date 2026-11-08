@@ -1,3 +1,4 @@
+import { agentName } from '../../shared/agent-name';
 import type { Agent, Loop } from '../../shared/model';
 
 /** What a loop told the orchestrator (`orchestrator:report`). */
@@ -59,9 +60,7 @@ export function ReportsTab({ reports, agents, loops, name }: Props) {
             className="flex flex-col gap-1 border-b border-white/6 px-4 py-2.5"
           >
             <span className="flex flex-wrap items-baseline gap-x-2 text-[12px] text-muted-foreground">
-              <span className="font-semibold text-foreground">
-                {name(agent.cliId)} {agent.position}
-              </span>
+              <span className="font-semibold text-foreground">{agentName(agent, name)}</span>
               {loop && (
                 <span>
                   {loop.issueId} · tour {loop.round}/3

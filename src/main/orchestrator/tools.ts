@@ -1,3 +1,4 @@
+import { agentName } from '../../shared/agent-name';
 import { unifiedText } from '../../shared/diff';
 import { IpcFailure } from '../../shared/ipc';
 import {
@@ -146,7 +147,7 @@ const stringArg = (args: unknown, key: string): string => {
 };
 
 export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: string): McpTool[] {
-  const nameOf = (agent: Agent) => `${deps.cliName(agent.cliId)} ${String(agent.position)}`;
+  const nameOf = (agent: Agent) => agentName(agent, deps.cliName);
 
   /** The orchestrator's workspace, read at each call: agents come and go. */
   const workspace = () => {

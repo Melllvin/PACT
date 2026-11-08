@@ -1,3 +1,4 @@
+import { agentName } from './agent-name';
 import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
 import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
@@ -23,7 +24,7 @@ const plural = (count: number, word: string) => `${String(count)} ${word}${count
 
 /** « <CLI> <number> · <role> »: which agent, and what it does. */
 const who = (agent: Agent, cli: string) =>
-  [`${cli} ${String(agent.position)}`, ...(agent.role ? [agent.role] : [])].join(' · ');
+  [agentName(agent, () => cli), ...(agent.role ? [agent.role] : [])].join(' · ');
 
 /** Who gets no « Changements à relire »: the orchestrator, and the agents of a loop until it ends. */
 function reviewedLater(agent: Agent, loops: readonly Loop[]): boolean {
@@ -134,7 +135,7 @@ export function deriveTodos(
   const requests = (workspace.integrationRequests ?? []).flatMap((request): TodoItem[] => {
     const agent = byId.get(request.agentId);
     if (!agent) return [];
-    const name = `${names(agent.cliId)} ${String(agent.position)}`;
+    const name = agentName(agent, names);
     return [
       {
         id: `${request.id}:integration-request`,
@@ -153,7 +154,7 @@ export function deriveTodos(
           (id) => (workspace.issues ?? []).find((issue) => issue.id === id)?.title ?? id,
         );
         const count = request.issueIds.length;
-        const name = `${names(lead.cliId)} ${String(lead.position)}`;
+        const name = agentName(lead, names);
         return {
           id: `${request.id}:publish-issues`,
           agentId: lead.id,
@@ -187,7 +188,7 @@ export function deriveTodos(
     if (pair.length !== 2) return [];
     const [first, second] = pair.sort((a, b) => a.position - b.position) as [Agent, Agent];
     const last = workspace.exchanges?.messages.find((m) => m.id === escalation.lastMessageId);
-    const name = (a: Agent) => `${names(a.cliId)} ${String(a.position)}`;
+    const name = (a: Agent) => agentName(a, names);
     return [
       {
         id: `${escalation.id}:exchange-escalated`,

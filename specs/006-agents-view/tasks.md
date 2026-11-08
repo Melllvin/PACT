@@ -105,16 +105,16 @@ un changement d'état met le nœud à jour.
 
 ### Tests (rouges d'abord)
 
-- [ ] T023 [P] [US3] Tests de `graphLayout(agents, loops)` (data-model « Graph ») : orchestrateur en haut ; un groupe par boucle non `closed` (dev et test côte à côte, `group` = issueId) ; puis agents lancés par l'orchestrateur, puis ceux lancés par l'utilisateur ; liens `launched` seulement si l'orchestrateur existe encore ; liens `loop` dev ↔ test ; sans orchestrateur ou orchestrateur fermé : aucun lien `launched`, nœuds à plat ; terminaux libres exclus, dans `tests/unit/renderer/graph/graph-layout.test.ts`
-- [ ] T024 [P] [US3] Tests `GraphView` : `region` « Graphe des agents », `list "Agents"` de boutons nommés `<Nom>, <rôle>, <état>[, <phase>][, issue <id>], lancé par <orchestrateur | vous>`, `group` « Issue <id> · dev ↔ test <n>/3 », `svg` `aria-hidden="true"` ; Entrée/Espace et clic → Focus ; ordre de tabulation = ordre de lecture, dans `tests/unit/renderer/graph/GraphView.test.tsx`
-- [ ] T025 [P] [US3] Tests Toolbar et store : `radio` « Graphe » dans `radiogroup "Vue"`, actif dès qu'un agent existe ; `View` accepte `'graph'`, dans `tests/unit/renderer/app/Toolbar.test.tsx` et `tests/unit/renderer/store/app-store.test.ts`
-- [ ] T026 [US3] E2E : orchestrateur, deux agents et une boucle (scénario faux CLI de `us19-loop`) → graphe relié, groupe « dev ↔ test 2/3 » au tour 2 ; un changement d'état modifie le nœud en < 1 s ; clic sur un nœud → Focus ; audit axe sans violation sérieuse, dans `tests/e2e/us30-graph.spec.ts`
+- [X] T023 [P] [US3] Tests de `graphLayout(agents, loops)` (data-model « Graph ») : orchestrateur en haut ; un groupe par boucle non `closed` (dev et test côte à côte, `group` = issueId) ; puis agents lancés par l'orchestrateur, puis ceux lancés par l'utilisateur ; liens `launched` seulement si l'orchestrateur existe encore ; liens `loop` dev ↔ test ; sans orchestrateur ou orchestrateur fermé : aucun lien `launched`, nœuds à plat ; terminaux libres exclus, dans `tests/unit/renderer/graph/graph-layout.test.ts`
+- [X] T024 [P] [US3] Tests `GraphView` : `region` « Graphe des agents », `list "Agents"` de boutons nommés `<Nom>, <rôle>, <état>[, <phase>][, issue <id>], lancé par <orchestrateur | vous>`, `group` « Issue <id> · dev ↔ test <n>/3 », `svg` `aria-hidden="true"` ; Entrée/Espace et clic → Focus ; ordre de tabulation = ordre de lecture, dans `tests/unit/renderer/graph/GraphView.test.tsx`
+- [X] T025 [P] [US3] Tests Toolbar et store : `radio` « Graphe » dans `radiogroup "Vue"`, actif dès qu'un agent existe ; `View` accepte `'graph'`, dans `tests/unit/renderer/app/Toolbar.test.tsx` et `tests/unit/renderer/store/app-store.test.ts`
+- [X] T026 [US3] E2E : orchestrateur, deux agents et une boucle (scénario faux CLI de `us19-loop`) → graphe relié, groupe « dev ↔ test 2/3 » au tour 2 ; un changement d'état modifie le nœud en < 1 s ; clic sur un nœud → Focus ; audit axe sans violation sérieuse, dans `tests/e2e/us34-graph.spec.ts`
 
 ### Implémentation
 
-- [ ] T027 [P] [US3] `src/renderer/graph/graph-layout.ts` (pur, positions en grille, liens)
-- [ ] T028 [US3] `src/renderer/graph/GraphView.tsx` (nœuds boutons en CSS grid, couleurs d'agent et d'état existantes, liens en `svg` décoratif)
-- [ ] T029 [US3] `View = 'tiles' | 'focus' | 'graph'` dans `src/renderer/store/app-store.ts` ; option « Graphe » dans `src/renderer/app/Toolbar.tsx` ; rendu de `GraphView` pour `view === 'graph'` dans `src/renderer/workspace/WorkspaceView.tsx`
+- [X] T027 [P] [US3] `src/renderer/graph/graph-layout.ts` (pur, positions en grille, liens)
+- [X] T028 [US3] `src/renderer/graph/GraphView.tsx` (nœuds boutons en CSS grid, couleurs d'agent et d'état existantes, liens en `svg` décoratif)
+- [X] T029 [US3] `View = 'tiles' | 'focus' | 'graph'` dans `src/renderer/store/app-store.ts` ; option « Graphe » dans `src/renderer/app/Toolbar.tsx` ; rendu de `GraphView` pour `view === 'graph'` dans `src/renderer/workspace/WorkspaceView.tsx`
 
 **Checkpoint** : PR « 006 Phase 5 US3 ».
 
@@ -138,11 +138,11 @@ avec « Reprendre le travail » relance les trois et envoie la consigne au seul 
 **Test indépendant** : un agent sans rôle → « Faire orchestrateur » → il redémarre sur sa session avec
 l'accès orchestrateur, sa tuile passe en haut, il lance un agent lié à lui.
 
-- [ ] T038 [P] [US5] Tests : `promoteToOrchestrator(agentId)` refuse s'il existe déjà un orchestrateur ou si le CLI ne peut pas l'être (raison renvoyée) ; sinon pose `role: 'orchestrator'`, prépare l'accès orchestrateur (plugin + jeton, comme au lancement) et redémarre en reprenant `sessionId`, dans `tests/integration/orchestrator/promote.test.ts`
-- [ ] T039 [P] [US5] Tests composant : « Faire orchestrateur » dans le menu ⋮ de la tuile et du Focus, indisponible avec sa raison ; confirmation qui prévient de l'interruption si l'agent travaille, dans `tests/unit/renderer/tiles/TileActions.test.tsx`
-- [ ] T040 [US5] E2E : faux CLI, un agent devient orchestrateur, sa tuile passe en haut, `launch_agent` crée un agent `launchedBy` = lui, dans `tests/e2e/us32-promote-orchestrator.spec.ts`
-- [ ] T041 [US5] Canal `orchestrator:promote` `{ agentId }` dans `src/shared/ipc.ts` ; implémentation dans `src/main/agents/agent-manager.ts` en réutilisant la préparation orchestrateur du lancement (003 R2) et `restart` avec reprise de session
-- [ ] T042 [US5] Option de menu et confirmation dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/focus/FocusView.tsx`
+- [X] T038 [P] [US5] Tests : `promoteToOrchestrator(agentId)` refuse s'il existe déjà un orchestrateur ou si le CLI ne peut pas l'être (raison renvoyée) ; sinon pose `role: 'orchestrator'`, prépare l'accès orchestrateur (plugin + jeton, comme au lancement) et redémarre en reprenant `sessionId`, dans `tests/integration/orchestrator/promote.test.ts`
+- [X] T039 [P] [US5] Tests composant : « Faire orchestrateur » dans le menu ⋮ de la tuile et du Focus, indisponible avec sa raison ; confirmation qui prévient de l'interruption si l'agent travaille, dans `tests/unit/renderer/tiles/TileActions.test.tsx`
+- [X] T040 [US5] E2E : faux CLI, un agent devient orchestrateur, sa tuile passe en haut, `launch_agent` crée un agent `launchedBy` = lui, dans `tests/e2e/us35-promote-orchestrator.spec.ts`
+- [X] T041 [US5] Canal `orchestrator:promote` `{ agentId }` dans `src/shared/ipc.ts` ; implémentation dans `src/main/agents/agent-manager.ts` en réutilisant la préparation orchestrateur du lancement (003 R2) et `restart` avec reprise de session
+- [X] T042 [US5] Option de menu et confirmation dans `src/renderer/tiles/TileActions.tsx` et `src/renderer/focus/FocusView.tsx`
 
 ---
 
@@ -152,25 +152,25 @@ l'accès orchestrateur, sa tuile passe en haut, il lance un agent lié à lui.
 
 ### Tests (rouges d'abord)
 
-- [ ] T043 [P] Test (#42) : dans le Focus, un onglet autre que Terminal (Aperçu, Changements, Actions, Rapports) occupe toute la tuile et le terminal n'est pas visible (ni sortie, ni prompt), pour un orchestrateur comme pour un agent simple, dans `tests/unit/renderer/focus/FocusView.test.tsx` ; e2e : onglet Actions ouvert, la dernière ligne du faux CLI n'est pas visible, dans `tests/e2e/us29-lead-tiles.spec.ts`
-- [ ] T044 [P] Test (#43) : `visibleTabs(agent)` renvoie Terminal toujours ; Aperçu seulement si l'agent a un port servi ; Changements seulement si le diff n'est pas vide ; Actions et Rapports seulement s'ils ont au moins une entrée ; un onglet apparaît dès que son contenu arrive, dans `tests/unit/renderer/focus/visible-tabs.test.ts`
-- [ ] T045 [P] Test (#45) : `renameAgent(agentId, name)` refuse un nom vide ou déjà pris (raison renvoyée), persiste le nom, et le nom est utilisé par la tuile, l'en-tête du Focus, la colonne « Agents », le graphe et les outils MCP de l'orchestrateur (`wait_for_agents` accepte le nouveau nom), dans `tests/integration/agents/rename.test.ts` et `tests/unit/renderer/tiles/TileActions.test.tsx`
-- [ ] T046 [P] Test (#46) : `agentColor(agent, agents)` donne aux sous-agents une nuance proche de la couleur de leur orchestrateur (même famille de teinte, distinctes entre elles) ; deux orchestrateurs ont des familles éloignées ; un agent sans orchestrateur garde sa couleur actuelle, dans `tests/unit/shared/agent-color.test.ts`
+- [X] T043 [P] Test (#42) : dans le Focus, un onglet autre que Terminal (Aperçu, Changements, Actions, Rapports) occupe toute la tuile et le terminal n'est pas visible (ni sortie, ni prompt), pour un orchestrateur comme pour un agent simple, dans `tests/unit/renderer/focus/FocusView.test.tsx` ; e2e : onglet Actions ouvert, la dernière ligne du faux CLI n'est pas visible, dans `tests/e2e/us29-lead-tiles.spec.ts`
+- [X] T044 [P] Test (#43) : `visibleTabs(agent)` renvoie Terminal toujours ; Aperçu seulement si l'agent a un port servi ; Changements seulement si le diff n'est pas vide ; Actions et Rapports seulement s'ils ont au moins une entrée ; un onglet apparaît dès que son contenu arrive, dans `tests/unit/renderer/focus/visible-tabs.test.ts`
+- [X] T045 [P] Test (#45) : `renameAgent(agentId, name)` refuse un nom vide ou déjà pris (raison renvoyée), persiste le nom, et le nom est utilisé par la tuile, l'en-tête du Focus, la colonne « Agents », le graphe et les outils MCP de l'orchestrateur (`wait_for_agents` accepte le nouveau nom), dans `tests/integration/agents/rename.test.ts` et `tests/unit/renderer/tiles/TileActions.test.tsx`
+- [X] T046 [P] Test (#46) : `agentColor(agent, agents)` donne aux sous-agents une nuance proche de la couleur de leur orchestrateur (même famille de teinte, distinctes entre elles) ; deux orchestrateurs ont des familles éloignées ; un agent sans orchestrateur garde sa couleur actuelle, dans `tests/unit/shared/agent-color.test.ts`
 
 ### Implementation
 
-- [ ] T047 (#42) Panneau d'onglet en pleine hauteur, terminal masqué hors onglet Terminal (sans le détruire) dans `src/renderer/focus/FocusView.tsx`
-- [ ] T048 (#43) `visibleTabs` dans `src/renderer/focus/visible-tabs.ts` ; barre d'onglets filtrée dans `src/renderer/focus/FocusView.tsx` ; si l'onglet actif disparaît, retour à Terminal
-- [ ] T049 (#45) Canal `agent:rename` `{ agentId, name }` dans `src/shared/ipc.ts` ; implémentation persistée dans `src/main/agents/agent-manager.ts` ; résolution par nom dans les outils MCP ; option « Renommer » (menu ⋮ de la tuile et du Focus) dans `src/renderer/tiles/TileActions.tsx`
-- [ ] T050 (#46) `agentColor` dans `src/shared/agent-color.ts` ; utilisé par la tuile, la colonne « Agents » et le graphe à la place de la couleur fixe
+- [X] T047 (#42) Panneau d'onglet en pleine hauteur, terminal masqué hors onglet Terminal (sans le détruire) dans `src/renderer/focus/FocusView.tsx`
+- [X] T048 (#43) `visibleTabs` dans `src/renderer/focus/visible-tabs.ts` ; barre d'onglets filtrée dans `src/renderer/focus/FocusView.tsx` ; si l'onglet actif disparaît, retour à Terminal
+- [X] T049 (#45) Canal `agent:rename` `{ agentId, name }` dans `src/shared/ipc.ts` ; implémentation persistée dans `src/main/agents/agent-manager.ts` ; résolution par nom dans les outils MCP ; option « Renommer » (menu ⋮ de la tuile et du Focus) dans `src/renderer/tiles/TileActions.tsx`
+- [X] T050 (#46) `agentColor` dans `src/shared/agent-color.ts` ; utilisé par la tuile, la colonne « Agents » et le graphe à la place de la couleur fixe
 
 ---
 
 ## Phase 8: Polish
 
-- [ ] T030 [P] Documenter colonne « Agents » et vue « Graphe » dans `README.md` (section d'utilisation)
-- [ ] T031 [P] Vérifier la couverture (non décroissante) et l'absence de code mort lié à l'ancienne colonne (`rg "À faire|TodoColumn" src tests`)
-- [ ] T032 Dérouler `specs/006-agents-view/quickstart.md` (vérifs automatiques) et noter pour l'utilisateur la vérification à la main avec de vrais CLI
+- [X] T030 [P] Documenter colonne « Agents » et vue « Graphe » dans `README.md` (section d'utilisation)
+- [X] T031 [P] Vérifier la couverture (non décroissante) et l'absence de code mort lié à l'ancienne colonne (`rg "À faire|TodoColumn" src tests`)
+- [X] T032 Dérouler `specs/006-agents-view/quickstart.md` (vérifs automatiques) et noter pour l'utilisateur la vérification à la main avec de vrais CLI
 
 ---
 

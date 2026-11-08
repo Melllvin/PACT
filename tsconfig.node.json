@@ -17,7 +17,9 @@
     "*.config.ts"
   ],
   "exclude": [
-    "tests/unit/renderer/**",
+    "tests/unit/renderer/**/*.test.ts",
+    "tests/unit/renderer/**/*.tsx",
+    "tests/unit/renderer/review/fixtures.ts",
     "tests/setup/renderer.ts",
     "tests/e2e/**",
     "playwright.config.ts"

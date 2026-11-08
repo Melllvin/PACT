@@ -197,6 +197,11 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
   'integrationRequest:refuse': { valid: { requestId: integrationId }, invalid: [{}] },
   'orchestrator:actions': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
   'orchestrator:revoke': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
+  'orchestrator:promote': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
+  'agent:rename': {
+    valid: { agentId, name: 'Relecteur' },
+    invalid: [{ agentId }, { agentId: 'x', name: 'a' }],
+  },
   'loop:decide': {
     valid: { workspaceId: 'w1', issueId: '0012-connexion', decision: 'restart' },
     invalid: [
