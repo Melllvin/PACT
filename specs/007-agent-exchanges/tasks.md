@@ -63,14 +63,14 @@
 
 ### Implémentation
 
-- [ ] T023 [US1] Créer `src/main/orchestrator/wake-service.ts` (R4 sans les hooks, R7) : `onRecorded`, fenêtre de 5 s, voies invite et fin de tour, `heldSince`, fenêtre glissante, coupure, minuterie de 30 s active seulement si un réveil est retenu, `urgent`
-- [ ] T024 [US1] Dans `src/main/agents/agent-manager.ts` : suivi `draft` dans `typed` ; garde dans `flushPrompt` ; origine `wake` dans `sendPrompt`, Entrée seule si pointeur bloqué (R6) ; `promptState(id)` ; `setWakeNotice` et événement `agent:wakeNotice`
-- [ ] T025 [US1] Dans `src/main/agents/agent-state.ts` : `isPointer` n'alimente pas `initialPrompt`
-- [ ] T026 [US1] Dans `src/main/orchestrator/tools.ts` : `send_prompt` et `launch_agent` enregistrent une `instruction` et remplissent `initialPrompt` si vide ; origine `orchestrator` retirée de `sendPrompt`
-- [ ] T027 [US1] Dans `src/main/orchestrator/wake-service.ts` et `src/main/agents/agent-manager.ts` : fichier `.pact/events.md` pour agent sans rôle ou CLI `generic`, `git.exclude`, marqué lu à l'écriture du pointeur (R11)
-- [ ] T028 [US1] Dans `src/shared/todo.ts`, `src/shared/agents-view.ts`, `src/renderer/todo/TodoItem.tsx` et `src/renderer/store/app-store.ts` : élément `wake-held`, `ROW_KINDS`, suivi de `agent:wakeNotice`
-- [ ] T029 [US1] Dans `src/main/index.ts` : créer `WakeService`, le brancher sur `ExchangeService.onRecorded`, l'état des agents, `UsageService` et `AgentManager` ; `AgentManager.setWake` donne au handler de hooks la référence dont T039 a besoin, pour que la Phase 4 ne touche pas `src/main/index.ts`
-- [ ] T030 [US1] Adapter les tests et scénarios e2e existants qui attendaient le texte dans l'invite (`tests/e2e/us13` à `us19`, `tests/integration/orchestrator/tools-prompt.test.ts`) : même attendu par la lecture du pointeur du faux CLI, sans `skip` ni suppression
+- [x] T023 [US1] Créer `src/main/orchestrator/wake-service.ts` (R4 sans les hooks, R7) : `onRecorded`, fenêtre de 5 s, voies invite et fin de tour, `heldSince`, fenêtre glissante, coupure, minuterie de 30 s active seulement si un réveil est retenu, `urgent`
+- [x] T024 [US1] Dans `src/main/agents/agent-manager.ts` : suivi `draft` dans `typed` ; garde dans `flushPrompt` ; origine `wake` dans `sendPrompt`, Entrée seule si pointeur bloqué (R6) ; `promptState(id)` ; `setWakeNotice` et événement `agent:wakeNotice`
+- [x] T025 [US1] Dans `src/main/agents/agent-state.ts` : `isPointer` n'alimente pas `initialPrompt`
+- [x] T026 [US1] Dans `src/main/orchestrator/tools.ts` : `send_prompt` et `launch_agent` enregistrent une `instruction` et remplissent `initialPrompt` si vide ; origine `orchestrator` retirée de `sendPrompt`
+- [x] T027 [US1] Dans `src/main/orchestrator/wake-service.ts` et `src/main/agents/agent-manager.ts` : fichier `.pact/events.md` pour agent sans rôle ou CLI `generic`, `git.exclude`, marqué lu à l'écriture du pointeur (R11)
+- [x] T028 [US1] Dans `src/shared/todo.ts`, `src/shared/agents-view.ts`, `src/renderer/todo/TodoItem.tsx` et `src/renderer/store/app-store.ts` : élément `wake-held`, `ROW_KINDS`, suivi de `agent:wakeNotice`
+- [x] T029 [US1] Dans `src/main/index.ts` : créer `WakeService`, le brancher sur `ExchangeService.onRecorded`, l'état des agents, `UsageService` et `AgentManager` ; `AgentManager.setWake` donne au handler de hooks la référence dont T039 a besoin, pour que la Phase 4 ne touche pas `src/main/index.ts`
+- [x] T030 [US1] Adapter les tests et scénarios e2e existants qui attendaient le texte dans l'invite (`tests/e2e/us13` à `us19`, `tests/integration/orchestrator/tools-prompt.test.ts`) : même attendu par la lecture du pointeur du faux CLI, sans `skip` ni suppression
 
 **Checkpoint** : US1 utilisable seule ; PR « 007 Phase 3 US1 ».
 
