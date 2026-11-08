@@ -64,9 +64,7 @@ const exchangesFake = (overrides: Record<string, unknown> = {}) => {
   };
   const tools = createAgentTools(
     {
-      exchanges: exchanges as unknown as NonNullable<
-        Parameters<typeof createAgentTools>[0]['exchanges']
-      >,
+      exchanges: exchanges,
     },
     ME,
   );

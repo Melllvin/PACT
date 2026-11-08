@@ -43,6 +43,11 @@
 //   agentMcp: { tool, arguments }[] calls these PACT tools when it is an agent of a role (007 R16),
 //                                   on PACT_AGENT_MCP_URL with its token, and prints
 //                                   `MCP <tool> : <text>`; `{{prompt}}` is filled as for `mcp`
+//                                   A step may also hold (007 T044): `when: 'typed' | 'pointer'` (runs only on
+//                                   a turn of a typed prompt, or of a pointer), `whenEvent: <text>` (runs only
+//                                   on a pointer turn whose events `get_events` listed have <text> in their
+//                                   summary) and `skipEmpty: true` (skipped when an argument, once filled,
+//                                   is an empty string); arguments are filled at any depth
 //   toolHook: boolean               posts `{ type: 'post-tool' }` (a PostToolUse) during the turn and
 //                                   prints `Contexte : <additionalContext>` when PACT answers one
 //   toolHooks: { times, everyMs }   (007 T034) posts `times` PostToolUse, `everyMs` apart, to stay in
@@ -220,6 +225,28 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const POINTER = /^\d+ événements?, lis \S+$/;
 
+/** 007 T044 — what the current turn is: a pointer or a typed prompt, and the events a pointer listed. */
+let pointerTurn = false;
+let pointerEvents = [];
+
+const hasEmpty = (value) =>
+  value === '' ||
+  (Array.isArray(value) && value.some(hasEmpty)) ||
+  (value !== null && typeof value === 'object' && Object.values(value).some(hasEmpty));
+
+/** Whether a step of `agentMcp` runs on this turn (`when`, `whenEvent`, `skipEmpty`). */
+function stepRuns(step, args) {
+  if (step.when === 'typed' && pointerTurn) return false;
+  if (step.when === 'pointer' && !pointerTurn) return false;
+  if (
+    step.whenEvent !== undefined &&
+    !pointerEvents.some((event) => String(event.summary ?? '').includes(step.whenEvent))
+  ) {
+    return false;
+  }
+  return !(step.skipEmpty && hasEmpty(args));
+}
+
 /** What a pointer makes the CLI play: the first instruction it reads, else the pointer itself. */
 async function readPointer(line) {
   if (!process.env.PACT_AGENT_MCP_URL && !process.env.PACT_ORCHESTRATOR_URL) {
@@ -231,6 +258,7 @@ async function readPointer(line) {
   }
   const list = await callToolFull('get_events', {});
   console.log(`MCP get_events : ${list.text}`);
+  pointerEvents = list.json?.events ?? [];
   const first = (list.json?.events ?? []).find((event) => event.kind === 'instruction');
   if (!first) return line;
   const detail = await callToolFull('get_events', { id: first.id });
@@ -465,7 +493,8 @@ async function runTurn(line) {
   }
   await sleep(Number(fillDeep(scenario.holdMs ?? 0, line)) || 0);
   for (const step of process.env.PACT_AGENT_MCP_URL ? (scenario.agentMcp ?? []) : []) {
-    const args = fillArguments(step.arguments, line);
+    const args = fillDeep(step.arguments ?? {}, line);
+    if (!stepRuns(step, args)) continue;
     const { text } = await callToolFull(step.tool, args);
     console.log(`MCP ${step.tool} : ${text}`);
   }
@@ -499,6 +528,8 @@ async function runTurn(line) {
 
 /** A line typed or a reason given: a pointer is read, anything else is the prompt. */
 async function play(line) {
+  pointerTurn = POINTER.test(line);
+  pointerEvents = [];
   await runTurn(POINTER.test(line) ? await readPointer(line) : line);
 }
 

@@ -1,0 +1,114 @@
+{
+  "echo": true,
+  "permission": "rm fichier.txt",
+  "permissionOn": "SUPPRIME",
+  "mcp": [
+    {
+      "tool": "send_message",
+      "arguments": {
+        "to": "{{prompt.0}}",
+        "text": "{{prompt.1}}"
+      }
+    }
+  ],
+  "agentMcp": [
+    {
+      "tool": "send_message",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "to": "{{prompt.0}}",
+        "text": "{{prompt.1}}"
+      }
+    },
+    {
+      "tool": "send_message",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "to": "{{prompt.0}}",
+        "text": "{{prompt.2}}"
+      }
+    },
+    {
+      "tool": "send_message",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "to": "{{prompt.0}}",
+        "text": "{{prompt.3}}"
+      }
+    },
+    {
+      "tool": "send_message",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "to": "{{prompt.0}}",
+        "text": "{{prompt.4}}"
+      }
+    },
+    {
+      "tool": "send_message",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "to": "{{prompt.0}}",
+        "text": "{{prompt.5}}"
+      }
+    },
+    {
+      "tool": "send_message",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "to": "{{prompt.0}}",
+        "text": "{{prompt.6}}"
+      }
+    },
+    {
+      "tool": "ask_orchestrator",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "text": "{{prompt.7}}"
+      }
+    },
+    {
+      "tool": "submit_report",
+      "when": "typed",
+      "skipEmpty": true,
+      "arguments": {
+        "issue": "0001-exchanges",
+        "status": "blocked",
+        "summary": "Bloqué",
+        "files": [],
+        "checks": [
+          {
+            "command": "npm test",
+            "exitCode": 1
+          }
+        ],
+        "questions": ["{{prompt.8}}"]
+      }
+    },
+    {
+      "tool": "send_message",
+      "when": "pointer",
+      "whenEvent": "BALLE",
+      "arguments": {
+        "to": "Faux CLI 3",
+        "text": "BALLE retour"
+      }
+    },
+    {
+      "tool": "send_message",
+      "when": "pointer",
+      "whenEvent": "BALLE",
+      "arguments": {
+        "to": "Faux CLI 2",
+        "text": "BALLE retour"
+      }
+    }
+  ]
+}

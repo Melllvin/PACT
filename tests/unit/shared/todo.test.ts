@@ -742,7 +742,7 @@ describe('deriveTodos — the questions go to the orchestrator first (FR-029 to 
     const own = lead({
       state: 'done',
       lastReport: { status: 'blocked', questions: ['Je publie ?'] },
-    } as WithReport);
+    });
     const todos = deriveTodos(workspace([own, asking(2)]), names);
     expect(kinds(todos)).toEqual(['a1:decide']);
     expect(todos[0]?.title).toBe('◆ Décider · Claude Code 1 · orchestrator · 1 question');
@@ -772,7 +772,7 @@ describe('deriveTodos — the questions go to the orchestrator first (FR-029 to 
   );
 
   it('Given an orchestrator, When an agent waits for an authorization, Then « ◆ Répondre » keeps Autoriser and Refuser', () => {
-    const waiting = asking(2, { state: 'awaiting-answer', awaiting: 'permission' });
+    const waiting = asking(2, { state: 'awaiting-answer' });
     const todos = deriveTodos(workspace([lead(), waiting]), names);
     expect(todos.find((t) => t.agentId === 'a2')).toMatchObject({
       kind: 'answer',
