@@ -36,6 +36,7 @@ import {
   markStuck,
   type Draft,
 } from './agent-state';
+import { accountFolder, countsInAccount } from './account';
 import { AutoResume, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
@@ -334,14 +335,11 @@ export class AgentManager {
    * that account, closed, crashed and paused ones left out; one in a rate limit error stays.
    */
   accountAgents(cliId: string, account: string): Agent[] {
-    return this.workspaces.list().flatMap(({ agents }) =>
-      agents.filter((agent) => {
-        if (agent.state === 'closed' || agent.state === 'paused') return false;
-        if (agent.state === 'error' && agent.lastError?.kind !== 'rate-limit') return false;
-        const source = this.running.get(agent.id)?.usage?.source ?? this.accounts.get(agent.id);
-        return source?.cliId === cliId && source.account === account;
-      }),
-    );
+    const of = (id: string) => this.running.get(id)?.usage?.source ?? this.accounts.get(id);
+    return this.workspaces
+      .list()
+      .flatMap(({ agents }) => agents.filter(countsInAccount))
+      .filter((agent) => of(agent.id)?.cliId === cliId && of(agent.id)?.account === account);
   }
 
   /** The agents of the workspace, those without a process marked « à reprendre ». */
@@ -1110,12 +1108,7 @@ export class AgentManager {
   /** 005 R3 — the account of the agent's CLI: its configuration folder, or `default`. */
   private usageOf(agent: Agent, adapter: CliAdapter, env: Record<string, string>) {
     if (!this.usage || !adapter.usageSource) return undefined;
-    const claude = adapter.usageSource === 'claude-statusline';
-    const home = env.HOME || homedir();
-    // The CLI's own folder is the account `default`, whether the variable names it or not (009 R7).
-    const own = join(home, claude ? '.claude' : '.codex');
-    const set = claude ? env.CLAUDE_CONFIG_DIR : env.CODEX_HOME;
-    const folder = set === own ? undefined : set;
+    const folder = accountFolder(adapter.usageSource === 'claude-statusline', env);
     const name = this.registry.get(agent.cliId)?.definition.name ?? agent.cliId;
     const source: UsageSource = {
       agentId: agent.id,
