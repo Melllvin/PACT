@@ -1,0 +1,34 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "send_prompt",
+      "arguments": {
+        "agent": "{{prompt.0}}",
+        "text": "Consigne mi-tour"
+      }
+    }
+  ],
+  "toolHooks": {
+    "times": "{{prompt.1}}",
+    "everyMs": 1500
+  },
+  "holdMs": "{{prompt.2}}",
+  "agentMcp": [
+    {
+      "tool": "submit_report",
+      "arguments": {
+        "issue": "0001-mid-turn",
+        "status": "done",
+        "summary": "RAPPORT-MI-TOUR",
+        "files": [],
+        "checks": [
+          {
+            "command": "npm test",
+            "exitCode": 0
+          }
+        ]
+      }
+    }
+  ]
+}
