@@ -2,6 +2,8 @@ import type { Agent, Loop, Workspace } from '../../shared/model';
 import type { HandoffReport, StoredReport } from '../../shared/report';
 import type { TestRun } from '../../shared/review';
 import type { GitService } from '../git/git-service';
+import { MAX_NOTICE } from '../../shared/exchanges';
+import type { RecordInput } from './exchange-service';
 import type { Notice } from './orchestrator-service';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
@@ -20,11 +22,13 @@ export interface LoopServiceDeps {
     list(): Workspace[];
     update(id: string, change: (ws: Workspace) => Workspace): Promise<Workspace>;
   };
-  git: Pick<GitService, 'snapshot' | 'changedFiles'>;
+  git: Pick<GitService, 'snapshot' | 'changedFiles' | 'mergeBase'>;
   review: Pick<ReviewService, 'testPlan'>;
   tests: Pick<TestRunner, 'run'>;
   agents: { escalate(agentId: string, model: string): Promise<void> };
   notify(workspaceId: string, event: LoopEvent): void;
+  /** 007 R14 — a message of PACT in the journal: the instructions and the verdict of a loop. */
+  message?: (workspaceId: string, draft: RecordInput) => Promise<unknown>;
   /** The loops and issues of a workspace changed (`workspace:loops`). */
   onChange?: (workspaceId: string, change: Pick<Workspace, 'loops' | 'issues'>) => void;
   now?: () => Date;
@@ -58,9 +62,10 @@ function reportNotice(agentId: string, report: HandoffReport): LoopEvent {
   return { agentId, kind: 'question', summary: `${report.summary}\n${questions}` };
 }
 
+/** Who got what when a loop started (007 FR-021): the tool says it in words. */
+export type Sent = { agentId: string; kind: 'instruction' }[];
+
 export class LoopService {
-  /** The tree of the tester's worktree when its round began, by `<workspace>/<issue>`. */
-  private readonly testerStart = new Map<string, string>();
   /** Agents that gave a report since their last turn ended. */
   private readonly reported = new Set<string>();
 
@@ -117,17 +122,10 @@ export class LoopService {
     }));
   }
 
-  private async markTesterStart(ws: Workspace, loop: Pick<Loop, 'issueId' | 'testAgentId'>) {
-    const tester = ws.agents.find((a) => a.id === loop.testAgentId);
-    if (!tester) return;
-    const { tree } = await this.deps.git.snapshot(tester.worktreePath);
-    this.testerStart.set(`${ws.id}/${loop.issueId}`, tree);
-  }
-
   async start(
     workspaceId: string,
     { issue: issueId, dev, test }: { issue: string; dev: string; test: string },
-  ): Promise<Loop> {
+  ): Promise<Loop & { sent: Sent }> {
     const ws = this.workspace(workspaceId);
     const issue = ws.issues.find((i) => i.id === issueId);
     if (!issue) throw new Error(`Issue inconnue : ${issueId}.`);
@@ -164,8 +162,53 @@ export class LoopService {
           : i,
       ),
     }));
-    await this.markTesterStart(ws, loop);
-    return loop;
+    // 007 FR-021 — the tester writes the tests first; the dev's own instruction waits for its report.
+    const sent: Sent = [];
+    const delivered = await this.send(workspaceId, {
+      to: test,
+      kind: 'instruction',
+      text: `Écris les tests d’acceptation de l’issue ${issueId} (lis .pact/issues/${issueId}.md dans ton worktree), sans toucher au code de production. Rends ton rapport avec submit_report.`,
+    });
+    if (delivered) sent.push({ agentId: test, kind: 'instruction' });
+    return { ...loop, sent };
+  }
+
+  /** A message of PACT; a journal that fails must not lose the loop or the verdict. */
+  private async send(
+    workspaceId: string,
+    draft: Pick<RecordInput, 'to' | 'kind' | 'text'>,
+  ): Promise<boolean> {
+    if (!this.deps.message) return false;
+    try {
+      await this.deps.message(workspaceId, { from: 'pact', unreadBy: [draft.to], ...draft });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The files outside the tests that the tester changed since its real base (007 R12, FR-023). */
+  private async outsideTests(ws: Workspace, agent: Agent): Promise<string[]> {
+    const { tree } = await this.deps.git.snapshot(agent.worktreePath);
+    const main = ws.mainBranch;
+    const bases = [
+      main,
+      `origin/${main}`,
+      ...(agent.baseBranch === main ? [] : [agent.baseBranch]),
+    ];
+    let outside: string[] | null = null;
+    for (const base of bases) {
+      // A base unknown here (no origin, a branch gone) is not one.
+      const from = await this.deps.git
+        .mergeBase(agent.worktreePath, 'HEAD', base)
+        .catch(() => null);
+      if (from === null) continue;
+      const changed = await this.deps.git.changedFiles(agent.worktreePath, from, tree);
+      const files = changed.map((f) => f.path).filter((p) => !isTestPath(p, ws.testPaths));
+      outside = outside === null ? files : outside.filter((p) => files.includes(p));
+    }
+    if (outside === null) throw new Error(`Aucune base connue pour contrôler ${agent.branch}.`);
+    return outside;
   }
 
   async next(workspaceId: string, issueId: string): Promise<Loop> {
@@ -196,7 +239,7 @@ export class LoopService {
         escalatedModel = profile.maxModel;
       }
     }
-    const saved = await this.save(workspaceId, issueId, (l) => ({
+    return this.save(workspaceId, issueId, (l) => ({
       ...l,
       round: n,
       escalatedModel,
@@ -205,8 +248,6 @@ export class LoopService {
         { n, startedAt: this.now(), reports: [], proof: null, testerTouched: [] },
       ],
     }));
-    await this.markTesterStart(ws, saved);
-    return saved;
   }
 
   /** A hand-off report of an agent; the reason it is refused, or `null`. */
@@ -224,20 +265,33 @@ export class LoopService {
     const stored: StoredReport = { ...report, agentId, role, round: loop.round, at: this.now() };
 
     if (role === 'test' && report.verdict) {
-      const start = this.testerStart.get(`${ws.id}/${loop.issueId}`);
-      if (start) {
-        const { tree } = await this.deps.git.snapshot(agent.worktreePath);
-        const changed = await this.deps.git.changedFiles(agent.worktreePath, start, tree);
-        const outside = changed.map((f) => f.path).filter((p) => !isTestPath(p, ws.testPaths));
-        if (outside.length > 0) {
-          await this.saveRound(ws.id, loop.issueId, (r) => ({ ...r, testerTouched: outside }));
-          return `Verdict rejeté : le test a modifié des fichiers hors tests (${outside.join(', ')}).`;
-        }
+      const outside = await this.outsideTests(ws, agent);
+      if (outside.length > 0) {
+        await this.saveRound(ws.id, loop.issueId, (r) => ({ ...r, testerTouched: outside }));
+        return `Verdict rejeté : le test a modifié des fichiers hors tests (${outside.join(', ')}). Retire ces fichiers de ta branche (remets-les comme sur la branche principale, ou supprime-les), commite, puis rends à nouveau ton verdict.`;
       }
     }
 
+    const firstOfTester =
+      role === 'test' && !loop.rounds.some((r) => r.reports.some((x) => x.role === 'test'));
     await this.saveRound(ws.id, loop.issueId, (r) => ({ ...r, reports: [...r.reports, stored] }));
     this.deps.notify(ws.id, reportNotice(agentId, report));
+    if (firstOfTester) {
+      await this.send(ws.id, {
+        to: loop.devAgentId,
+        kind: 'instruction',
+        text: `Fais passer les tests d’acceptation de l’issue ${loop.issueId} (lis .pact/issues/${loop.issueId}.md dans ton worktree) sans les modifier, puis rends ton rapport avec submit_report.`,
+      });
+    }
+    if (role === 'test' && report.verdict?.result === 'defects') {
+      const defects = report.verdict.defects.map((d) => `- ${d}`).join('\n');
+      const head = `Verdict du test sur ${loop.issueId} (tour ${String(loop.round)}/${String(MAX_ROUNDS)}) : défauts.\n`;
+      await this.send(ws.id, {
+        to: loop.devAgentId,
+        kind: 'verdict',
+        text: `${head}${defects}`.slice(0, MAX_NOTICE),
+      });
+    }
 
     if (role === 'test' && report.verdict?.result === 'accepted') {
       const { target, command } = await this.deps.review.testPlan(loop.devAgentId);
@@ -333,14 +387,13 @@ export class LoopService {
       throw new Error(`La boucle de ${issueId} n’attend pas de décision.`);
     }
     if (decision === 'restart') {
-      const saved = await this.save(workspaceId, issueId, (l) => ({
+      await this.save(workspaceId, issueId, (l) => ({
         ...l,
         state: 'running',
         round: 1,
         rounds: [{ n: 1, startedAt: this.now(), reports: [], proof: null, testerTouched: [] }],
       }));
       await this.setIssue(workspaceId, issueId, 'in-progress');
-      await this.markTesterStart(this.workspace(workspaceId), saved);
       return;
     }
     await this.save(workspaceId, issueId, (l) => ({ ...l, state: 'closed' }));

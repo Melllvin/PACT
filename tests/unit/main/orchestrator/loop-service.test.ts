@@ -96,6 +96,7 @@ const deps = () => ({
       Promise.resolve({ commit: 'c', tree: cwd === dev.worktreePath ? devTree : TREE }),
     ),
     changedFiles: vi.fn(() => Promise.resolve(touched.map((path) => ({ path })))),
+    mergeBase: vi.fn((_cwd: string, _a: string, b: string) => Promise.resolve(`base-${b}`)),
   },
   review: {
     testPlan: vi.fn((agentId: string) =>
@@ -120,6 +121,7 @@ const deps = () => ({
   },
   agents: { escalate: vi.fn(() => Promise.resolve()) },
   notify,
+  message: vi.fn(() => Promise.resolve({})),
 });
 
 let d: ReturnType<typeof deps>;
@@ -263,7 +265,7 @@ describe('reports', () => {
   it('rejects the verdict of a test that changed files outside the tests (FR-020)', async () => {
     await start();
     touched = ['src/connexion.ts', 'tests/connexion.test.ts'];
-    await expect(loops.report(tester.id, accepted)).resolves.toBe(
+    await expect(loops.report(tester.id, accepted)).resolves.toContain(
       'Verdict rejeté : le test a modifié des fichiers hors tests (src/connexion.ts).',
     );
     expect(loop()?.rounds[0]?.testerTouched).toEqual(['src/connexion.ts']);
@@ -523,7 +525,7 @@ describe('the base of the control of the tester (007 FR-023, R12)', () => {
         ...deps().git,
         mergeBase: vi.fn((_cwd: string, _a: string, b: string) => Promise.resolve(`base-${b}`)),
       },
-    } as unknown as ReturnType<typeof deps>;
+    };
     loops = new LoopService(d as never);
   });
 

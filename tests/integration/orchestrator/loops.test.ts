@@ -82,10 +82,9 @@ describe('start_loop', () => {
 describe('a loop', () => {
   it('goes round on defects, then is done once PACT’s run of the tests passes', async () => {
     const started = await tool('start_loop', { issue: '0012-connexion', dev: devId, test: testId });
-    expect(started).toMatchObject({
-      isError: false,
-      text: 'Boucle de 0012-connexion démarrée : tour 1/3.',
-    });
+    expect(started.isError).toBe(false);
+    expect(started.text).toContain('Boucle de 0012-connexion démarrée : tour 1/3.');
+    expect(started.text).toMatch(/consigne/i);
     expect(current()?.issues[0]).toMatchObject({ state: 'in-progress' });
 
     // Round 1: the test finds a defect and reports it with submit_report.
