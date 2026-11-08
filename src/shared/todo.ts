@@ -181,9 +181,9 @@ export function deriveTodos(
   // « ✕ Échanges en boucle »: two agents bounced a message 3 times without a commit (007 FR-006).
   const exchanges = (workspace.exchanges?.escalations ?? []).flatMap((escalation): TodoItem[] => {
     if (escalation.state !== 'pending') return [];
-    const pair = escalation.agents.map((id) => byId.get(id));
-    const [first, second] = pair.sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0));
-    if (!first || !second) return [];
+    const pair = escalation.agents.flatMap((id) => byId.get(id) ?? []);
+    if (pair.length !== 2) return [];
+    const [first, second] = pair.sort((a, b) => a.position - b.position) as [Agent, Agent];
     const last = workspace.exchanges?.messages.find((m) => m.id === escalation.lastMessageId);
     const name = (a: Agent) => `${names(a.cliId)} ${String(a.position)}`;
     return [

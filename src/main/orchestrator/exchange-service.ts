@@ -384,14 +384,11 @@ export class ExchangeService {
     escalationId: string,
     decision: 'resume' | 'cut',
   ): Promise<void> {
-    const ws = this.options.workspaces.get(workspaceId);
-    if (!ws?.exchanges.escalations.some((e) => e.id === escalationId)) {
-      throw notFound('Escalade introuvable.');
-    }
-    if (decision === 'resume') {
-      const pair = ws.exchanges.escalations.find((e) => e.id === escalationId)?.agents;
-      if (pair) this.pairs.delete([...pair].sort().join('|'));
-    }
+    const escalation = this.options.workspaces
+      .get(workspaceId)
+      ?.exchanges.escalations.find((e) => e.id === escalationId);
+    if (!escalation) throw notFound('Escalade introuvable.');
+    if (decision === 'resume') this.pairs.delete([...escalation.agents].sort().join('|'));
     const updated = await this.options.workspaces.update(workspaceId, (current) => ({
       ...current,
       exchanges: {
