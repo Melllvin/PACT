@@ -1,0 +1,29 @@
+{
+  "echo": true,
+  "holdMs": 10000,
+  "mcp": [
+    {
+      "tool": "{{prompt.0}}",
+      "json": "{{prompt.1}}"
+    }
+  ],
+  "agentMcp": [
+    {
+      "tool": "ask_orchestrator",
+      "when": "pointer",
+      "whenEvent": "DEFAUT-LOOP",
+      "arguments": {
+        "text": "VERDICT-LU"
+      }
+    }
+  ],
+  "writeTests": ["loop-start"],
+  "report": {
+    "issue": "0012-connexion",
+    "status": "defects",
+    "summary": "Défaut relevé",
+    "files": ["tests/loop-start.test.ts"],
+    "checks": [{ "command": "npm test", "exitCode": 1 }],
+    "verdict": { "result": "defects", "defects": ["DEFAUT-LOOP a() renvoie 2"] }
+  }
+}

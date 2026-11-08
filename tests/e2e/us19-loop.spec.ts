@@ -122,6 +122,7 @@ test('stops the loop after three rounds of defects, and the user decides', async
 
   await call(page, lead, 'start_loop', { issue: ISSUE, dev: 'Faux CLI 2', test: 'Faux CLI 3' });
   await expect(lead).toContainText(`Boucle de ${ISSUE} démarrée : tour 1/3.`);
+  await expect(lead).toContainText(/Consigne envoyée à Faux CLI 3/);
   await expect(dev.getByLabel('Tour')).toHaveText('tour 1/3');
   await expect(tester.getByLabel('Tour')).toHaveText('tour 1/3');
 

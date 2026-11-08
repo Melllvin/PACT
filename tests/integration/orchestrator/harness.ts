@@ -206,6 +206,13 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       orchestrator.notice(workspaceId, notice);
       reports.push({ workspaceId, ...notice });
     },
+    // 007 R14 — the instructions and the verdict of a loop go through the journal, as in the app.
+    ...(exchanges
+      ? {
+          message: (workspaceId: string, draft: Parameters<typeof exchanges.record>[1]) =>
+            exchanges.record(workspaceId, draft),
+        }
+      : {}),
   });
 
   /** `gh` as a suite fakes it (004 US3): each call, and what answers it. */
