@@ -118,7 +118,8 @@ export function applyTyped(draft: Draft, data: string, state: AgentState): Draft
   if (state === 'awaiting-answer') return draft;
   let next = draft;
   // A paste may hold line breaks of its own: it is skipped whole, and leaves the content unknown.
-  const text = skipPastes(data);
+  // What the terminal answers by itself to the CLI or to ConPTY is no key of the user.
+  const text = skipTerminalReplies(skipPastes(data));
   const chars = Array.from(text);
   for (let i = 0; i < chars.length; i++) {
     const char = chars[i] as string;
@@ -145,6 +146,29 @@ export function draftAfterSignal(draft: Draft, signal: AgentSignal): Draft {
 
 /** A pointer typed and never submitted (R6): the prompt is busy until Enter. */
 export const markStuck = (draft: Draft): Draft => ({ ...draft, stuck: true });
+
+// The replies xterm sends on its own through `onData`, to a query of the CLI or of ConPTY (which asks
+// for the cursor position as it starts, on Windows): position (CPR), status, device attributes,
+// mode and window reports, focus, the kitty keyboard flags, then the OSC and DCS answers. They
+// reach `typed` like any key, but none is typed by the user, and none fills the prompt. A key that
+// shares a form with a reply (Shift+F3 is CSI 1;2 R) is dropped too: it writes nothing in a prompt.
+const TERMINAL_REPLIES = new RegExp(
+  [
+    String.raw`\x1b\[\??\d+;\d+(?:;\d+)?R`,
+    String.raw`\x1b\[[?>=]\d*(?:;\d+)*c`,
+    String.raw`\x1b\[\??\d+n`,
+    String.raw`\x1b\[[IO]`,
+    String.raw`\x1b\[\??\d+;\d+\$y`,
+    String.raw`\x1b\[\d+(?:;\d+){0,2}t`,
+    String.raw`\x1b\[\?\d*u`,
+    String.raw`\x1b\]\d+;[^\x07\x1b]*(?:\x07|\x1b\\)`,
+    String.raw`\x1bP[^\x1b]*\x1b\\`,
+  ].join('|'),
+  'g',
+);
+
+/** `data` without the replies the terminal made by itself. */
+export const skipTerminalReplies = (data: string): string => data.replace(TERMINAL_REPLIES, '');
 
 const PASTE_OPEN = '\x1b[200~';
 const PASTE_MARK = '\x1b\x00';
