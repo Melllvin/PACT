@@ -663,3 +663,237 @@ describe('wake-held (007)', () => {
     expect(held(items)).toEqual([]);
   });
 });
+
+// 007 T042 — the route of the questions (FR-029 to FR-031, US3 sc.13 to 15, data-model « Changement
+// de decide », research R9) and « ✕ Échanges en boucle » (FR-006, contracts/ui.md).
+//
+// API fixed here for the dev (see the report, « API fixées »):
+//   deriveTodos reads `workspace.exchanges` (optional, like `loops`);
+//   a pending escalation of two agents still in the workspace gives
+//     { id: '<escalationId>:exchange-escalated', agentId: <first agent of the pair, by position>,
+//       kind: 'exchange-escalated', actions: [],
+//       title: '✕ Échanges en boucle · <CLI> <n> ↔ <CLI> <m> · 3 allers-retours',
+//       exchange: { escalationId, text: <text of the last message, or ''> } }
+//   (`TodoItem.exchange` is new). A `cut` escalation, or one with an agent gone, gives nothing.
+describe('deriveTodos — the questions go to the orchestrator first (FR-029 to FR-031)', () => {
+  const asking = (n: number, overrides: WithReport = {}) =>
+    reported(n, {
+      state: 'done',
+      role: 'dev',
+      lastReport: { status: 'blocked', questions: ['Quelle base ?', 'Quel nom ?'] },
+      ...overrides,
+    });
+  const lead = (overrides: Partial<Agent> = {}) =>
+    agent(1, { role: 'orchestrator', state: 'working', ...overrides });
+  const kinds = (todos: ReturnType<typeof deriveTodos>) => todos.map((t) => t.id);
+
+  it('Given an orchestrator present and not in error, When an agent reports blocked with questions, Then no « ◆ Décider » for the user', () => {
+    for (const state of ['working', 'awaiting-prompt', 'done'] as const) {
+      const todos = deriveTodos(workspace([lead({ state }), asking(2)]), names);
+      expect(todos.filter((t) => t.kind === 'decide')).toEqual([]);
+    }
+  });
+
+  it('Given that route, When the agent is ready, Then the rest of its items applies: its review, or its prompt', () => {
+    const review = deriveTodos(workspace([lead(), asking(2)]), names, { a2: 3 });
+    expect(kinds(review)).toEqual(['a2:review']);
+    const prompt = deriveTodos(workspace([lead(), asking(2, { state: 'awaiting-prompt' })]), names);
+    expect(kinds(prompt)).toEqual(['a2:prompt']);
+    const none = deriveTodos(workspace([lead(), asking(2)]), names);
+    expect(none).toEqual([]);
+  });
+
+  it('Given an orchestrator, When the report is of a tester or comes from a loop, Then there is no « ◆ Décider » either', () => {
+    const todos = deriveTodos(
+      {
+        ...workspace([lead(), asking(2, { role: 'dev' }), asking(3, { role: 'test' })]),
+        loops: [loopOf('running', 'a2', 'a3')],
+      },
+      names,
+    );
+    expect(todos.filter((t) => t.kind === 'decide')).toEqual([]);
+  });
+
+  it('Given an orchestrator in error, When an agent reports blocked with questions, Then « ◆ Décider » stays', () => {
+    const todos = deriveTodos(
+      workspace([lead({ state: 'error', lastError: rateLimited }), asking(2)]),
+      names,
+    );
+    expect(todos.find((t) => t.kind === 'decide')).toMatchObject({
+      id: 'a2:decide',
+      title: '◆ Décider · Claude Code 2 · dev · 2 questions',
+      decide: { questions: ['Quelle base ?', 'Quel nom ?'] },
+    });
+  });
+
+  it('Given an orchestrator in error, When it recovers, Then « ◆ Décider » goes away', () => {
+    const failed = lead({ state: 'error', lastError: rateLimited });
+    expect(kinds(deriveTodos(workspace([failed, asking(2)]), names))).toContain('a2:decide');
+    expect(kinds(deriveTodos(workspace([lead(), asking(2)]), names))).not.toContain('a2:decide');
+  });
+
+  it('Given no orchestrator, When an agent reports blocked with questions, Then « ◆ Décider » is shown as before', () => {
+    const todos = deriveTodos(workspace([asking(2), asking(3, { role: 'spec' })]), names);
+    expect(todos.map((t) => t.id)).toEqual(['a2:decide', 'a3:decide']);
+    expect(todos[1]?.title).toBe('◆ Décider · Claude Code 3 · spec · 2 questions');
+  });
+
+  it('Given an orchestrator, When the orchestrator itself reports blocked with questions, Then it keeps its own « ◆ Décider »', () => {
+    const own = lead({
+      state: 'done',
+      lastReport: { status: 'blocked', questions: ['Je publie ?'] },
+    });
+    const todos = deriveTodos(workspace([own, asking(2)]), names);
+    expect(kinds(todos)).toEqual(['a1:decide']);
+    expect(todos[0]?.title).toBe('◆ Décider · Claude Code 1 · orchestrator · 1 question');
+  });
+
+  it.each([
+    ['an orchestrator present', [agent(1, { role: 'orchestrator', state: 'working' })]],
+    [
+      'an orchestrator in error',
+      [agent(1, { role: 'orchestrator', state: 'error', lastError: rateLimited })],
+    ],
+    ['no orchestrator', []],
+  ])(
+    'Given %s, When an agent waits for an answer in its terminal, Then « ◆ Répondre » is shown (FR-031)',
+    (_name, others) => {
+      const waiting = asking(2, { state: 'awaiting-answer', awaiting: 'question' });
+      const todos = deriveTodos(workspace([...others, waiting]), names);
+      expect(todos.filter((t) => t.agentId === 'a2')).toEqual([
+        expect.objectContaining({
+          id: 'a2:answer',
+          kind: 'answer',
+          title: '◆ Répondre',
+          actions: ['open-terminal'],
+        }),
+      ]);
+    },
+  );
+
+  it('Given an orchestrator, When an agent waits for an authorization, Then « ◆ Répondre » keeps Autoriser and Refuser', () => {
+    const waiting = asking(2, { state: 'awaiting-answer' });
+    const todos = deriveTodos(workspace([lead(), waiting]), names);
+    expect(todos.find((t) => t.agentId === 'a2')).toMatchObject({
+      kind: 'answer',
+      actions: ['allow', 'deny'],
+    });
+  });
+
+  it('Given an orchestrator that itself waits for an answer, When todos are derived, Then it has « ◆ Répondre »', () => {
+    const todos = deriveTodos(
+      workspace([lead({ state: 'awaiting-answer', awaiting: 'question' })]),
+      names,
+    );
+    expect(kinds(todos)).toEqual(['a1:answer']);
+  });
+});
+
+describe('deriveTodos — « ✕ Échanges en boucle » (FR-006)', () => {
+  const at = '2026-11-08T10:00:00.000Z';
+  const msg = (id: string, text: string) => ({
+    id,
+    at,
+    from: 'a2',
+    to: 'a3',
+    type: 'action' as const,
+    kind: 'message' as const,
+    text,
+    unreadBy: [],
+  });
+  const escalation = (
+    state: 'pending' | 'cut' = 'pending',
+    agents: [string, string] = ['a2', 'a3'],
+  ) => ({
+    id: 'e1',
+    agents,
+    lastMessageId: 'm9',
+    state,
+    at,
+  });
+  const withExchanges = (
+    agents: Agent[],
+    escalations: ReturnType<typeof escalation>[],
+    messages = [msg('m9', 'Je ne suis pas d’accord, relis le contrat.')],
+  ) => ({
+    ...workspace(agents),
+    exchanges: { messages, escalations },
+  });
+  const pair = () => [
+    agent(2, { state: 'done', role: 'dev' }),
+    agent(3, { state: 'done', role: 'spec' }),
+  ];
+
+  it('Given a pending escalation, When todos are derived, Then one item names the two agents, the round trips and carries the last message', () => {
+    const todos = deriveTodos(withExchanges(pair(), [escalation()]), names);
+    expect(todos).toEqual([
+      {
+        id: 'e1:exchange-escalated',
+        agentId: 'a2',
+        kind: 'exchange-escalated',
+        title: '✕ Échanges en boucle · Claude Code 2 ↔ Claude Code 3 · 3 allers-retours',
+        actions: [],
+        exchange: { escalationId: 'e1', text: 'Je ne suis pas d’accord, relis le contrat.' },
+      },
+    ]);
+  });
+
+  it('Given a last message that is gone, When todos are derived, Then the item stays, with an empty text', () => {
+    const todos = deriveTodos(withExchanges(pair(), [escalation()], []), names);
+    expect(todos[0]).toMatchObject({ kind: 'exchange-escalated', exchange: { text: '' } });
+  });
+
+  it('Given an escalation cut by the user, When todos are derived, Then there is no item', () => {
+    const todos = deriveTodos(withExchanges(pair(), [escalation('cut')]), names);
+    expect(todos.filter((t) => t.kind === 'exchange-escalated')).toEqual([]);
+  });
+
+  it('Given one of the two agents gone, When todos are derived, Then there is no item', () => {
+    const todos = deriveTodos(withExchanges([pair()[0] as Agent], [escalation()]), names);
+    expect(todos.filter((t) => t.kind === 'exchange-escalated')).toEqual([]);
+  });
+
+  it('Given a workspace saved before 007, When todos are derived, Then there is no item and no error', () => {
+    expect(deriveTodos(workspace(pair()), names)).toEqual([]);
+  });
+
+  it('Given a loop stopped and a limit, When todos are derived, Then the escalation comes right after the loop and before the limit and the reviews', () => {
+    const todos = deriveTodos(
+      {
+        ...withExchanges(
+          [
+            ...pair(),
+            agent(4, { state: 'error', lastError: rateLimited }),
+            agent(5, { state: 'done' }),
+          ],
+          [escalation()],
+        ),
+        loops: [loopOf('escalated', 'a2', 'a3')],
+      },
+      names,
+      { a5: 1 },
+    );
+    expect(todos.map((t) => t.kind)).toEqual([
+      'loop-escalated',
+      'exchange-escalated',
+      'rate-limit',
+      'review',
+    ]);
+  });
+
+  it('Given an orchestrator in the pair, When todos are derived, Then the item names it like any agent', () => {
+    const todos = deriveTodos(
+      withExchanges(
+        [
+          agent(2, { state: 'done', role: 'orchestrator' }),
+          agent(3, { state: 'done', role: 'dev' }),
+        ],
+        [escalation()],
+      ),
+      names,
+    );
+    expect(todos[0]?.title).toBe(
+      '✕ Échanges en boucle · Claude Code 2 ↔ Claude Code 3 · 3 allers-retours',
+    );
+  });
+});

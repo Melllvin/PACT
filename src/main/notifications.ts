@@ -19,6 +19,7 @@ const NOTIFIED: ReadonlySet<TodoKind> = new Set([
   'integration-request',
   'publish-issues',
   'loop-escalated',
+  'exchange-escalated',
   'rate-limit',
   'usage-limit',
 ]);
@@ -27,6 +28,7 @@ const NOTIFIED: ReadonlySet<TodoKind> = new Set([
 const GENERIC_TITLE: Partial<Record<TodoKind, string>> = {
   'publish-issues': '◎ Issues à publier',
   'loop-escalated': '✕ Boucle arrêtée',
+  'exchange-escalated': '✕ Échanges en boucle',
 };
 
 export class NotificationService {

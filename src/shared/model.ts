@@ -334,6 +334,8 @@ export type TodoItem = {
   request?: { id: string; message: string };
   /** 004 FR-018 — the loop stopped after 3 rounds, for `loop-escalated`. */
   loop?: { issueId: string };
+  /** 007 FR-006 — the escalation of an exchange in a loop, and its last message as text. */
+  exchange?: { escalationId: string; text: string };
   /** 004 FR-023 — the issues the orchestrator asks to publish, for `publish-issues`. */
   publish?: { requestId: string };
   /** 005 FR-011 — the account near its limit, for `usage-limit`. */

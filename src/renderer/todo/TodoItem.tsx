@@ -45,7 +45,9 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           todo.kind === 'publish-issues' ||
           todo.kind === 'decide') &&
           'border-primary/30 bg-primary/6',
-        (todo.kind === 'rate-limit' || todo.kind === 'loop-escalated') &&
+        (todo.kind === 'rate-limit' ||
+          todo.kind === 'loop-escalated' ||
+          todo.kind === 'exchange-escalated') &&
           'border-destructive/30 bg-destructive/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
@@ -88,13 +90,14 @@ export function TodoActions({
   onConfirmIntegration,
   onRefuseIntegration,
   onDecideLoop,
+  onDecideExchange,
   onConfirmPublish,
   onRefusePublish,
   onOpenTerminal,
   onUsageDetail,
   onDecide,
 }: ActionsProps) {
-  const { request, loop, publish, usage, decide } = todo;
+  const { request, loop, publish, usage, decide, exchange } = todo;
   return (
     <>
       {request && agent && (
@@ -140,6 +143,31 @@ export function TodoActions({
           </Button>
         </div>
       )}
+      {exchange && (
+        <>
+          {/* The text of an agent: React text, never HTML (007 contracts/ui.md). */}
+          {exchange.text !== '' && (
+            <span className="text-[12px] break-words text-dim">{exchange.text}</span>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              onClick={() => {
+                onDecideExchange?.(exchange.escalationId, 'resume');
+              }}
+            >
+              Laisser reprendre
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                onDecideExchange?.(exchange.escalationId, 'cut');
+              }}
+            >
+              Couper
+            </Button>
+          </div>
+        </>
+      )}
       {publish && (
         <div className="flex flex-wrap gap-1.5">
           <Button
@@ -178,7 +206,7 @@ export function TodoActions({
           }}
         />
       )}
-      {agent && !request && !loop && !publish && !decide && (
+      {agent && !request && !loop && !publish && !decide && !exchange && (
         <TileActions
           state={agent.state}
           question={todo.actions.includes('open-terminal')}
