@@ -1,6 +1,11 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GitService } from '../../../src/main/git/git-service';
+import { LoopService } from '../../../src/main/orchestrator/loop-service';
 import type { Issue } from '../../../src/shared/model';
-import { callTool, createHarness, type Harness } from './harness';
+import type { HandoffReport } from '../../../src/shared/report';
+import { callTool, createHarness, git, gitEnv, type Harness } from './harness';
 
 // 004 T020–T021 — submit_report, start_loop, next_round and get_loop with real repositories and
 // fake agents: the report reaches the orchestrator, a turn without one is told, and the issue is
@@ -77,10 +82,9 @@ describe('start_loop', () => {
 describe('a loop', () => {
   it('goes round on defects, then is done once PACT’s run of the tests passes', async () => {
     const started = await tool('start_loop', { issue: '0012-connexion', dev: devId, test: testId });
-    expect(started).toMatchObject({
-      isError: false,
-      text: 'Boucle de 0012-connexion démarrée : tour 1/3.',
-    });
+    expect(started.isError).toBe(false);
+    expect(started.text).toContain('Boucle de 0012-connexion démarrée : tour 1/3.');
+    expect(started.text).toMatch(/consigne/i);
     expect(current()?.issues[0]).toMatchObject({ state: 'in-progress' });
 
     // Round 1: the test finds a defect and reports it with submit_report.
@@ -143,4 +147,142 @@ describe('a loop', () => {
     expect(early).toMatchObject({ isError: true });
     expect(early.text).toBe('Le tour 1 attend le verdict « defects » du test.');
   });
+});
+
+// 007 US4 (T050, FR-023, R12) — the check of the files the tester changed starts from the real base of
+// its branch, worked out at each verdict, on temporary Git repositories: a tester put back on `main`
+// (or on an `origin/main` that moved) is accepted, a production file is rejected with the way out,
+// the merge of the dev's branch is rejected, a restart of PACT keeps the check, and an explicit
+// `baseBranch` is respected.
+describe('the control of the files of the tester (007 FR-023)', () => {
+  const ID = '0012-connexion';
+  const verdict = (result: 'accepted' | 'defects' = 'accepted'): HandoffReport => ({
+    issue: ID,
+    status: result === 'accepted' ? 'done' : 'defects',
+    summary: 'Verdict',
+    files: [],
+    checks: [{ command: 'git --version', exitCode: 0 }],
+    questions: [],
+    verdict: { result, defects: result === 'accepted' ? [] : ['Un défaut'] },
+  });
+  const worktree = (id: string) => h.current(id)?.worktreePath ?? '';
+  const commit = async (cwd: string, path: string, message: string) => {
+    await mkdir(join(cwd, path, '..'), { recursive: true });
+    await writeFile(join(cwd, path), `// ${message}\n`);
+    git(cwd, 'add', '.');
+    git(cwd, 'commit', '-m', message);
+  };
+  const startLoop = () => h.loops.start(h.workspace.id, { issue: ID, dev: devId, test: testId });
+  const touched = () => current()?.loops[0]?.rounds[0]?.testerTouched;
+
+  it('accepts a tester that changed only tests, then was put back on main that moved (US4 sc.2, SC-006)', async () => {
+    // Given a loop started, a tester that wrote a test and a main that moved on
+    await startLoop();
+    await commit(worktree(testId), 'tests/connexion.test.ts', 'tests du testeur');
+    await commit(h.repo, 'src/auth.ts', 'main avance');
+    // When the tester is put back on main, then gives its verdict
+    git(worktree(testId), 'rebase', 'main');
+    const rejection = await h.loops.report(testId, verdict());
+    // Then PACT accepts it: the files that came from main are not the tester's
+    expect(rejection).toBeNull();
+    expect(touched()).toEqual([]);
+  }, 30_000);
+
+  it('accepts it too when put back on an origin/main that moved while main stayed behind (SC-006)', async () => {
+    // Given a remote, a local main behind origin/main and a tester put back on origin/main
+    const remote = join(h.root, 'origin.git');
+    git(h.root, 'init', '--bare', '-b', 'main', remote);
+    git(h.repo, 'remote', 'add', 'origin', remote);
+    git(h.repo, 'push', 'origin', 'main');
+    await startLoop();
+    await commit(worktree(testId), 'tests/connexion.test.ts', 'tests du testeur');
+    const other = join(h.root, 'other');
+    git(h.root, 'clone', remote, other);
+    await commit(other, 'src/upstream.ts', 'origin/main avance');
+    git(other, 'push', 'origin', 'main');
+    git(h.repo, 'fetch', 'origin');
+    git(worktree(testId), 'rebase', 'origin/main');
+    // When it gives its verdict
+    const rejection = await h.loops.report(testId, verdict());
+    // Then it is accepted, whichever of the two bases is behind
+    expect(rejection).toBeNull();
+    expect(touched()).toEqual([]);
+  }, 30_000);
+
+  it('rejects a verdict after a production file, with the list and the way out (US4 sc.3)', async () => {
+    // Given a tester that changed a test and a production file
+    await startLoop();
+    await commit(worktree(testId), 'tests/connexion.test.ts', 'tests du testeur');
+    await mkdir(join(worktree(testId), 'src'), { recursive: true });
+    await writeFile(join(worktree(testId), 'src', 'oops.ts'), '// prod\n');
+    // When it gives its verdict
+    const rejection = await h.loops.report(testId, verdict());
+    // Then it is rejected: the file is named, the test is not, and the message says to remove it from the branch
+    expect(rejection).toContain('src/oops.ts');
+    expect(rejection).not.toContain('tests/connexion.test.ts');
+    expect(rejection).toMatch(/retire/i);
+    expect(rejection).toMatch(/branche/i);
+    expect(touched()).toEqual(['src/oops.ts']);
+  }, 30_000);
+
+  it('rejects a verdict after the merge of the branch of the dev (R12)', async () => {
+    // Given a dev that committed production code, and a tester that merged its branch
+    await startLoop();
+    await commit(worktree(devId), 'src/connexion.ts', 'le code du dev');
+    await commit(worktree(testId), 'tests/connexion.test.ts', 'tests du testeur');
+    git(worktree(testId), 'merge', '--no-edit', h.current(devId)?.branch ?? '');
+    // When the tester gives its verdict
+    const rejection = await h.loops.report(testId, verdict());
+    // Then it is rejected with the dev's file, and the way out
+    expect(rejection).toContain('src/connexion.ts');
+    expect(rejection).toMatch(/retire/i);
+    expect(touched()).toContain('src/connexion.ts');
+  }, 30_000);
+
+  it('keeps the check after a restart of PACT: a new LoopService reads the real base (US4 sc.4)', async () => {
+    // Given a loop started by a first LoopService, and a tester that changed a production file
+    await startLoop();
+    await commit(worktree(testId), 'src/oops.ts', 'code de prod');
+    // When PACT restarts (a new LoopService, nothing in memory) and the tester gives its verdict
+    const restarted = new LoopService({
+      workspaces: h.workspaces,
+      git: new GitService({ env: gitEnv }),
+      review: h.review,
+      tests: h.tests,
+      agents: { escalate: () => Promise.resolve() },
+      notify: () => undefined,
+      message: (workspaceId: string, draft: never) => h.exchanges?.record(workspaceId, draft),
+    } as never);
+    const rejection = await restarted.report(testId, verdict());
+    // Then the check still takes place
+    expect(rejection).not.toBeNull();
+    expect(rejection).toContain('src/oops.ts');
+    expect(touched()).toEqual(['src/oops.ts']);
+  }, 30_000);
+
+  it('respects an explicit baseBranch: a tester started from another branch is not blamed for its files (US4 sc.7)', async () => {
+    // Given a branch `feature` ahead of main, and a tester launched from it
+    git(h.repo, 'checkout', '-b', 'feature');
+    await commit(h.repo, 'src/feature.ts', 'la branche feature');
+    git(h.repo, 'checkout', 'main');
+    const [other] = await h.launch(
+      [h.draft({ role: 'test', baseBranch: 'feature' })],
+      'role-report',
+    );
+    const otherId = other?.id ?? '';
+    await h.workspaces.update(h.workspace.id, (ws) => ({
+      ...ws,
+      issues: [
+        ...ws.issues,
+        { ...issue('ready'), id: '0013-autre', path: '.pact/issues/0013-autre.md' },
+      ],
+    }));
+    await h.loops.start(h.workspace.id, { issue: '0013-autre', dev: devId, test: otherId });
+    await commit(worktree(otherId), 'tests/autre.test.ts', 'tests du testeur');
+    // When it gives its verdict
+    const rejection = await h.loops.report(otherId, { ...verdict(), issue: '0013-autre' });
+    // Then it is accepted: src/feature.ts comes from its base, not from the tester
+    expect(h.current(otherId)?.baseBranch).toBe('feature');
+    expect(rejection).toBeNull();
+  }, 30_000);
 });

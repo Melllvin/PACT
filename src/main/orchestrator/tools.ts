@@ -649,7 +649,17 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const loop = await loopRefusal(() =>
           loops.start(workspace().id, { issue, dev: dev.id, test: test.id }),
         );
-        return reply(`Boucle de ${issue} démarrée : tour 1/3.`, { loop });
+        const { sent, ...plain } = loop;
+        const to = (id: string) => (id === test.id ? test : dev);
+        const who = sent.map((s) => nameOf(to(s.agentId)));
+        const said =
+          who.length > 0
+            ? `Consigne envoyée à ${who.join(' et ')}.`
+            : 'Aucune consigne n’a pu partir : envoie-les avec send_prompt.';
+        return reply(
+          `Boucle de ${issue} démarrée : tour 1/3. ${said} ${nameOf(test)} (test) écrit les tests ; ${nameOf(dev)} (dev) reçoit sa consigne à son premier rapport.`,
+          { loop: plain, sent },
+        );
       },
     ),
     tool(

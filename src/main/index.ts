@@ -315,6 +315,7 @@ void app.whenReady().then(async () => {
     review,
     tests,
     agents,
+    message: (workspaceId, draft) => exchanges.record(workspaceId, draft),
     notify: (workspaceId, notice) => {
       orchestrator.notice(workspaceId, notice);
       emit('orchestrator:report', { workspaceId, ...notice });
