@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { FocusView } from '../../../../src/renderer/focus/FocusView';
+import { FocusView, type FocusTab as FocusTabName } from '../../../../src/renderer/focus/FocusView';
 import type { Agent } from '../../../../src/shared/model';
 import { agent, rateLimited, scheduledResume, time } from '../tiles/fixtures';
 
@@ -434,5 +434,105 @@ describe('FocusView of the orchestrator — the exchanges in the journal', () =>
   it('Given only messages, When the journal is shown, Then « Aucune action » is not shown', () => {
     renderJournal([message(1, 10)], []);
     expect(screen.queryByText('Aucune action pour l’instant.')).toBeNull();
+  });
+});
+
+// 006 T043 (#42) and #43 — a tab other than Terminal fills the tile; the terminal is hidden, not
+// destroyed; a tab without content is not offered.
+describe('FocusView tabs (#42, #43)', () => {
+  const hidden = (el: HTMLElement) => {
+    for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+      if (
+        node.hidden ||
+        node.getAttribute('aria-hidden') === 'true' ||
+        node.hasAttribute('inert') ||
+        node.style.display === 'none' ||
+        node.classList.contains('hidden')
+      )
+        return true;
+    }
+    return false;
+  };
+  const mount = (agents: Agent[], tab: FocusTabName, extra: Record<string, unknown> = {}) => {
+    const detach = vi.fn();
+    const terminals = { attach: vi.fn(() => detach) };
+    const view = (current: FocusTabName) => (
+      <FocusView
+        agents={agents}
+        agentId={agents[0]?.id ?? ''}
+        name={() => 'Claude Code'}
+        terminals={terminals}
+        tab={current}
+        onTab={vi.fn()}
+        onSelect={vi.fn()}
+        onBack={vi.fn()}
+        onAnswer={vi.fn()}
+        onResume={vi.fn()}
+        onRestart={vi.fn()}
+        onLog={vi.fn()}
+        onCancelAutoResume={vi.fn()}
+        onClose={vi.fn()}
+        changes={<p>Liste des changements</p>}
+        {...extra}
+      />
+    );
+    const utils = render(view(tab));
+    return { ...utils, view, detach, terminals };
+  };
+  const lead = () => [agent(1, { role: 'orchestrator' }), agent(2)];
+  const orchestration = { actions: [], onRevoke: vi.fn() };
+
+  it.each([
+    ['changes', 'Liste des changements'],
+    ['reports', 'Les rapports'],
+    ['actions', 'Aucune action pour l’instant.'],
+    ['preview', 'Mon aperçu'],
+  ] as const)(
+    'Given the %s tab of an orchestrator, When shown, Then the terminal is not visible and the panel is',
+    (tab, text) => {
+      mount(lead(), tab, {
+        orchestration,
+        reports: <p>Les rapports</p>,
+        preview: <p>Mon aperçu</p>,
+      });
+      expect(screen.getByText(text)).toBeDefined();
+      expect(hidden(screen.getByLabelText('Terminal de Claude Code 1'))).toBe(true);
+    },
+  );
+
+  it('Given a simple agent on Changements, When shown, Then its terminal is not visible either', () => {
+    mount([agent(1)], 'changes');
+    expect(hidden(screen.getByLabelText('Terminal de Claude Code 1'))).toBe(true);
+  });
+
+  it('Given the Terminal tab, When shown, Then the terminal is visible', () => {
+    mount([agent(1)], 'terminal');
+    expect(hidden(screen.getByLabelText('Terminal de Claude Code 1'))).toBe(false);
+  });
+
+  it('Given a panel tab, When shown, Then the panel is not squeezed above a terminal strip (no 32 % band)', () => {
+    mount([agent(1)], 'changes');
+    const box = screen.getByLabelText('Terminal de Claude Code 1').closest('[class*="h-["]');
+    expect(box).toBeNull();
+  });
+
+  it('Given a tab left and Terminal again, When switched, Then the terminal was never detached (session kept)', () => {
+    const { rerender, view, detach, terminals } = mount([agent(1)], 'terminal');
+    rerender(view('changes'));
+    rerender(view('terminal'));
+    expect(detach).not.toHaveBeenCalled();
+    expect(terminals.attach).toHaveBeenCalledTimes(1);
+  });
+
+  it('Given no preview given, When the tabs show, Then there is no Aperçu tab at all (#43)', () => {
+    mount([agent(1)], 'terminal');
+    expect(screen.queryByRole('tab', { name: 'Aperçu' })).toBeNull();
+  });
+
+  it('Given no reports and no journal, When the tabs show, Then neither Actions nor Rapports is offered (#43)', () => {
+    mount([agent(1)], 'terminal');
+    expect(screen.queryByRole('tab', { name: /Actions/ })).toBeNull();
+    expect(screen.queryByRole('tab', { name: /Rapports/ })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Terminal' })).toBeDefined();
   });
 });
