@@ -1,8 +1,17 @@
 import { z } from 'zod';
-import { effortSchema, gitIdSchema, isoDate, repoPathSchema, roleSchema } from './primitives';
+import { exchangesSchema } from './exchanges';
+import {
+  agentStateSchema,
+  effortSchema,
+  gitIdSchema,
+  isoDate,
+  repoPathSchema,
+  roleSchema,
+} from './primitives';
 import { storedReportSchema } from './report';
 
 export {
+  agentStateSchema,
   EFFORTS,
   ROLES,
   effortSchema,
@@ -19,16 +28,6 @@ export const MAX_AGENTS = 6;
 export const MAX_RECENT_PROJECTS = 20;
 
 export const agentColorSchema = z.enum(AGENT_COLORS);
-
-export const agentStateSchema = z.enum([
-  'starting',
-  'awaiting-prompt',
-  'working',
-  'awaiting-answer',
-  'done',
-  'error',
-  'closed',
-]);
 
 /** An agent still at work: integrating it asks for a confirmation first (002 FR-025). */
 export const WORKING_STATES: readonly z.infer<typeof agentStateSchema>[] = [
@@ -120,6 +119,8 @@ export const agentSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** 007 — a wake held back and signalled: `deriveTodos` reads it (data-model). */
+  wakeNotice: z.enum(['input', 'cap']).nullable().optional(),
 });
 
 /** 004 R2 — what an agent of a role is launched with; `null` model: the CLI's own. */
@@ -245,6 +246,8 @@ export const workspaceSchema = z
     testPaths: z.array(z.string().min(1)).default(() => [...DEFAULT_TEST_PATHS]),
     /** At most one: a new one replaces the old one. */
     publishRequests: z.array(publishRequestSchema).max(1).default([]),
+    /** 007 — the journal of the exchanges between the agents; old files load without it. */
+    exchanges: exchangesSchema,
     lastOpenedAt: isoDate,
     status: z.enum(['available', 'unavailable']),
   })
@@ -331,12 +334,16 @@ export type TodoItem = {
   request?: { id: string; message: string };
   /** 004 FR-018 — the loop stopped after 3 rounds, for `loop-escalated`. */
   loop?: { issueId: string };
+  /** 007 FR-006 — the escalation of an exchange in a loop, and its last message as text. */
+  exchange?: { escalationId: string; text: string };
   /** 004 FR-023 — the issues the orchestrator asks to publish, for `publish-issues`. */
   publish?: { requestId: string };
   /** 005 FR-011 — the account near its limit, for `usage-limit`. */
   usage?: { cliId: string; account: string; level: 'warn' | 'critical' };
   /** The questions of an agent stopped on a `blocked` report, for `decide`. */
   decide?: { questions: string[] };
+  /** 007 — the sentence under the title, for `wake-held`. */
+  detail?: string;
 };
 export type TodoKind =
   | 'answer'
@@ -344,8 +351,10 @@ export type TodoKind =
   | 'integration-request'
   | 'publish-issues'
   | 'loop-escalated'
+  | 'exchange-escalated'
   | 'rate-limit'
   | 'usage-limit'
+  | 'wake-held'
   | 'review'
   | 'prompt'
   | 'info';

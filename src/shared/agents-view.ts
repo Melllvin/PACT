@@ -97,6 +97,7 @@ const ROW_KINDS: readonly TodoItem['kind'][] = [
   'answer',
   'decide',
   'rate-limit',
+  'wake-held',
   'review',
   'prompt',
 ];

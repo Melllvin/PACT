@@ -2,6 +2,7 @@ import type { Role } from '../../shared/primitives';
 import {
   DEFAULT_USAGE_THRESHOLDS,
   launchWarning,
+  usageAlert,
   shownWindow,
   usageLevel,
   type UsageReading,
@@ -104,6 +105,15 @@ export class UsageService {
   /** 005 FR-012 — the warning of a launch of agents of `cliId`, or null. */
   warning(cliId: string): string | null {
     return launchWarning(this.list(), cliId, this.thresholds, this.now());
+  }
+
+  /** 007 FR-016 — an account of this CLI is at its critical level: the wakes wait (R7). */
+  critical(cliId: string): boolean {
+    const now = this.now();
+    return this.list().some(
+      (state) =>
+        state.cliId === cliId && usageAlert(state, this.thresholds, now)?.level === 'critical',
+    );
   }
 
   /**

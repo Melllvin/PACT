@@ -28,7 +28,7 @@ import {
 /** 004 US2 — a report, a missing one, the end of a loop, as the « Rapports » band shows it. */
 export type LoopReport = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup';
+  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup' | 'question';
   summary: string;
   at: string;
 };
@@ -131,6 +131,12 @@ export type AppState = {
     issueId: string,
     decision: 'restart' | 'take-over' | 'abandon',
   ) => Promise<void>;
+  /** 007 FR-006 — « Laisser reprendre » / « Couper » on two agents that bounce a message. */
+  decideExchange: (
+    workspaceId: string,
+    escalationId: string,
+    decision: 'resume' | 'cut',
+  ) => Promise<void>;
   /** 004 FR-023 — « Créer » / « Refuser » of the issues the orchestrator asks to publish. */
   confirmPublish: (requestId: string) => Promise<void>;
   refusePublish: (requestId: string) => Promise<void>;
@@ -206,8 +212,9 @@ const applyState =
     ...agent,
     state: event.state,
     // Working again, the agent has answered what it was asked: its last report is behind it.
-    ...(event.lastReport ? { lastReport: event.lastReport } : {}),
     ...(event.state === 'working' ? { lastReport: null } : {}),
+    // A report handed in during the turn arrives while the agent still works: it stays.
+    ...(event.lastReport ? { lastReport: event.lastReport } : {}),
     ...(event.lastError === undefined ? {} : { lastError: event.lastError }),
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
     // Each event tells whether the agent asks a question: absent, it does not (FR-024a).
@@ -353,6 +360,14 @@ export function createAppStore(api: PactApi) {
               orchestratorPrompted: followCorrection(get().orchestratorPrompted, event),
             });
           }),
+          api.on('agent:wakeNotice', ({ agentId, notice }) => {
+            set({
+              workspaces: updateAgent(get().workspaces, agentId, (a) => ({
+                ...a,
+                wakeNotice: notice,
+              })),
+            });
+          }),
           api.on('orchestrator:prompted', ({ agentId }) => {
             set({ orchestratorPrompted: { ...get().orchestratorPrompted, [agentId]: 'queued' } });
           }),
@@ -403,6 +418,13 @@ export function createAppStore(api: PactApi) {
             set({
               workspaces: get().workspaces.map((w) =>
                 w.id === workspaceId ? { ...w, loops, issues } : w,
+              ),
+            });
+          }),
+          api.on('workspace:exchanges', ({ workspaceId, exchanges }) => {
+            set({
+              workspaces: get().workspaces.map((w) =>
+                w.id === workspaceId ? { ...w, exchanges } : w,
               ),
             });
           }),
@@ -617,6 +639,9 @@ export function createAppStore(api: PactApi) {
 
       decideLoop: (workspaceId, issueId, decision) =>
         act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),
+
+      decideExchange: (workspaceId, escalationId, decision) =>
+        act(() => api.invoke('exchange:decide', { workspaceId, escalationId, decision })),
 
       confirmPublish: (requestId) => act(() => api.invoke('publishRequest:confirm', { requestId })),
 

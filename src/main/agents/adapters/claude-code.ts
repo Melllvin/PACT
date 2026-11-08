@@ -31,12 +31,41 @@ const SENSITIVE_RULES = [
   'Bash(wget *)',
   'Bash(git push *)',
   'WebFetch',
+  // 007 R15 (FR-027): reading what a third party wrote goes through the user. `gh pr create` stays free.
+  'Bash(gh pr view)',
+  'Bash(gh pr view *)',
+  'Bash(gh pr diff)',
+  'Bash(gh pr diff *)',
+  'Bash(gh pr list)',
+  'Bash(gh pr list *)',
+  'Bash(gh pr checkout)',
+  'Bash(gh pr checkout *)',
+  'Bash(gh pr status)',
+  'Bash(gh pr status *)',
+  'Bash(gh issue view)',
+  'Bash(gh issue view *)',
+  'Bash(gh issue list)',
+  'Bash(gh issue list *)',
+  'Bash(gh issue status)',
+  'Bash(gh issue status *)',
+  'Bash(gh run view)',
+  'Bash(gh run view *)',
+  'Bash(gh run list)',
+  'Bash(gh run list *)',
+  'Bash(gh search)',
+  'Bash(gh search *)',
+  'Bash(gh api *)',
+  'Bash(git fetch * refs/pull/*)',
+  'Bash(git fetch * +refs/pull/*)',
 ];
 
 /** 003 R2 — the tools of the session plugin's MCP server, as Claude Code names them. */
 const PACT_TOOLS = 'mcp__plugin_pact_pact__*';
 
-/** 003 R5 — above the longest wait_for_agents (600 s), so Claude Code does not give up on it. */
+/**
+ * 003 R5 — far above the longest wait_for_agents (60 s since 007), so that Claude Code never gives up
+ * on a tool call; kept as it was, a looser bound costing nothing.
+ */
 const MCP_TOOL_TIMEOUT_MS = '660000';
 
 const ORCHESTRATOR_PROMPT = `Tu es l'orchestrateur de ce workspace PACT : tu diriges les autres agents avec le skill ${SKILL_NAME} et les outils du serveur MCP « pact ».`;
@@ -125,6 +154,8 @@ export class ClaudeCodeAdapter implements CliAdapter {
   }
 
   readonly supportsEffort = true;
+  /** 007 R1 — validated on Claude Code 2.1.318: PostToolUse and Stop carry a text to the agent. */
+  readonly midTurnWake = true;
 
   listModels(): Promise<string[]> {
     return Promise.resolve([]);
@@ -149,6 +180,27 @@ export class ClaudeCodeAdapter implements CliAdapter {
     if (signal?.type !== 'failed' || signal.kind !== 'rate-limit') return signal;
     const resetAt = this.parseRateLimitReset(signal.message);
     return resetAt ? { ...signal, resetAt } : signal;
+  }
+
+  isWakePoint(payload: unknown): 'tool' | 'stop' | null {
+    const parsed = hookPayloadSchema.safeParse(payload);
+    if (!parsed.success || parsed.data.agent_id !== undefined) return null;
+    switch (parsed.data.hook_event_name) {
+      case 'PostToolUse':
+        return 'tool';
+      case 'Stop':
+        return 'stop';
+      default:
+        return null;
+    }
+  }
+
+  wakeReply(payload: unknown, pointer: string): object | null {
+    const point = this.isWakePoint(payload);
+    if (point === 'tool') {
+      return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: pointer } };
+    }
+    return point === 'stop' ? { decision: 'block', reason: pointer } : null;
   }
 
   mapOutput(chunk: string, _ctx: OutputContext): AgentSignal | null {
@@ -245,21 +297,22 @@ export class ClaudeCodeAdapter implements CliAdapter {
         // Claude Code refuses HTTP hooks for SessionStart (T049).
         SessionStart: hook({ type: 'command', command: bridgeCommand(this.bridge) }),
         UserPromptSubmit: hook(http),
+        PostToolUse: hook(http),
         Notification: hook(http),
         Stop: hook(http),
         StopFailure: hook(http),
         PermissionRequest: hook({ ...http, timeout: PERMISSION_HOOK_TIMEOUT_S }),
       },
-      ...permissions(level, input.orchestrator != null),
+      ...permissions(level, input.orchestrator != null || input.agentMcp != null),
     };
   }
 }
 
 /** Only a question needs the user: what a teammate or subagent asks waits in the lead's terminal. */
-/** « Actions sensibles » asks (R5 of 001); an orchestrator also uses PACT's tools freely (003 R2). */
-function permissions(level: PermissionLevel, orchestrator: boolean) {
+/** « Actions sensibles » asks (R5 of 001); whoever has the access to PACT's tools uses them freely: the orchestrator (003 R2), and an agent that reads its events with get_events (007 R15). */
+function permissions(level: PermissionLevel, pactTools: boolean) {
   const rules = {
-    ...(orchestrator ? { allow: [PACT_TOOLS] } : {}),
+    ...(pactTools ? { allow: [PACT_TOOLS] } : {}),
     ...(level === 'ask-sensitive' ? { ask: SENSITIVE_RULES } : {}),
   };
   return Object.keys(rules).length === 0 ? {} : { permissions: rules };

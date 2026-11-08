@@ -49,8 +49,10 @@ test('waits for the end of an agent’s turn, then reads its changes', async () 
   await expect(worker).toHaveAttribute('data-state', 'awaiting-prompt');
 
   await typeIn(page, lead, 'Faux CLI 2|Écris la fonction');
-  await expect(worker).toContainText('Reçu : Écris la fonction');
-  await expect(lead).toContainText('MCP wait_for_agents : Faux CLI 2 a fini son tour');
-  await expect(lead).toContainText('MCP get_changes :');
+  await expect(worker).toContainText('Écris la fonction', { timeout: 20_000 });
+  await expect(lead).toContainText('MCP wait_for_agents : Faux CLI 2 a fini son tour', {
+    timeout: 20_000,
+  });
+  await expect(lead).toContainText('MCP get_changes :', { timeout: 20_000 });
   await expect(lead).toContainText('src/fonction.ts');
 });

@@ -6,6 +6,7 @@ import {
   type Issue,
   type Workspace,
 } from '../../../../src/shared/model';
+import { MAX_NOTICE, typeOf, type ExchangeKind } from '../../../../src/shared/exchanges';
 import type { HandoffReport } from '../../../../src/shared/report';
 import type { TestRun } from '../../../../src/shared/review';
 
@@ -72,6 +73,7 @@ const base = (): Workspace => ({
   loops: [],
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
+  exchanges: { messages: [], escalations: [] },
   lastOpenedAt: '2026-11-03T00:00:00.000Z',
   status: 'available',
 });
@@ -94,6 +96,7 @@ const deps = () => ({
       Promise.resolve({ commit: 'c', tree: cwd === dev.worktreePath ? devTree : TREE }),
     ),
     changedFiles: vi.fn(() => Promise.resolve(touched.map((path) => ({ path })))),
+    mergeBase: vi.fn((_cwd: string, _a: string, b: string) => Promise.resolve(`base-${b}`)),
   },
   review: {
     testPlan: vi.fn((agentId: string) =>
@@ -118,6 +121,7 @@ const deps = () => ({
   },
   agents: { escalate: vi.fn(() => Promise.resolve()) },
   notify,
+  message: vi.fn(() => Promise.resolve({})),
 });
 
 let d: ReturnType<typeof deps>;
@@ -261,7 +265,7 @@ describe('reports', () => {
   it('rejects the verdict of a test that changed files outside the tests (FR-020)', async () => {
     await start();
     touched = ['src/connexion.ts', 'tests/connexion.test.ts'];
-    await expect(loops.report(tester.id, accepted)).resolves.toBe(
+    await expect(loops.report(tester.id, accepted)).resolves.toContain(
       'Verdict rejeté : le test a modifié des fichiers hors tests (src/connexion.ts).',
     );
     expect(loop()?.rounds[0]?.testerTouched).toEqual(['src/connexion.ts']);
@@ -291,7 +295,8 @@ describe('the proof (FR-019)', () => {
     await loops.testRun(finished('failed'));
     expect(state()).toBe('in-progress');
     expect(notify.mock.calls.at(-1)?.[1]).toMatchObject({ kind: 'loop' });
-    expect((notify.mock.calls.at(-1)?.[1] as { summary: string }).summary).toContain(
+    // 007 FR-025: the end of the output is read on demand, not carried by the event.
+    expect((notify.mock.calls.at(-1)?.[1] as { summary: string }).summary).not.toContain(
       'FAIL connexion.test.ts',
     );
     devTree = OTHER_TREE;
@@ -350,5 +355,204 @@ describe('the orchestrator’s role withdrawn', () => {
     await loops.closeAll('w1');
     expect(loop()?.state).toBe('closed');
     expect(current.agents).toHaveLength(4);
+  });
+});
+
+// 007 T005 — what the orchestrator hears of a report, in a loop or not (FR-028, R8), and the
+// summaries without the output of the tests (FR-025).
+describe('reports out of a loop (007 FR-010)', () => {
+  it('tells the orchestrator a report of an agent that is in no loop', async () => {
+    await expect(loops.report(plain.id, report())).resolves.toBeNull();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({ agentId: plain.id, kind: 'report', summary: 'Fait' }),
+    );
+  });
+
+  it('tells it the report of a dev whose loop is not running', async () => {
+    await expect(loops.report(dev.id, report())).resolves.toBeNull();
+    expect(kinds()).toEqual(['report']);
+  });
+});
+
+describe('questions in a report (007 FR-028, research R8)', () => {
+  const blocked = report({
+    status: 'blocked',
+    summary: 'Je ne peux pas continuer',
+    questions: ['Quel format pour la date ?', 'Faut-il garder l’ancien endpoint ?'],
+  });
+
+  it.each([
+    ['out of a loop', () => plain.id],
+    ['in a loop', () => dev.id],
+  ])('tells the orchestrator every question, as a question, %s', async (where, who) => {
+    if (where === 'in a loop') await start();
+    notify.mockClear();
+    await loops.report(who(), blocked);
+    expect(kinds()).toEqual(['question']);
+    const { summary } = notify.mock.calls[0]?.[1] as { summary: string };
+    expect(summary).toContain('Quel format pour la date ?');
+    expect(summary).toContain('Faut-il garder l’ancien endpoint ?');
+    expect(notify.mock.calls[0]?.[1]).toMatchObject({ agentId: who() });
+  });
+
+  it('tells the questions of the tester of a loop too', async () => {
+    await start();
+    notify.mockClear();
+    await loops.report(tester.id, report({ status: 'blocked', questions: ['Quel jeu de test ?'] }));
+    expect(kinds()).toEqual(['question']);
+    expect((notify.mock.calls[0]?.[1] as { summary: string }).summary).toContain(
+      'Quel jeu de test ?',
+    );
+  });
+
+  it('keeps a plain report a report when it has no question', async () => {
+    await loops.report(plain.id, report({ status: 'blocked', summary: 'Bloqué', questions: [] }));
+    expect(kinds()).toEqual(['report']);
+  });
+});
+
+describe('summaries without the output of the tests (007 FR-025)', () => {
+  it('carries neither the output tail nor a list of files when the tests of a loop fail', async () => {
+    await start();
+    await loops.report(tester.id, accepted);
+    notify.mockClear();
+    await loops.testRun({
+      ...finished('failed'),
+      outputTail: 'FAIL src/connexion.ts\nExpected 2, got 3',
+    });
+    const { summary } = notify.mock.calls.at(-1)?.[1] as { summary: string };
+    expect(summary).toContain('0012-connexion');
+    expect(summary).not.toContain('FAIL');
+    expect(summary).not.toContain('Expected 2');
+    expect(summary).not.toContain('src/connexion.ts');
+  });
+});
+
+// 007 US4 (T051, R14, R12) — what PACT sends in a loop (FR-021, FR-007) and where the check of the
+// tester starts (FR-023). The instructions and the verdict go through `deps.message`.
+describe('what PACT sends in a loop (007 FR-021, FR-007, R14)', () => {
+  type Draft = { from?: string; to: string; kind: ExchangeKind; text: string };
+  let message: ReturnType<typeof vi.fn>;
+  const drafts = () => message.mock.calls.map(([, draft]) => draft as Draft);
+  const toDev = () => drafts().filter((m) => m.to === dev.id);
+  const toTester = () => drafts().filter((m) => m.to === tester.id);
+
+  beforeEach(() => {
+    message = vi.fn(() => Promise.resolve({}));
+    d = {
+      ...deps(),
+      message,
+      git: {
+        ...deps().git,
+        mergeBase: vi.fn((_cwd: string, _a: string, b: string) => Promise.resolve(`base-${b}`)),
+      },
+    } as unknown as ReturnType<typeof deps>;
+    loops = new LoopService(d as never);
+  });
+
+  it('sends the tester the instruction to write the tests, and says so in `sent` (US4 sc.1, FR-021)', async () => {
+    // Given a ready issue, a dev and a tester; When the loop starts
+    const started = await start();
+    // Then the tester got one instruction naming the issue, and `start` says who got it
+    expect(toTester()).toHaveLength(1);
+    expect(toTester()[0]).toMatchObject({ kind: 'instruction' });
+    expect(toTester()[0]?.text).toContain('0012-connexion');
+    expect(toTester()[0]?.text).not.toContain('Connexion');
+    expect(toDev()).toHaveLength(0);
+    expect(started).toMatchObject({ issueId: '0012-connexion', round: 1, state: 'running' });
+    const sent = JSON.stringify((started as unknown as { sent?: unknown }).sent ?? null);
+    expect(sent).toContain(tester.id);
+    expect(sent).not.toContain(dev.id);
+  });
+
+  it('sends the dev its instruction at the first report of the tester, once (US4 sc.1, FR-021)', async () => {
+    // Given a started loop; When the tester gives its first report, then a second
+    await start();
+    await loops.report(tester.id, report());
+    // Then the dev got one instruction naming the issue
+    expect(toDev()).toHaveLength(1);
+    expect(toDev()[0]).toMatchObject({ kind: 'instruction' });
+    expect(toDev()[0]?.text).toContain('0012-connexion');
+    expect(toDev()[0]?.text).not.toContain('Connexion');
+    await loops.report(tester.id, report({ summary: 'Encore' }));
+    // And not a second one
+    expect(toDev().filter((m) => m.kind === 'instruction')).toHaveLength(1);
+  });
+
+  it('does not instruct the dev at a report of the dev itself', async () => {
+    await start();
+    await loops.report(dev.id, report());
+    expect(toDev()).toHaveLength(0);
+  });
+
+  it('sends the dev the verdict `defects` that PACT accepted: an action, bounded (FR-007)', async () => {
+    // Given a started loop and a tester whose defects are very long
+    await start();
+    const long = 'x'.repeat(3000);
+    const verdict = report({
+      status: 'defects',
+      verdict: { result: 'defects', defects: ['La connexion vide passe', long, long] },
+    });
+    // When the tester gives its verdict and PACT accepts it
+    await loops.report(tester.id, verdict);
+    // Then the dev got a `verdict` (an action) with the defects, in at most MAX_NOTICE characters
+    const sent = toDev().filter((m) => m.kind === 'verdict');
+    expect(sent).toHaveLength(1);
+    expect(typeOf('verdict')).toBe('action');
+    expect(sent[0]?.text).toContain('La connexion vide passe');
+    expect(sent[0]?.text.length).toBeLessThanOrEqual(MAX_NOTICE);
+  });
+
+  it('sends the dev nothing when the verdict is rejected (FR-020, FR-021)', async () => {
+    // Given a tester that changed a production file
+    await start();
+    touched = ['src/connexion.ts'];
+    // When it gives a verdict
+    await expect(loops.report(tester.id, defects)).resolves.toMatch(/^Verdict rejeté/);
+    // Then only the tester’s own instruction left: nothing for the dev
+    expect(drafts().map((m) => [m.to, m.kind])).toEqual([[tester.id, 'instruction']]);
+  });
+});
+
+describe('the base of the control of the tester (007 FR-023, R12)', () => {
+  beforeEach(() => {
+    d = {
+      ...deps(),
+      message: vi.fn(() => Promise.resolve({})),
+      git: {
+        ...deps().git,
+        mergeBase: vi.fn((_cwd: string, _a: string, b: string) => Promise.resolve(`base-${b}`)),
+      },
+    };
+    loops = new LoopService(d as never);
+  });
+
+  it('is worked out at the verdict from the merge base with main, not kept from the start', async () => {
+    await start();
+    await loops.report(tester.id, accepted);
+    const git = d.git as unknown as { mergeBase: ReturnType<typeof vi.fn> };
+    expect(git.mergeBase).toHaveBeenCalledWith(tester.worktreePath, 'HEAD', 'main');
+    expect(d.git.changedFiles).toHaveBeenCalledWith(tester.worktreePath, 'base-main', TREE);
+  });
+
+  it('still controls after a restart: a new LoopService has no memory of the start', async () => {
+    await start();
+    touched = ['src/connexion.ts'];
+    const restarted = new LoopService(d as never);
+    const rejection = await restarted.report(tester.id, accepted);
+    expect(rejection).toMatch(/^Verdict rejeté/);
+    expect(rejection).toContain('src/connexion.ts');
+  });
+
+  it('says in the rejection how to get out: remove the files from the branch', async () => {
+    await start();
+    touched = ['src/connexion.ts', 'src/auth.ts'];
+    const rejection = await loops.report(tester.id, accepted);
+    expect(rejection).toContain('src/connexion.ts');
+    expect(rejection).toContain('src/auth.ts');
+    expect(rejection).toMatch(/retire/i);
+    expect(rejection).toMatch(/branche/i);
   });
 });

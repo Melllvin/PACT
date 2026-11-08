@@ -14,6 +14,7 @@ import { IntegrationRequests } from '../../../src/main/orchestrator/integration-
 import { IssueService } from '../../../src/main/orchestrator/issues';
 import { LoopService } from '../../../src/main/orchestrator/loop-service';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
+import { WakeService, eventsFile } from '../../../src/main/orchestrator/wake-service';
 import { createOrchestratorTools } from '../../../src/main/orchestrator/tools';
 import { openStores, type Stores } from '../../../src/main/persistence/store';
 import { IntegrationService } from '../../../src/main/review/integration-service';
@@ -22,7 +23,7 @@ import { TestRunner } from '../../../src/main/review/test-runner';
 import { PtyManager } from '../../../src/main/pty/pty-manager';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
 import type { AgentDraft } from '../../../src/shared/ipc';
-import type { AgentState } from '../../../src/shared/model';
+import type { AgentState, Workspace } from '../../../src/shared/model';
 import type { IntegrationRequest, OrchestratorAction } from '../../../src/shared/orchestrator';
 import type { Integration } from '../../../src/shared/review';
 import { FAKE_CLI, scenarioPath } from '../../fixtures/fake-cli/paths';
@@ -43,6 +44,8 @@ export const git = (cwd: string, ...args: string[]) =>
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
+type ExchangesModule = typeof import('../../../src/main/orchestrator/exchange-service');
+
 /** `managerOptions`: extra AgentManager options (fix-send-prompt: submitDelayMs, submitTimeoutMs). */
 export async function createHarness(managerOptions: Record<string, unknown> = {}) {
   const root = realpathSync.native(await mkdtemp(join(tmpdir(), 'pact-orchestrator-')));
@@ -58,6 +61,45 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
   const gitService = new GitService({ env: gitEnv });
   const workspaces = new WorkspaceService({ git: gitService, stores });
   const workspace = await workspaces.open(repo);
+  // 007 — the journal of the workspace. Loaded when the module exists, so that the suites that
+  // do not use it keep running while it is being written.
+  const exchangesPath = '../../../src/main/orchestrator/exchange-service';
+  const exchangesModule = (await import(/* @vite-ignore */ exchangesPath).catch(
+    () => null,
+  )) as ExchangesModule | null;
+  /** What `workspace:exchanges` announced, in order. */
+  const exchangesHeard: unknown[] = [];
+  const exchanges = exchangesModule
+    ? new exchangesModule.ExchangeService({
+        workspaces,
+        onChange: (_workspaceId: string, journal: unknown) => exchangesHeard.push(journal),
+      })
+    : undefined;
+  const withExchanges = exchanges ? { exchanges } : {};
+  // 007 — the wake, wired as the app does: a message recorded for an agent types ONE pointer line.
+  const wake = exchanges
+    ? new WakeService({
+        workspaces,
+        type: (agentId, line) => manager.sendPrompt(agentId, line, 'wake'),
+        inputBusy: (agentId) => manager.promptState(agentId) === 'busy',
+        setNotice: (agentId, notice) => {
+          void manager.setWakeNotice(agentId, notice).catch(() => undefined);
+        },
+        usageCritical: () => false,
+        file: eventsFile({
+          exchanges,
+          agents: {
+            hasMcp: (id) => manager.hasMcp(id),
+            writeEventsFile: (id, text, before) => manager.writeEventsFile(id, text, before),
+          },
+        }),
+      })
+    : undefined;
+  if (exchanges && wake) {
+    exchanges.onRecorded((workspaceId, message) => {
+      wake.notify(workspaceId, message);
+    });
+  }
   const pty = new PtyManager();
   /** The environment each agent was last started with (004: its agent MCP access). */
   const envs = new Map<string, Record<string, string | undefined>>();
@@ -93,9 +135,13 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     workspaces,
     rolesDir: join(userData, 'roles'),
     skillsDir: 'resources/skills',
+    ...withExchanges,
     onAction: (orchestratorId, action) => actionsHeard.push({ ...action, orchestratorId }),
     agentTools: (agentId) =>
-      createAgentTools({ onReport: (id, report) => loops.report(id, report) }, agentId),
+      createAgentTools(
+        { onReport: (id, report) => loops.report(id, report), ...withExchanges },
+        agentId,
+      ),
     onTurnFinished: (agentId) => {
       loops.turnFinished(agentId);
     },
@@ -115,6 +161,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
           clis: () => registry.list(),
           usageWarning: (cliId) => usageWarnings[cliId] ?? null,
           permissions,
+          ...withExchanges,
           log: (entry) => {
             orchestrator.record(orchestratorId, entry);
           },
@@ -159,6 +206,13 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       orchestrator.notice(workspaceId, notice);
       reports.push({ workspaceId, ...notice });
     },
+    // 007 R14 — the instructions and the verdict of a loop go through the journal, as in the app.
+    ...(exchanges
+      ? {
+          message: (workspaceId: string, draft: Parameters<typeof exchanges.record>[1]) =>
+            exchanges.record(workspaceId, draft),
+        }
+      : {}),
   });
 
   /** `gh` as a suite fakes it (004 US3): each call, and what answers it. */
@@ -193,7 +247,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       stores,
     });
     await registry.detect();
-    return new AgentManager({
+    const created = new AgentManager({
       workspaces,
       registry,
       git: gitService,
@@ -216,6 +270,8 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       orchestrator,
       ...managerOptions,
     });
+    if (wake) created.setWake(wake);
+    return created;
   };
   // Assigned at once: the tools above only read it when an orchestrator calls them.
   let manager: AgentManager = await createManager();
@@ -277,6 +333,8 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     pending,
     usageWarnings,
     typed,
+    /** 007 — the wake, as the app wires it; `deliver(id)` skips the window of 5 s. */
+    wake,
     review,
     tests,
     integration,
@@ -290,6 +348,16 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     issues,
     gh,
     issueChanges,
+    exchanges,
+    exchangesHeard,
+    /** The messages of the journal of the workspace, as they are now. */
+    journal() {
+      const kept = (
+        workspaces.get(workspace.id) as { exchanges?: Workspace['exchanges'] } | undefined
+      )?.exchanges?.messages;
+      if (!kept) throw new Error('007 : workspace.exchanges absent (src/shared/exchanges.ts)');
+      return kept;
+    },
     get manager() {
       return manager;
     },
@@ -310,6 +378,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     async dispose() {
       review.dispose();
       tests.dispose();
+      wake?.dispose();
       orchestrator.dispose();
       await manager.dispose();
       await pty.dispose();

@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Agent } from '../../shared/model';
+import { exchangeMessageSchema, type ExchangeMessage } from '../../shared/exchanges';
 import type { OrchestratorAction } from '../../shared/orchestrator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TerminalView } from '../tiles/TerminalView';
@@ -27,7 +28,14 @@ type Props = Omit<AgentActions, 'onClose'> & {
   /** The Conflits tab of screen 1q, while an integration is stopped on a conflict (002 US4). */
   conflicts?: { count: number; content: ReactNode } | undefined;
   /** 003 US5 — the orchestrator's journal « ◎ Actions » and the withdrawal of its role. */
-  orchestration?: { actions: OrchestratorAction[]; onRevoke: () => void } | undefined;
+  orchestration?:
+    | {
+        actions: OrchestratorAction[];
+        onRevoke: () => void;
+        /** 007 — the messages of the workspace, merged with the actions by time. */
+        messages?: readonly unknown[];
+      }
+    | undefined;
   /** 004 FR-006a — « ◎ Rapports » of the orchestrator: the latest report of each agent. */
   reports?: ReactNode;
   /** 004 US4 — the Aperçu of the agent; without it, the tab stays disabled (001 FR-033). */
@@ -230,35 +238,56 @@ const TIME = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-di
 function ActionsJournal({
   actions,
   onRevoke,
+  messages = [],
   name,
 }: {
   actions: OrchestratorAction[];
   onRevoke: () => void;
+  messages?: readonly unknown[];
   name: (agentId: string | null) => string | null;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const entries = [
+    ...actions.map((action) => ({ at: action.at, action })),
+    ...messages.flatMap((raw): { at: string; message: ExchangeMessage }[] => {
+      // The journal comes from a file the agents write to: it is checked, not trusted.
+      const parsed = exchangeMessageSchema.safeParse(raw);
+      return parsed.success ? [{ at: parsed.data.at, message: parsed.data }] : [];
+    }),
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ul
         aria-label="Actions de l’orchestrateur"
         className="min-h-0 flex-1 overflow-y-auto px-3.5 py-2 text-[12.5px]"
       >
-        {actions.length === 0 && <li className="text-dim">Aucune action pour l’instant.</li>}
-        {actions.map((action) => (
-          <li key={action.id} className="flex gap-3 border-b border-white/4 py-1.5">
-            <span className="font-mono text-[11px] text-dim">
-              {TIME.format(new Date(action.at))}
-            </span>
-            <span className="font-mono text-[11px]">{action.tool}</span>
-            {name(action.agentId) && (
-              <span className="text-muted-foreground">{name(action.agentId)}</span>
-            )}
-            <span className="flex-1">{action.summary}</span>
-            {action.outcome === 'refused' && (
-              <span className="text-[#f2a0a0]">refusé : {action.reason}</span>
-            )}
-          </li>
-        ))}
+        {entries.length === 0 && <li className="text-dim">Aucune action pour l’instant.</li>}
+        {entries.map((entry) =>
+          'message' in entry ? (
+            <li
+              key={entry.message.id}
+              data-type={entry.message.type}
+              className={cn(
+                'flex gap-3 border-b border-white/4 py-1.5',
+                entry.message.type === 'info' && 'text-dim',
+              )}
+            >
+              <span className="font-mono text-[11px] text-dim">
+                {TIME.format(new Date(entry.message.at))}
+              </span>
+              <span className="text-muted-foreground">
+                {entry.message.from === 'pact' ? 'PACT' : (name(entry.message.from) ?? '?')} →{' '}
+                {name(entry.message.to) ?? '?'}
+              </span>
+              <span className="font-mono text-[11px]">
+                {entry.message.type} · {entry.message.kind}
+              </span>
+              <span className="min-w-0 flex-1 break-words">{entry.message.text}</span>
+            </li>
+          ) : (
+            <ActionRow key={entry.action.id} action={entry.action} name={name} />
+          ),
+        )}
       </ul>
       <div className="flex flex-none items-center justify-end gap-2 border-t border-white/6 px-3.5 py-2 text-[12.5px]">
         {confirming ? (
@@ -297,5 +326,27 @@ function ActionsJournal({
         )}
       </div>
     </div>
+  );
+}
+
+function ActionRow({
+  action,
+  name,
+}: {
+  action: OrchestratorAction;
+  name: (agentId: string | null) => string | null;
+}) {
+  return (
+    <li className="flex gap-3 border-b border-white/4 py-1.5">
+      <span className="font-mono text-[11px] text-dim">{TIME.format(new Date(action.at))}</span>
+      <span className="font-mono text-[11px]">{action.tool}</span>
+      {name(action.agentId) && (
+        <span className="text-muted-foreground">{name(action.agentId)}</span>
+      )}
+      <span className="flex-1">{action.summary}</span>
+      {action.outcome === 'refused' && (
+        <span className="text-[#f2a0a0]">refusé : {action.reason}</span>
+      )}
+    </li>
   );
 }

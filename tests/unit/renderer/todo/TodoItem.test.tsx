@@ -263,3 +263,116 @@ describe('TodoItem usage alert', () => {
     expect(screen.getByRole('listitem').className).toContain('border-destructive/30');
   });
 });
+
+describe('TodoItem « Réveil en attente » (007 FR-014)', () => {
+  it('shows the sentence under the title', () => {
+    const held = agent(1, { state: 'awaiting-prompt' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: `${held.id}:wake-held`,
+            agentId: held.id,
+            kind: 'wake-held',
+            title: '◆ Réveil en attente · Claude Code · saisie en cours',
+            actions: [],
+            detail: 'Videz l’invite ou envoyez votre saisie.',
+          }}
+          agent={held}
+          {...actions()}
+        />
+      </ul>,
+    );
+    expect(screen.getByText('Videz l’invite ou envoyez votre saisie.')).toBeTruthy();
+  });
+});
+
+// 007 T043 — « ✕ Échanges en boucle » (contracts/ui.md « Colonne Agents »): the last message as plain
+// text, « Laisser reprendre » and « Couper », reachable with the keyboard.
+//
+// API fixed here for the dev (see the report, « API fixées »): `TodoItem.exchange = { escalationId,
+// text }` (see todo.test.ts) and the handler `onDecideExchange(escalationId, 'resume' | 'cut')`.
+describe('TodoItem of an exchange in a loop', () => {
+  const dev = agent(2, { state: 'done', role: 'dev' });
+  const todoOf = (text: string) =>
+    ({
+      id: 'e1:exchange-escalated',
+      agentId: dev.id,
+      kind: 'exchange-escalated',
+      title: '✕ Échanges en boucle · Claude Code 2 ↔ Claude Code 3 · 3 allers-retours',
+      actions: [],
+      exchange: { escalationId: 'e1', text },
+    }) as unknown as Parameters<typeof TodoItem>[0]['todo'];
+
+  const show = (text = 'Relis le contrat.', handlers: Record<string, unknown> = {}) => {
+    const onDecideExchange = vi.fn();
+    const { container } = render(
+      <ul>
+        <TodoItem
+          todo={todoOf(text)}
+          agent={dev}
+          {...actions()}
+          {...{ onDecideExchange, ...handlers }}
+        />
+      </ul>,
+    );
+    return { onDecideExchange, container };
+  };
+
+  it('Given an escalation, When it is shown, Then the title names the two agents and the round trips, and the last message is there', () => {
+    show('Je ne suis pas d’accord.');
+    const item = screen.getByRole('listitem');
+    expect(item.getAttribute('data-kind')).toBe('exchange-escalated');
+    expect(item.textContent).toContain('✕ Échanges en boucle');
+    expect(item.textContent).toContain('Claude Code 2 ↔ Claude Code 3');
+    expect(item.textContent).toContain('3 allers-retours');
+    expect(screen.getByText('Je ne suis pas d’accord.')).toBeTruthy();
+  });
+
+  it.each([
+    ['Laisser reprendre', 'resume'],
+    ['Couper', 'cut'],
+  ] as const)(
+    'Given the buttons, When « %s » is clicked, Then %s is decided for this escalation',
+    async (label, decision) => {
+      const user = userEvent.setup();
+      const { onDecideExchange } = show();
+      expect(screen.queryByRole('button', { name: 'Revue →' })).toBeNull();
+      await user.click(screen.getByRole('button', { name: label }));
+      expect(onDecideExchange).toHaveBeenCalledTimes(1);
+      expect(onDecideExchange).toHaveBeenCalledWith('e1', decision);
+    },
+  );
+
+  it('Given the keyboard, When the user tabs and presses Enter, Then both buttons are reached and decide', async () => {
+    const user = userEvent.setup();
+    const { onDecideExchange } = show();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Laisser reprendre' }));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Couper' }));
+    await user.keyboard('{Enter}');
+    expect(onDecideExchange).toHaveBeenCalledWith('e1', 'cut');
+  });
+
+  it('Given a message written by an agent with markup, When it is shown, Then it is text: no element is created from it', () => {
+    const hostile = '<img src=x onerror="alert(1)"><b>gras</b><script>alert(2)</script>';
+    const { container } = show(hostile);
+    expect(screen.getByText(hostile)).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('b')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+  });
+
+  it('Given no handler, When a button is clicked, Then nothing breaks', async () => {
+    const user = userEvent.setup();
+    const onDecideExchange = undefined;
+    render(
+      <ul>
+        <TodoItem todo={todoOf('x')} agent={dev} {...actions()} {...{ onDecideExchange }} />
+      </ul>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Couper' }));
+    expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});

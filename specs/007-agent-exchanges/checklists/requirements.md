@@ -32,5 +32,5 @@
 ## Notes
 
 - Les outils, hooks et défauts sont nommés par la demande elle-même : les cases sur les détails d'implémentation restent décochées.
-- Aucune question ouverte : les 13 sont décidées.
-- FR-012 (hooks PostToolUse et Stop sur le CLI installé) n'est pas validée à ce stade.
+- Aucune question ouverte : les 14 sont décidées.
+- FR-012 validée sur Claude Code 2.1.318 en session `-p`, sans touche simulée : résultat dans `research.md` R1. Le mode interactif n'a pas été observé.

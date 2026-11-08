@@ -48,7 +48,7 @@ const notifyPayloadSchema = z.looseObject({
 /** TOML basic strings share JSON's escapes for the characters paths and commands contain. */
 const toml = (value: string) => JSON.stringify(value);
 
-/** Longer than the longest wait_for_agents (600 s). */
+/** Far longer than the longest wait_for_agents (60 s since 007). */
 const MCP_TOOL_TIMEOUT_S = 660;
 
 type Options = {
@@ -90,6 +90,8 @@ export class CodexAdapter implements CliAdapter {
   }
 
   readonly supportsEffort = true;
+  /** 007 contracts/hooks.md — its pointer is typed at the end of the turn. */
+  readonly midTurnWake = false;
 
   /** No order known until the CLI lists its models (R2). */
   modelTiers(): string[][] {
@@ -211,7 +213,7 @@ export class CodexAdapter implements CliAdapter {
             ...config(
               `mcp_servers.pact.env_http_headers={ "X-Pact-Token" = ${toml(mcp.variable)} }`,
             ),
-            // wait_for_agents may wait 10 minutes.
+            // A wait_for_agents lasts a minute at most; the bound is kept loose.
             ...config(`mcp_servers.pact.tool_timeout_sec=${String(MCP_TOOL_TIMEOUT_S)}`),
           ]
         : []),

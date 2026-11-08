@@ -26,6 +26,7 @@ const workspaceOf = (agents: Agent[]): Workspace => ({
   loops: [],
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
+  exchanges: { messages: [], escalations: [] },
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 });

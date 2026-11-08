@@ -7,7 +7,7 @@ import type { AgentMcpLaunch, OrchestratorLaunch } from '../agents/adapters/type
 import type { AgentStateEvent } from '../agents/agent-manager';
 import type { HookServer } from '../agents/hook-server';
 import { createAgentTools } from './agent-tools';
-import { EventQueue, type WaitResult } from './events';
+import type { ExchangeService, WaitResult } from './exchange-service';
 import { handleMcp, type McpTool } from './mcp';
 import { removeRoleFiles, writeRoleSkills } from './role-skills';
 
@@ -17,6 +17,8 @@ import { removeRoleFiles, writeRoleSkills } from './role-skills';
 type Options = {
   hooks: Pick<HookServer, 'registerMcp' | 'revokeMcp' | 'mcpUrl'>;
   workspaces: { list(): Workspace[] };
+  /** 007 — the journal where what the orchestrator hears is written and read. */
+  exchanges?: Pick<ExchangeService, 'record' | 'wait' | 'cancelWait' | 'forget'>;
   /** `<userData>/roles`: the copy of its skills and its session plugin, per agent (004 R3). */
   rolesDir: string;
   /** The suite of skills shipped with PACT (`resources/skills`). */
@@ -34,14 +36,14 @@ type Options = {
 /** 004 US2 — what a loop tells the orchestrator: a report, a missing one, its end. */
 export type Notice = {
   agentId: string;
-  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup';
+  kind: 'report' | 'report-missing' | 'loop' | 'publish' | 'mockup' | 'question';
   summary: string;
 };
 
 /** The journal keeps the latest actions only (FR-021). */
 const MAX_ACTIONS = 200;
 
-type Session = { workspaceId: string; events: EventQueue };
+type Session = { workspaceId: string };
 
 export class OrchestratorService {
   private readonly sessions = new Map<string, Session>();
@@ -58,8 +60,8 @@ export class OrchestratorService {
     const url = hooks.mcpUrl();
     const skills = await this.writeSkills(agent.id, 'orchestrator', url);
     const token = hooks.registerMcp(agent.id, (payload) => handleMcp(payload, tools(agent.id)));
-    this.sessions.get(agent.id)?.events.close();
-    this.sessions.set(agent.id, { workspaceId: agent.workspaceId, events: new EventQueue() });
+    this.options.exchanges?.cancelWait(agent.id);
+    this.sessions.set(agent.id, { workspaceId: agent.workspaceId });
     return { pluginDir: skills.pluginDir, url, token, skills };
   }
 
@@ -89,8 +91,12 @@ export class OrchestratorService {
     timeoutMs: number,
   ): Promise<WaitResult> {
     const session = this.sessions.get(orchestratorId);
-    if (!session) return Promise.resolve({ events: [], timedOut: false, replaced: true });
-    return session.events.wait(agentIds, timeoutMs);
+    if (!session) {
+      return Promise.resolve({ events: [], remaining: 0, timedOut: false, replaced: true });
+    }
+    const { exchanges } = this.options;
+    if (!exchanges) return Promise.resolve({ events: [], remaining: 0, timedOut: true });
+    return exchanges.wait(session.workspaceId, orchestratorId, agentIds, timeoutMs);
   }
 
   /** An agent changed state: the orchestrator of its workspace hears of what matters (R5). */
@@ -103,6 +109,7 @@ export class OrchestratorService {
     this.lastStates.set(agentId, { state, workspaceId });
     const event = eventOf(agentId, state, previous, lastError?.message ?? '');
     if (event) this.push(workspaceId, event);
+    if (state === 'closed') this.forget(workspaceId, agentId);
     if (event?.kind === 'turn-finished') this.options.onTurnFinished(agentId);
   }
 
@@ -123,10 +130,24 @@ export class OrchestratorService {
   push(workspaceId: string, event: OrchestratorEvent): void {
     for (const [orchestratorId, session] of this.sessions) {
       const about = orchestratorId === event.agentId && event.kind !== 'publish';
-      if (!about && session.workspaceId === workspaceId) {
-        session.events.push(event);
-      }
+      if (about || session.workspaceId !== workspaceId) continue;
+      this.options.exchanges
+        ?.record(workspaceId, {
+          from: 'pact',
+          to: orchestratorId,
+          about: event.agentId,
+          state: event.state,
+          kind: event.kind,
+          text: event.summary,
+          ...(event.integration ? { integration: event.integration } : {}),
+        })
+        .catch(() => undefined);
     }
+  }
+
+  /** A closed agent reads nothing any more (007). */
+  private forget(workspaceId: string, agentId: string): void {
+    this.options.exchanges?.forget(workspaceId, agentId).catch(() => undefined);
   }
 
   /** An action of the orchestrator, done or refused (FR-021). */
@@ -155,7 +176,7 @@ export class OrchestratorService {
         .find((a) => a.id === agentId)?.worktreePath ?? null;
     void removeRoleFiles(join(this.options.rolesDir, agentId), worktree);
     this.options.hooks.revokeMcp(agentId);
-    this.sessions.get(agentId)?.events.close();
+    this.options.exchanges?.cancelWait(agentId);
     this.sessions.delete(agentId);
   }
 }

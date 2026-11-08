@@ -167,6 +167,8 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
                 onDecideLoop: (issueId, decision) =>
                   void state.decideLoop(workspace.id, issueId, decision),
+                onDecideExchange: (escalationId, decision) =>
+                  void state.decideExchange(workspace.id, escalationId, decision),
                 onConfirmPublish: (id) => void state.confirmPublish(id),
                 onRefusePublish: (id) => void state.refusePublish(id),
               }}

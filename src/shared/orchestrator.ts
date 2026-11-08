@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { agentStateSchema, gitIdSchema, integrationRequestSchema } from './model';
+import { integrationOutcomeSchema } from './exchanges';
+import { agentStateSchema, integrationRequestSchema } from './model';
 
 export { integrationRequestSchema };
 
@@ -17,6 +18,8 @@ export const orchestratorEventSchema = z.object({
     'error',
     'closed',
     'integration',
+    // 007 — a question of a report.
+    'question',
     // 004 US2 — reports and loops.
     'report',
     'report-missing',
@@ -28,13 +31,7 @@ export const orchestratorEventSchema = z.object({
   ]),
   state: agentStateSchema,
   summary: z.string(),
-  integration: z
-    .object({
-      outcome: z.enum(['integrated', 'refused', 'conflicted', 'failed']),
-      commit: gitIdSchema.optional(),
-      files: z.array(z.string()).optional(),
-    })
-    .optional(),
+  integration: integrationOutcomeSchema.optional(),
 });
 
 /** The tools that act; reads and waits are not logged (FR-021). */

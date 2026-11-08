@@ -172,3 +172,27 @@ describe('PermissionsDialog', () => {
     expect(onCancel).toHaveBeenCalled();
   });
 });
+
+// 007 T063, research R15 — FR-027: only Claude Code has rules that make reading a third party's PR,
+// issue or comment go through the user. For the other CLIs the guarantee is partial, and the
+// dialog says it.
+describe('PermissionsDialog, partial guarantee (FR-027)', () => {
+  const generic: Cli = { id: 'custom-aider', name: 'Aider', adapter: 'generic' };
+
+  it('Given Codex is launched, When the dialog opens, Then it says the guarantee is partial', () => {
+    renderDialog([claude, codex]);
+    const text = document.body.textContent;
+    expect(text).toMatch(/garantie partielle/i);
+    expect(text).toMatch(/PR|issue|commentaire|tiers/i);
+  });
+
+  it('Given only another CLI is launched, When the dialog opens, Then it says the same', () => {
+    renderDialog([generic]);
+    expect(document.body.textContent).toMatch(/garantie partielle/i);
+  });
+
+  it('Given only Claude Code is launched, When the dialog opens, Then nothing says the guarantee is partial', () => {
+    renderDialog([claude]);
+    expect(document.body.textContent).not.toMatch(/garantie partielle/i);
+  });
+});

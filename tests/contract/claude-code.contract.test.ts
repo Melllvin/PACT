@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClaudeCodeAdapter } from '../../src/main/agents/adapters/claude-code';
 import type { CommandRunner, LaunchInput } from '../../src/main/agents/adapters/types';
-import { runCliAdapterContract } from './cli-adapter.contract';
+import { runCliAdapterContract, type WakeCapable } from './cli-adapter.contract';
 
 // research.md R4–R6 and « Caractérisation T049 » (Claude Code 2.1.281).
 
@@ -294,6 +294,40 @@ describe('Claude Code with another role (004 T042)', () => {
     expect(spec.env.PACT_AGENT_MCP_TOKEN).toBe(agentMcp.token);
     expect(spec.env.PACT_ORCHESTRATOR_TOKEN).toBeUndefined();
     expect(spec.args.join(' ')).not.toContain(agentMcp.token);
+  });
+});
+
+// 007 T009, research R15 — an agent with the access to PACT's MCP reads its events with
+// `get_events`: its tools are allowed as the orchestrator's are, or each wake would ask the user.
+describe('Claude Code with the access to PACT’s tools (007 R15)', () => {
+  const pluginDir = '/Users/me/Library/Application Support/PACT/roles/a 3/plugin';
+  const skills = {
+    role: 'dev' as const,
+    pluginDir,
+    skills: [{ name: 'pact-dev', file: `${pluginDir}/skills/pact-dev/SKILL.md` }],
+    contract: `${pluginDir}/skills/pact-dev/pact-contract.md`,
+  };
+  const agentMcp = { url: 'http://127.0.0.1:4567/mcp', token: 'b'.repeat(64), skills };
+  const launch = (permissionLevel: LaunchInput['permissionLevel']) =>
+    create().buildLaunch({ ...input, permissionLevel, agentMcp, skills });
+
+  it.each(['always-allow', 'ask-sensitive'] as const)(
+    'allows the PACT tools without a prompt at the level « %s »',
+    (level) => {
+      expect(settingsOf(launch(level).args).permissions?.allow).toEqual([
+        'mcp__plugin_pact_pact__*',
+      ]);
+    },
+  );
+
+  it('keeps the asks of « actions sensibles » next to the allowed tools', () => {
+    const permissions = settingsOf(launch('ask-sensitive').args).permissions;
+    expect(permissions?.ask).toContain('Bash(rm *)');
+  });
+
+  it('allows nothing for an agent with no access to the tools', () => {
+    const spec = create().buildLaunch({ ...input, permissionLevel: 'always-allow' });
+    expect(settingsOf(spec.args).permissions?.allow).toBeUndefined();
   });
 });
 
@@ -626,4 +660,161 @@ describe('Claude Code model tiers and effort (004 T009)', () => {
       });
     },
   );
+});
+
+// 007 US2, contracts/hooks.md, research R1 — the wake in the middle of a turn, validated on Claude
+// Code 2.1.318: PostToolUse answers `additionalContext`, Stop answers `{ decision: 'block', reason }`.
+describe('Claude Code wake points (007 T031)', () => {
+  const common = {
+    session_id: input.sessionId,
+    transcript_path: '/Users/me/.claude/projects/x/s.jsonl',
+    cwd: input.cwd,
+  };
+  const POINTER = '2 événements, lis get_events';
+  const wake = create() as unknown as WakeCapable;
+  const post = { ...common, hook_event_name: 'PostToolUse', tool_name: 'Bash' };
+  const stop = { ...common, hook_event_name: 'Stop', stop_hook_active: false };
+
+  it('can carry a pointer in the middle of a turn', () => {
+    expect(wake.midTurnWake).toBe(true);
+  });
+
+  it('sends PostToolUse over HTTP, like Stop, with the token read from the environment', () => {
+    const { hooks } = settingsOf(create().buildLaunch(input).args);
+    expect(hooks.PostToolUse?.[0]?.hooks[0]).toEqual({
+      type: 'http',
+      url: input.hook.url,
+      headers: { 'X-Pact-Token': '$PACT_AGENT_TOKEN' },
+      allowedEnvVars: ['PACT_AGENT_TOKEN'],
+    });
+    // Resumed too, and Stop is still there.
+    const resumed = settingsOf(create().buildResume({ ...input, sessionId: 's' }).args).hooks;
+    expect(resumed.PostToolUse).toBeDefined();
+    expect(resumed.Stop).toBeDefined();
+  });
+
+  it('PostToolUse is a wake point « tool », Stop a wake point « stop »', () => {
+    expect(wake.isWakePoint?.(post)).toBe('tool');
+    expect(wake.isWakePoint?.(stop)).toBe('stop');
+  });
+
+  it.each(['UserPromptSubmit', 'Notification', 'StopFailure', 'PermissionRequest', 'SessionStart'])(
+    '%s is no wake point',
+    (event) => {
+      expect(wake.midTurnWake).toBe(true);
+      expect(wake.isWakePoint?.({ ...common, hook_event_name: event })).toBeNull();
+    },
+  );
+
+  it('a subagent or a teammate (agent_id) is no wake point, whatever its hook (US2 sc.4)', () => {
+    expect(wake.midTurnWake).toBe(true);
+    expect(wake.isWakePoint?.({ ...post, agent_id: 'agent-7' })).toBeNull();
+    expect(wake.isWakePoint?.({ ...stop, agent_id: 'agent-7' })).toBeNull();
+  });
+
+  it('an invalid payload is no wake point and does not throw', () => {
+    expect(wake.midTurnWake).toBe(true);
+    for (const payload of [null, undefined, 42, 'text', [], {}, { hook_event_name: 5 }]) {
+      expect(wake.isWakePoint?.(payload)).toBeNull();
+    }
+  });
+
+  it('answers PostToolUse with additionalContext, in the exact format of the contract', () => {
+    expect(wake.wakeReply?.(post, POINTER)).toEqual({
+      hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: POINTER },
+    });
+  });
+
+  it('answers Stop with a block whose reason is the pointer, in the exact format of the contract', () => {
+    expect(wake.wakeReply?.(stop, POINTER)).toEqual({ decision: 'block', reason: POINTER });
+  });
+
+  it('has no reply for a hook that is not a wake point', () => {
+    expect(wake.midTurnWake).toBe(true);
+    expect(
+      wake.wakeReply?.({ ...common, hook_event_name: 'Notification' }, POINTER) ?? null,
+    ).toBeNull();
+    expect(wake.wakeReply?.(null, POINTER) ?? null).toBeNull();
+  });
+
+  it('PostToolUse changes no state: mapHookEvent gives null', () => {
+    const adapter = create();
+    expect(adapter.mapHookEvent(post)).toBeNull();
+    expect(adapter.mapHookEvent({ ...post, agent_id: 'agent-7' })).toBeNull();
+    // … while Stop is still the end of the turn.
+    expect(adapter.mapHookEvent(stop)).toEqual({ type: 'turn-finished' });
+  });
+});
+
+// 007 T062, research R15 — FR-027: reading what a third party wrote goes through the user's
+// decision. The `ask` rules of « actions sensibles » gain the read-only commands of the forge.
+describe('Claude Code sensitive rules for third-party content (007 R15, FR-027)', () => {
+  const asks = () =>
+    settingsOf(create().buildLaunch({ ...input, permissionLevel: 'ask-sensitive' }).args)
+      .permissions?.ask ?? [];
+  /** Whether a `Bash(<pattern>)` rule covers the command, `*` standing for any text. */
+  const covers = (rule: string, command: string) => {
+    const pattern = /^Bash\((.*)\)$/.exec(rule)?.[1];
+    if (pattern === undefined) return false;
+    const source = pattern
+      .split('*')
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*');
+    return new RegExp(`^${source}$`).test(command);
+  };
+  const asked = (command: string) => asks().some((rule) => covers(rule, command));
+
+  it.each([
+    'gh pr view 12',
+    'gh pr view',
+    'gh pr diff 12',
+    'gh pr diff',
+    'gh pr list',
+    'gh pr list --state open',
+    'gh pr checkout 12',
+    'gh pr checkout',
+    'gh pr status',
+    'gh pr status --json number',
+    'gh issue view 7',
+    'gh issue view',
+    'gh issue list',
+    'gh issue status',
+    'gh issue status --json number',
+    'gh run view 99',
+    'gh run view',
+    'gh run list',
+    'gh run list --limit 5',
+    'gh search',
+    'gh search prs foo',
+    'gh api repos/pact/test/pulls/12/comments',
+  ])(
+    'Given the level « ask-sensitive », When an agent runs `%s`, Then the user is asked',
+    (command) => {
+      expect(asked(command)).toBe(true);
+    },
+  );
+
+  it('Given the level « ask-sensitive », When an agent fetches refs/pull, Then the user is asked', () => {
+    expect(asked('git fetch origin refs/pull/12/head')).toBe(true);
+    expect(asked('git fetch origin refs/pull/12/head:pr-12')).toBe(true);
+    expect(asked('git fetch origin +refs/pull/12/head')).toBe(true);
+    expect(asked('git fetch origin +refs/pull/*/head:refs/remotes/pr/*')).toBe(true);
+  });
+
+  it.each(['gh pr create --title "Ma PR" --body-file corps.md', 'gh pr create'])(
+    'Given the level « ask-sensitive », When an agent runs `%s`, Then it stays free (agents publish)',
+    (command) => {
+      expect(asked(command)).toBe(false);
+    },
+  );
+
+  it('keeps the rules of 001 R5 next to the new ones', () => {
+    expect(asks()).toEqual(
+      expect.arrayContaining(['Bash(rm *)', 'Bash(curl *)', 'Bash(git push *)', 'WebFetch']),
+    );
+  });
+
+  it('adds no rule at the level « always-allow »', () => {
+    expect(settingsOf(create().buildLaunch(input).args).permissions).toBeUndefined();
+  });
 });

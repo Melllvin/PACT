@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commandRunner, createAdapters, runCommand } from '../../src/main/agents/adapters';
 import { FakeAdapter } from '../../src/main/agents/adapters/fake';
 import { FAKE_CLI, scenarioPath } from '../fixtures/fake-cli/paths';
-import { runCliAdapterContract } from './cli-adapter.contract';
+import { runCliAdapterContract, type WakeCapable } from './cli-adapter.contract';
 
 const baseEnv: Record<string, string> = {};
 for (const [key, value] of Object.entries(process.env))
@@ -183,5 +183,80 @@ describe('fake adapter as an orchestrator (003 T008)', () => {
       PACT_ORCHESTRATOR_TOKEN: 'e'.repeat(64),
     });
     expect(spec.args.join(' ')).not.toContain('e'.repeat(64));
+  });
+});
+
+// 007 US2, contracts/hooks.md — the fake CLI plays Claude Code: `post-tool` is its PostToolUse,
+// `turn-finished` its Stop. FAKE_CLI_NO_WAKE_HOOK=1 turns the hook off, as a CLI that has none.
+//
+// API fixed here (see the report): the replies are the ones of Claude Code, so that the fake CLI
+// reads `hookSpecificOutput.additionalContext` and `{ decision: 'block', reason }` as the real one.
+describe('fake adapter wake points (007 T031)', () => {
+  const POINTER = '2 événements, lis get_events';
+  const make = () =>
+    new FakeAdapter({ cliPath: FAKE_CLI, platform: 'darwin' }) as unknown as WakeCapable & {
+      mapHookEvent(payload: unknown): unknown;
+    };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('can carry a pointer in the middle of a turn by default', () => {
+    vi.stubEnv('FAKE_CLI_NO_WAKE_HOOK', '');
+    expect(make().midTurnWake).toBe(true);
+  });
+
+  it('cannot with FAKE_CLI_NO_WAKE_HOOK=1, and then has no wake point nor reply', () => {
+    vi.stubEnv('FAKE_CLI_NO_WAKE_HOOK', '1');
+    const adapter = make();
+    expect(adapter.midTurnWake).toBe(false);
+    for (const payload of [{ type: 'post-tool' }, { type: 'turn-finished' }]) {
+      expect(adapter.isWakePoint?.(payload) ?? null).toBeNull();
+      expect(adapter.wakeReply?.(payload, POINTER) ?? null).toBeNull();
+    }
+  });
+
+  it('post-tool is a wake point « tool », turn-finished a wake point « stop »', () => {
+    vi.stubEnv('FAKE_CLI_NO_WAKE_HOOK', '');
+    const adapter = make();
+    expect(adapter.isWakePoint?.({ type: 'post-tool' })).toBe('tool');
+    expect(adapter.isWakePoint?.({ type: 'turn-finished' })).toBe('stop');
+  });
+
+  it.each(['session-started', 'prompt-submitted', 'awaiting-answer', 'failed'])(
+    '%s is no wake point',
+    (type) => {
+      vi.stubEnv('FAKE_CLI_NO_WAKE_HOOK', '');
+      const adapter = make();
+      expect(adapter.midTurnWake).toBe(true);
+      expect(adapter.isWakePoint?.({ type })).toBeNull();
+    },
+  );
+
+  it('a subagent (agent_id) is no wake point (US2 sc.4)', () => {
+    vi.stubEnv('FAKE_CLI_NO_WAKE_HOOK', '');
+    const adapter = make();
+    expect(adapter.midTurnWake).toBe(true);
+    expect(adapter.isWakePoint?.({ type: 'post-tool', agent_id: 'sub-1' })).toBeNull();
+    expect(adapter.isWakePoint?.({ type: 'turn-finished', agent_id: 'sub-1' })).toBeNull();
+  });
+
+  it('answers post-tool with additionalContext and turn-finished with a block', () => {
+    vi.stubEnv('FAKE_CLI_NO_WAKE_HOOK', '');
+    const adapter = make();
+    expect(adapter.wakeReply?.({ type: 'post-tool' }, POINTER)).toEqual({
+      hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: POINTER },
+    });
+    expect(adapter.wakeReply?.({ type: 'turn-finished' }, POINTER)).toEqual({
+      decision: 'block',
+      reason: POINTER,
+    });
+  });
+
+  it('post-tool changes no state, turn-finished is still the end of the turn', () => {
+    const adapter = make();
+    expect(adapter.mapHookEvent({ type: 'post-tool' })).toBeNull();
+    expect(adapter.mapHookEvent({ type: 'turn-finished' })).toEqual({ type: 'turn-finished' });
   });
 });

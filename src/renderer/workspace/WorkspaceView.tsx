@@ -49,6 +49,8 @@ export type AgentActions = {
   onRefuseIntegration?: (requestId: string) => void;
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
   onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
+  /** 007 FR-006 — the user's decision on two agents that bounce a message. */
+  onDecideExchange?: ((escalationId: string, decision: 'resume' | 'cut') => void) | undefined;
   /** 004 FR-023 — « Créer » / « Refuser » of the issues the orchestrator asks to publish. */
   onConfirmPublish?: (requestId: string) => void;
   onRefusePublish?: (requestId: string) => void;
@@ -452,6 +454,7 @@ export function WorkspaceView({
                 focusedLead !== null && orchestration
                   ? {
                       actions: orchestration.actions[focusedLead] ?? [],
+                      messages: workspace.exchanges.messages,
                       onRevoke: () => {
                         orchestration.revoke(focusedLead);
                       },

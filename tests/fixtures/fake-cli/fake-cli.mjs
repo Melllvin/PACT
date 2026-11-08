@@ -40,6 +40,32 @@
 //                                   Codex token_count to $CODEX_HOME/sessions/AAAA/MM/JJ/
 //                                   rollout-<time>-<session>.jsonl; an array gives one per turn
 //   signal: object                  final hook payload (default { type: 'turn-finished' })
+//   agentMcp: { tool, arguments }[] calls these PACT tools when it is an agent of a role (007 R16),
+//                                   on PACT_AGENT_MCP_URL with its token, and prints
+//                                   `MCP <tool> : <text>`; `{{prompt}}` is filled as for `mcp`
+//                                   A step may also hold (007 T044): `when: 'typed' | 'pointer'` (runs only on
+//                                   a turn of a typed prompt, or of a pointer), `whenEvent: <text>` (runs only
+//                                   on a pointer turn whose events `get_events` listed have <text> in their
+//                                   summary) and `skipEmpty: true` (skipped when an argument, once filled,
+//                                   is an empty string); arguments are filled at any depth
+//   toolHook: boolean               posts `{ type: 'post-tool' }` (a PostToolUse) during the turn and
+//                                   prints `Contexte : <additionalContext>` when PACT answers one
+//   toolHooks: { times, everyMs }   (007 T034) posts `times` PostToolUse, `everyMs` apart, to stay in
+//                                   its turn long enough to be reached in the middle of it; each
+//                                   reply with a context prints `Contexte : …`. `times` is filled
+//                                   with `{{prompt.N}}` as `mcp` is (no number: none)
+//   holdMs: number | string         (007 T034) keeps the turn open this long, with no hook, before
+//                                   its final one: a Stop reached with a wake waiting. Filled the
+//                                   same way
+//
+// A line that is a PACT pointer (« N événement(s), lis get_events » or « …, lis <file> ») is not a
+// prompt (007 R16): with PACT_AGENT_MCP_URL or PACT_ORCHESTRATOR_URL the CLI calls `get_events`,
+// then `get_events({ id })` on the first `instruction`, and plays the turn with that text, as if it
+// had been typed; without MCP it reads `.pact/events.md` and plays its content. A pointer with no
+// instruction plays as itself. Scenarios keep their `{{prompt}}`.
+//
+// A final hook answered `{ decision: 'block', reason }` (Stop prolonged by a wake) prints
+// `Prolongé : <reason>` and plays one more turn with the reason, which is a pointer.
 //   exitCode: number                exits with this code after the turn
 //
 // A bracketed paste (ESC[200~ … ESC[201~) is one prompt, its line breaks included, as in the
@@ -160,6 +186,84 @@ async function callTool(
   } catch (error) {
     return `injoignable (${error.message})`;
   }
+}
+
+/** `tools/call` with the text and the JSON PACT answers (`get_events` gives both). */
+async function callToolFull(tool, args) {
+  const url = process.env.PACT_AGENT_MCP_URL ?? process.env.PACT_ORCHESTRATOR_URL;
+  const token = process.env.PACT_AGENT_MCP_URL
+    ? process.env.PACT_AGENT_MCP_TOKEN
+    : process.env.PACT_ORCHESTRATOR_TOKEN;
+  try {
+    const response = await fetch(url ?? '', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'x-pact-token': token ?? '',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/call',
+        params: { name: tool, arguments: args },
+      }),
+    });
+    if (!response.ok) return { text: `HTTP ${String(response.status)}`, json: null };
+    const reply = await response.json();
+    const [text, json] = (reply.result?.content ?? []).map((c) => c.text);
+    return {
+      text: text ?? JSON.stringify(reply.error ?? reply),
+      json: json ? JSON.parse(json) : null,
+    };
+  } catch (error) {
+    return { text: `injoignable (${error.message})`, json: null };
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const POINTER = /^\d+ événements?, lis \S+$/;
+
+/** 007 T044 — what the current turn is: a pointer or a typed prompt, and the events a pointer listed. */
+let pointerTurn = false;
+let pointerEvents = [];
+
+const hasEmpty = (value) =>
+  value === '' ||
+  (Array.isArray(value) && value.some(hasEmpty)) ||
+  (value !== null && typeof value === 'object' && Object.values(value).some(hasEmpty));
+
+/** Whether a step of `agentMcp` runs on this turn (`when`, `whenEvent`, `skipEmpty`). */
+function stepRuns(step, args) {
+  if (step.when === 'typed' && pointerTurn) return false;
+  if (step.when === 'pointer' && !pointerTurn) return false;
+  if (
+    step.whenEvent !== undefined &&
+    !pointerEvents.some((event) => String(event.summary ?? '').includes(step.whenEvent))
+  ) {
+    return false;
+  }
+  return !(step.skipEmpty && hasEmpty(args));
+}
+
+/** What a pointer makes the CLI play: the first instruction it reads, else the pointer itself. */
+async function readPointer(line) {
+  if (!process.env.PACT_AGENT_MCP_URL && !process.env.PACT_ORCHESTRATOR_URL) {
+    try {
+      return readFileSync(join(process.cwd(), '.pact', 'events.md'), 'utf8').trim() || line;
+    } catch {
+      return line;
+    }
+  }
+  const list = await callToolFull('get_events', {});
+  console.log(`MCP get_events : ${list.text}`);
+  pointerEvents = list.json?.events ?? [];
+  const first = (list.json?.events ?? []).find((event) => event.kind === 'instruction');
+  if (!first) return line;
+  const detail = await callToolFull('get_events', { id: first.id });
+  console.log(`MCP get_events : ${detail.text}`);
+  return detail.json?.event?.text ?? line;
 }
 
 /** Fills `{{prompt}}` and `{{prompt.N}}` in every string of a value, at any depth. */
@@ -364,13 +468,35 @@ async function runTurn(line) {
   }
 
   // Only the orchestrator gets PACT's tools; the agents it leads skip these steps.
-  for (const step of process.env.PACT_ORCHESTRATOR_URL ? (scenario.mcp ?? []) : []) {
+  // A pointer that led to no instruction (a report, a verdict…) is no prompt: the scripted calls,
+  // written for a prompt of the user, do not run on it.
+  const scripted = process.env.PACT_ORCHESTRATOR_URL && !POINTER.test(line);
+  for (const step of scripted ? (scenario.mcp ?? []) : []) {
     const tool = fillDeep(step.tool, line);
     const args =
       step.json === undefined
         ? fillArguments(step.arguments, line)
         : JSON.parse(fillDeep(step.json, line));
     console.log(`MCP ${tool} : ${await callTool(tool, args)}`);
+  }
+  if (scenario.toolHook) {
+    const reply = await hook({ type: 'post-tool' });
+    const context = reply?.hookSpecificOutput?.additionalContext;
+    if (context) console.log(`Contexte : ${context}`);
+  }
+  const times = Number(fillDeep(scenario.toolHooks?.times ?? 0, line)) || 0;
+  for (let i = 0; i < times; i++) {
+    if (i > 0) await sleep(scenario.toolHooks?.everyMs ?? 1000);
+    const reply = await hook({ type: 'post-tool' });
+    const context = reply?.hookSpecificOutput?.additionalContext;
+    if (context) console.log(`Contexte : ${context}`);
+  }
+  await sleep(Number(fillDeep(scenario.holdMs ?? 0, line)) || 0);
+  for (const step of process.env.PACT_AGENT_MCP_URL ? (scenario.agentMcp ?? []) : []) {
+    const args = fillDeep(step.arguments ?? {}, line);
+    if (!stepRuns(step, args)) continue;
+    const { text } = await callToolFull(step.tool, args);
+    console.log(`MCP ${step.tool} : ${text}`);
   }
   for (const payload of scenario.hooks ?? []) await hook(payload);
   editFiles(scenario.files ?? []);
@@ -391,8 +517,20 @@ async function runTurn(line) {
     execFileSync('git', ['branch', '-m', scenario.renameBranch], { stdio: 'ignore' });
   }
 
-  await hook(scenario.signal ?? { type: 'turn-finished' });
+  const end = await hook(scenario.signal ?? { type: 'turn-finished' });
   if (scenario.exitCode !== undefined) process.exit(scenario.exitCode);
+  // A Stop prolonged by a wake: the reason is a pointer, and the turn goes on.
+  if (end?.decision === 'block' && typeof end.reason === 'string') {
+    console.log(`Prolongé : ${end.reason}`);
+    await play(end.reason);
+  }
+}
+
+/** A line typed or a reason given: a pointer is read, anything else is the prompt. */
+async function play(line) {
+  pointerTurn = POINTER.test(line);
+  pointerEvents = [];
+  await runTurn(POINTER.test(line) ? await readPointer(line) : line);
 }
 
 console.log(resumed ? `Session reprise ${resumed}` : `Session ${sessionId}`);
@@ -400,5 +538,5 @@ await hook({ type: 'session-started', sessionId });
 for (;;) {
   prompt();
   const line = await nextPrompt();
-  if (line) await runTurn(line);
+  if (line) await play(line);
 }

@@ -25,6 +25,7 @@ const workspace: Workspace = {
   loops: [],
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
+  exchanges: { messages: [], escalations: [] },
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 };
@@ -382,5 +383,38 @@ describe('prompts of the orchestrator (003 T019)', () => {
     expect(store.getState().orchestratorPrompted[id]).toBe('working');
     emit('agent:state', { agentId: id, state: 'done' });
     expect(store.getState().orchestratorPrompted[id]).toBeUndefined();
+  });
+});
+
+// 007 T043 — « Laisser reprendre » / « Couper »: the store asks the main process by exchange:decide,
+// as decideLoop does for loop:decide (contracts/ui.md « IPC »).
+//
+// API fixed here for the dev (see the report, « API fixées »):
+//   state.decideExchange(workspaceId, escalationId, decision: 'resume' | 'cut'): Promise<void>
+describe('deciding an exchange in a loop (007)', () => {
+  type Decider = {
+    decideExchange: (w: string, e: string, d: 'resume' | 'cut') => Promise<void>;
+  };
+  const escalationId = '00000000-0000-4000-8000-0000000000e1';
+
+  it.each(['resume', 'cut'] as const)(
+    'calls exchange:decide with the workspace, the escalation and « %s »',
+    async (decision) => {
+      const { store, invoke } = await setup();
+      await (store.getState() as unknown as Decider).decideExchange('w1', escalationId, decision);
+      expect(invoke).toHaveBeenCalledWith('exchange:decide', {
+        workspaceId: 'w1',
+        escalationId,
+        decision,
+      });
+    },
+  );
+
+  it('shows why when the main process refuses, until the next action succeeds', async () => {
+    const { store } = await setup('exchange:decide');
+    await (store.getState() as unknown as Decider).decideExchange('w1', escalationId, 'cut');
+    expect(store.getState().actionError).toBe('Refusé');
+    await store.getState().restartAgent(id);
+    expect(store.getState().actionError).toBeNull();
   });
 });

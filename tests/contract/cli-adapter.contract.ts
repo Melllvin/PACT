@@ -23,6 +23,25 @@ type ContractOptions = {
 
 const LEVELS = ['always-allow', 'ask-sensitive', 'always-ask'] as const;
 
+/**
+ * 007 contracts/hooks.md — what an adapter says about the wake in the middle of a turn. Read through
+ * a local type, so that the suite compiles (and fails on the missing behavior) before the
+ * interface carries these members.
+ */
+export type WakeCapable = CliAdapter & {
+  midTurnWake?: boolean;
+  isWakePoint?(payload: unknown): 'tool' | 'stop' | null;
+  wakeReply?(payload: unknown, pointer: string): object | null;
+};
+
+/** Payloads of a subagent or a teammate: whatever the CLI, `agent_id` is set. */
+const SUBAGENT_PAYLOADS = [
+  { hook_event_name: 'Stop', agent_id: 'sub-1' },
+  { hook_event_name: 'PostToolUse', tool_name: 'Bash', agent_id: 'sub-1' },
+  { type: 'turn-finished', agent_id: 'sub-1' },
+  { type: 'post-tool', agent_id: 'sub-1' },
+];
+
 export function runCliAdapterContract(
   name: string,
   factory: AdapterFactory,
@@ -122,6 +141,36 @@ export function runCliAdapterContract(
         { type: 5 },
       ]) {
         expect(adapter.mapHookEvent(payload)).toBeNull();
+      }
+    });
+
+    it('7. declares whether a hook can carry a pointer in the middle of a turn (midTurnWake)', () => {
+      expect((adapter as WakeCapable).midTurnWake).toBeTypeOf('boolean');
+    });
+
+    it('7. never makes a wake point of a subagent or a teammate (agent_id), nor of an invalid payload', () => {
+      const wake = adapter as WakeCapable;
+      expect(wake.midTurnWake).toBeTypeOf('boolean');
+      for (const payload of SUBAGENT_PAYLOADS) {
+        expect(wake.isWakePoint?.(payload) ?? null).toBeNull();
+      }
+      for (const payload of [null, undefined, 42, 'text', [], {}, { type: 5 }]) {
+        expect(wake.isWakePoint?.(payload) ?? null).toBeNull();
+      }
+    });
+
+    it('7. without a hook that can carry it, has no wake point and no reply', () => {
+      const wake = adapter as WakeCapable;
+      expect(wake.midTurnWake).toBeTypeOf('boolean');
+      if (wake.midTurnWake) return;
+      for (const payload of [
+        { hook_event_name: 'Stop' },
+        { hook_event_name: 'PostToolUse' },
+        { type: 'turn-finished' },
+        { type: 'post-tool' },
+      ]) {
+        expect(wake.isWakePoint?.(payload) ?? null).toBeNull();
+        expect(wake.wakeReply?.(payload, '1 événement, lis get_events') ?? null).toBeNull();
       }
     });
 

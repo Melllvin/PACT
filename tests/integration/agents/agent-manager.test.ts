@@ -663,3 +663,79 @@ describe('AgentManager.launch from origin', { timeout: 30_000 }, () => {
     }
   });
 });
+
+// 007 T008 — the result of the fetch is kept and read once by launch_agent (FR-022, research R13,
+// US4 sc.5 to 7). `launchWarnings(agentId)` gives the warnings of the launch of an agent, once.
+describe('AgentManager.launchWarnings', { timeout: 30_000 }, () => {
+  let origin: string;
+
+  beforeEach(() => {
+    origin = join(root, 'origin.git');
+    git(root, 'init', '--bare', '-b', 'main', origin);
+    git(repo, 'remote', 'add', 'origin', origin);
+    git(repo, 'push', '-q', 'origin', 'main');
+    git(repo, 'fetch', '-q', 'origin');
+  });
+
+  const warnings = (manager: AgentManager, id: string) =>
+    (manager as unknown as { launchWarnings(id: string): string[] }).launchWarnings(id);
+
+  it('warns when the fetch fails: the agent starts from the last origin/main known', async () => {
+    const known = git(repo, 'rev-parse', 'origin/main');
+    git(repo, 'remote', 'set-url', 'origin', join(root, 'absent.git'));
+    const manager = await createManager();
+    const [agent] = await launch(manager, [draft()]);
+    expect(git(agent?.worktreePath ?? '', 'rev-parse', 'HEAD')).toBe(known);
+    const first = warnings(manager, agent?.id ?? '');
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatch(/fetch|origin/i);
+  });
+
+  it('warns when the fetch does not answer in time', async () => {
+    class Silent extends GitService {
+      override fetchOrigin = () => new Promise<boolean>(() => undefined);
+    }
+    const manager = await createManager({
+      gitService: new Silent({ env: gitEnv }),
+      fetchTimeoutMs: 20,
+    });
+    const [agent] = await launch(manager, [draft()]);
+    expect(warnings(manager, agent?.id ?? '')).toHaveLength(1);
+  });
+
+  it('gives the warning once: a second reading is empty', async () => {
+    git(repo, 'remote', 'set-url', 'origin', join(root, 'absent.git'));
+    const manager = await createManager();
+    const [agent] = await launch(manager, [draft()]);
+    expect(warnings(manager, agent?.id ?? '')).toHaveLength(1);
+    expect(warnings(manager, agent?.id ?? '')).toEqual([]);
+  });
+
+  it('warns for every agent of a launch whose fetch failed', async () => {
+    git(repo, 'remote', 'set-url', 'origin', join(root, 'absent.git'));
+    const manager = await createManager();
+    const agents = await launch(manager, [draft(), draft()]);
+    for (const agent of agents) expect(warnings(manager, agent.id)).toHaveLength(1);
+  });
+
+  it('does not warn when the fetch succeeds', async () => {
+    const manager = await createManager();
+    const [agent] = await launch(manager, [draft()]);
+    expect(warnings(manager, agent?.id ?? '')).toEqual([]);
+  });
+
+  it('does not warn when the repository has no remote', async () => {
+    git(repo, 'remote', 'remove', 'origin');
+    const manager = await createManager();
+    const [agent] = await launch(manager, [draft()]);
+    expect(warnings(manager, agent?.id ?? '')).toEqual([]);
+  });
+
+  it('does not warn for an explicit baseBranch, whatever the remote: no fetch is expected', async () => {
+    git(repo, 'branch', 'develop');
+    git(repo, 'remote', 'set-url', 'origin', join(root, 'absent.git'));
+    const manager = await createManager();
+    const [agent] = await launch(manager, [draft({ baseBranch: 'develop' })]);
+    expect(warnings(manager, agent?.id ?? '')).toEqual([]);
+  });
+});

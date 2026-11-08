@@ -237,7 +237,19 @@ export class IssueService {
   }
 }
 
+/** Categories of `gh` failures PACT knows: only their fixed wording is ever reported. */
+const KNOWN_FAILURES: [RegExp, (match: RegExpExecArray) => string][] = [
+  [/no git remotes found/i, () => 'no git remotes found'],
+  [/\bHTTP (\d{3})\b/, (match) => `HTTP ${match[1] ?? ''}`],
+  // Anything else: no text of `gh`, which can quote what a third party wrote (FR-026).
+  [/^/, () => 'gh a échoué'],
+];
+
 const reason = (error: unknown) => {
-  const { stderr, message } = error as { stderr?: string; message?: string };
-  return (stderr?.trim() || message || String(error)).split('\n')[0] ?? '';
+  const { stderr, message } = error as { stderr?: unknown; message?: unknown };
+  const text = `${String(stderr)}\n${String(message)}`;
+  return KNOWN_FAILURES.flatMap(([pattern, wording]) => {
+    const match = pattern.exec(text);
+    return match ? [wording(match)] : [];
+  })[0] as string;
 };

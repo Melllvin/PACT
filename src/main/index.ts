@@ -9,6 +9,7 @@ import { deriveTodos } from '../shared/todo';
 import { PREVIEW_SCHEME } from '../shared/preview';
 import { createAdapters } from './agents/adapters';
 import { AgentManager } from './agents/agent-manager';
+import { TurnTracker } from './agents/turn-tracker';
 import { CliRegistry } from './agents/cli-registry';
 import { FreeTerminals } from './agents/free-terminals';
 import { HookServer } from './agents/hook-server';
@@ -29,6 +30,8 @@ import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
 import { IntegrationRequests } from './orchestrator/integration-requests';
+import { ExchangeService } from './orchestrator/exchange-service';
+import { WakeService, eventsFile } from './orchestrator/wake-service';
 import { OrchestratorService } from './orchestrator/orchestrator-service';
 import type { McpTool } from './orchestrator/mcp';
 import { createOrchestratorTools } from './orchestrator/tools';
@@ -120,10 +123,28 @@ void app.whenReady().then(async () => {
   // The e2e harness moves this clock itself from the main process (T106).
   const clock = testClock(process.env);
   if (clock) Object.assign(globalThis, { pactTestClock: clock });
+  const turns = new TurnTracker();
+  // 007 — the journal of the exchanges of each workspace, where the orchestrator's events are kept.
+  const exchanges = new ExchangeService({
+    workspaces,
+    // R10 — the commit of an agent's worktree: a new one starts the count of its pairs again.
+    head: async (agentId) => {
+      const path = workspaces
+        .list()
+        .flatMap((ws) => ws.agents)
+        .find((a) => a.id === agentId)?.worktreePath;
+      return path === undefined ? null : git.revParse(path, 'HEAD').catch(() => null);
+    },
+    name: (cliId) => registry.list().find((cli) => cli.id === cliId)?.name ?? cliId,
+    onChange: (workspaceId, journal) => {
+      emit('workspace:exchanges', { workspaceId, exchanges: journal });
+    },
+  });
   // 003 — the orchestrator of a workspace reaches PACT through its session plugin (R2).
   const orchestrator: OrchestratorService = new OrchestratorService({
     hooks,
     workspaces,
+    exchanges,
     onAction: (orchestratorId, action) => {
       emit('orchestrator:action', { ...action, orchestratorId });
     },
@@ -136,6 +157,7 @@ void app.whenReady().then(async () => {
     agentTools: (agentId) =>
       createAgentTools(
         {
+          exchanges,
           onReport: async (id, report) => {
             const refused = await loops.report(id, report);
             // « ◆ Décider » reads the last report of an agent, with or without a loop.
@@ -158,6 +180,7 @@ void app.whenReady().then(async () => {
           pending: (workspaceId) => review.updatePending(workspaceId),
           review,
           tests,
+          exchanges,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
           requests,
           loops,
@@ -188,6 +211,10 @@ void app.whenReady().then(async () => {
     hooks,
     orchestrator,
     usage,
+    onWakeNotice: (agentId, notice) => {
+      emit('agent:wakeNotice', { agentId, notice });
+      syncTodos();
+    },
     onPromptTyped: (agentId, origin) => {
       if (origin === 'orchestrator') emit('orchestrator:prompted', { agentId });
     },
@@ -201,10 +228,23 @@ void app.whenReady().then(async () => {
     onLaunched: (workspaceId) => {
       emit('workspace:agentsLaunched', { workspaceId });
     },
+    // 007 FR-005 — the count of messages of an agent restarts with each turn.
+    onTurnStart: (agentId) => {
+      exchanges.resetTurn(agentId);
+    },
     onState: (event) => {
-      emit('agent:state', event);
+      // A report handed in just before the `working` event of its own turn reaches us first: that
+      // event is not a new turn, and it must not drop the report (it carries it along).
+      const late = turns.observe(event.agentId, event.state);
+      const kept = late
+        ? workspaces
+            .list()
+            .flatMap((ws) => ws.agents)
+            .find((a) => a.id === event.agentId)?.lastReport
+        : undefined;
+      emit('agent:state', kept ? { ...event, lastReport: kept } : event);
       // Working again, an agent has left its last report behind it.
-      if (event.state === 'working') void keepReport(event.agentId, null);
+      if (event.state === 'working' && !late) void keepReport(event.agentId, null);
       syncTodos();
       // 003 R5 — what the orchestrator of the workspace waits for.
       orchestrator.agentState(event);
@@ -228,6 +268,21 @@ void app.whenReady().then(async () => {
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
     ...(clock ? { clock } : {}),
+  });
+  // 007 — the wake: an action event for an agent becomes one pointer line, typed once it is ready.
+  const wake = new WakeService({
+    workspaces,
+    type: (agentId, line) => agents.sendPrompt(agentId, line, 'wake'),
+    inputBusy: (agentId) => agents.promptState(agentId) === 'busy',
+    setNotice: (agentId, notice) => {
+      void agents.setWakeNotice(agentId, notice).catch(() => undefined);
+    },
+    usageCritical: (cliId) => usage.critical(cliId),
+    file: eventsFile({ exchanges, agents }),
+  });
+  agents.setWake(wake);
+  exchanges.onRecorded((workspaceId, message) => {
+    wake.notify(workspaceId, message);
   });
   // 002 US1 — the review of each agent's changes.
   const review = new ReviewService({
@@ -260,6 +315,7 @@ void app.whenReady().then(async () => {
     review,
     tests,
     agents,
+    message: (workspaceId, draft) => exchanges.record(workspaceId, draft),
     notify: (workspaceId, notice) => {
       orchestrator.notice(workspaceId, notice);
       emit('orchestrator:report', { workspaceId, ...notice });
@@ -356,6 +412,7 @@ void app.whenReady().then(async () => {
     const agent = workspace?.agents.find((a) => a.id === agentId);
     if (!workspace || !agent || (report === null && !agent.lastReport)) return;
     const lastReport = report && { status: report.status, questions: report.questions };
+    if (report) turns.reported(agentId, agent.state);
     await workspaces.update(workspace.id, (ws) => ({
       ...ws,
       agents: ws.agents.map((a) => (a.id === agentId ? { ...a, lastReport } : a)),
@@ -427,6 +484,7 @@ void app.whenReady().then(async () => {
   };
 
   for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
+  wake.restore();
   workspaces.startWatching(AVAILABILITY_CHECK_MS);
   origin.start();
   const clones = new CloneJobs({
@@ -477,6 +535,7 @@ void app.whenReady().then(async () => {
       ...createOrchestratorServices({
         requests,
         orchestrator,
+        exchanges,
         agents,
         workspaces,
         loops,
@@ -516,6 +575,7 @@ void app.whenReady().then(async () => {
       tests.dispose();
       integration.dispose();
       orchestrator.dispose();
+      wake.dispose();
       usage.stop();
       await Promise.all([agents.dispose(), freeTerminals.dispose()]);
       await pty.dispose();
