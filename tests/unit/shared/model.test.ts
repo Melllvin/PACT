@@ -501,3 +501,124 @@ describe('Agent.launchedBy (006)', () => {
     ]);
   });
 });
+
+// 008 T004 — the delivery in the saved state (data-model « Changements de Loop et Round »).
+// RED until T008: the workspace has no `delivery` nor `deliveries`, a loop is still limited to
+// 3 rounds, and a round has no `kind`.
+describe('delivery in the workspace (008)', () => {
+  const sha = (c: string) => c.repeat(40);
+  const old = () => ({ ...workspace([]) }) as Record<string, unknown>;
+  const withoutDelivery = () => {
+    const file = old();
+    delete file.delivery;
+    delete file.deliveries;
+    return file;
+  };
+  const loop = (over: Record<string, unknown> = {}) => ({
+    issueId: '0012-connexion',
+    devAgentId: uuid(1),
+    testAgentId: uuid(2),
+    round: 1,
+    rounds: [{ n: 1, startedAt: now }],
+    state: 'running',
+    ...over,
+  });
+
+  it('Given a file saved before 008, When read, Then the settings are the defaults and no delivery is kept', () => {
+    expect(workspaceSchema.parse(withoutDelivery())).toMatchObject({
+      delivery: {
+        auto: false,
+        mergeMode: 'squash',
+        maxRounds: 3,
+        polishPasses: 0,
+        polishBrief: '',
+      },
+      deliveries: [],
+    });
+  });
+
+  it('Given settings in a workspace, When read back, Then they are kept and bounded (FR-020)', () => {
+    const settings = {
+      auto: true,
+      mergeMode: 'rebase',
+      maxRounds: 5,
+      polishPasses: 1,
+      polishBrief: 'Relis les noms',
+    };
+    expect(workspaceSchema.parse({ ...withoutDelivery(), delivery: settings }).delivery).toEqual(
+      settings,
+    );
+    expect(
+      workspaceSchema.safeParse({ ...withoutDelivery(), delivery: { maxRounds: 11 } }).success,
+    ).toBe(false);
+  });
+
+  it('Given a file of 007 with a loop « passed », When read, Then the loop is « closed » (R12)', () => {
+    const file = { ...withoutDelivery(), loops: [loop({ state: 'passed' })] };
+    expect(workspaceSchema.parse(file).loops[0]?.state).toBe('closed');
+  });
+
+  it('Given the new states of a loop, When read, Then all of them are known and « passed » is not written any more', () => {
+    for (const state of [
+      'running',
+      'polishing',
+      'accepted',
+      'delivering',
+      'merged',
+      'escalated',
+      'closed',
+    ]) {
+      expect(loopSchema.parse(loop({ state })).state).toBe(state);
+    }
+    expect(loopSchema.safeParse(loop({ state: 'finished' })).success).toBe(false);
+  });
+
+  it('Given a ceiling of 10, When read, Then a loop goes to round 10 with 10 rounds, not 11 (FR-021)', () => {
+    const rounds = Array.from({ length: 10 }, (_, i) => ({ n: i + 1, startedAt: now }));
+    expect(loopSchema.safeParse(loop({ round: 10, rounds })).success).toBe(true);
+    expect(loopSchema.safeParse(loop({ round: 11, rounds })).success).toBe(false);
+    expect(
+      loopSchema.safeParse(loop({ round: 10, rounds: [...rounds, { n: 10, startedAt: now }] }))
+        .success,
+    ).toBe(false);
+  });
+
+  it('Given a round saved before 008, When read, Then it is a round, with a proof that has no commit (R3)', () => {
+    const parsed = loopSchema.parse(
+      loop({
+        rounds: [{ n: 1, startedAt: now, proof: { tree: sha('a'), exitCode: 0, at: now } }],
+      }),
+    );
+    expect(parsed.rounds[0]).toMatchObject({
+      kind: 'round',
+      proof: { tree: sha('a'), commit: null, exitCode: 0 },
+    });
+  });
+
+  it('Given a polish pass, When read, Then the round says so and the counter of passes is kept (R23)', () => {
+    const parsed = loopSchema.parse(
+      loop({
+        state: 'polishing',
+        polish: { done: 1, total: 2, restarted: false },
+        rounds: [
+          { n: 1, startedAt: now },
+          {
+            n: 1,
+            kind: 'polish',
+            startedAt: now,
+            proof: { tree: sha('a'), commit: sha('b'), exitCode: 0, at: now },
+          },
+        ],
+      }),
+    );
+    expect(parsed.rounds[1]).toMatchObject({ kind: 'polish', proof: { commit: sha('b') } });
+    expect(parsed.polish).toEqual({ done: 1, total: 2, restarted: false });
+    expect(loopSchema.parse(loop()).polish).toBeNull();
+    expect(
+      loopSchema.safeParse(loop({ polish: { done: 6, total: 6, restarted: false } })).success,
+    ).toBe(false);
+    expect(
+      loopSchema.safeParse(loop({ rounds: [{ n: 1, startedAt: now, kind: 'pass' }] })).success,
+    ).toBe(false);
+  });
+});
