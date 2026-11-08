@@ -254,14 +254,14 @@ describe('the usage kinds', () => {
   });
 
   it('types a save instruction as an action and a pause notice as info', () => {
-    expect(typeOf('usage-save' as never)).toBe('action');
-    expect(typeOf('usage-paused' as never)).toBe('info');
+    expect(typeOf('usage-save')).toBe('action');
+    expect(typeOf('usage-paused')).toBe('info');
   });
 
   it('lets the sender of a resume notice choose its type, action by default', () => {
-    expect(typeOf('usage-resumed' as never, 'info')).toBe('info');
-    expect(typeOf('usage-resumed' as never, 'action')).toBe('action');
-    expect(typeOf('usage-resumed' as never)).toBe('action');
+    expect(typeOf('usage-resumed', 'info')).toBe('info');
+    expect(typeOf('usage-resumed', 'action')).toBe('action');
+    expect(typeOf('usage-resumed')).toBe('action');
   });
 
   it('hold at most MAX_NOTICE characters', () => {

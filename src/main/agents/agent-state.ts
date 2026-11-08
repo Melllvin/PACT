@@ -24,7 +24,7 @@ function awaitingOf(agent: Agent, signal: Extract<AgentSignal, { type: 'awaiting
 }
 
 function nextAgent(agent: Agent, signal: AgentSignal): Agent {
-  if (agent.state === 'closed') return agent;
+  if (agent.state === 'closed' || agent.state === 'paused') return agent;
   switch (signal.type) {
     case 'session-started': {
       const sessionId = signal.sessionId ?? agent.sessionId;
@@ -77,7 +77,7 @@ function nextAgent(agent: Agent, signal: AgentSignal): Agent {
 
 /** The process ended without PACT closing the agent: « à reprendre » (exit code 0 included). */
 export function applyExit(agent: Agent, code: number | null): Agent {
-  if (agent.state === 'closed') return agent;
+  if (agent.state === 'closed' || agent.state === 'paused') return agent;
   const lastError =
     agent.lastError?.kind === 'rate-limit'
       ? { ...agent.lastError, code }

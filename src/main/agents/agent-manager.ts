@@ -219,6 +219,8 @@ export class AgentManager {
   private readonly resumes: AutoResume;
   private readonly orchestrator: Options['orchestrator'];
   private readonly usage: Options['usage'];
+  /** 009 R7 — the usage source of each agent, kept after its process ends, until it is closed. */
+  private readonly accounts = new Map<string, UsageSource>();
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
@@ -327,13 +329,31 @@ export class AgentManager {
     if (workspace) await this.markStale(workspace, UNAVAILABLE_MESSAGE);
   }
 
+  /**
+   * 009 R7 — the agents of an account of a CLI, in every workspace: those with a usage source of
+   * that account, closed, crashed and paused ones left out; one in a rate limit error stays.
+   */
+  accountAgents(cliId: string, account: string): Agent[] {
+    return this.workspaces.list().flatMap(({ agents }) =>
+      agents.filter((agent) => {
+        if (agent.state === 'closed' || agent.state === 'paused') return false;
+        if (agent.state === 'error' && agent.lastError?.kind !== 'rate-limit') return false;
+        const source = this.running.get(agent.id)?.usage?.source ?? this.accounts.get(agent.id);
+        return source?.cliId === cliId && source.account === account;
+      }),
+    );
+  }
+
   /** The agents of the workspace, those without a process marked « à reprendre ». */
   private async markStale(
     { id: workspaceId, agents }: Workspace,
     message = RESTORED_MESSAGE,
   ): Promise<Agent[]> {
     const stale = (agent: Agent) =>
-      agent.state !== 'closed' && agent.state !== 'error' && !this.pty.has(agent.id);
+      agent.state !== 'closed' &&
+      agent.state !== 'error' &&
+      agent.state !== 'paused' &&
+      !this.pty.has(agent.id);
     const changed = agents.filter(stale);
     if (changed.length === 0) return agents;
     const updated = await this.workspaces.update(workspaceId, (ws) => ({
@@ -638,6 +658,7 @@ export class AgentManager {
     // Closed with its orchestrator before: it stays as it is.
     if (keepTile && agent.state === 'closed') return;
     this.resumes.forget(id);
+    this.accounts.delete(id);
     this.prompts.delete(id);
     this.undelivered.delete(id);
     this.orchestrator?.release(id);
@@ -898,6 +919,7 @@ export class AgentManager {
         effort: draft.effort ?? fromProfile?.effort ?? null,
         launchedBy: launchedBy ?? null,
         closedWhileWorking: false,
+        pause: null,
       };
       if (warned !== null) this.warnings.set(agent.id, [warned]);
       const cli = clis[index];
@@ -1074,6 +1096,7 @@ export class AgentManager {
       mcp: adapter.id !== 'generic' && (orchestrator !== null || agentMcp !== null),
       ...(usage ? { usage } : {}),
     });
+    if (usage) this.accounts.set(agent.id, usage.source);
     this.pty.start(agent.id, {
       file: spec.file,
       args: spec.args,
@@ -1087,8 +1110,12 @@ export class AgentManager {
   /** 005 R3 — the account of the agent's CLI: its configuration folder, or `default`. */
   private usageOf(agent: Agent, adapter: CliAdapter, env: Record<string, string>) {
     if (!this.usage || !adapter.usageSource) return undefined;
-    const folder =
-      adapter.usageSource === 'claude-statusline' ? env.CLAUDE_CONFIG_DIR : env.CODEX_HOME;
+    const claude = adapter.usageSource === 'claude-statusline';
+    const home = env.HOME || homedir();
+    // The CLI's own folder is the account `default`, whether the variable names it or not (009 R7).
+    const own = join(home, claude ? '.claude' : '.codex');
+    const set = claude ? env.CLAUDE_CONFIG_DIR : env.CODEX_HOME;
+    const folder = set === own ? undefined : set;
     const name = this.registry.get(agent.cliId)?.definition.name ?? agent.cliId;
     const source: UsageSource = {
       agentId: agent.id,

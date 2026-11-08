@@ -31,5 +31,6 @@ export const agentStateSchema = z.enum([
   'awaiting-answer',
   'done',
   'error',
+  'paused',
   'closed',
 ]);

@@ -19,6 +19,7 @@ const STATE_LABELS: Record<AgentState, string> = {
   'awaiting-answer': 'attend votre réponse',
   done: 'terminé',
   error: 'erreur',
+  paused: 'en pause',
   closed: 'fermé',
 };
 

@@ -102,6 +102,8 @@ describe('openStores', () => {
       customClis: [],
       permission: null,
       usageThresholds: { warn: 80, critical: 95 },
+      usageStops: {},
+      usageLimit: { saves: [], overrides: [], declined: [], resumed: [] },
     });
   });
 
