@@ -10,6 +10,8 @@ export const ORDER: TodoKind[] = [
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',
+  'usage-paused',
+  'usage-stale',
   'rate-limit',
   'usage-limit',
   'wake-held',

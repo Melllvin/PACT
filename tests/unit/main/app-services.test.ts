@@ -78,6 +78,8 @@ describe('app:getState', () => {
       customClis: [],
       permission: { level: 'ask-sensitive', autoResume: false, scope: 'global' },
       usageThresholds: { warn: 80, critical: 95 },
+      usageStops: {},
+      usageLimit: { saves: [], overrides: [], declined: [], resumed: [] },
     });
     await services['workspace:open']({ path: await makeRepo('app') });
     expect(await services['app:getState']()).toMatchObject({

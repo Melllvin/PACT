@@ -63,6 +63,7 @@ const agent = (worktreePath: string, state: AgentState = 'done'): Agent => ({
   role: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
   effort: null,
 });
 

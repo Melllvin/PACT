@@ -9,6 +9,7 @@ import {
   roleSchema,
 } from './primitives';
 import { storedReportSchema } from './report';
+import { usagePauseSchema } from './usage-limit';
 
 export {
   agentStateSchema,
@@ -90,6 +91,8 @@ export const agentSchema = z.object({
   state: agentStateSchema,
   lastError: agentErrorSchema.nullable(),
   scheduledResume: scheduledResumeSchema.nullable(),
+  /** 009 — why and until when PACT stopped it at a limit; non-null only in `paused`. */
+  pause: usagePauseSchema.nullable().default(null),
   /** 002 — defaulted so that workspace files from 001 load without a migration (R9). */
   review: agentReviewSchema.default(() => ({ seen: {}, comments: [] })),
   /** Set while an `awaiting-answer` agent asks a question, not a permission (FR-024a). */
@@ -342,6 +345,8 @@ export type TodoItem = {
   publish?: { requestId: string };
   /** 005 FR-011 — the account near its limit, for `usage-limit`. */
   usage?: { cliId: string; account: string; level: 'warn' | 'critical' };
+  /** 009 — the account stopped at its limit, or asking for a stop by prudence. */
+  usageLimit?: { cliId: string; account: string; kind: 'paused' | 'stale'; step?: number };
   /** The questions of an agent stopped on a `blocked` report, for `decide`. */
   decide?: { questions: string[] };
   /** 007 — the sentence under the title, for `wake-held`. */
@@ -354,6 +359,8 @@ export type TodoKind =
   | 'publish-issues'
   | 'loop-escalated'
   | 'exchange-escalated'
+  | 'usage-paused'
+  | 'usage-stale'
   | 'rate-limit'
   | 'usage-limit'
   | 'wake-held'

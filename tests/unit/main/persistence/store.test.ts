@@ -102,6 +102,8 @@ describe('openStores', () => {
       customClis: [],
       permission: null,
       usageThresholds: { warn: 80, critical: 95 },
+      usageStops: {},
+      usageLimit: { saves: [], overrides: [], declined: [], resumed: [] },
     });
   });
 
@@ -147,5 +149,132 @@ describe('openStores', () => {
   it('returns the same store for the same workspace so writes are serialized', () => {
     const stores = openStores(dir);
     expect(stores.workspace('abc')).toBe(stores.workspace('abc'));
+  });
+});
+
+// 009 T007 — the stop at a limit adds to the stored files, with defaults and no migration (data-model
+// « Storage »).
+
+describe('openStores — usage limit (009)', () => {
+  const emptyLimit = { saves: [], overrides: [], declined: [], resumed: [] };
+  const agentOnDisk = {
+    id: '00000000-0000-4000-8000-000000000001',
+    workspaceId: 'abc123',
+    position: 1,
+    color: 'purple',
+    cliId: 'claude-code',
+    model: null,
+    permissionLevel: 'always-allow',
+    baseBranch: 'main',
+    branch: 'agent/claude-code-1',
+    worktreePath: '/repo/.worktrees/claude-code-1',
+    port: 3001,
+    startCommand: null,
+    sessionId: null,
+    initialPrompt: null,
+    alwaysAllowRules: [],
+    state: 'awaiting-prompt',
+    lastError: null,
+    scheduledResume: null,
+    review: { seen: {}, comments: [] },
+    role: null,
+    launchedBy: null,
+    closedWhileWorking: false,
+    effort: null,
+  };
+  const workspaceOnDisk = (agents: unknown[]) => ({
+    id: 'abc123',
+    path: '/repo',
+    name: 'repo',
+    mainBranch: 'main',
+    agents,
+    freeTerminals: [],
+    quickLaunchCounters: { freeTerminal: 0 },
+    permissionOverride: null,
+    lastOpenedAt: '2026-11-08T10:00:00.000Z',
+    status: 'available',
+  });
+  const writeWorkspace = async (agents: unknown[]) => {
+    await mkdir(join(dir, 'workspaces'), { recursive: true });
+    await writeFile(
+      join(dir, 'workspaces', 'abc123.json'),
+      JSON.stringify({ schemaVersion: SCHEMA_VERSION, data: workspaceOnDisk(agents) }),
+    );
+  };
+
+  it('reads a state saved before 009 with no stop and an empty usageLimit', async () => {
+    await writeFile(
+      join(dir, 'state.json'),
+      JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        data: {
+          openWorkspaces: ['/a'],
+          recents: [],
+          customClis: [],
+          permission: null,
+          usageThresholds: { warn: 70, critical: 90 },
+        },
+      }),
+    );
+    const state = await openStores(dir).state.read();
+    expect(state.openWorkspaces).toEqual(['/a']);
+    expect(state.usageThresholds).toEqual({ warn: 70, critical: 90 });
+    expect(state.usageStops).toEqual({});
+    expect(state.usageLimit).toEqual(emptyLimit);
+  });
+
+  it('starts with no stop and an empty usageLimit', async () => {
+    const state = await openStores(dir).state.read();
+    expect(state.usageStops).toEqual({});
+    expect(state.usageLimit).toEqual(emptyLimit);
+  });
+
+  it('round-trips the stops and the usageLimit', async () => {
+    const stores = openStores(dir);
+    const state = await stores.state.read();
+    const usageStops = { 'claude-code': { week: 80, 'five-hour': 100 } };
+    const usageLimit = {
+      ...emptyLimit,
+      resumed: [{ cliId: 'claude-code', account: 'default', at: '2026-11-08T10:00:00.000Z' }],
+    };
+    await stores.state.write({ ...state, usageStops, usageLimit });
+    const read = await openStores(dir).state.read();
+    expect(read.usageStops).toEqual(usageStops);
+    expect(read.usageLimit).toEqual(usageLimit);
+  });
+
+  it.each([{ 'claude-code': { week: 9 } }, { 'claude-code': { week: 101 } }])(
+    'refuses the stops %j',
+    async (usageStops) => {
+      const stores = openStores(dir);
+      const state = await stores.state.read();
+      await expect(stores.state.write({ ...state, usageStops })).rejects.toThrow();
+    },
+  );
+
+  it('reads an agent saved before 009 with pause: null', async () => {
+    await writeWorkspace([agentOnDisk]);
+    const workspace = await openStores(dir).workspace('abc123').read();
+    expect(workspace?.agents[0]).toMatchObject({ id: agentOnDisk.id, pause: null });
+  });
+
+  it('keeps the pause of a paused agent through a write and a read', async () => {
+    const pause = {
+      cliId: 'claude-code',
+      account: 'default',
+      cause: 'threshold',
+      windows: [
+        { id: 'five-hour', label: '5 h', percent: 91, resetsAt: '2026-11-08T14:00:00.000Z' },
+      ],
+      resumeAt: '2026-11-08T14:00:00.000Z',
+      pausedAt: '2026-11-08T10:00:00.000Z',
+      midTurn: true,
+      saved: false,
+      closedQuestion: null,
+      blocked: null,
+    };
+    await writeWorkspace([{ ...agentOnDisk, state: 'paused', pause }]);
+    const workspace = await openStores(dir).workspace('abc123').read();
+    expect(workspace?.agents[0]).toMatchObject({ state: 'paused', pause });
   });
 });
