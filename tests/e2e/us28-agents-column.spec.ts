@@ -69,8 +69,15 @@ test('lists every agent of the orchestrator, puts the one that asks first, opens
 
   // Agent 3 asks a question: its row comes first with « ◆ Répondre » (scenario 2).
   const tile3 = page.getByRole('article', { name: /^Faux CLI 3,/ });
-  // Its first turn (the prompt of the orchestrator) may already be over: idle either way.
-  await expect(tile3).toHaveAttribute('data-state', /^(awaiting-prompt|done)$/);
+  // Since 007 the prompt of the orchestrator reaches each agent as an instruction of the journal,
+  // read after a wake pointer (5 s grouping). « awaiting-prompt » is then the state BEFORE that first
+  // turn: typing now would mix the user's line with the pointer PACT types at the same moment (seen on
+  // Windows). The first turn of the three agents must be over.
+  for (const n of [2, 3, 4]) {
+    await expect(
+      page.getByRole('article', { name: new RegExp(`^Faux CLI ${String(n)},`) }),
+    ).toHaveAttribute('data-state', 'done', { timeout: 30_000 });
+  }
   await typeIn(page, tile3, 'DEMANDE');
   await expect(rows.first()).toContainText('◆ Répondre', { timeout: 1_000 });
   await expect(rows.first().getByRole('button', { name: /^Faux CLI 3, / })).toBeVisible();
