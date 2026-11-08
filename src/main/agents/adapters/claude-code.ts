@@ -31,6 +31,18 @@ const SENSITIVE_RULES = [
   'Bash(wget *)',
   'Bash(git push *)',
   'WebFetch',
+  // 007 R15 (FR-027): reading what a third party wrote goes through the user. `gh pr create` stays free.
+  'Bash(gh pr view *)',
+  'Bash(gh pr diff *)',
+  'Bash(gh pr list *)',
+  'Bash(gh pr list)',
+  'Bash(gh pr checkout *)',
+  'Bash(gh issue view *)',
+  'Bash(gh issue list *)',
+  'Bash(gh issue list)',
+  'Bash(gh run view *)',
+  'Bash(gh api *)',
+  'Bash(git fetch * refs/pull/*)',
 ];
 
 /** 003 R2 — the tools of the session plugin's MCP server, as Claude Code names them. */

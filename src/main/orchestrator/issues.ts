@@ -237,7 +237,28 @@ export class IssueService {
   }
 }
 
+/** Categories of `gh` failures PACT knows: only their fixed wording is ever reported. */
+const KNOWN_FAILURES: [RegExp, (match: RegExpExecArray) => string][] = [
+  [/no git remotes found/i, () => 'no git remotes found'],
+  [/\bHTTP (\d{3})\b/, (match) => `HTTP ${match[1] ?? ''}`],
+];
+
+/**
+ * A generic motive, never the text of `gh` (FR-026): its stderr can quote what a third party wrote
+ * (a title, a comment). Only a known category, with its own wording, or the exit status is kept.
+ */
 const reason = (error: unknown) => {
-  const { stderr, message } = error as { stderr?: string; message?: string };
-  return (stderr?.trim() || message || String(error)).split('\n')[0] ?? '';
+  const { code, stderr, message } = error as {
+    code?: unknown;
+    stderr?: unknown;
+    message?: unknown;
+  };
+  const text = [stderr, message].filter((part) => typeof part === 'string').join('\n');
+  for (const [pattern, wording] of KNOWN_FAILURES) {
+    const match = pattern.exec(text);
+    if (match) return wording(match);
+  }
+  if (code === 'ENOENT') return 'gh est introuvable';
+  if (typeof code === 'number') return `gh a échoué (code de sortie ${String(code)})`;
+  return 'gh a échoué';
 };
