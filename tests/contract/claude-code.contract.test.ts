@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClaudeCodeAdapter } from '../../src/main/agents/adapters/claude-code';
 import type { CommandRunner, LaunchInput } from '../../src/main/agents/adapters/types';
-import { runCliAdapterContract } from './cli-adapter.contract';
+import { runCliAdapterContract, type WakeCapable } from './cli-adapter.contract';
 
 // research.md R4–R6 and « Caractérisation T049 » (Claude Code 2.1.281).
 
@@ -660,4 +660,88 @@ describe('Claude Code model tiers and effort (004 T009)', () => {
       });
     },
   );
+});
+
+// 007 US2, contracts/hooks.md, research R1 — the wake in the middle of a turn, validated on Claude
+// Code 2.1.318: PostToolUse answers `additionalContext`, Stop answers `{ decision: 'block', reason }`.
+describe('Claude Code wake points (007 T031)', () => {
+  const common = {
+    session_id: input.sessionId,
+    transcript_path: '/Users/me/.claude/projects/x/s.jsonl',
+    cwd: input.cwd,
+  };
+  const POINTER = '2 événements, lis get_events';
+  const wake = create() as unknown as WakeCapable;
+  const post = { ...common, hook_event_name: 'PostToolUse', tool_name: 'Bash' };
+  const stop = { ...common, hook_event_name: 'Stop', stop_hook_active: false };
+
+  it('can carry a pointer in the middle of a turn', () => {
+    expect(wake.midTurnWake).toBe(true);
+  });
+
+  it('sends PostToolUse over HTTP, like Stop, with the token read from the environment', () => {
+    const { hooks } = settingsOf(create().buildLaunch(input).args);
+    expect(hooks.PostToolUse?.[0]?.hooks[0]).toEqual({
+      type: 'http',
+      url: input.hook.url,
+      headers: { 'X-Pact-Token': '$PACT_AGENT_TOKEN' },
+      allowedEnvVars: ['PACT_AGENT_TOKEN'],
+    });
+    // Resumed too, and Stop is still there.
+    const resumed = settingsOf(create().buildResume({ ...input, sessionId: 's' }).args).hooks;
+    expect(resumed.PostToolUse).toBeDefined();
+    expect(resumed.Stop).toBeDefined();
+  });
+
+  it('PostToolUse is a wake point « tool », Stop a wake point « stop »', () => {
+    expect(wake.isWakePoint?.(post)).toBe('tool');
+    expect(wake.isWakePoint?.(stop)).toBe('stop');
+  });
+
+  it.each(['UserPromptSubmit', 'Notification', 'StopFailure', 'PermissionRequest', 'SessionStart'])(
+    '%s is no wake point',
+    (event) => {
+      expect(wake.midTurnWake).toBe(true);
+      expect(wake.isWakePoint?.({ ...common, hook_event_name: event })).toBeNull();
+    },
+  );
+
+  it('a subagent or a teammate (agent_id) is no wake point, whatever its hook (US2 sc.4)', () => {
+    expect(wake.midTurnWake).toBe(true);
+    expect(wake.isWakePoint?.({ ...post, agent_id: 'agent-7' })).toBeNull();
+    expect(wake.isWakePoint?.({ ...stop, agent_id: 'agent-7' })).toBeNull();
+  });
+
+  it('an invalid payload is no wake point and does not throw', () => {
+    expect(wake.midTurnWake).toBe(true);
+    for (const payload of [null, undefined, 42, 'text', [], {}, { hook_event_name: 5 }]) {
+      expect(wake.isWakePoint?.(payload)).toBeNull();
+    }
+  });
+
+  it('answers PostToolUse with additionalContext, in the exact format of the contract', () => {
+    expect(wake.wakeReply?.(post, POINTER)).toEqual({
+      hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: POINTER },
+    });
+  });
+
+  it('answers Stop with a block whose reason is the pointer, in the exact format of the contract', () => {
+    expect(wake.wakeReply?.(stop, POINTER)).toEqual({ decision: 'block', reason: POINTER });
+  });
+
+  it('has no reply for a hook that is not a wake point', () => {
+    expect(wake.midTurnWake).toBe(true);
+    expect(
+      wake.wakeReply?.({ ...common, hook_event_name: 'Notification' }, POINTER) ?? null,
+    ).toBeNull();
+    expect(wake.wakeReply?.(null, POINTER) ?? null).toBeNull();
+  });
+
+  it('PostToolUse changes no state: mapHookEvent gives null', () => {
+    const adapter = create();
+    expect(adapter.mapHookEvent(post)).toBeNull();
+    expect(adapter.mapHookEvent({ ...post, agent_id: 'agent-7' })).toBeNull();
+    // … while Stop is still the end of the turn.
+    expect(adapter.mapHookEvent(stop)).toEqual({ type: 'turn-finished' });
+  });
 });

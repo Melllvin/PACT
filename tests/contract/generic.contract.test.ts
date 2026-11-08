@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { GenericAdapter } from '../../src/main/agents/adapters/generic';
-import { runCliAdapterContract } from './cli-adapter.contract';
+import { runCliAdapterContract, type WakeCapable } from './cli-adapter.contract';
 
 // T094 — « Autre CLI » (FR-008): a command typed by the user, followed through its terminal only.
 
@@ -173,5 +173,25 @@ describe('generic CLI as an orchestrator (003 T008)', () => {
     expect(
       new GenericAdapter({ command: 'aider --no-git', platform: 'darwin' }).supportsOrchestrator,
     ).toBe(false);
+  });
+});
+
+// 007 US2, contracts/hooks.md — « Autre CLI » has no hook: its pointer is typed at the end of the turn.
+describe('generic wake points (007 T031)', () => {
+  const wake = new GenericAdapter({
+    command: 'aider --no-git',
+    platform: 'darwin',
+  }) as unknown as WakeCapable;
+
+  it('cannot carry a pointer in the middle of a turn', () => {
+    expect(wake.midTurnWake).toBe(false);
+  });
+
+  it('has no wake point and no reply', () => {
+    expect(wake.midTurnWake).toBe(false);
+    for (const payload of [{ hook_event_name: 'Stop' }, { type: 'turn-finished' }]) {
+      expect(wake.isWakePoint?.(payload) ?? null).toBeNull();
+      expect(wake.wakeReply?.(payload, '1 événement, lis get_events') ?? null).toBeNull();
+    }
   });
 });
