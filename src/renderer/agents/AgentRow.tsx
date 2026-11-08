@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { AgentRow as Row } from '../../shared/agents-view';
+import { ROLE_LABELS, type AgentRow as Row } from '../../shared/agents-view';
 import { TodoActions } from '../todo/TodoItem';
 import type { AgentActions } from '../workspace/WorkspaceView';
 
@@ -7,15 +7,6 @@ type Props = Omit<AgentActions, 'onClose'> & {
   row: Row;
   onOpen: (agentId: string) => void;
 };
-
-const ROLE_LABELS = {
-  orchestrator: 'orchestrateur',
-  spec: 'spec',
-  design: 'design',
-  dev: 'dev',
-  test: 'test',
-  recap: 'recap',
-} as const;
 
 const SEPARATOR = ' · ';
 
@@ -72,7 +63,7 @@ export function AgentRow({ row, onOpen, ...actions }: Props) {
             {what}
           </span>
           {hints.length > 0 && (
-            <span className="text-[12px] text-dim">{hints.join(SEPARATOR)}</span>
+            <span className="text-[12px] text-[#a1a1aa]">{hints.join(SEPARATOR)}</span>
           )}
           <TodoActions todo={todo} agent={agent} {...actions} />
         </>

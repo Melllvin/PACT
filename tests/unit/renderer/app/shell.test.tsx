@@ -81,7 +81,7 @@ describe('Toolbar', () => {
       within(views)
         .getAllByRole('radio')
         .map((view) => view.textContent),
-    ).toEqual(['Tuiles', 'Comparer', 'Revue']);
+    ).toEqual(['Tuiles', 'Comparer', 'Revue', 'Graphe']);
     for (const name of [/^Agents \d/, /\+ Agents/]) {
       expect(screen.getByRole('button', { name })).toBeDefined();
     }

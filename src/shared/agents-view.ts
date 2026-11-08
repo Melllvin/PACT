@@ -31,6 +31,16 @@ export function agentStateLabel(agent: Agent, now: Date): string {
 
 export const LOOP_ROUNDS = 3;
 
+/** The role of an agent in words, as the column and the graph name it. */
+export const ROLE_LABELS: Record<Role, string> = {
+  orchestrator: 'orchestrateur',
+  spec: 'spec',
+  design: 'design',
+  dev: 'dev',
+  test: 'test',
+  recap: 'recap',
+};
+
 export type AgentPhase = {
   label: string;
   issueId?: string;
