@@ -31,7 +31,6 @@ const MUST_SAY: Record<string, string[]> = {
     'sortent à 0',
     'Le rapport est rendu',
     'Le recap (`.pact/recap.md`) est à jour',
-    "Les questions sont à l'utilisateur",
   ],
   'pact-orchestrator/SKILL.md': [
     'list_agents',
@@ -155,6 +154,92 @@ describe('skills about the files two agents change', () => {
       expect(text).toMatch(/worktree/i);
       expect(text).toMatch(/pouss\w*\b[^.]*\bbranche/i);
       expect(text).toMatch(/récupér\w*\b[^.]*\bautre branche/i);
+    },
+  );
+});
+
+// 007 T057 — questions of the agents go to the orchestrator first, permissions stay with the user
+// (FR-032), `wait_for_agents` is a fallback (US5 sc.4), nobody reads what a third party wrote
+// (FR-027, US3 sc.10).
+describe('skills about the exchanges between agents (007)', () => {
+  const sentences = (text: string) => flat(text).split(/(?<=[.!?:])\s+/);
+  const has = (text: string, ...parts: RegExp[]) =>
+    sentences(text).some((sentence) => parts.every((part) => part.test(sentence)));
+
+  const ALL = [
+    'pact-contract.md',
+    'pact-orchestrator/SKILL.md',
+    'pact-spec/SKILL.md',
+    'pact-design-system/SKILL.md',
+    'pact-mockup/SKILL.md',
+    'pact-dev/SKILL.md',
+    'pact-test/SKILL.md',
+    'pact-recap/SKILL.md',
+  ];
+
+  it.each(ALL)('%s no longer sends the questions of the agents to the user', async (path) => {
+    expect(flat(await read(path))).not.toContain(
+      "Les questions et autorisations des agents sont à l'utilisateur",
+    );
+  });
+
+  it("pact-contract.md no longer says « Les questions sont à l'utilisateur »", async () => {
+    expect(flat(await read('pact-contract.md'))).not.toContain(
+      "Les questions sont à l'utilisateur",
+    );
+  });
+
+  it.each(['pact-contract.md', 'pact-orchestrator/SKILL.md'])(
+    '%s sends the questions to the orchestrator first and the permissions to the user',
+    async (path) => {
+      const text = await read(path);
+      expect(has(text, /question/i, /d'abord/i, /orchestrateur/i), 'questions').toBe(true);
+      expect(has(text, /autorisation/i, /utilisateur/i), 'autorisations').toBe(true);
+    },
+  );
+
+  it.each(['pact-contract.md', 'pact-orchestrator/SKILL.md'])(
+    '%s names get_events and ask_orchestrator',
+    async (path) => {
+      const text = flat(await read(path));
+      expect(text).toContain('get_events');
+      expect(text).toContain('ask_orchestrator');
+    },
+  );
+
+  it.each(['pact-contract.md', 'pact-orchestrator/SKILL.md'])(
+    '%s forbids reading what a third party wrote',
+    async (path) => {
+      expect(
+        has(
+          await read(path),
+          /tiers/i,
+          /\b(lire|lis|lit|récupér\w*)\b/i,
+          /jamais|interdit|\bne\b/i,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it('pact-orchestrator says to end the turn and be woken, with wait_for_agents as a fallback only', async () => {
+    const text = await read('pact-orchestrator/SKILL.md');
+    expect(flat(text)).toMatch(/finir son tour|finis ton tour/i);
+    expect(has(text, /wait_for_agents/, /secours/i), 'wait_for_agents en secours').toBe(true);
+    expect(flat(text)).not.toContain('`wait_for_agents` : attends la fin de leur tour');
+  });
+
+  it('pact-test writes only through ask_orchestrator, never to the dev', async () => {
+    const text = await read('pact-test/SKILL.md');
+    expect(flat(text)).toContain('ask_orchestrator');
+    expect(has(text, /\bdev\b/i, /jamais/i), 'jamais au dev').toBe(true);
+  });
+
+  it.each(['pact-spec/SKILL.md', 'pact-dev/SKILL.md'])(
+    '%s cites the new route of the questions',
+    async (path) => {
+      const text = await read(path);
+      expect(flat(text)).toContain('ask_orchestrator');
+      expect(has(text, /question/i, /orchestrateur/i)).toBe(true);
     },
   );
 });

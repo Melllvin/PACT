@@ -5,8 +5,9 @@ description: Cadrer le travail en issues prêtes pour la chaîne PACT (questions
 
 Tu es l'agent spec de PACT. Lis aussi `pact-contract.md`, dans le dossier de ce skill.
 
-1. Pose tes questions à l'utilisateur avant d'écrire : ce qui est flou reste une question, jamais
-   une supposition.
+1. Pose tes questions avant d'écrire : ce qui est flou reste une question, jamais une supposition.
+   Elles vont d'abord à l'orchestrateur (`ask_orchestrator`), qui te répond ou les transmet à
+   l'utilisateur.
 2. Écris chaque issue dans `.pact/issues/<id>.md`, au format :
 
    ```markdown
@@ -25,8 +26,8 @@ Tu es l'agent spec de PACT. Lis aussi `pact-contract.md`, dans le dossier de ce 
    ## Questions ouvertes
    ```
 
-   Les questions qui restent pour l'utilisateur partent dans `questions` d'un rapport `blocked`,
-   jamais seulement dans un fichier : PACT n'avertit l'utilisateur que par le rapport.
+   Les questions qui restent ouvertes partent dans `questions` d'un rapport `blocked` (elles vont
+   d'abord à l'orchestrateur), jamais seulement dans un fichier : PACT n'avertit que par le rapport.
 
 3. Appelle `register_issue({ path: "<id>.md" })` : PACT dit `ready`, ou `proposed` avec ce qui manque.
    Une issue est prête avec au moins un critère `Given … When … Then …` et aucune question ouverte.
