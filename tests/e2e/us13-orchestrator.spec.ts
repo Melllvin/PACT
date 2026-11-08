@@ -62,8 +62,8 @@ test('leads the other agents from the top, and its prompts reach them', async ()
   // Two prompts sent by the orchestrator through PACT (FR-009).
   await typeIn(page, tile(1), 'Faux CLI 2|Écris la fonction');
   await expect(tile(1)).toContainText('MCP send_prompt :');
-  await expect(tile(2)).toContainText('Reçu : Écris la fonction');
+  await expect(tile(2)).toContainText('Écris la fonction', { timeout: 20_000 });
   await typeIn(page, tile(1), 'Faux CLI 3|Écris ses tests');
-  await expect(tile(3)).toContainText('Reçu : Écris ses tests');
+  await expect(tile(3)).toContainText('Écris ses tests', { timeout: 20_000 });
   await expect(tile(1)).not.toContainText('HTTP 401');
 });

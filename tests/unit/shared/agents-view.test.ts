@@ -313,3 +313,49 @@ describe('agentRows', () => {
     expect(result.head.map((item) => item.kind).sort()).toEqual(['info', 'integration-request']);
   });
 });
+
+// 007 T021 — « ◆ Réveil en attente » goes on the line of its agent (data-model « TodoKind »,
+// contracts/ui.md « Ligne de l'agent »), not in the head.
+describe('agentRows — wake-held (007)', () => {
+  it.each(['input', 'cap'] as const)(
+    'Given a wake held for « %s », When the column is built, Then the item is on the row of its agent and not in the head',
+    (notice) => {
+      const ws = workspaceOf([agent(1, { state: 'done', wakeNotice: notice })]);
+      const items = deriveTodos(ws, names);
+      const result = view(ws, items);
+      expect(items.map((item) => item.kind)).toEqual(['wake-held']);
+      expect(result.head).toEqual([]);
+      expect(result.rows[0]?.todo?.kind).toBe('wake-held');
+      expect(result.rows[0]?.pending).toBe(1);
+      expect(result.pendingCount).toBe(1);
+    },
+  );
+
+  it('Given a held wake on a working agent, When the column is built, Then its row comes before the rows without action', () => {
+    const ws = workspaceOf([
+      agent(1, { role: 'orchestrator', state: 'working' }),
+      agent(2, { state: 'working' }),
+      agent(3, { state: 'done', wakeNotice: 'input' }),
+    ]);
+    const result = view(ws, deriveTodos(ws, names));
+    expect(result.rows.map((row) => row.agent.position)).toEqual([3, 1, 2]);
+  });
+
+  it('Given an agent that waits for a prompt and holds a wake, When the column is built, Then the row shows the wake first and counts both', () => {
+    const ws = workspaceOf([agent(1, { state: 'awaiting-prompt', wakeNotice: 'input' })]);
+    const row = view(ws, deriveTodos(ws, names)).rows[0];
+    expect(row?.todo?.kind).toBe('wake-held');
+    expect(row?.pending).toBe(2);
+  });
+
+  it('Given a held wake, When the column is built, Then no item of deriveTodos is lost (SC-005)', () => {
+    const ws = workspaceOf([
+      agent(1, { state: 'done', wakeNotice: 'cap' }),
+      agent(2, { state: 'awaiting-prompt', wakeNotice: 'input' }),
+    ]);
+    const items = deriveTodos(ws, names);
+    const result = view(ws, items);
+    const placed = result.rows.reduce((sum, row) => sum + row.pending, result.head.length);
+    expect(placed).toBe(items.length);
+  });
+});

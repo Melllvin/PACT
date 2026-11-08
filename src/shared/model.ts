@@ -340,6 +340,8 @@ export type TodoItem = {
   usage?: { cliId: string; account: string; level: 'warn' | 'critical' };
   /** The questions of an agent stopped on a `blocked` report, for `decide`. */
   decide?: { questions: string[] };
+  /** 007 — the sentence under the title, for `wake-held`. */
+  detail?: string;
 };
 export type TodoKind =
   | 'answer'

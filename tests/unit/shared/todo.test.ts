@@ -569,3 +569,97 @@ describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', 
     expect(deriveTodos(workspace([done]), names)).toEqual([]);
   });
 });
+
+// 007 T021 — « ◆ Réveil en attente » (data-model « TodoKind », contracts/ui.md): a wake held back and
+// said by `Agent.wakeNotice`, derived and never stored, one item on the line of its agent. API fixed
+// for the dev: `TodoItem.detail?: string`, the sentence under the title.
+describe('wake-held (007)', () => {
+  const held = (items: ReturnType<typeof deriveTodos>) =>
+    items.filter((item) => item.kind === 'wake-held');
+
+  it('Given a held wake because of the prompt, When todos are derived, Then « saisie en cours » with its sentence and « Répondre dans le terminal ↗ »', () => {
+    const items = deriveTodos(workspace([agent(1, { state: 'done', wakeNotice: 'input' })]), names);
+    expect(held(items)).toEqual([
+      {
+        id: 'a1:wake-held',
+        agentId: 'a1',
+        kind: 'wake-held',
+        title: '◆ Réveil en attente · Claude Code 1 · saisie en cours',
+        actions: ['open-terminal'],
+        detail: expect.stringMatching(/^Videz l['’]invite ou envoyez votre saisie\.$/) as string,
+      },
+    ]);
+  });
+
+  it('Given a held wake because of the cap, When todos are derived, Then « plafond atteint », its sentence and no action', () => {
+    const items = deriveTodos(workspace([agent(2, { state: 'done', wakeNotice: 'cap' })]), names);
+    expect(held(items)).toEqual([
+      {
+        id: 'a2:wake-held',
+        agentId: 'a2',
+        kind: 'wake-held',
+        title: '◆ Réveil en attente · Claude Code 2 · plafond atteint',
+        actions: [],
+        detail: '20 réveils cette heure : les événements restent lisibles.',
+      },
+    ]);
+  });
+
+  it.each([null, undefined])(
+    'Given a wake notice of %s, When todos are derived, Then there is no item',
+    (notice) => {
+      const items = deriveTodos(
+        workspace([agent(1, { state: 'done', ...(notice === null ? { wakeNotice: null } : {}) })]),
+        names,
+      );
+      expect(held(items)).toEqual([]);
+    },
+  );
+
+  it('Given an agent that waits for a prompt and holds a wake, When todos are derived, Then both its items are there', () => {
+    const items = deriveTodos(
+      workspace([agent(1, { state: 'awaiting-prompt', wakeNotice: 'input' })]),
+      names,
+    );
+    expect(items.map((item) => item.kind)).toEqual(['wake-held', 'prompt']);
+  });
+
+  it('Given a role, When the agent holds a wake, Then the title names the agent as the other items do', () => {
+    const items = deriveTodos(
+      workspace([agent(3, { state: 'done', role: 'orchestrator', wakeNotice: 'input' })]),
+      names,
+    );
+    expect(held(items)[0]?.title).toMatch(
+      /^◆ Réveil en attente · Claude Code 3( · orchestrator)? · saisie en cours$/,
+    );
+  });
+
+  it('Given several kinds, When todos are derived, Then wake-held comes after the answers and the limits, before the reviews and the prompts', () => {
+    const items = deriveTodos(
+      workspace([
+        agent(1, { state: 'awaiting-prompt' }),
+        agent(2, { state: 'done', wakeNotice: 'cap' }),
+        agent(3, { state: 'done' }),
+        agent(4, { state: 'awaiting-answer' }),
+        agent(5, { state: 'error', lastError: rateLimited }),
+      ]),
+      names,
+      { a3: 2 },
+    );
+    expect(items.map((item) => item.kind)).toEqual([
+      'answer',
+      'rate-limit',
+      'wake-held',
+      'review',
+      'prompt',
+    ]);
+  });
+
+  it('Given a closed agent, When it still carries a notice, Then it shows nothing', () => {
+    const items = deriveTodos(
+      workspace([agent(1, { state: 'closed', wakeNotice: 'input' })]),
+      names,
+    );
+    expect(held(items)).toEqual([]);
+  });
+});

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentSignal } from '../../../../src/main/agents/adapters/types';
-import { applyExit, applySignal } from '../../../../src/main/agents/agent-state';
+import {
+  EMPTY_DRAFT,
+  applyExit,
+  applySignal,
+  applyTyped,
+  draftAfterSignal,
+  isDraftEmpty,
+  markStuck,
+} from '../../../../src/main/agents/agent-state';
 import { agentSchema, type Agent, type AgentState } from '../../../../src/shared/model';
 
 // data-model.md « AgentState — transitions », research.md R6 and the T049 findings.
@@ -210,5 +218,133 @@ describe('applyExit', () => {
   it('keeps a closed agent closed', () => {
     const closed = agent({ state: 'closed' });
     expect(applyExit(closed, 0)).toBe(closed);
+  });
+});
+
+// 007 T019 — what the prompt of an agent holds (R5, R6), and the pointer that is not its first prompt
+// (R11). API fixed for the dev, all pure, in agent-state.ts:
+//   type Draft = { count: number; unknown: boolean; stuck: boolean }
+//   EMPTY_DRAFT                         { count: 0, unknown: false, stuck: false }
+//   applyTyped(draft, data, state)      what the user typed (`AgentManager.typed`)
+//   draftAfterSignal(draft, signal)     `prompt-submitted` empties it
+//   markStuck(draft)                    a pointer typed but never submitted (R6): busy until Enter
+//   isDraftEmpty(draft)                 count 0, not unknown, not stuck
+describe('the draft of the prompt (R5)', () => {
+  const type = (data: string, from = EMPTY_DRAFT, state: AgentState = 'awaiting-prompt') =>
+    applyTyped(from, data, state);
+
+  it('Given an empty prompt, When the user types characters, Then the draft counts them and is no longer empty', () => {
+    expect(isDraftEmpty(EMPTY_DRAFT)).toBe(true);
+    expect(type('a')).toMatchObject({ count: 1, unknown: false });
+    expect(type('abc')).toMatchObject({ count: 3 });
+    expect(type('éé')).toMatchObject({ count: 2 });
+    expect(isDraftEmpty(type('a'))).toBe(false);
+  });
+
+  it('Given three characters, When the user erases them one by one, Then the draft is empty again, and erasing an empty one changes nothing', () => {
+    let draft = type('abc');
+    draft = type('\x7f', draft);
+    expect(draft.count).toBe(2);
+    draft = type('\x7f', type('\x7f', draft));
+    expect(isDraftEmpty(draft)).toBe(true);
+    expect(isDraftEmpty(type('\x7f'))).toBe(true);
+  });
+
+  it('Given an empty prompt, When the user pastes, Then the content is unknown, hence not empty', () => {
+    const pasted = type('\x1b[200~du texte collé\x1b[201~');
+    expect(pasted.unknown).toBe(true);
+    expect(isDraftEmpty(pasted)).toBe(false);
+  });
+
+  it('Given an empty prompt, When a movement sequence arrives (arrow, home), Then the content is unknown', () => {
+    expect(type('\x1b[D').unknown).toBe(true);
+    expect(type('\x1b[H').unknown).toBe(true);
+    expect(isDraftEmpty(type('\x1b[D'))).toBe(false);
+  });
+
+  it('Given an unknown content, When the user erases or types more, Then it stays unknown, until Enter', () => {
+    const unknown = type('\x1b[D');
+    expect(type('\x7f', unknown).unknown).toBe(true);
+    expect(type('a', unknown).unknown).toBe(true);
+    expect(isDraftEmpty(type('\x7f\x7f\x7f', unknown))).toBe(false);
+    expect(isDraftEmpty(type('\r', unknown))).toBe(true);
+  });
+
+  it('Given a draft, When Enter (\\r) is typed, Then it is empty', () => {
+    expect(isDraftEmpty(type('\r', type('abc')))).toBe(true);
+    expect(isDraftEmpty(type('fin\r', type('abc')))).toBe(true);
+  });
+
+  it('Given an empty prompt, When Shift+Enter (a line break) is typed, Then the prompt is not empty and Enter was not pressed', () => {
+    expect(isDraftEmpty(type('\x1b\r'))).toBe(false);
+  });
+
+  it('Given a draft, When the CLI reports prompt-submitted, Then it is empty, stuck pointer included', () => {
+    const typed = type('abc');
+    expect(isDraftEmpty(draftAfterSignal(typed, { type: 'prompt-submitted', prompt: 'abc' }))).toBe(
+      true,
+    );
+    expect(isDraftEmpty(draftAfterSignal(type('\x1b[D'), { type: 'prompt-submitted' }))).toBe(true);
+    expect(
+      isDraftEmpty(draftAfterSignal(markStuck(EMPTY_DRAFT), { type: 'prompt-submitted' })),
+    ).toBe(true);
+  });
+
+  it('Given a draft, When another signal arrives, Then the draft is unchanged', () => {
+    const typed = type('abc');
+    expect(draftAfterSignal(typed, { type: 'turn-finished' })).toEqual(typed);
+    expect(draftAfterSignal(typed, { type: 'session-started', sessionId: 's' })).toEqual(typed);
+  });
+
+  it('Given an agent that awaits an answer, When keys are typed, Then they are ignored: they answer a question, not the prompt', () => {
+    expect(type('oui', EMPTY_DRAFT, 'awaiting-answer')).toEqual(EMPTY_DRAFT);
+    const typed = type('ab');
+    expect(type('xyz\x7f\x7f\x7f', typed, 'awaiting-answer')).toEqual(typed);
+    // Not even its Enter empties what was in the prompt before the question.
+    expect(type('\r', typed, 'awaiting-answer')).toEqual(typed);
+  });
+});
+
+describe('a pointer typed but never submitted (R6)', () => {
+  it('Given a pointer left in the prompt, When it is marked stuck, Then the prompt counts as busy until Enter or prompt-submitted', () => {
+    const stuck = markStuck(EMPTY_DRAFT);
+    expect(stuck.stuck).toBe(true);
+    expect(isDraftEmpty(stuck)).toBe(false);
+    expect(isDraftEmpty(applyTyped(stuck, '\r', 'awaiting-prompt'))).toBe(true);
+  });
+});
+
+describe('the pointer is not the initial prompt (R11)', () => {
+  const POINTER = '1 événement, lis get_events';
+
+  it('Given an agent without initial prompt, When it submits a pointer, Then it works and the initial prompt stays empty', () => {
+    const next = applySignal(agent({ state: 'awaiting-prompt' }), {
+      type: 'prompt-submitted',
+      prompt: POINTER,
+    });
+    expect(next.state).toBe('working');
+    expect(next.initialPrompt).toBeNull();
+  });
+
+  it('Given the same agent, When the pointer is the file variant, Then it is ignored too', () => {
+    const next = applySignal(agent({ state: 'awaiting-prompt' }), {
+      type: 'prompt-submitted',
+      prompt: '3 événements, lis .pact/events.md',
+    });
+    expect(next.initialPrompt).toBeNull();
+  });
+
+  it('Given a pointer already submitted, When the first instruction is played, Then it becomes the initial prompt, and only the first', () => {
+    let current = applySignal(agent({ state: 'awaiting-prompt' }), {
+      type: 'prompt-submitted',
+      prompt: POINTER,
+    });
+    current = applySignal(current, { type: 'turn-finished' });
+    current = applySignal(current, { type: 'prompt-submitted', prompt: 'Corrige a.ts\nPuis b.ts' });
+    expect(current.initialPrompt).toBe('Corrige a.ts\nPuis b.ts');
+    current = applySignal(current, { type: 'turn-finished' });
+    current = applySignal(current, { type: 'prompt-submitted', prompt: POINTER });
+    current = applySignal(current, { type: 'prompt-submitted', prompt: 'Autre consigne' });
+    expect(current.initialPrompt).toBe('Corrige a.ts\nPuis b.ts');
   });
 });

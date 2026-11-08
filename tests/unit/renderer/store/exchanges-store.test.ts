@@ -111,3 +111,13 @@ describe('the store follows workspace:exchanges', () => {
     expect(store.getState().workspaces.map((w) => w.exchanges.messages)).toEqual([[], []]);
   });
 });
+
+describe('the store follows agent:wakeNotice (007 FR-014, FR-016)', () => {
+  it('sets and clears the notice of the agent concerned', async () => {
+    const { store, emit } = await setup();
+    emit('agent:wakeNotice', { agentId: uuid(1), notice: 'input' });
+    expect(store.getState().workspaces[0]?.agents[0]?.wakeNotice).toBe('input');
+    emit('agent:wakeNotice', { agentId: uuid(1), notice: null });
+    expect(store.getState().workspaces[0]?.agents[0]?.wakeNotice).toBeNull();
+  });
+});
