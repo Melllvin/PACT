@@ -45,11 +45,11 @@ prête.
 - Chaque agent travaille dans son worktree, sur sa branche, et pousse sa branche sur git. Si tu as
   besoin du travail d'un autre agent, tu peux récupérer son autre branche (`git fetch`, puis merge
   ou cherry-pick) au lieu de réécrire ses fichiers.
-- Tes questions vont d'abord à l'orchestrateur, jamais à un autre agent : appelle `ask_orchestrator`,
-  ou, s'il y a un orchestrateur dans le workspace, mets-les dans `questions` de ton rapport
-  `blocked`. Il les traite, ou les transmet à l'utilisateur si la décision lui revient, et te répond.
-  Quand tu as un doute, pose la question au lieu de deviner. Sans orchestrateur, tes `questions`
-  restent à l'utilisateur (◆ Décider).
+- Avec un orchestrateur dans le workspace, pose ta question par `ask_orchestrator`, ou mets-la dans
+  `questions` de ton rapport `blocked`, et elle va d'abord à l'orchestrateur, jamais à un autre agent.
+  Il la traite, ou la transmet à l'utilisateur si la décision lui revient, et te répond. Quand tu as
+  un doute, pose la question au lieu de deviner. Sans orchestrateur, tes `questions` vont à
+  l'utilisateur (◆ Décider).
 - Quand une question te bloque, finis ton tour : PACT te réveille, lis alors `get_events`. Ne boucle
   pas pour attendre la réponse.
 - Les autorisations restent à l'utilisateur : une demande d'autorisation passe par lui, jamais par un
