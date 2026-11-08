@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { Agent } from '../../shared/model';
 
 // 009 R7 — which usage account an agent counts in.
@@ -14,7 +14,8 @@ export function accountFolder(
 ): string | undefined {
   const own = join(env.HOME || homedir(), claude ? '.claude' : '.codex');
   const set = claude ? env.CLAUDE_CONFIG_DIR : env.CODEX_HOME;
-  return set === own ? undefined : set;
+  // Compared once resolved: separators and a trailing slash do not make another account.
+  return set && resolve(set) === resolve(own) ? undefined : set;
 }
 
 /** Closed and paused agents are out, and so are those that crashed; a rate limit error stays. */

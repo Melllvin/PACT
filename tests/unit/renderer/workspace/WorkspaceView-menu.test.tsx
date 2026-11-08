@@ -37,6 +37,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   closedWhileWorking: false,
   effort: null,
   name: null,
+  pause: null,
   ...overrides,
 });
 
