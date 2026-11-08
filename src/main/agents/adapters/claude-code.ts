@@ -128,6 +128,8 @@ export class ClaudeCodeAdapter implements CliAdapter {
   }
 
   readonly supportsEffort = true;
+  /** 007 R1 — validated on Claude Code 2.1.318: PostToolUse and Stop carry a text to the agent. */
+  readonly midTurnWake = true;
 
   listModels(): Promise<string[]> {
     return Promise.resolve([]);
@@ -152,6 +154,27 @@ export class ClaudeCodeAdapter implements CliAdapter {
     if (signal?.type !== 'failed' || signal.kind !== 'rate-limit') return signal;
     const resetAt = this.parseRateLimitReset(signal.message);
     return resetAt ? { ...signal, resetAt } : signal;
+  }
+
+  isWakePoint(payload: unknown): 'tool' | 'stop' | null {
+    const parsed = hookPayloadSchema.safeParse(payload);
+    if (!parsed.success || parsed.data.agent_id !== undefined) return null;
+    switch (parsed.data.hook_event_name) {
+      case 'PostToolUse':
+        return 'tool';
+      case 'Stop':
+        return 'stop';
+      default:
+        return null;
+    }
+  }
+
+  wakeReply(payload: unknown, pointer: string): object | null {
+    const point = this.isWakePoint(payload);
+    if (point === 'tool') {
+      return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: pointer } };
+    }
+    return point === 'stop' ? { decision: 'block', reason: pointer } : null;
   }
 
   mapOutput(chunk: string, _ctx: OutputContext): AgentSignal | null {
@@ -248,6 +271,7 @@ export class ClaudeCodeAdapter implements CliAdapter {
         // Claude Code refuses HTTP hooks for SessionStart (T049).
         SessionStart: hook({ type: 'command', command: bridgeCommand(this.bridge) }),
         UserPromptSubmit: hook(http),
+        PostToolUse: hook(http),
         Notification: hook(http),
         Stop: hook(http),
         StopFailure: hook(http),

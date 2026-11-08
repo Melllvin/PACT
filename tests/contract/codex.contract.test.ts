@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CodexAdapter } from '../../src/main/agents/adapters/codex';
 import type { CommandRunner, LaunchInput } from '../../src/main/agents/adapters/types';
-import { runCliAdapterContract } from './cli-adapter.contract';
+import { runCliAdapterContract, type WakeCapable } from './cli-adapter.contract';
 
 // research.md R4–R6 and « Caractérisation T049 » (Codex 0.156.1).
 
@@ -357,5 +357,45 @@ describe('Codex model tiers and effort (004 T009)', () => {
     expect(configs(create().buildLaunch(input).args).join(' ')).not.toContain(
       'model_reasoning_effort',
     );
+  });
+});
+
+// 007 US2, contracts/hooks.md — Codex has no PostToolUse (HOOK_EVENTS) and Stop is not validated to
+// extend a turn: its pointer is typed at the end of the turn.
+describe('Codex wake points (007 T031)', () => {
+  const wake = new CodexAdapter({
+    platform: 'darwin',
+    bridge,
+    run: installed,
+  }) as unknown as WakeCapable;
+
+  it('cannot carry a pointer in the middle of a turn', () => {
+    expect(wake.midTurnWake).toBe(false);
+  });
+
+  it('has no wake point and no reply, for the hooks it does follow', () => {
+    expect(wake.midTurnWake).toBe(false);
+    for (const hook_event_name of ['Stop', 'PostToolUse', 'UserPromptSubmit']) {
+      expect(wake.isWakePoint?.({ hook_event_name }) ?? null).toBeNull();
+      expect(
+        wake.wakeReply?.({ hook_event_name }, '1 événement, lis get_events') ?? null,
+      ).toBeNull();
+    }
+  });
+
+  it('does not add PostToolUse to the hooks it installs', () => {
+    const spec = new CodexAdapter({ platform: 'darwin', bridge, run: installed }).buildLaunch({
+      agentId: '00000000-0000-4000-8000-000000000001',
+      executablePath: '/opt/bin/codex',
+      repoPath: '/repo',
+      cwd: '/repo/.worktrees/codex-1',
+      model: null,
+      permissionLevel: 'always-allow',
+      sessionId: '11111111-2222-4333-8444-555555555555',
+      port: 3001,
+      hook: { url: 'http://127.0.0.1:4567', token: 'f'.repeat(64) },
+    });
+    expect(spec.args.join(' ')).not.toContain('PostToolUse');
+    expect(wake.midTurnWake).toBe(false);
   });
 });

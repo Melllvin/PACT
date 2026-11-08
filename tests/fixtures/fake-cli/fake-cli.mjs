@@ -45,6 +45,13 @@
 //                                   `MCP <tool> : <text>`; `{{prompt}}` is filled as for `mcp`
 //   toolHook: boolean               posts `{ type: 'post-tool' }` (a PostToolUse) during the turn and
 //                                   prints `Contexte : <additionalContext>` when PACT answers one
+//   toolHooks: { times, everyMs }   (007 T034) posts `times` PostToolUse, `everyMs` apart, to stay in
+//                                   its turn long enough to be reached in the middle of it; each
+//                                   reply with a context prints `Contexte : …`. `times` is filled
+//                                   with `{{prompt.N}}` as `mcp` is (no number: none)
+//   holdMs: number | string         (007 T034) keeps the turn open this long, with no hook, before
+//                                   its final one: a Stop reached with a wake waiting. Filled the
+//                                   same way
 //
 // A line that is a PACT pointer (« N événement(s), lis get_events » or « …, lis <file> ») is not a
 // prompt (007 R16): with PACT_AGENT_MCP_URL or PACT_ORCHESTRATOR_URL the CLI calls `get_events`,
@@ -208,6 +215,8 @@ async function callToolFull(tool, args) {
     return { text: `injoignable (${error.message})`, json: null };
   }
 }
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const POINTER = /^\d+ événements?, lis \S+$/;
 
@@ -447,6 +456,14 @@ async function runTurn(line) {
     const context = reply?.hookSpecificOutput?.additionalContext;
     if (context) console.log(`Contexte : ${context}`);
   }
+  const times = Number(fillDeep(scenario.toolHooks?.times ?? 0, line)) || 0;
+  for (let i = 0; i < times; i++) {
+    if (i > 0) await sleep(scenario.toolHooks?.everyMs ?? 1000);
+    const reply = await hook({ type: 'post-tool' });
+    const context = reply?.hookSpecificOutput?.additionalContext;
+    if (context) console.log(`Contexte : ${context}`);
+  }
+  await sleep(Number(fillDeep(scenario.holdMs ?? 0, line)) || 0);
   for (const step of process.env.PACT_AGENT_MCP_URL ? (scenario.agentMcp ?? []) : []) {
     const args = fillArguments(step.arguments, line);
     const { text } = await callToolFull(step.tool, args);

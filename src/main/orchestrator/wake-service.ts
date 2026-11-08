@@ -70,6 +70,37 @@ export class WakeService {
     this.attempt(agentId, false);
   }
 
+  /**
+   * 007 R1, R4 — the reply of a hook of an agent at work: the pointer it carries, or null. `tool`
+   * (PostToolUse) waits for the window of 5 s to be over; `stop` empties it. The cap of the hour and
+   * the usage cut hold the hook as they hold a typed wake; the busy prompt does not, since nothing
+   * is typed. Never types. An agent without MCP (R11) reads a file that is written asynchronously:
+   * its pointer stays typed, at the end of the turn.
+   */
+  takeForHook(agentId: string, point: 'tool' | 'stop'): string | null {
+    const found = this.find(agentId);
+    if (!found) return null;
+    const { workspace, agent } = found;
+    const pending = this.pending(workspace, agentId);
+    if (pending.length === 0) {
+      this.release(agentId);
+      return null;
+    }
+    if (this.options.file?.applies(agent) === true) return null;
+    if (point === 'tool' && this.windows.has(agentId)) return null;
+    if (this.recentWakes(agentId).length >= MAX_WAKES_PER_HOUR) {
+      this.hold(agentId, 'cap');
+      return null;
+    }
+    if (this.options.usageCritical(agent.cliId)) {
+      this.hold(agentId, 'usage');
+      return null;
+    }
+    this.closeWindow(agentId);
+    this.mark(agent, workspace, pending);
+    return pointerText(pending.length);
+  }
+
   /** After a restart: the events still unread are announced, as nothing is in memory. */
   restore(): void {
     for (const workspace of this.options.workspaces.list()) {
@@ -176,7 +207,8 @@ export class WakeService {
     return recent;
   }
 
-  private send(agent: Agent, workspace: Workspace, pending: ExchangeMessage[]) {
+  /** The messages are announced and the wake counts for the cap; the hold and its notice end. */
+  private mark(agent: Agent, workspace: Workspace, pending: ExchangeMessage[]) {
     const ids = this.announced.get(agent.id) ?? new Set<string>();
     // Only what the journal still holds is remembered.
     const kept = new Set(workspace.exchanges.messages.map((m) => m.id));
@@ -185,6 +217,10 @@ export class WakeService {
     this.announced.set(agent.id, next);
     this.wakes.set(agent.id, [...this.recentWakes(agent.id), Date.now()]);
     this.release(agent.id);
+  }
+
+  private send(agent: Agent, workspace: Workspace, pending: ExchangeMessage[]) {
+    this.mark(agent, workspace, pending);
     const file = this.options.file?.applies(agent) === true;
     if (!file) {
       this.options.type(agent.id, pointerText(pending.length));

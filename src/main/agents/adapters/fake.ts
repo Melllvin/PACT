@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import { toSpawnCommand } from '../../env/resolve-command';
 import { bridgeCommand } from './shared';
 import {
@@ -56,6 +57,8 @@ export class FakeAdapter implements CliAdapter {
   }
 
   readonly supportsEffort = true;
+  /** 007 — plays Claude Code's hooks, unless FAKE_CLI_NO_WAKE_HOOK=1: a CLI that has none. */
+  readonly midTurnWake = process.env['FAKE_CLI_NO_WAKE_HOOK'] !== '1';
 
   modelTiers(): string[][] {
     return [['fake-small'], ['fake'], ['fake-large']];
@@ -76,6 +79,24 @@ export class FakeAdapter implements CliAdapter {
   mapHookEvent(payload: unknown): AgentSignal | null {
     const parsed = agentSignalSchema.safeParse(payload);
     return parsed.success ? parsed.data : null;
+  }
+
+  isWakePoint(payload: unknown): 'tool' | 'stop' | null {
+    if (!this.midTurnWake) return null;
+    const parsed = z
+      .looseObject({ type: z.string(), agent_id: z.string().optional() })
+      .safeParse(payload);
+    if (!parsed.success || parsed.data.agent_id !== undefined) return null;
+    if (parsed.data.type === 'post-tool') return 'tool';
+    return parsed.data.type === 'turn-finished' ? 'stop' : null;
+  }
+
+  wakeReply(payload: unknown, pointer: string): object | null {
+    const point = this.isWakePoint(payload);
+    if (point === 'tool') {
+      return { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: pointer } };
+    }
+    return point === 'stop' ? { decision: 'block', reason: pointer } : null;
   }
 
   mapOutput(_chunk: string, _ctx: OutputContext): AgentSignal | null {

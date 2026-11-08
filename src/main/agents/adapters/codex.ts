@@ -90,6 +90,8 @@ export class CodexAdapter implements CliAdapter {
   }
 
   readonly supportsEffort = true;
+  /** 007 contracts/hooks.md — its pointer is typed at the end of the turn. */
+  readonly midTurnWake = false;
 
   /** No order known until the CLI lists its models (R2). */
   modelTiers(): string[][] {

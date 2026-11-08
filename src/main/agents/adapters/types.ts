@@ -90,6 +90,11 @@ export interface CliAdapter {
   readonly supportsOrchestrator: boolean;
   /** 004 R2 — whether `LaunchInput.effort` reaches the CLI. */
   readonly supportsEffort: boolean;
+  /**
+   * 007 R1 — whether a reply of a hook can carry a pointer to the agent in the middle of its turn
+   * (PostToolUse `additionalContext`, Stop `block`). False: the pointer is typed at the end of the turn.
+   */
+  readonly midTurnWake: boolean;
   detect(env: ResolvedEnv): Promise<DetectionResult>;
   listModels(): Promise<string[]>;
   /** 004 R2 — its models by tier, smallest first; empty when the order is unknown. */
@@ -110,6 +115,17 @@ export interface CliAdapter {
    * runs, or the rollout Codex writes. None for the other CLIs: no gauge.
    */
   readonly usageSource?: 'claude-statusline' | 'codex-rollout';
+  /**
+   * 007 contracts/hooks.md — the reply of a hook that carries `pointer`, or null when the hook is
+   * no wake point. Only meaningful when `midTurnWake` is true.
+   */
+  wakeReply?(payload: unknown, pointer: string): object | null;
+  /**
+   * 007 contracts/hooks.md — whether a hook payload is a wake point: `tool` (a tool ended) or
+   * `stop` (the agent is about to stop). Always null when `agent_id` is set: a subagent or a
+   * teammate never receives a pointer.
+   */
+  isWakePoint?(payload: unknown): 'tool' | 'stop' | null;
 }
 
 /** Variables every agent receives (contract obligation 1, FR-015). */
