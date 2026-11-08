@@ -122,9 +122,22 @@ void app.whenReady().then(async () => {
   // The e2e harness moves this clock itself from the main process (T106).
   const clock = testClock(process.env);
   if (clock) Object.assign(globalThis, { pactTestClock: clock });
+  /** Agents whose report came before the `working` event of the turn it belongs to. */
+  const lateWorking = new Set<string>();
+  /** The last state seen of each agent, to tell where a turn starts or ends. */
+  const turnStates = new Map<string, string>();
   // 007 — the journal of the exchanges of each workspace, where the orchestrator's events are kept.
   const exchanges = new ExchangeService({
     workspaces,
+    // R10 — the commit of an agent's worktree: a new one starts the count of its pairs again.
+    head: async (agentId) => {
+      const path = workspaces
+        .list()
+        .flatMap((ws) => ws.agents)
+        .find((a) => a.id === agentId)?.worktreePath;
+      return path === undefined ? null : git.revParse(path, 'HEAD').catch(() => null);
+    },
+    name: (cliId) => registry.list().find((cli) => cli.id === cliId)?.name ?? cliId,
     onChange: (workspaceId, journal) => {
       emit('workspace:exchanges', { workspaceId, exchanges: journal });
     },
@@ -217,10 +230,24 @@ void app.whenReady().then(async () => {
     onLaunched: (workspaceId) => {
       emit('workspace:agentsLaunched', { workspaceId });
     },
+    // 007 FR-005 — the count of messages of an agent restarts with each turn.
+    onTurnStart: (agentId) => {
+      exchanges.resetTurn(agentId);
+    },
     onState: (event) => {
-      emit('agent:state', event);
+      // A report handed in just before the `working` event of its own turn reaches us first: that
+      // event is not a new turn, and it must not drop the report (it carries it along).
+      const late = event.state === 'working' && lateWorking.delete(event.agentId);
+      const kept = late
+        ? workspaces
+            .list()
+            .flatMap((ws) => ws.agents)
+            .find((a) => a.id === event.agentId)?.lastReport
+        : undefined;
+      emit('agent:state', kept ? { ...event, lastReport: kept } : event);
+      turnStates.set(event.agentId, event.state);
       // Working again, an agent has left its last report behind it.
-      if (event.state === 'working') void keepReport(event.agentId, null);
+      if (event.state === 'working' && !late) void keepReport(event.agentId, null);
       syncTodos();
       // 003 R5 — what the orchestrator of the workspace waits for.
       orchestrator.agentState(event);
@@ -387,6 +414,9 @@ void app.whenReady().then(async () => {
     const agent = workspace?.agents.find((a) => a.id === agentId);
     if (!workspace || !agent || (report === null && !agent.lastReport)) return;
     const lastReport = report && { status: report.status, questions: report.questions };
+    if (report && agent.state === 'working' && turnStates.get(agentId) !== 'working') {
+      lateWorking.add(agentId);
+    }
     await workspaces.update(workspace.id, (ws) => ({
       ...ws,
       agents: ws.agents.map((a) => (a.id === agentId ? { ...a, lastReport } : a)),

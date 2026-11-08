@@ -131,6 +131,12 @@ export type AppState = {
     issueId: string,
     decision: 'restart' | 'take-over' | 'abandon',
   ) => Promise<void>;
+  /** 007 FR-006 — « Laisser reprendre » / « Couper » on two agents that bounce a message. */
+  decideExchange: (
+    workspaceId: string,
+    escalationId: string,
+    decision: 'resume' | 'cut',
+  ) => Promise<void>;
   /** 004 FR-023 — « Créer » / « Refuser » of the issues the orchestrator asks to publish. */
   confirmPublish: (requestId: string) => Promise<void>;
   refusePublish: (requestId: string) => Promise<void>;
@@ -206,8 +212,9 @@ const applyState =
     ...agent,
     state: event.state,
     // Working again, the agent has answered what it was asked: its last report is behind it.
-    ...(event.lastReport ? { lastReport: event.lastReport } : {}),
     ...(event.state === 'working' ? { lastReport: null } : {}),
+    // A report handed in during the turn arrives while the agent still works: it stays.
+    ...(event.lastReport ? { lastReport: event.lastReport } : {}),
     ...(event.lastError === undefined ? {} : { lastError: event.lastError }),
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
     // Each event tells whether the agent asks a question: absent, it does not (FR-024a).
@@ -632,6 +639,9 @@ export function createAppStore(api: PactApi) {
 
       decideLoop: (workspaceId, issueId, decision) =>
         act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),
+
+      decideExchange: (workspaceId, escalationId, decision) =>
+        act(() => api.invoke('exchange:decide', { workspaceId, escalationId, decision })),
 
       confirmPublish: (requestId) => act(() => api.invoke('publishRequest:confirm', { requestId })),
 

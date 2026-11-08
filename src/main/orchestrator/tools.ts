@@ -21,7 +21,12 @@ import type { IntegrationRequests } from './integration-requests';
 import type { IssueService } from './issues';
 import type { LoopService } from './loop-service';
 import type { McpTool, ToolResult } from './mcp';
-import { createEventsTool, type ExchangeReads } from './agent-tools';
+import {
+  createEventsTool,
+  createExchangeTools,
+  type ExchangeReads,
+  type ExchangeWrites,
+} from './agent-tools';
 
 // 003 contracts/mcp-tools.md — the tools of the pact MCP server, for one orchestrator. A refusal
 // is a result marked as an error with its reason (FR-022), never a protocol error.
@@ -52,7 +57,7 @@ export type ToolDependencies = {
   /** The next events of these agents (all when undefined), or none after `timeoutMs` (R5). */
   wait: (agentIds: readonly string[] | undefined, timeoutMs: number) => Promise<WaitResult>;
   /** 007 — the shared reading of the journal, for `get_events`. */
-  exchanges?: ExchangeReads & Pick<ExchangeService, 'record'>;
+  exchanges?: ExchangeReads & Pick<ExchangeService, 'record'> & Partial<ExchangeWrites>;
   /** The integrations waiting for the user (US3). */
   requests: Pick<IntegrationRequests, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
@@ -267,7 +272,12 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
   };
 
   return [
-    ...(deps.exchanges ? [createEventsTool(deps.exchanges, orchestratorId)] : []),
+    ...(deps.exchanges
+      ? [
+          createEventsTool(deps.exchanges, orchestratorId),
+          ...createExchangeTools(deps.exchanges, orchestratorId, { ask: false }),
+        ]
+      : []),
     tool(
       'list_agents',
       'Liste les autres agents du workspace : nom, CLI, branche, état, question en attente de l’utilisateur, changements à relire, consignes de toi en attente.',

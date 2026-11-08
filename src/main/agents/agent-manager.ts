@@ -89,6 +89,8 @@ type Options = {
   fetchTimeoutMs?: number;
   isPortInUse?: (port: number) => Promise<boolean>;
   onState?: (event: AgentStateEvent) => void;
+  /** 007 FR-005 — a prompt was submitted: a new turn, told synchronously with its hook. */
+  onTurnStart?: (agentId: string) => void;
   onBranch?: (event: AgentBranchEvent) => void;
   /** Agents were launched, whoever asked: the launcher or an orchestrator. */
   onLaunched?: (workspaceId: string, agents: Agent[]) => void;
@@ -208,6 +210,7 @@ export class AgentManager {
   private readonly warnings = new Map<string, string[]>();
   private readonly isPortInUse: (port: number) => Promise<boolean>;
   private readonly onState: NonNullable<Options['onState']>;
+  private readonly onTurnStart: NonNullable<Options['onTurnStart']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
   private readonly onLaunched: NonNullable<Options['onLaunched']>;
   private readonly branches: BranchWatcher;
@@ -257,6 +260,7 @@ export class AgentManager {
     this.fetchTimeoutMs = options.fetchTimeoutMs ?? FETCH_WAIT_MS;
     this.isPortInUse = options.isPortInUse ?? defaultIsPortInUse;
     this.onState = options.onState ?? (() => undefined);
+    this.onTurnStart = options.onTurnStart ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
     this.onLaunched = options.onLaunched ?? (() => undefined);
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
@@ -1034,6 +1038,8 @@ export class AgentManager {
           this.pty.write(agent.id, adapter.answerKeys('allow'));
           return {};
         }
+        // A turn starts: told at once, before the CLI goes on (its next MCP call is a new turn).
+        if (signal.type === 'prompt-submitted') this.onTurnStart(agent.id);
         void this.apply(agent.id, signal);
         return {};
       },

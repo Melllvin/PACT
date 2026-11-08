@@ -262,7 +262,7 @@ describe('NotificationService — an exchange in a loop (007)', () => {
     service.update('w1', [
       escalated({
         exchange: { escalationId: 'e1', text: 'SECRET du message de l’agent' },
-      } as never),
+      }),
     ]);
     expect(notify).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(notify.mock.calls)).not.toContain('SECRET');

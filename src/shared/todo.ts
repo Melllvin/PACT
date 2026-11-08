@@ -39,6 +39,8 @@ function agentTodo(
   cli: string,
   files: number | undefined,
   loops: readonly Loop[],
+  /** 007 FR-029 — an orchestrator able to take the questions: they do not go to the user. */
+  routed = false,
 ): TodoItem | null {
   const item = (kind: TodoKind, title: string, actions: TileAction[]): TodoItem => ({
     id: `${agent.id}:${kind}`,
@@ -54,7 +56,7 @@ function agentTodo(
   // A blocked report with questions, once the agent stopped: the user decides.
   const ready = agent.state === 'done' || agent.state === 'awaiting-prompt';
   const report = agent.lastReport;
-  if (ready && report?.status === 'blocked' && report.questions.length > 0) {
+  if (ready && !routed && report?.status === 'blocked' && report.questions.length > 0) {
     return {
       ...item(
         'decide',
@@ -103,7 +105,9 @@ const shellName = (path: string) => path.replace(/^.*[\\/]/, '').replace(/\.exe$
 /** The À faire items of a workspace, derived and never stored (data-model TodoItem, FR-027). */
 export function deriveTodos(
   workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'mainBranch'> &
-    Partial<Pick<Workspace, 'integrationRequests' | 'loops' | 'issues' | 'publishRequests'>>,
+    Partial<
+      Pick<Workspace, 'integrationRequests' | 'loops' | 'issues' | 'publishRequests' | 'exchanges'>
+    >,
   names: (cliId: string) => string,
   /** The agents with changes to review, with their number of changed files (`review:pending`). */
   toReview: Readonly<Record<string, number>> | readonly never[] = {},
@@ -111,6 +115,8 @@ export function deriveTodos(
   usage?: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
+  // 007 R9 — with an orchestrator that is not in error, the questions of the others go to it.
+  const lead = agents.find((agent) => agent.role === 'orchestrator');
   const todos = agents.flatMap(
     (agent) =>
       agentTodo(
@@ -118,6 +124,7 @@ export function deriveTodos(
         names(agent.cliId),
         (toReview as Readonly<Record<string, number | undefined>>)[agent.id],
         workspace.loops ?? [],
+        lead !== undefined && lead.state !== 'error' && agent.id !== lead.id,
       ) ?? [],
   );
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
@@ -138,7 +145,6 @@ export function deriveTodos(
     ];
   });
   // « ◎ Créer N issues ? »: nothing leaves the machine before the user says so (004 FR-023).
-  const lead = agents.find((agent) => agent.role === 'orchestrator');
   const publish = lead
     ? (workspace.publishRequests ?? []).map((request): TodoItem => {
         const titles = request.issueIds.map(
@@ -172,6 +178,25 @@ export function deriveTodos(
         ]
       : [];
   });
+  // « ✕ Échanges en boucle »: two agents bounced a message 3 times without a commit (007 FR-006).
+  const exchanges = (workspace.exchanges?.escalations ?? []).flatMap((escalation): TodoItem[] => {
+    if (escalation.state !== 'pending') return [];
+    const pair = escalation.agents.map((id) => byId.get(id));
+    const [first, second] = pair.sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0));
+    if (!first || !second) return [];
+    const last = workspace.exchanges?.messages.find((m) => m.id === escalation.lastMessageId);
+    const name = (a: Agent) => `${names(a.cliId)} ${String(a.position)}`;
+    return [
+      {
+        id: `${escalation.id}:exchange-escalated`,
+        agentId: first.id,
+        kind: 'exchange-escalated',
+        title: `✕ Échanges en boucle · ${name(first)} ↔ ${name(second)} · 3 allers-retours`,
+        actions: [],
+        exchange: { escalationId: escalation.id, text: last?.text ?? '' },
+      },
+    ];
+  });
   const terminals = workspace.freeTerminals.map((terminal): TodoItem => ({
     id: `${terminal.id}:info`,
     agentId: terminal.id,
@@ -182,9 +207,16 @@ export function deriveTodos(
   const limits = usage ? usageTodos(workspace, names, usage) : [];
   // Array.prototype.sort is stable: the tile order holds within a kind.
   const held = agents.flatMap((agent) => wakeHeld(agent, names(agent.cliId)) ?? []);
-  return [...todos, ...held, ...requests, ...publish, ...loops, ...limits, ...terminals].sort(
-    (a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind),
-  );
+  return [
+    ...todos,
+    ...held,
+    ...requests,
+    ...publish,
+    ...loops,
+    ...exchanges,
+    ...limits,
+    ...terminals,
+  ].sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
 }
 
 /**

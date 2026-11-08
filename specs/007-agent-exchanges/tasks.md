@@ -117,11 +117,11 @@
 
 ### Implémentation
 
-- [ ] T045 [US3] Dans `src/main/orchestrator/exchange-service.ts` : `send`, plafond par tour, allers-retours par paire avec résolution de `HEAD`, création de l'escalade et messages `exchange-escalated`, `exchange-decided`
-- [ ] T046 [US3] Dans `src/main/orchestrator/agent-tools.ts` : `ask_orchestrator` et `send_message` selon `contracts/mcp-tools.md` ; `send_message` pour l'orchestrateur dans `src/main/orchestrator/tools.ts`
-- [ ] T047 [US3] Dans `src/shared/todo.ts` : remonter `lead`, passer `routed` à `agentTodo`, créer `exchange-escalated` ; dans `src/main/notifications.ts` : `NOTIFIED` et `GENERIC_TITLE`
-- [ ] T048 [US3] Dans `src/renderer/todo/TodoItem.tsx`, `src/renderer/app/App.tsx` et `src/renderer/store/app-store.ts` : élément d'escalade et action `decideExchange`, sur le modèle de `decideLoop`
-- [ ] T049 [US3] Dans `src/renderer/focus/FocusView.tsx` : `ActionsJournal` fusionne les messages selon `contracts/ui.md`
+- [x] T045 [US3] Dans `src/main/orchestrator/exchange-service.ts` : `send`, plafond par tour, allers-retours par paire avec résolution de `HEAD`, création de l'escalade et messages `exchange-escalated`, `exchange-decided`
+- [x] T046 [US3] Dans `src/main/orchestrator/agent-tools.ts` : `ask_orchestrator` et `send_message` selon `contracts/mcp-tools.md` ; `send_message` pour l'orchestrateur dans `src/main/orchestrator/tools.ts`
+- [x] T047 [US3] Dans `src/shared/todo.ts` : remonter `lead`, passer `routed` à `agentTodo`, créer `exchange-escalated` ; dans `src/main/notifications.ts` : `NOTIFIED` et `GENERIC_TITLE`
+- [x] T048 [US3] Dans `src/renderer/todo/TodoItem.tsx`, `src/renderer/app/App.tsx` et `src/renderer/store/app-store.ts` : élément d'escalade et action `decideExchange`, sur le modèle de `decideLoop`
+- [x] T049 [US3] Dans `src/renderer/focus/FocusView.tsx` : `ActionsJournal` fusionne les messages selon `contracts/ui.md`
 
 **Checkpoint** : US3 livrée ; PR « 007 Phase 5 US3 ».
 

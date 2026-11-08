@@ -130,10 +130,11 @@ test('US3 sc.14: without an orchestrator, a report blocked with questions shows 
   await typeIn(page, dev, line('', [], 'Quelqu’un ?'));
   await expect(dev).toContainText(/MCP ask_orchestrator : .*orchestrateur/i, { timeout: 5_000 });
   await typeIn(page, dev, line('', [], '', 'Quelle base ?'));
-  await expect(column(page).getByRole('list', { name: 'Agents du workspace' })).toContainText(
-    '◆ Décider · Faux CLI 1 · dev · 1 question',
-    { timeout: 15_000 },
-  );
+  // The row of the agent names it (« Faux CLI 1 dev »), so the item shows « ◆ Décider » and the
+  // rest of its title, as the Agents column of 006 renders every item of a row.
+  const rows = column(page).getByRole('list', { name: 'Agents du workspace' });
+  await expect(rows).toContainText('Faux CLI 1', { timeout: 15_000 });
+  await expect(rows).toContainText(/◆ Décider\s*dev · 1 question/, { timeout: 15_000 });
 });
 
 test('US3 sc.2, sc.3, sc.4, SC-005: a message is copied to the orchestrator and read in the journal; 501 characters and a 6th message in the turn are refused', async () => {
@@ -196,6 +197,9 @@ test('US3 sc.5, sc.11: the tester and the dev cannot write to each other; the te
   });
   await expect(lead).toContainText(POINTER, { timeout: 15_000 });
   await typeIn(page, lead, 'Faux CLI 4|Le critère 3 couvre le cas vide');
+  // Typing in the orchestrator's tile scrolled the grid: xterm paints only the tiles in view, so the
+  // tester's tile is brought back before its text is read.
+  await tester.scrollIntoViewIfNeeded();
   await expect(tester).toContainText(POINTER, { timeout: 20_000 });
 
   const journal = await openJournal(page, lead);
