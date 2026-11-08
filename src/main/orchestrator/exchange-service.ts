@@ -305,6 +305,31 @@ export class ExchangeService {
       },
     }));
     this.options.onChange(workspaceId, updated.exchanges);
+    await this.journalPair(
+      workspaceId,
+      sorted,
+      'exchange-escalated',
+      (a, b) =>
+        `Échange en boucle entre ${a} et ${b} : ${String(MAX_ROUND_TRIPS)} allers-retours. En attente de la décision de l’utilisateur.`,
+    );
+  }
+
+  /** R3 — an `action` for the orchestrator: what PACT did about a pair of agents. */
+  private async journalPair(
+    workspaceId: string,
+    agents: readonly string[],
+    kind: 'exchange-escalated' | 'exchange-decided',
+    text: (a: string, b: string) => string,
+  ): Promise<void> {
+    const ws = this.options.workspaces.get(workspaceId);
+    const lead = ws?.agents.find((a) => a.role === 'orchestrator');
+    if (!ws || !lead) return;
+    const label = (id: string) => {
+      const found = ws.agents.find((a) => a.id === id);
+      return found ? this.nameOf(found.cliId, found.position) : id;
+    };
+    const [a = '', b = ''] = agents.map(label);
+    await this.record(workspaceId, { from: 'pact', to: lead.id, kind, text: text(a, b) });
   }
 
   /** The 20 most recent unread of `readerId`, and what remains; they are marked read. */
@@ -402,6 +427,13 @@ export class ExchangeService {
       },
     }));
     this.options.onChange(workspaceId, updated.exchanges);
+    await this.journalPair(
+      workspaceId,
+      escalation.agents,
+      'exchange-decided',
+      (a, b) =>
+        `Échange entre ${a} et ${b} : ${decision === 'resume' ? 'reprise autorisée' : 'coupé'} par l’utilisateur.`,
+    );
   }
 
   /** A closed agent reads nothing any more, and its pairs are free. */

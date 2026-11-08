@@ -138,6 +138,22 @@ const refused = async (call: Promise<unknown>, reason: RegExp) => {
   expect(changes).toHaveLength(announced);
 };
 
+/** The notices PACT wrote to the orchestrator about a pair (R3: `action`, the agents named). */
+const pactNotices = (kind: 'exchange-escalated' | 'exchange-decided') =>
+  journal().filter((m) => m.kind === kind);
+const expectNotice = (
+  kind: 'exchange-escalated' | 'exchange-decided',
+  count: number,
+  named: string[] = ['Claude Code 2', 'Claude Code 3'],
+) => {
+  const notices = pactNotices(kind);
+  expect(notices).toHaveLength(count);
+  for (const notice of notices) {
+    expect(notice).toMatchObject({ from: 'pact', to: LEAD, type: 'action', kind });
+    for (const name of named) expect(notice.text).toContain(name);
+  }
+};
+
 /** `n` alternating messages A→B, B→A, A→B… */
 const alternate = async (a: string, b: string, n: number) => {
   for (let i = 0; i < n; i++) await (i % 2 === 0 ? say(a, b) : say(b, a));
@@ -366,11 +382,16 @@ describe('3 round trips without a commit (FR-006, US3 sc.6)', () => {
 
   it('Given 6 alternating messages, When the 3rd retour is sent, Then it is delivered and the escalation names the pair and the last exchange', async () => {
     await alternate(DEV, SPEC, 6);
-    expect(journal()).toHaveLength(6);
+    // The 6 messages and the notice exchange-escalated for the orchestrator.
+    expect(journal()).toHaveLength(7);
+    expectNotice('exchange-escalated', 1);
+    service.resetTurn(DEV);
+    await refused(say(DEV, SPEC, 'Encore'), /escalad|boucle|décision/i);
+    expect(journal().some((m) => m.text === 'Encore')).toBe(false);
     expect(escalations()).toHaveLength(1);
     expect(escalations()[0]).toMatchObject({
       agents: [DEV, SPEC].sort(),
-      lastMessageId: journal().at(-1)?.id,
+      lastMessageId: journal()[5]?.id,
       state: 'pending',
     });
     expect(changes.at(-1)?.escalations).toHaveLength(1);
@@ -392,7 +413,11 @@ describe('3 round trips without a commit (FR-006, US3 sc.6)', () => {
     await say(SPEC, DESIGN);
     await say(DESIGN, DEV);
     await service.ask('w1', DEV, 'Je suis bloqué');
-    expect(journal()).toHaveLength(10);
+    // The 10 messages and the notice exchange-escalated.
+    expect(journal()).toHaveLength(11);
+    expectNotice('exchange-escalated', 1);
+    await refused(say(DEV, SPEC, 'Encore'), /escalad|boucle|décision/i);
+    expect(journal().some((m) => m.text === 'Encore')).toBe(false);
   });
 
   it('Given messages in the same direction, When they are many, Then they are not round trips', async () => {
@@ -454,10 +479,15 @@ describe('the decision of the user on an escalation (FR-006)', () => {
 
   it('Given « Laisser reprendre », When resume is decided, Then the escalation is gone and the pair may write again', async () => {
     const id = await escalated();
+    await refused(say(DEV, SPEC, 'Trop tôt'), /escalad|boucle|décision/i);
     await service.decide('w1', id, 'resume');
     expect(escalations()).toEqual([]);
     await say(DEV, SPEC);
-    expect(journal()).toHaveLength(7);
+    // 6 messages, the notices exchange-escalated and exchange-decided, and the new message.
+    expect(journal()).toHaveLength(9);
+    expectNotice('exchange-escalated', 1);
+    expectNotice('exchange-decided', 1);
+    expect(journal().some((m) => m.text === 'Trop tôt')).toBe(false);
   });
 
   it('Given a resumed pair, When it writes 2 round trips more, Then the count had been reset: no new escalation', async () => {
