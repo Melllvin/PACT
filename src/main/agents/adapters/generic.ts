@@ -57,6 +57,8 @@ export class GenericAdapter implements CliAdapter {
   }
 
   readonly supportsEffort = false;
+  /** 007 contracts/hooks.md — its pointer is typed at the end of the turn. */
+  readonly midTurnWake = false;
 
   modelTiers(): string[][] {
     return [];

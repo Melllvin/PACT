@@ -91,11 +91,11 @@
 
 ### Implémentation
 
-- [ ] T035 [US2] Dans `src/main/agents/adapters/types.ts`, `src/main/agents/adapters/codex.ts` et `src/main/agents/adapters/generic.ts` : `midTurnWake`, `isWakePoint`, `wakeReply` ; faux pour Codex et generic
-- [ ] T036 [US2] Dans `src/main/agents/adapters/claude-code.ts` : hook `PostToolUse`, `isWakePoint`, `wakeReply` selon `research.md` R1
-- [ ] T037 [US2] Dans `src/main/agents/adapters/fake.ts` : `post-tool`, `wakeReply`, `FAKE_CLI_NO_WAKE_HOOK`
-- [ ] T038 [US2] Dans `src/main/orchestrator/wake-service.ts` : `takeForHook` ; la voie plein tour attend un hook si `midTurnWake`
-- [ ] T039 [US2] Dans `src/main/agents/agent-manager.ts`, handler de `start` : réveil décidé avant `apply`, selon `contracts/hooks.md`
+- [x] T035 [US2] Dans `src/main/agents/adapters/types.ts`, `src/main/agents/adapters/codex.ts` et `src/main/agents/adapters/generic.ts` : `midTurnWake`, `isWakePoint`, `wakeReply` ; faux pour Codex et generic
+- [x] T036 [US2] Dans `src/main/agents/adapters/claude-code.ts` : hook `PostToolUse`, `isWakePoint`, `wakeReply` selon `research.md` R1
+- [x] T037 [US2] Dans `src/main/agents/adapters/fake.ts` : `post-tool`, `wakeReply`, `FAKE_CLI_NO_WAKE_HOOK`
+- [x] T038 [US2] Dans `src/main/orchestrator/wake-service.ts` : `takeForHook` ; la voie plein tour attend un hook si `midTurnWake`
+- [x] T039 [US2] Dans `src/main/agents/agent-manager.ts`, handler de `start` : réveil décidé avant `apply`, selon `contracts/hooks.md`
 
 **Checkpoint** : US2 livrée ; PR « 007 Phase 4 US2 ».
 
