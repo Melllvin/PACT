@@ -577,6 +577,71 @@ describe('AgentManager launch of an orchestrator without a way to serve one', ()
   });
 });
 
+// #113 — a launch that fails before the CLI starts must not leave a ghost holding the role.
+describe('AgentManager launch of an orchestrator whose access cannot be prepared', () => {
+  const failing = () => ({
+    prepare: vi.fn().mockRejectedValue(new Error('ENOENT: resources/skills/pact-orchestrator')),
+    release: vi.fn(),
+  });
+
+  it('rejects, and leaves no agent, so no ghost orchestrator', async () => {
+    const manager = await createManager({ orchestrator: failing() });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(/ENOENT/);
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+    expect(await agentsOnDisk()).toEqual([]);
+    expect(manager.activeCount()).toBe(0);
+  });
+
+  it('frees the worktree and the position, so a launch can be tried again', async () => {
+    const orchestrator = failing();
+    const manager = await createManager({ orchestrator });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow();
+    expect(git(repo, 'worktree', 'list')).not.toContain('fake-1');
+    expect(git(repo, 'branch', '--list', 'agent/*')).toBe('');
+    orchestrator.prepare.mockRejectedValueOnce(new Error('ENOENT again'));
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(/again/);
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+  });
+});
+
+// #113 — the cleanup of a failed launch never hides the error that failed it.
+describe('AgentManager abandon of a failed launch', () => {
+  const failing = () => ({
+    prepare: vi.fn().mockRejectedValue(new Error('ENOENT original')),
+    release: vi.fn(),
+  });
+
+  it('throws the original error when saving the workspace fails too, and still frees the branch', async () => {
+    const manager = await createManager({ orchestrator: failing() });
+    const update = workspaces.update.bind(workspaces);
+    let calls = 0;
+    vi.spyOn(workspaces, 'update').mockImplementation((id, fn) => {
+      calls += 1;
+      // 1st: the agent is saved; 2nd: the cleanup fails.
+      return calls === 2 ? Promise.reject(new Error('disk full')) : update(id, fn);
+    });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(
+      /ENOENT original/,
+    );
+    expect(git(repo, 'branch', '--list', 'agent/*')).toBe('');
+    expect(git(repo, 'worktree', 'list')).not.toContain('fake-1');
+  });
+
+  it('throws the original error when the worktree cannot be removed', async () => {
+    class Stuck extends GitService {
+      override removeWorktree = () => Promise.reject(new Error('locked'));
+    }
+    const manager = await createManager({
+      orchestrator: failing(),
+      gitService: new Stuck({ env: gitEnv }),
+    });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(
+      /ENOENT original/,
+    );
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+  });
+});
+
 // fix-todo-diff-notifications — a new worktree starts from origin/<main>, after a try to fetch it.
 describe('AgentManager.launch from origin', { timeout: 30_000 }, () => {
   let origin: string;

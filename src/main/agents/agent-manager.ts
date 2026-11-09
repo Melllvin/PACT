@@ -204,6 +204,32 @@ const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
 /** What the terminal sends for Shift+Enter (see xterm-factory). */
 const LINE_BREAK = '\x1b\r';
+/** #112 — a closed orchestrator directs nothing: it does not hold the role of its workspace. */
+const isLiveOrchestrator = (agent: Agent) =>
+  agent.role === 'orchestrator' && agent.state !== 'closed';
+
+/**
+ * #112 — a new orchestrator has taken the role: the closed one becomes an ordinary closed tile and
+ * its group is detached (`launchedBy` cleared), so its agents stay, closed and independent.
+ */
+const withoutClosedLead = (agents: Agent[]): Agent[] => {
+  const old = closedLeadIds(agents);
+  if (old.size === 0) return agents;
+  return agents.map((a) => {
+    if (old.has(a.id)) return { ...a, role: null, launchedBy: null };
+    return a.launchedBy !== null && old.has(a.launchedBy) ? { ...a, launchedBy: null } : a;
+  });
+};
+
+const closedLeadIds = (agents: Agent[]) =>
+  new Set(agents.filter((a) => a.role === 'orchestrator' && a.state === 'closed').map((a) => a.id));
+
+/** The agents `withoutClosedLead` changes, as they are now: what a failed launch gives back. */
+const closedLeadAndGroup = (agents: Agent[]): Agent[] => {
+  const old = closedLeadIds(agents);
+  return agents.filter((a) => old.has(a.id) || (a.launchedBy !== null && old.has(a.launchedBy)));
+};
+
 const isReady = (state: Agent['state']) => state === 'awaiting-prompt' || state === 'done';
 
 /** 006 FR-026 — typed to an agent that was at work when it was closed, once it is ready. */
@@ -755,7 +781,7 @@ export class AgentManager {
   async promoteToOrchestrator(id: string): Promise<void> {
     const { workspace, agent } = this.find(id);
     if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
-    const current = workspace.agents.find((a) => a.role === 'orchestrator');
+    const current = workspace.agents.find(isLiveOrchestrator);
     if (current) {
       throw new IpcFailure(
         'INVALID_INPUT',
@@ -781,7 +807,7 @@ export class AgentManager {
               scope: 'project' as const,
             },
           }),
-      agents: ws.agents.map((a) => (a.id === id ? promoted : a)),
+      agents: withoutClosedLead(ws.agents).map((a) => (a.id === id ? promoted : a)),
     }));
     this.resumes.forget(id);
     await this.stop(id);
@@ -1122,18 +1148,49 @@ export class AgentManager {
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
       // Saved before the process starts: its first hook must find the agent.
-      await this.workspaces.update(workspaceId, (ws) => ({ ...ws, agents: [...ws.agents, agent] }));
-      this.start(
-        agent,
-        workspace.path,
-        cli,
-        env,
-        await this.prepareRole(agent, workspace.path, cli),
-      );
+      // The schema allows one orchestrator at a time: the old closed one is demoted in the same
+      // save, and given back by `abandon` if this launch fails (#112).
+      let demoted: Agent[] = [];
+      await this.workspaces.update(workspaceId, (ws) => {
+        demoted = role === 'orchestrator' ? closedLeadAndGroup(ws.agents) : [];
+        return { ...ws, agents: [...withoutClosedLead(ws.agents), agent] };
+      });
+      let prepared: Prepared;
+      try {
+        prepared = await this.prepareRole(agent, workspace.path, cli);
+      } catch (error) {
+        // #113 — it failed before the CLI started: nothing ran, so the agent must not stay recorded
+        // (a ghost orchestrator would hold the role). Its worktree and its place go too.
+        await this.abandon(workspace, agent, demoted);
+        throw error;
+      }
+      this.start(agent, workspace.path, cli, env, prepared);
       launched.push(agent);
     }
     await this.workspaces.update(workspaceId, (ws) => ({ ...ws, quickLaunchCounters: counters }));
     return launched;
+  }
+
+  /** #113 — forgets an agent whose launch failed before its CLI started. */
+  private async abandon(workspace: Workspace, agent: Agent, demoted: Agent[]) {
+    this.orchestrator?.release(agent.id);
+    this.warnings.delete(agent.id);
+    // Best effort, each step on its own: the caller rethrows the error that failed the launch.
+    await this.workspaces
+      .update(workspace.id, (ws) => ({
+        ...ws,
+        agents: ws.agents
+          .filter((a) => a.id !== agent.id)
+          .map((a) => demoted.find((d) => d.id === a.id) ?? a),
+      }))
+      .catch(() => undefined);
+    await this.git
+      .removeWorktree(workspace.path, {
+        path: agent.worktreePath,
+        branch: agent.branch,
+        force: true,
+      })
+      .catch(() => undefined);
   }
 
   /** The user's profile of a role, else its default one (004 R2). */
@@ -1186,7 +1243,8 @@ export class AgentManager {
     const asked = drafts.filter((draft) => draftRole(draft) === 'orchestrator').length;
     if (asked === 0) return;
     if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
-    if (asked + workspace.agents.filter((agent) => agent.role === 'orchestrator').length > 1) {
+    // A closed orchestrator directs nothing (#112): only a live one holds the role.
+    if (asked + workspace.agents.filter(isLiveOrchestrator).length > 1) {
       throw new IpcFailure('INVALID_INPUT', 'Un seul orchestrateur par workspace.');
     }
     if (

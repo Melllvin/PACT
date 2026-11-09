@@ -10,7 +10,7 @@ export type LaunchPanelProps = {
   /** Counters last used in this workspace (FR-010). */
   counters: Workspace['quickLaunchCounters'];
   /** Agents of this workspace: the limit of six, and where new tiles land. */
-  running: Pick<Agent, 'position' | 'color' | 'role'>[];
+  running: (Pick<Agent, 'position' | 'color' | 'role'> & Partial<Pick<Agent, 'state'>>)[];
   /** Agents of every workspace: their branches and ports are taken. */
   taken: Pick<Agent, 'branch' | 'port'>[];
   /** Draft of a refused launch, to start again from it. */
@@ -55,6 +55,10 @@ export function LaunchPanel({
 }: LaunchPanelProps) {
   const [draft, setDraft] = useState(() => initialDraft ?? fromCounters(clis, counters));
   const [detailed, setDetailed] = useState(false);
+  // #112 — a closed orchestrator directs nothing: only a live one holds the role.
+  const hasLiveOrchestrator = running.some(
+    (agent) => agent.role === 'orchestrator' && agent.state !== 'closed',
+  );
   // One per CLI of the draft, the orchestrator's included: a warning, never a block.
   const usageWarnings = [...new Set(draft.agents.map((agent) => agent.cliId))].flatMap(
     (cliId): UsageWarning[] => {
@@ -71,7 +75,7 @@ export function LaunchPanel({
       onChange={setDraft}
       running={running}
       taken={taken}
-      canOrchestrate={!running.some((agent) => agent.role === 'orchestrator')}
+      canOrchestrate={!hasLiveOrchestrator}
       error={error}
       localChanges={localChanges}
       usageWarnings={usageWarnings}
@@ -90,7 +94,7 @@ export function LaunchPanel({
       draft={draft}
       onChange={setDraft}
       existingAgents={running.length}
-      canOrchestrate={!running.some((agent) => agent.role === 'orchestrator')}
+      canOrchestrate={!hasLiveOrchestrator}
       error={error}
       localChanges={localChanges}
       usageWarnings={usageWarnings}

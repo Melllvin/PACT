@@ -46,7 +46,10 @@ test('gives a generic agent its role in .pact/ROLE.md and tells it to read it', 
   await page.getByRole('button', { name: 'Choisir un dépôt Git…' }).click();
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
   const quick = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  await quick.getByRole('group', { name: 'Autre CLI…' }).getByRole('button', { name: '+' }).click();
+  await quick
+    .getByRole('group', { name: 'Autre CLI…' })
+    .getByRole('button', { name: /^Ajouter un / })
+    .click();
   await quick.getByRole('button', { name: 'Mode détaillé…' }).click();
   const detailed = page.getByRole('dialog', { name: 'Lancer des agents' });
   await detailed

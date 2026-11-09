@@ -100,9 +100,9 @@ describe('QuickLaunch', () => {
   it('launches what the counters say', async () => {
     const user = userEvent.setup();
     const { launched } = renderLauncher();
-    await user.click(within(row('Claude Code')).getByRole('button', { name: '+' }));
-    await user.click(within(row('Codex')).getByRole('button', { name: '+' }));
-    await user.click(within(row('Terminal libre')).getByRole('button', { name: '+' }));
+    await user.click(within(row('Claude Code')).getByRole('button', { name: /^Ajouter un / }));
+    await user.click(within(row('Codex')).getByRole('button', { name: /^Ajouter un / }));
+    await user.click(within(row('Terminal libre')).getByRole('button', { name: /^Ajouter un / }));
     await user.click(screen.getByRole('button', { name: 'Lancer 3 agents' }));
     expect(launched()).toEqual({ agents: { 'claude-code': 2, codex: 1 }, freeTerminal: 1 });
   });
@@ -110,9 +110,9 @@ describe('QuickLaunch', () => {
   it('never goes below zero', async () => {
     const user = userEvent.setup();
     renderLauncher();
-    const minus = within(row('Codex')).getByRole('button', { name: '−' });
+    const minus = within(row('Codex')).getByRole('button', { name: /^Retirer un / });
     expect((minus as HTMLButtonElement).disabled).toBe(true);
-    await user.click(within(row('Claude Code')).getByRole('button', { name: '−' }));
+    await user.click(within(row('Claude Code')).getByRole('button', { name: /^Retirer un / }));
     expect(count('Claude Code')).toBe('0');
     expect(screen.getByRole('button', { name: 'Lancer 0 agent' }).hasAttribute('disabled')).toBe(
       true,
@@ -136,10 +136,12 @@ describe('QuickLaunch', () => {
   it('stops at six agents per workspace (US2 scenario 8)', async () => {
     const user = userEvent.setup();
     renderLauncher({ running: running(4) });
-    await user.click(within(row('Codex')).getByRole('button', { name: '+' }));
-    expect(within(row('Codex')).getByRole('button', { name: '+' }).hasAttribute('disabled')).toBe(
-      true,
-    );
+    await user.click(within(row('Codex')).getByRole('button', { name: /^Ajouter un / }));
+    expect(
+      within(row('Codex'))
+        .getByRole('button', { name: /^Ajouter un / })
+        .hasAttribute('disabled'),
+    ).toBe(true);
     expect(screen.getByText(/6 agents au plus/)).toBeDefined();
   });
 
@@ -160,7 +162,7 @@ describe('QuickLaunch', () => {
       clis: [...detected, aider],
       counters: { freeTerminal: 0, codex: 0 },
     });
-    await user.click(within(row('Autre CLI…')).getByRole('button', { name: '+' }));
+    await user.click(within(row('Autre CLI…')).getByRole('button', { name: /^Ajouter un / }));
     await user.click(screen.getByRole('button', { name: 'Lancer 1 agent' }));
     expect(launched()).toEqual({ agents: { 'custom-aider': 1 }, freeTerminal: 0 });
   });
@@ -168,7 +170,9 @@ describe('QuickLaunch', () => {
   it('disables « Autre CLI… » until a CLI is added', () => {
     renderLauncher();
     expect(
-      within(row('Autre CLI…')).getByRole('button', { name: '+' }).hasAttribute('disabled'),
+      within(row('Autre CLI…'))
+        .getByRole('button', { name: /^Ajouter un / })
+        .hasAttribute('disabled'),
     ).toBe(true);
   });
 
@@ -211,7 +215,7 @@ describe('QuickLaunch', () => {
     await user.type(screen.getByRole('textbox', { name: 'Commande' }), 'npm run dev');
     await user.click(screen.getByRole('button', { name: '← Mode rapide' }));
     expect(count('Codex')).toBe('1');
-    await user.click(within(row('Claude Code')).getByRole('button', { name: '+' }));
+    await user.click(within(row('Claude Code')).getByRole('button', { name: /^Ajouter un / }));
     await user.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
     expect(
       within(screen.getByRole('list', { name: 'Agents' })).getAllByRole('listitem'),
@@ -319,7 +323,7 @@ describe('usage warning of the launcher', () => {
     const { launched } = renderLauncher({ usageWarning });
     const note = screen.getByRole('note', { name: 'Limite d’usage Claude Code' });
     expect(note.textContent).toBe(`Claude Code · ${WARNING}`);
-    await userEvent.click(within(row('Codex')).getByRole('button', { name: '+' }));
+    await userEvent.click(within(row('Codex')).getByRole('button', { name: /^Ajouter un / }));
     expect(screen.queryByRole('note', { name: 'Limite d’usage Codex' })).toBeNull();
     const button = screen.getByRole('button', { name: 'Lancer 2 agents' });
     expect(button).toHaveProperty('disabled', false);
@@ -329,9 +333,9 @@ describe('usage warning of the launcher', () => {
 
   it('says nothing once the draft has no agent of that CLI, and in the detailed mode too', async () => {
     renderLauncher({ usageWarning });
-    await userEvent.click(within(row('Claude Code')).getByRole('button', { name: '−' }));
+    await userEvent.click(within(row('Claude Code')).getByRole('button', { name: /^Retirer un / }));
     expect(screen.queryByRole('note', { name: /Limite d’usage/ })).toBeNull();
-    await userEvent.click(within(row('Claude Code')).getByRole('button', { name: '+' }));
+    await userEvent.click(within(row('Claude Code')).getByRole('button', { name: /^Ajouter un / }));
     await userEvent.click(screen.getByRole('button', { name: 'Mode détaillé…' }));
     expect(screen.getByRole('note', { name: 'Limite d’usage Claude Code' })).toBeTruthy();
   });
@@ -347,5 +351,51 @@ describe('usage warning of the launcher', () => {
     expect(screen.getByRole('note', { name: 'Limite d’usage disparu' }).textContent).toBe(
       `disparu · ${WARNING}`,
     );
+  });
+});
+
+// #114 — the counters speak: « Retirer un X » / « Ajouter un X », not « − » / « + ».
+describe('QuickLaunch counters, for a screen reader', () => {
+  it('names each button after the CLI it counts', () => {
+    renderLauncher();
+    for (const name of ['Claude Code', 'Codex', 'Autre CLI…', 'Terminal libre']) {
+      expect(within(row(name)).getByRole('button', { name: `Retirer un ${name}` })).toBeDefined();
+      expect(within(row(name)).getByRole('button', { name: `Ajouter un ${name}` })).toBeDefined();
+    }
+  });
+
+  it('still adds and removes through the named buttons', async () => {
+    const user = userEvent.setup();
+    renderLauncher();
+    await user.click(screen.getByRole('button', { name: 'Ajouter un Codex' }));
+    expect(count('Codex')).toBe('1');
+    await user.click(screen.getByRole('button', { name: 'Retirer un Codex' }));
+    expect(count('Codex')).toBe('0');
+  });
+});
+
+// #112 — only a live orchestrator blocks a new one.
+describe('QuickLaunch « Orchestrateur » with a closed orchestrator', () => {
+  const orchestrator = (state: Agent['state']) =>
+    ({ position: 1, role: 'orchestrator', state }) as Agent;
+  const choice = () =>
+    screen.getByRole('checkbox', { name: /Orchestrateur : le premier Claude Code/ });
+
+  it('is offered when the orchestrator is closed', () => {
+    renderLauncher({
+      counters: { freeTerminal: 0, 'claude-code': 1 },
+      running: [orchestrator('closed')],
+    });
+    expect((choice() as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/déjà un orchestrateur/)).toBeNull();
+  });
+
+  it('is refused while the orchestrator is live', () => {
+    renderLauncher({
+      counters: { freeTerminal: 0, 'claude-code': 1 },
+      running: [orchestrator('awaiting-prompt')],
+    });
+    expect((choice() as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/déjà un orchestrateur/)).toBeDefined();
   });
 });

@@ -58,7 +58,9 @@ const launchSix = async (scenario: string) => {
   await page.getByRole('button', { name: 'Choisir un dépôt Git…' }).click();
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  const plus = launcher.getByRole('group', { name: 'Faux CLI' }).getByRole('button', { name: '+' });
+  const plus = launcher
+    .getByRole('group', { name: 'Faux CLI' })
+    .getByRole('button', { name: /^Ajouter un / });
   for (let i = 1; i < 6; i++) await plus.click();
   await launcher.getByRole('button', { name: 'Lancer 6 agents' }).click();
   await page.keyboard.press('Enter'); // 1m: « Toujours autoriser »

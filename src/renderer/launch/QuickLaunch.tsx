@@ -66,6 +66,7 @@ function Counter({ label, hint, value, canAdd, onChange }: CounterProps) {
         <button
           type="button"
           className={STEP}
+          aria-label={`Retirer un ${label}`}
           onClick={() => {
             onChange(value - 1);
           }}
@@ -85,6 +86,7 @@ function Counter({ label, hint, value, canAdd, onChange }: CounterProps) {
         <button
           type="button"
           className={STEP}
+          aria-label={`Ajouter un ${label}`}
           onClick={() => {
             onChange(value + 1);
           }}

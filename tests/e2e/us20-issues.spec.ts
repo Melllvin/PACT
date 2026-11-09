@@ -43,7 +43,7 @@ async function openWithLead(remote: string | null): Promise<{ page: Page; lead: 
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
   await launcher
     .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();
