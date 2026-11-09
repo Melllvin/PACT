@@ -1042,3 +1042,328 @@ describe('the resume at the reset (US2; R8 to R10)', () => {
     });
   });
 });
+
+// 009 T037 — US3: a reading too old (research R11; spec US3 sc.1 to 4, SC-006). The service checks every minute
+// (`STALE_CHECK_MS`), only once it holds a reading, and offers to stop by caution; it never stops on its own.
+//
+// API fixed here for the dev (see the report, « API fixées »), `src/main/usage/usage-limit-service.ts`:
+//   options.onStale(offers: StaleOffer[]): void       called with the whole list of the offers each time it changes
+//                                                      (renderer: `usage:stale-offers`-like push, free to the dev);
+//                                                      `StaleOffer = { cliId, account, step, windows }` as
+//                                                      `staleProposal` rates it (`windows`: id, label, percent, resetsAt)
+//   service.decideStale(cliId, account, decision: 'stop' | 'later'): Promise<void>
+//     'later': the offer goes, its step is kept in `state.usageLimit.declined` with the `readAt` it was made on
+//     'stop' : like a jump over the band: usage-save « dans la minute » to the agents, then the stop at the end of
+//              the turn or 60 s at most, `pause.cause: 'stale'`, notice « par prudence » (events.md)
+// The agents counted as active are those `accountAgents` lists in `working`. Readings come from `onUsage`; a reading
+// is `age` minutes old when the clock has advanced that much since it was made.
+describe('a reading too old (US3; R11)', () => {
+  type StaleOffer = {
+    cliId: string;
+    account: string;
+    step: number;
+    windows: { id: string; label: string; percent: number; resetsAt: string | null }[];
+  };
+  type StaleService = ServiceLike & {
+    dispose(): void;
+    decideStale(cliId: string, account: string, decision: 'stop' | 'later'): Promise<void>;
+  };
+
+  const MIN = 60_000;
+  let offers: StaleOffer[];
+  let offerCalls: number;
+  let timeouts: number[];
+  let stale: StaleService;
+
+  /** The same clock, which also tells the waits that were asked for. */
+  const watched = (): Clock => ({
+    now: () => clock.now(),
+    setTimeout: (run, ms) => {
+      timeouts.push(ms);
+      return clock.setTimeout(run, ms);
+    },
+    clearTimeout: (timer) => {
+      clock.clearTimeout(timer);
+    },
+  });
+
+  const createStale = async () => {
+    const { UsageLimitService } = await load();
+    const options = {
+      agents: {
+        accountAgents: (cliId: string, account: string) =>
+          (members[key(cliId, account)] ?? []).filter((a) => !paused.includes(a.id)),
+        pause: (agentId: string, pause: Pause) => {
+          calls.push(`pause:${agentId}`);
+          pauses.push({ agentId, pause });
+          paused.push(agentId);
+          return Promise.resolve();
+        },
+        pausedAgents: () => [],
+        resumePaused: () => Promise.resolve('resumed' as const),
+        schedule: () => Promise.resolve(),
+      },
+      git: { indexLock: () => Promise.resolve(null) },
+      cliName: () => 'Claude',
+      exchanges: {
+        record: (workspaceId: string, input: Record<string, unknown>) => {
+          calls.push(`record:${String(input.kind)}:${String(input.to)}`);
+          records.push({ workspaceId, input });
+          return Promise.resolve({});
+        },
+      },
+      wake: {
+        deliver: (agentId: string, options?: { urgent?: boolean }) => {
+          calls.push(`deliver:${agentId}`);
+          delivered.push({ agentId, urgent: options?.urgent === true });
+        },
+      },
+      stores,
+      clock: watched(),
+      autoResume: (workspaceId: string) => Promise.resolve(autoResumeOf[workspaceId] ?? true),
+      commitFrozen: () => false,
+      onStale: (next: StaleOffer[]) => {
+        offerCalls++;
+        offers = next;
+      },
+    };
+    return new UsageLimitService(options) as StaleService;
+  };
+
+  /** Reads the account at `percent` of its 5 h window; the reading is dated now. */
+  const read = (percent = 82) => stale.onUsage(state([window5h(percent)]));
+  const decide = async (decision: 'stop' | 'later') => {
+    await stale.decideStale('claude-code', 'default', decision);
+    await flush();
+  };
+  const declined = async () => (await stores.state.read()).usageLimit.declined;
+
+  beforeEach(async () => {
+    offers = [];
+    offerCalls = 0;
+    timeouts = [];
+    members = { [key('claude-code', 'default')]: [A, B] };
+    stale = await createStale();
+  });
+
+  describe('the check every minute', () => {
+    it('Given no reading at all, When time goes by, Then nothing is armed and nothing is offered', async () => {
+      await clock.advance(2 * 3_600_000);
+      expect(timeouts).toEqual([]);
+      expect(offerCalls).toBe(0);
+    });
+
+    it('Given a reading, When it is taken, Then a check is armed every 60 s', async () => {
+      await read();
+      expect(timeouts).toContain(MIN);
+      const armed = timeouts.length;
+      await clock.advance(3 * MIN);
+      // The check goes on by itself: it re-arms after each minute.
+      expect(timeouts.length).toBeGreaterThanOrEqual(armed + 3);
+      expect(new Set(timeouts)).toEqual(new Set([MIN]));
+    });
+
+    it('Given a reading 14 and 15 minutes old, When the checks run, Then nothing is offered; at 16 minutes, one offer at step 1 (US3 sc.1)', async () => {
+      await read(82);
+      await clock.advance(15 * MIN);
+      expect(offers).toEqual([]);
+      await clock.advance(MIN);
+      expect(offers).toEqual([
+        {
+          cliId: 'claude-code',
+          account: 'default',
+          step: 1,
+          windows: [has({ id: 'five-hour', label: '5 h', percent: 82, resetsAt: RESET_5H })],
+        },
+      ]);
+    });
+
+    it('Given a reading far from the threshold, When it gets old, Then nothing is offered', async () => {
+      await read(79);
+      await clock.advance(40 * MIN);
+      expect(offers).toEqual([]);
+    });
+
+    it('Given an old reading and no agent at work, When the checks run, Then nothing is offered (US3 sc.4)', async () => {
+      members[key('claude-code', 'default')] = [B];
+      await read(85);
+      await clock.advance(40 * MIN);
+      expect(offers).toEqual([]);
+    });
+
+    it('Given a Codex agent at work and no reading for Codex, When the checks run, Then only the Claude account is offered (FR-011)', async () => {
+      members[key('codex', 'default')] = [CODEX];
+      await read(85);
+      await clock.advance(40 * MIN);
+      expect(offers.map((o) => o.cliId)).toEqual(['claude-code']);
+    });
+
+    it('Given an offer, When a fresh reading far from the threshold comes, Then the offer is withdrawn', async () => {
+      await read(85);
+      await clock.advance(16 * MIN);
+      expect(offers).toHaveLength(1);
+      await read(40);
+      expect(offers).toEqual([]);
+    });
+  });
+
+  describe('never alone (SC-006)', () => {
+    it('Given an offer nobody answers, When hours go by, Then no agent is told to save, woken or paused', async () => {
+      await read(84);
+      await clock.advance(6 * 3_600_000);
+      expect(offers).toHaveLength(1);
+      expect(offers[0]?.step).toBeGreaterThanOrEqual(1);
+      expect(pauses).toEqual([]);
+      expect(delivered).toEqual([]);
+      expect(records).toEqual([]);
+    });
+
+    it('Given an old reading at 82 %, When the checks run, Then no usage-save goes out: the offer is not an order', async () => {
+      await read(82);
+      await clock.advance(2 * 3_600_000);
+      expect(records.filter((r) => r.input.kind === 'usage-save')).toEqual([]);
+      expect(pauses).toEqual([]);
+    });
+  });
+
+  describe('« Pas maintenant » (US3 sc.2)', () => {
+    it('Given an offer, When the user declines, Then nothing is stopped, the offer goes, and its step is kept with the reading', async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+      await decide('later');
+      expect(offers).toEqual([]);
+      expect(pauses).toEqual([]);
+      expect(records.filter((r) => r.input.kind === 'usage-save')).toEqual([]);
+      expect(await declined()).toEqual([
+        has({ cliId: 'claude-code', account: 'default', step: 1, readAt: START }),
+      ]);
+    });
+
+    it('Given a declined offer, When 14 more minutes pass, Then nothing comes back; at the next 15-minute step (30 min) it comes back at step 2', async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+      await decide('later');
+      await clock.advance(13 * MIN);
+      expect(offers).toEqual([]);
+      await clock.advance(MIN);
+      expect(offers).toEqual([has({ cliId: 'claude-code', account: 'default', step: 2 })]);
+      expect(pauses).toEqual([]);
+    });
+
+    it('Given the two steps declined, When the 45th minute comes, Then the third step is offered', async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+      await decide('later');
+      await clock.advance(14 * MIN);
+      await decide('later');
+      expect(await declined()).toEqual([has({ step: 2 })]);
+      await clock.advance(15 * MIN);
+      expect(offers).toEqual([has({ step: 3 })]);
+    });
+
+    it('Given a declined offer, When PACT restarts, Then the new service does not offer the same step again', async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+      await decide('later');
+      stale.dispose();
+      offers = [];
+      stale = await createStale();
+      await stale.onUsage({
+        ...state([window5h(82)]),
+        reading: {
+          cliId: 'claude-code',
+          account: 'default',
+          windows: [window5h(82)],
+          readAt: START,
+        },
+      });
+      await clock.advance(MIN);
+      expect(offers).toEqual([]);
+    });
+
+    it('Given a declined offer, When a fresh reading comes, Then the refusal is erased and the offer comes back after 16 minutes', async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+      await decide('later');
+      await read(83);
+      expect(await declined()).toEqual([]);
+      await clock.advance(15 * MIN);
+      expect(offers).toEqual([]);
+      await clock.advance(MIN);
+      expect(offers).toEqual([has({ step: 1, windows: [has({ percent: 83 })] })]);
+    });
+  });
+
+  describe('« Arrêter par prudence » (US3 sc.3)', () => {
+    beforeEach(async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+    });
+
+    it('Given an offer, When the user accepts, Then each agent of the account gets the save instruction « dans la minute » and an urgent wake, and nobody is paused yet', async () => {
+      await decide('stop');
+      for (const target of [A, B]) {
+        expect(savesTo(target.id).map((r) => r.input.text)).toEqual([
+          saveText('5 h', 82, 90, true),
+        ]);
+        expect(calls.indexOf(`record:usage-save:${target.id}`)).toBeLessThan(
+          calls.indexOf(`deliver:${target.id}`),
+        );
+      }
+      expect(delivered.filter((d) => d.urgent)).toHaveLength(2);
+      expect(pauses).toEqual([]);
+      expect(offers).toEqual([]);
+    });
+
+    it('Given an acceptance, When an agent ends its turn, Then it is paused then, and the other one at 60 s, not before', async () => {
+      await decide('stop');
+      await clock.advance(10_000);
+      expect(pauses).toEqual([]);
+      await stale.turnFinished(A.id);
+      expect(pauses.map((p) => p.agentId)).toEqual([A.id]);
+      await clock.advance(49_999);
+      expect(pauses.map((p) => p.agentId)).toEqual([A.id]);
+      await clock.advance(1);
+      expect(pauses.map((p) => p.agentId)).toEqual([A.id, B.id]);
+    });
+
+    it('Given an acceptance, When 60 s pass with no end of turn, Then every agent is paused once, with cause stale, the window near its threshold and its reset', async () => {
+      await decide('stop');
+      await clock.advance(60_000);
+      expect(pauses.map((p) => p.agentId).sort()).toEqual([A.id, B.id].sort());
+      for (const { pause } of pauses) {
+        expect(pause).toEqual(
+          has({
+            cliId: 'claude-code',
+            account: 'default',
+            cause: 'stale',
+            windows: [{ id: 'five-hour', label: '5 h', percent: 82, resetsAt: RESET_5H }],
+            resumeAt: RESET_5H,
+          }),
+        );
+      }
+      await clock.advance(5 * MIN);
+      expect(pauses).toHaveLength(2);
+      expect(offers).toEqual([]);
+    });
+
+    it('Given an acceptance, When the agents are paused, Then each notice says « par prudence » with the last reading and its age', async () => {
+      await decide('stop');
+      await clock.advance(60_000);
+      for (const target of [A, B]) {
+        expect(notices(target.id).map((r) => r.input.text)).toEqual([
+          expect.stringMatching(
+            /^PACT t'a mis en pause par prudence : dernière lecture de la limite 5 h à 82 %, il y a 1[67] min\.$/,
+          ),
+        ]);
+      }
+    });
+
+    it('Given an acceptance, When the paused account is read again below the threshold, Then it stays in pause until its reset', async () => {
+      await decide('stop');
+      await clock.advance(60_000);
+      expect(stale.pausedFor('claude-code')).toMatchObject({ cause: 'stale' });
+      expect(stale.usageHeld('claude-code')).toBe(true);
+    });
+  });
+});

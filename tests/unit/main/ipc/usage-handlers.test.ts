@@ -85,3 +85,58 @@ describe('usage handlers: the resume (009 US2)', () => {
     );
   });
 });
+
+// 009 T038 — US3: `usage:stale` (contracts/ui.md « IPC »).
+//
+// API fixed here for the dev: `createUsageServices` uses a third method of `limit`,
+//   decideStale(cliId, account, decision): Promise<void>   « Arrêter par prudence » ('stop') / « Pas maintenant » ('later')
+// and serves, with no answer (`void`):
+//   'usage:stale'  { cliId, account, decision: 'stop' | 'later' }
+
+type StaleChannel = {
+  'usage:stale': (input: {
+    cliId: string;
+    account: string;
+    decision: 'stop' | 'later';
+  }) => Promise<void>;
+};
+
+describe('usage handlers: the offer of a stop by caution (009 US3)', () => {
+  const build = () => {
+    const limit = {
+      resumeByHand: vi.fn(() => Promise.resolve()),
+      cancelResume: vi.fn(() => Promise.resolve()),
+      decideStale: vi.fn(() => Promise.resolve()),
+    };
+    const services = createUsageServices({
+      usage: { list: vi.fn(() => []), setThresholds: vi.fn() },
+      stores: { state: { read: vi.fn(), write: vi.fn() } } as never,
+      limit,
+    }) as unknown as StaleChannel;
+    return { limit, services };
+  };
+
+  it.each(['stop', 'later'] as const)(
+    'Given an offer, When the renderer answers %s on usage:stale, Then the service decides for that account and the answer is void',
+    async (decision) => {
+      const { limit, services } = build();
+      await expect(
+        services['usage:stale']({ cliId: 'claude-code', account: '/comptes/a', decision }),
+      ).resolves.toBeUndefined();
+      expect(limit.decideStale).toHaveBeenCalledExactlyOnceWith(
+        'claude-code',
+        '/comptes/a',
+        decision,
+      );
+      expect(limit.resumeByHand).not.toHaveBeenCalled();
+    },
+  );
+
+  it('Given the service fails, When the renderer answers usage:stale, Then the error reaches the renderer', async () => {
+    const { limit, services } = build();
+    limit.decideStale.mockRejectedValueOnce(new Error('boom'));
+    await expect(
+      services['usage:stale']({ cliId: 'claude-code', account: 'a', decision: 'stop' }),
+    ).rejects.toThrow('boom');
+  });
+});
