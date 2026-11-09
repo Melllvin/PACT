@@ -165,6 +165,23 @@ describe('PtyManager', () => {
     expect(ptys[1]?.written).toEqual([]);
   });
 
+  // #106 — the tile was laid out before « Reprendre »: its size came while no PTY ran.
+  it('starts a terminal at the last size it was given, even before it ran', () => {
+    manager.resize('a1', 132, 41);
+    manager.start('a1', spec);
+    expect(pty().options).toMatchObject({ cols: 132, rows: 41 });
+    manager.resize('a1', 100, 30);
+    pty().exit(0);
+    manager.start('a1', spec);
+    expect(ptys[1]?.options).toMatchObject({ cols: 100, rows: 30 });
+  });
+
+  it('prefers the size of the start spec over the remembered one', () => {
+    manager.resize('a1', 132, 41);
+    manager.start('a1', { ...spec, cols: 90, rows: 20 });
+    expect(pty().options).toMatchObject({ cols: 90, rows: 20 });
+  });
+
   it('ignores writes and resizes to unknown or exited terminals', () => {
     expect(() => {
       manager.write('nope', 'x');

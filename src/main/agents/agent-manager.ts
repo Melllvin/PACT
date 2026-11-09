@@ -246,6 +246,8 @@ export class AgentManager {
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
+  /** #103 — the keys of the screen each agent waits on, when it named its own. */
+  private readonly answerKeys = new Map<string, { allow: string; deny: string }>();
   /**
    * Prompts waiting for the agent to be ready (002 R7): review comments and shortcuts. One is typed per ready transition.
    */
@@ -501,10 +503,14 @@ export class AgentManager {
     }
     const rule = always && answer === 'allow' ? this.pendingRule.get(id) : undefined;
     this.pendingRule.delete(id);
-    this.pty.write(id, running.adapter.answerKeys(answer));
+    const keys = this.answerKeys.get(id);
+    this.answerKeys.delete(id);
+    this.pty.write(id, keys ? keys[answer] : running.adapter.answerKeys(answer));
+    // #104 — a CLI that drops its turn on a refusal says nothing more: it waits for a prompt.
+    const ends = answer === 'deny' && running.adapter.denyEndsTurn === true;
     await this.change(workspace.id, id, ({ awaiting: _answered, ...a }) => ({
       ...a,
-      state: 'working',
+      state: ends ? 'awaiting-prompt' : 'working',
       alwaysAllowRules:
         rule === undefined || a.alwaysAllowRules.includes(rule)
           ? a.alwaysAllowRules
@@ -930,6 +936,7 @@ export class AgentManager {
     this.afterSent.delete(id);
     this.clearSubmission(id);
     this.pendingRule.delete(id);
+    this.answerKeys.delete(id);
     this.branches.unwatch(id);
     const running = this.running.get(id);
     if (!running) return;
@@ -1355,6 +1362,7 @@ export class AgentManager {
     this.afterSent.delete(id);
     this.clearSubmission(id);
     this.pendingRule.delete(id);
+    this.answerKeys.delete(id);
     await this.change(running.workspaceId, id, (agent) => applyExit(agent, code));
   }
 
@@ -1365,9 +1373,12 @@ export class AgentManager {
     if (signal.type === 'awaiting-answer') {
       if (signal.ruleKey !== undefined) this.pendingRule.set(id, signal.ruleKey);
       this.questions.set(id, signal.summary);
+      if (signal.keys) this.answerKeys.set(id, signal.keys);
+      else this.answerKeys.delete(id);
     } else {
       this.pendingRule.delete(id);
       this.questions.delete(id);
+      this.answerKeys.delete(id);
     }
     // 005 R2 — Codex names its rollout after the session: followed from its start.
     if (

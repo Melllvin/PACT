@@ -213,6 +213,46 @@ describe('AgentManager.answer', { timeout: 30_000 }, () => {
     await waitForState(agent.id, 'done');
   });
 
+  // #103 — a question that names its own keys (the folder trust screen) is answered with them.
+  it('types the keys the question came with instead of the usual ones', async () => {
+    scenario = 'ask-permission';
+    const agent = await launchOne();
+    const map = adapter.mapHookEvent.bind(adapter);
+    vi.spyOn(adapter, 'mapHookEvent').mockImplementation((payload) => {
+      const signal = map(payload);
+      return signal?.type === 'awaiting-answer'
+        ? { ...signal, keys: { allow: 'Y', deny: 'N' } }
+        : signal;
+    });
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    const written = vi.spyOn(pty, 'write');
+    await manager.answer(agent.id, 'allow');
+    expect(written).toHaveBeenCalledWith(agent.id, 'Y');
+  });
+
+  // #104 — the CLI drops its turn on a refusal and sends no end of turn.
+  it('waits for a prompt after a refusal when the CLI ends its turn there', async () => {
+    scenario = 'ask-permission';
+    const agent = await launchOne();
+    Object.defineProperty(adapter, 'denyEndsTurn', { value: true, configurable: true });
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    const from = events.length;
+    await manager.answer(agent.id, 'deny');
+    expect(events.slice(from).find((e) => e.agentId === agent.id)?.state).toBe('awaiting-prompt');
+  });
+
+  it('goes on working after a refusal when the CLI keeps its turn', async () => {
+    scenario = 'ask-permission';
+    const agent = await launchOne();
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    const from = events.length;
+    await manager.answer(agent.id, 'deny');
+    expect(events.slice(from).find((e) => e.agentId === agent.id)?.state).toBe('working');
+  });
+
   it('only answers an agent that is waiting for an answer', async () => {
     const agent = await launchOne();
     await expect(manager.answer(agent.id, 'deny')).rejects.toMatchObject({
