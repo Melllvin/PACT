@@ -13,7 +13,7 @@ const setup = (options: { active: number; answer?: boolean; skipConfirm?: boolea
   };
   const shutdown = vi.fn(() => Promise.resolve());
   const confirm = vi.fn(() => Promise.resolve(options.answer ?? true));
-  guardQuit({
+  const guard = guardQuit({
     app,
     activeAgents: () => options.active,
     confirm,
@@ -30,8 +30,66 @@ const setup = (options: { active: number; answer?: boolean; skipConfirm?: boolea
     await Promise.resolve();
     return event;
   };
-  return { app, shutdown, confirm, quit, listeners };
+  return { app, shutdown, confirm, quit, listeners, guard };
 };
+
+// #116 — SIGTERM quits whatever dialog is open: stops everything, without asking, then exits.
+describe('guardQuit terminate', () => {
+  it('quits while the confirmation dialog is still open, and stops everything first', async () => {
+    const { app, shutdown, confirm, quit, guard } = setup({ active: 1 });
+    confirm.mockImplementation(() => new Promise<boolean>(() => undefined));
+    await quit();
+    expect(shutdown).not.toHaveBeenCalled();
+
+    await guard.terminate();
+
+    expect(shutdown).toHaveBeenCalledOnce();
+    expect(app.quit).toHaveBeenCalledOnce();
+    expect(shutdown.mock.invocationCallOrder[0]).toBeLessThan(
+      app.quit.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('lets the quit it triggers through, without asking again', async () => {
+    const { listeners, confirm, guard } = setup({ active: 2 });
+    await guard.terminate();
+    const event = { preventDefault: vi.fn() };
+    for (const listener of listeners) listener(event);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('does not stop twice when the dialog is answered afterwards', async () => {
+    const { app, shutdown, confirm, quit, guard } = setup({ active: 1 });
+    let answer: (value: boolean) => void = () => undefined;
+    confirm.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await quit();
+    await guard.terminate();
+    answer(true);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(shutdown).toHaveBeenCalledOnce();
+    expect(app.quit).toHaveBeenCalledOnce();
+  });
+
+  it('quits even when the stop hangs, at the deadline', async () => {
+    const { app, shutdown, guard } = setup({ active: 0 });
+    shutdown.mockImplementation(() => new Promise<void>(() => undefined));
+    vi.useFakeTimers();
+    try {
+      const done = guard.terminate();
+      await vi.advanceTimersByTimeAsync(5000);
+      await done;
+      expect(app.quit).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 // T110 — quitting with active agents asks first, and every PTY stops before the app exits.
 describe('guardQuit', () => {

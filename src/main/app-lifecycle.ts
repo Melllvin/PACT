@@ -31,8 +31,19 @@ export function guardQuit({
   shutdown,
   skipConfirm,
   deadlineMs = DEADLINE_MS,
-}: Options): void {
+}: Options): { terminate: () => Promise<void> } {
   let phase: 'open' | 'busy' | 'done' = 'open';
+  let terminated = false;
+  const stopAndQuit = async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, deadlineMs);
+    });
+    await Promise.race([shutdown().catch(() => undefined), deadline]);
+    clearTimeout(timer);
+    phase = 'done';
+    app.quit();
+  };
   app.on('before-quit', (event) => {
     if (phase === 'done') return;
     event.preventDefault();
@@ -40,20 +51,28 @@ export function guardQuit({
     phase = 'busy';
     void (async () => {
       const count = activeAgents();
-      if (count > 0 && !skipConfirm && !(await confirm(count))) {
+      const confirmed = count === 0 || skipConfirm === true || (await confirm(count));
+      // A SIGTERM came while the question was open: it quits, whatever the answer.
+      if (terminated) return;
+      if (!confirmed) {
         phase = 'open';
         return;
       }
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const deadline = new Promise<void>((resolve) => {
-        timer = setTimeout(resolve, deadlineMs);
-      });
-      await Promise.race([shutdown().catch(() => undefined), deadline]);
-      clearTimeout(timer);
-      phase = 'done';
-      app.quit();
+      await stopAndQuit();
     })();
   });
+  return {
+    /**
+     * #116 — SIGTERM (system shutdown, supervisor): quits at once, whatever dialog is open and
+     * whatever phase the guard is in, with the same stop as a confirmed quit.
+     */
+    terminate: async () => {
+      if (phase === 'done' || terminated) return;
+      terminated = true;
+      phase = 'busy';
+      await stopAndQuit();
+    },
+  };
 }
 
 /** The quit question of T110, Annuler by default. */

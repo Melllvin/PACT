@@ -609,7 +609,7 @@ void app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow(windowEnv);
   });
-  guardQuit({
+  const quitGuard = guardQuit({
     app,
     activeAgents: () => agents.activeCount(),
     confirm: async (count) => {
@@ -638,6 +638,10 @@ void app.whenReady().then(async () => {
     },
     // e2e runs close the app themselves; no one is there to answer.
     skipConfirm: process.env.PACT_TEST_MODE === '1',
+  });
+  // #116 — a system shutdown or a supervisor quits PACT even with « Quitter PACT ? » open.
+  process.once('SIGTERM', () => {
+    void quitGuard.terminate();
   });
 });
 
