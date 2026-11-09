@@ -144,9 +144,9 @@
 
 ## Phase 7: Polish
 
-- [ ] T049 [P] Test dans `tests/integration/usage/usage-edge.test.ts` : un terminal libre ne s'arrête pas ; un test lancé par PACT continue pendant la pause, et son événement attend la reprise de l'orchestrateur dans le journal ; le plafond de réveils atteint ne retient pas la consigne (spec, cas limites)
-- [ ] T050 Dérouler `specs/009-usage-limit/quickstart.md` ; vérifier la couverture des fichiers modifiés (80 % hors UI, 70 % UI)
-- [ ] T051 [P] Mettre à jour `README.md` (arrêt à la limite, reprise) et la note d'amendement de 005 FR-012 dans `specs/005-usage-gauge/spec.md` : `launch_agent` est refusé pendant une pause ; ajuster `version` dans `package.json` selon la règle 0.x seulement si l'orchestrateur le demande
+- [x] T049 [P] Test dans `tests/integration/usage/usage-edge.test.ts` : un terminal libre ne s'arrête pas ; un test lancé par PACT continue pendant la pause, et son événement attend la reprise de l'orchestrateur dans le journal ; le plafond de réveils atteint ne retient pas la consigne (spec, cas limites)
+- [x] T050 Dérouler `specs/009-usage-limit/quickstart.md` ; vérifier la couverture des fichiers modifiés (80 % hors UI, 70 % UI)
+- [x] T051 [P] Mettre à jour `README.md` (arrêt à la limite, reprise) et la note d'amendement de 005 FR-012 dans `specs/005-usage-gauge/spec.md` : `launch_agent` est refusé pendant une pause ; ajuster `version` dans `package.json` selon la règle 0.x seulement si l'orchestrateur le demande
 
 ---
 
