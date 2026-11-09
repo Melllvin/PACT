@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveTodos } from '../../../src/shared/todo';
 import type { Agent, Workspace } from '../../../src/shared/model';
 import { clockTime, launchWarning, pauseWarning } from '../../../src/shared/usage';
-import { pausedText, pausesOf, saveText } from '../../../src/shared/usage-limit';
+import { pausedText, pausesOf, resumedText, saveText } from '../../../src/shared/usage-limit';
 import { agent } from '../renderer/tiles/fixtures';
 
 // 009 — the texts of contracts/events.md and the pause items, in the cases the main tests do not reach.
@@ -117,5 +117,53 @@ describe('deriveTodos — usage-paused titles', () => {
     expect(item?.title).toBe(
       '◆ En pause · Claude Code · limites 5 h à 91 % et semaine à 90 % · reprise après réinitialisation',
     );
+  });
+});
+
+describe('pausedText with no window', () => {
+  it('still reads as a sentence', () => {
+    expect(pausedText([], null, false)).toBe(
+      "PACT t'a mis en pause : limite . Reprise à la main par l'utilisateur.",
+    );
+  });
+});
+
+describe('resumedText (contracts/events.md « usage-resumed »)', () => {
+  const head = `Reprise après la limite 5 h (90 %), en pause de ${clockTime('2030-01-01T09:00:00.000Z')} à ${clockTime(RESET)}.`;
+  const base = {
+    label: '5 h',
+    percent: 90,
+    since: '2030-01-01T09:00:00.000Z',
+    until: RESET,
+  };
+
+  it('gives an idle agent the first sentence only, a busy one the continue sentence', () => {
+    expect(resumedText({ ...base, who: 'idle' })).toBe(head);
+    expect(resumedText({ ...base, who: 'busy' })).toBe(
+      `${head} Reprends ton travail là où tu t'es arrêté.`,
+    );
+  });
+
+  it('lists the agents resumed and those not saved to an orchestrator, and says no turn was counted', () => {
+    expect(
+      resumedText({
+        ...base,
+        who: 'orchestrator',
+        resumed: ['Claude 2 · dev', 'Claude 3 · test'],
+        unsaved: ['Claude 2 · dev'],
+      }),
+    ).toBe(
+      `${head} Agents repris : Claude 2 · dev, Claude 3 · test. La pause n'a compté aucun tour ni rapport manquant. Non sauvegardé à l'arrêt : Claude 2 · dev.`,
+    );
+    expect(resumedText({ ...base, who: 'orchestrator' })).toBe(
+      `${head} La pause n'a compté aucun tour ni rapport manquant.`,
+    );
+  });
+
+  it('names the Git lock found, and only when there is one', () => {
+    expect(resumedText({ ...base, who: 'idle', lockIn: '/wt/2' })).toBe(
+      `${head} Verrou Git trouvé dans /wt/2 : vérifie-le avant de committer, PACT ne l'a pas effacé.`,
+    );
+    expect(resumedText({ ...base, who: 'idle', lockIn: null })).toBe(head);
   });
 });

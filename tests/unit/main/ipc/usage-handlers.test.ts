@@ -19,7 +19,7 @@ describe('usage handlers', () => {
       },
     };
     const usage = { list: vi.fn(() => []), setThresholds: vi.fn() };
-    const services = createUsageServices({ usage, stores: stores as never });
+    const services = createUsageServices({ usage, stores: stores as never, limit: {} as never });
     expect(await services['settings:usageThresholds']({ warn: 70, critical: 90 })).toEqual({
       warn: 70,
       critical: 90,
@@ -55,7 +55,7 @@ describe('usage handlers: the resume (009 US2)', () => {
       usage: { list: vi.fn(() => []), setThresholds: vi.fn() },
       stores: { state: { read: vi.fn(), write: vi.fn() } } as never,
       limit,
-    } as never) as unknown as ResumeChannels;
+    }) as unknown as ResumeChannels;
     return { limit, services };
   };
 

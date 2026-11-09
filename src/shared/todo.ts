@@ -24,7 +24,7 @@ export const ORDER: TodoKind[] = [
 const plural = (count: number, word: string) => `${String(count)} ${word}${count > 1 ? 's' : ''}`;
 
 /** « <CLI> <number> · <role> »: which agent, and what it does. */
-const who = (agent: Agent, cli: string) =>
+export const who = (agent: Agent, cli: string) =>
   [agentName(agent, () => cli), ...(agent.role ? [agent.role] : [])].join(' · ');
 
 /** Who gets no « Changements à relire »: the orchestrator, and the agents of a loop until it ends. */

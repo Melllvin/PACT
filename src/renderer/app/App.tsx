@@ -169,6 +169,9 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onConfirmIntegration: (id, message) =>
                   void state.confirmIntegrationRequest(id, message),
                 onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
+                onUsageResume: (cliId, account) => void state.resumeUsage(cliId, account),
+                onUsageCancelResume: (cliId, account) =>
+                  void state.cancelUsageResume(cliId, account),
                 onDecideLoop: (issueId, decision) =>
                   void state.decideLoop(workspace.id, issueId, decision),
                 onDecideExchange: (escalationId, decision) =>

@@ -9,9 +9,6 @@ type Props = Omit<AgentActions, 'onClose'> & {
   todo: Todo;
   /** Absent for a free terminal, which has no color nor actions. */
   agent: Agent | undefined;
-  /** 009 — « Reprendre » and « Annuler la reprise » of a « ◆ En pause »: they act on the account. */
-  onUsageResume?: (cliId: string, account: string) => void;
-  onUsageCancelResume?: (cliId: string, account: string) => void;
 };
 
 const SEPARATOR = ' · ';

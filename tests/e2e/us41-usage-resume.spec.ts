@@ -87,7 +87,7 @@ test('at the reset the agents start again in their session, with a pointer for t
   // Stopped mid-turn: PACT hands it a pointer once it is ready, and it goes on with its work.
   await expect
     .poll(() => outputOf(page, 1), { timeout: 60_000 })
-    .toMatch(/événements?, lis get_events/);
+    .toMatch(/événements?, lis (\.pact\/events\.md|get_events)/);
 });
 
 test('an agent idle at the stop is resumed without any pointer (sc. 3)', async () => {

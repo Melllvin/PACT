@@ -32,6 +32,14 @@ const absolute =
 const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown[] }> = {
   'app:getState': { valid: undefined, invalid: [{ extra: true }] },
   'usage:get': { valid: undefined, invalid: [{ extra: true }] },
+  'usage:resume': {
+    valid: { cliId: 'claude-code', account: 'default' },
+    invalid: [{}, { cliId: 'claude-code' }, { cliId: '', account: 'a' }],
+  },
+  'usage:cancelResume': {
+    valid: { cliId: 'claude-code', account: 'default' },
+    invalid: [{}, { account: 'a' }, { cliId: 'x', account: '' }],
+  },
   'settings:usageThresholds': {
     valid: { warn: 70, critical: 90 },
     invalid: [

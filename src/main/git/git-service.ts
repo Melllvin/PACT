@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { appendFile, copyFile, mkdir, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { Writable } from 'node:stream';
 import { promisify } from 'node:util';
 import { parseUnifiedDiff } from '../../shared/diff';
@@ -204,6 +204,21 @@ export class GitService {
   async initRepo(path: string): Promise<void> {
     await mkdir(path, { recursive: true });
     await this.git(path, ['init']);
+  }
+
+  /**
+   * 009 R8 — the path of the `index.lock` of a worktree when it exists, else null. Only read:
+   * a lock may belong to a Git command still running, so PACT never erases it.
+   */
+  async indexLock(worktree: string): Promise<string | null> {
+    const raw = await this.git(worktree, ['rev-parse', '--git-path', 'index.lock']);
+    const path = isAbsolute(raw) ? raw : join(worktree, raw);
+    return (await stat(path).then(
+      () => true,
+      () => false,
+    ))
+      ? path
+      : null;
   }
 
   /** Worktrees start from the committed base branch: local changes are not included. */

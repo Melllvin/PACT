@@ -906,7 +906,7 @@ describe('the resume at the reset (US2; R8 to R10)', () => {
         calls.indexOf(`record:usage-resumed:${WORKER.id}`),
       );
       expect(calls.indexOf(`record:usage-resumed:${WORKER.id}`)).toBeLessThan(
-        calls.indexOf(`deliver:${WORKER.id}`),
+        calls.lastIndexOf(`deliver:${WORKER.id}`),
       );
     });
 
@@ -921,7 +921,7 @@ describe('the resume at the reset (US2; R8 to R10)', () => {
           input: has({ to: IDLE.id, kind: 'usage-resumed', type: 'info', text: headline() }),
         },
       ]);
-      expect(delivered.map((d) => d.agentId)).not.toContain(IDLE.id);
+      expect(delivered.filter((d) => !d.urgent).map((d) => d.agentId)).not.toContain(IDLE.id);
     });
 
     it('Given an orchestrator, When the account resumes, Then it gets an action naming the agents resumed and saying the pause counted no turn', async () => {

@@ -163,3 +163,37 @@ export function pausedText(
 export function pausesOf(workspaces: readonly { agents: readonly Pick<Agent, 'pause'>[] }[]) {
   return workspaces.flatMap((w) => w.agents.flatMap((a) => (a.pause ? [a.pause] : [])));
 }
+
+export type ResumedFields = {
+  /** The window of the pause, as `pause.windows` names it. */
+  label: string;
+  percent: number;
+  /** When the pause began, and now. */
+  since: string;
+  until: string;
+  /** An orchestrator is told who resumed; an agent stopped mid-turn goes on; an idle one is only told. */
+  who: 'orchestrator' | 'busy' | 'idle';
+  /** Orchestrator only: the agents resumed, and those not saved at the stop. */
+  resumed?: readonly string[];
+  unsaved?: readonly string[];
+  /** The Git lock found in the worktree of the agent, if any. */
+  lockIn?: string | null;
+};
+
+/** contracts/events.md « usage-resumed » — the sentence, its follow-up by role, and the suffixes. */
+export function resumedText(f: ResumedFields): string {
+  const head = `Reprise après la limite ${f.label} (${String(f.percent)} %), en pause de ${clockTime(f.since)} à ${clockTime(f.until)}.`;
+  const resumed = f.resumed ?? [];
+  const unsaved = f.unsaved ?? [];
+  const body =
+    f.who === 'busy'
+      ? " Reprends ton travail là où tu t'es arrêté."
+      : f.who === 'orchestrator'
+        ? `${resumed.length > 0 ? ` Agents repris : ${resumed.join(', ')}.` : ''} La pause n'a compté aucun tour ni rapport manquant.`
+        : '';
+  const saved = unsaved.length > 0 ? ` Non sauvegardé à l'arrêt : ${unsaved.join(', ')}.` : '';
+  const lock = f.lockIn
+    ? ` Verrou Git trouvé dans ${f.lockIn} : vérifie-le avant de committer, PACT ne l'a pas effacé.`
+    : '';
+  return `${head}${body}${saved}${lock}`;
+}

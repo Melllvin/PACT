@@ -115,6 +115,9 @@ export type AppState = {
   confirmRestartAgent: (resumeWork: boolean) => Promise<void>;
   /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
   cancelAutoResume: (agentId: string) => Promise<void>;
+  /** 009 R10 — « Reprendre » / « Annuler la reprise » of a « ◆ En pause »: the whole account. */
+  resumeUsage: (cliId: string, account: string) => Promise<void>;
+  cancelUsageResume: (cliId: string, account: string) => Promise<void>;
   /** 003 US3 — the user's answer to an integration the orchestrator asks for (FR-018). */
   confirmIntegrationRequest: (requestId: string, message: string) => Promise<void>;
   refuseIntegrationRequest: (requestId: string) => Promise<void>;
@@ -635,6 +638,9 @@ export function createAppStore(api: PactApi) {
         await get().restartAgent(agentId, { resumeWork });
       },
       cancelAutoResume: (agentId) => act(() => api.invoke('agent:cancelAutoResume', { agentId })),
+      resumeUsage: (cliId, account) => act(() => api.invoke('usage:resume', { cliId, account })),
+      cancelUsageResume: (cliId, account) =>
+        act(() => api.invoke('usage:cancelResume', { cliId, account })),
 
       confirmIntegrationRequest: (requestId, message) =>
         act(() => api.invoke('integrationRequest:confirm', { requestId, message })),

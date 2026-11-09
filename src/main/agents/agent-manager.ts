@@ -102,6 +102,13 @@ type Options = {
   onLaunched?: (workspaceId: string, agents: Agent[]) => void;
   /** Quiet time after which the output is read again for a question (generic adapter). */
   idleMs?: number;
+  /**
+   * 009 R8 — the scheduled resume of a `paused` agent is due. The account is resumed as a whole by
+   * the usage service, which reads the limits again.
+   */
+  onPausedDue?: (agent: Agent) => void;
+  /** 009 R10 — « Reprendre » on the tile of a paused agent: the service resumes it, with an override. */
+  onPausedResume?: (agent: Agent) => Promise<void>;
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
   autoResume?: (workspaceId: string) => Promise<boolean>;
   clock?: Clock;
@@ -225,6 +232,8 @@ export class AgentManager {
   private readonly onTurnStart: NonNullable<Options['onTurnStart']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
   private readonly onLaunched: NonNullable<Options['onLaunched']>;
+  private readonly onPausedDue: ((agent: Agent) => void) | undefined;
+  private readonly onPausedResume: ((agent: Agent) => Promise<void>) | undefined;
   private readonly branches: BranchWatcher;
   private readonly idleMs: number;
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
@@ -278,6 +287,8 @@ export class AgentManager {
     this.onTurnStart = options.onTurnStart ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
     this.onLaunched = options.onLaunched ?? (() => undefined);
+    this.onPausedDue = options.onPausedDue;
+    this.onPausedResume = options.onPausedResume;
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
     this.onClosing = options.onClosing ?? (() => undefined);
     this.onWakeNotice = options.onWakeNotice ?? (() => undefined);
@@ -325,7 +336,13 @@ export class AgentManager {
   async restore(workspaceId: string): Promise<void> {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) return;
-    for (const agent of await this.markStale(workspace)) this.resumes.sync(agent);
+    for (const agent of await this.markStale(workspace)) {
+      const resume = agent.scheduledResume;
+      // 009 R9 — the reset of a pause passed while PACT was closed: the resume runs at once.
+      if (agent.state === 'paused' && resume && Date.parse(resume.at) <= +this.clock.now()) {
+        void this.resumeDue(resume);
+      } else this.resumes.sync(agent);
+    }
   }
 
   /**
@@ -391,6 +408,47 @@ export class AgentManager {
       lastError: null,
       scheduledResume: resume,
     }));
+  }
+
+  /** 009 R8 — the agents in `paused` of an account, in every workspace. */
+  pausedAgents(cliId: string, account: string): Agent[] {
+    return this.workspaces
+      .list()
+      .flatMap(({ agents }) => agents)
+      .filter(
+        (agent) =>
+          agent.state === 'paused' &&
+          agent.pause?.cliId === cliId &&
+          agent.pause.account === account,
+      );
+  }
+
+  /**
+   * 009 R8 — a paused agent starts again in its own session (`--resume`) and leaves the pause. With
+   * no session id there is nothing to resume: it stays paused, `blocked`, waiting for « Relancer ».
+   */
+  async resumePaused(id: string): Promise<'resumed' | 'blocked'> {
+    const { workspace, agent } = this.find(id);
+    if (agent.state !== 'paused') {
+      throw new IpcFailure('INVALID_INPUT', 'Cet agent n’est pas en pause.');
+    }
+    this.resumes.forget(id);
+    if (agent.sessionId === null) {
+      await this.change(workspace.id, id, (a) => ({
+        ...a,
+        scheduledResume: null,
+        pause: a.pause && { ...a.pause, blocked: 'session' },
+      }));
+      return 'blocked';
+    }
+    await this.startAgain(workspace, agent, agent.sessionId);
+    return 'resumed';
+  }
+
+  /** 009 R8, R10 — sets, or with null clears, the scheduled resume of a paused agent. */
+  async schedule(id: string, resume: ScheduledResume | null): Promise<void> {
+    const { workspace } = this.find(id);
+    await this.change(workspace.id, id, (a) => ({ ...a, scheduledResume: resume }));
   }
 
   /** The agents of the workspace, those without a process marked « à reprendre ». */
@@ -459,6 +517,13 @@ export class AgentManager {
    * « continue » typed in its prompt instead (data-model « AgentState »).
    */
   async resume(id: string): Promise<void> {
+    const found = this.find(id);
+    // 009 — a paused agent resumes in its session, and the service covers it until the reset.
+    if (found.agent.state === 'paused') {
+      if (this.onPausedResume) await this.onPausedResume(found.agent);
+      else await this.resumePaused(id);
+      return;
+    }
     const { workspace, agent } = this.inError(id);
     this.resumes.forget(id);
     await this.resumeNow(workspace, agent);
@@ -930,14 +995,13 @@ export class AgentManager {
     if (!found) return;
     const { workspace, agent } = found;
     const scheduled = agent.scheduledResume;
-    if (
-      agent.state !== 'error' ||
-      agent.lastError?.kind !== 'rate-limit' ||
-      scheduled?.at !== resume.at ||
-      scheduled.attempt !== resume.attempt
-    ) {
+    const due = scheduled?.at === resume.at && scheduled.attempt === resume.attempt;
+    // 009 R8 — a paused agent hands over to the usage service, which reads the limits again.
+    if (agent.state === 'paused') {
+      if (due) this.onPausedDue?.(agent);
       return;
     }
+    if (agent.state !== 'error' || agent.lastError?.kind !== 'rate-limit' || !due) return;
     try {
       await this.resumeNow(workspace, agent);
     } catch {

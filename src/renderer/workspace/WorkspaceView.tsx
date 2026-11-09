@@ -73,6 +73,9 @@ export type AgentActions = {
   onDecide?: (agentId: string, text: string) => void;
   /** 005 — « Détail » of a usage alert: opens the detail of its gauge (`usage:<cli>:<account>`). */
   onUsageDetail?: (key: string) => void;
+  /** 009 — « Reprendre » and « Annuler la reprise » of a « ◆ En pause »: they act on the account. */
+  onUsageResume?: (cliId: string, account: string) => void;
+  onUsageCancelResume?: (cliId: string, account: string) => void;
 };
 
 /** The review of the app (review-store and « vu » of app-store), for this workspace. */
