@@ -462,6 +462,16 @@ describe('a reading that jumps over the band (FR-005, Q8; US1 sc.7, O5)', () => 
     expect(pauses).toHaveLength(2);
   });
 
+  it('Given a deferred stop, When the window resets before the 60 s, Then nothing is paused at 60 s', async () => {
+    await service.onUsage(state([window5h(85)]));
+    await service.onUsage(state([window5h(92)]));
+    await clock.advance(10_000);
+    // The window reset since: its reset time is behind the clock, so it reads 0 %.
+    await service.onUsage(state([window5h(92, { resetsAt: '2030-01-01T08:59:00.000Z' })]));
+    await clock.advance(60_000);
+    expect(pauses).toEqual([]);
+  });
+
   it('Given a first reading above the threshold, When it comes, Then it is a jump too: the save goes, the stop waits', async () => {
     await service.onUsage(state([window5h(93)]));
     expect(savesTo(A.id)).toHaveLength(1);
