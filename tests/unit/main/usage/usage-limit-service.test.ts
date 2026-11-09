@@ -634,3 +634,411 @@ describe('an agent launched by the user during the pause (O1)', () => {
     expect(pauses.map((p) => p.agentId)).toContain(mine.id);
   });
 });
+
+// 009 T028 — US2: the resume at the reset (research R8 to R10; contracts/events.md « usage-resumed »; spec US2
+// sc.2, 5, 6, 8, 10, FR-008, FR-012, FR-013). Same service, same clock, more fake dependencies.
+//
+// API fixed here for the dev, on top of the one above (see the report, « API fixées »):
+//   options.agents.pausedAgents(cliId, account): Agent[]         the agents in `paused` of the account, in every
+//                                                                workspace, each with its `pause` (T032)
+//   options.agents.resumePaused(agentId): Promise<'resumed' | 'blocked'>
+//                                                                AgentManager.resumePaused (T032): `startAgain` with
+//                                                                the sessionId and `pause` back to null; 'blocked'
+//                                                                when the sessionId is null (pause.blocked: 'session')
+//   options.agents.schedule(agentId, resume): Promise<void>      sets (or, with null, clears) `scheduledResume`
+//   options.git.indexLock(worktreePath): Promise<string | null>  GitService.indexLock (T034): the path, never erased
+//   options.cliName(cliId): string                               « Claude » for `claude-code`: names in the notices
+//   service.resumeAccount(cliId, account): Promise<void>         the resume at its time (R8): reads the last reading
+//                                                                again, waits for a window still at its threshold,
+//                                                                else resumes the account, orchestrators first
+//   service.resumeByHand(cliId, account): Promise<void>         « Reprendre » of À faire (R10): resumes the account as
+//                                                                at the reset and writes an override of the account
+//   service.resumeAgent(agentId): Promise<void>                 « Reprendre » of the tile (R10): that agent alone,
+//                                                                with an override of its own
+//   service.cancelResume(cliId, account): Promise<void>        « Annuler la reprise »: `schedule(id, null)` for each
+//                                                                paused agent of the account, which stay paused
+// The notice is `exchanges.record(workspaceId, { from: 'pact', to, kind: 'usage-resumed', type, text })`; an
+// `action` is followed by `wake.deliver(agentId)` (not urgent), an `info` by nothing.
+
+type Scheduled = { agentId: string; at: string; attempt: number } | null;
+type ResumeService = ServiceLike & {
+  resumeAccount(cliId: string, account: string): Promise<void>;
+  resumeByHand(cliId: string, account: string): Promise<void>;
+  resumeAgent(agentId: string): Promise<void>;
+  cancelResume(cliId: string, account: string): Promise<void>;
+};
+type ResumeOptions = ServiceOptions & {
+  agents: ServiceOptions['agents'] & {
+    pausedAgents(cliId: string, account: string): Agent[];
+    resumePaused(agentId: string): Promise<'resumed' | 'blocked'>;
+    schedule(agentId: string, resume: Scheduled): Promise<void>;
+  };
+  git: { indexLock(worktreePath: string): Promise<string | null> };
+  cliName(cliId: string): string;
+};
+
+describe('the resume at the reset (US2; R8 to R10)', () => {
+  let waiting: Agent[];
+  let resumeCalls: string[];
+  let schedules: { agentId: string; resume: Scheduled }[];
+  let locks: Record<string, string>;
+  let blockedIds: Set<string>;
+  let resuming: ResumeService;
+
+  const ORCHESTRATOR = agent(10, { role: 'orchestrator', name: 'Claude 1', state: 'working' });
+  const WORKER = agent(11, {
+    role: 'dev',
+    name: 'Claude 2',
+    state: 'working',
+    worktreePath: '/wt/2',
+  });
+  const IDLE = agent(12, {
+    role: 'test',
+    name: 'Claude 3',
+    state: 'awaiting-prompt',
+    worktreePath: '/wt/3',
+  });
+
+  const paused = (source: Agent, over: Record<string, unknown> = {}): Agent => {
+    const pause = pauses.find((p) => p.agentId === source.id)?.pause;
+    return {
+      ...source,
+      state: 'paused',
+      sessionId: source.sessionId ?? `session-${source.id.slice(-2)}`,
+      pause: {
+        ...pause,
+        midTurn: source.state === 'working',
+        saved: true,
+        closedQuestion: null,
+        blocked: null,
+        ...over,
+      },
+    } as Agent;
+  };
+
+  const createResuming = async () => {
+    const { UsageLimitService } = await load();
+    const options: ResumeOptions = {
+      agents: {
+        accountAgents: (cliId, account) =>
+          (members[key(cliId, account)] ?? []).filter((a) => !paused_.has(a.id)),
+        pause: (agentId, pause) => {
+          calls.push(`pause:${agentId}`);
+          pauses.push({ agentId, pause });
+          paused_.add(agentId);
+          return Promise.resolve();
+        },
+        pausedAgents: (cliId, account) =>
+          waiting.filter((a) => a.pause?.cliId === cliId && a.pause.account === account),
+        resumePaused: (agentId) => {
+          resumeCalls.push(agentId);
+          calls.push(`resume:${agentId}`);
+          if (blockedIds.has(agentId)) return Promise.resolve('blocked' as const);
+          waiting = waiting.filter((a) => a.id !== agentId);
+          paused_.delete(agentId);
+          return Promise.resolve('resumed' as const);
+        },
+        schedule: (agentId, resume) => {
+          schedules.push({ agentId, resume });
+          return Promise.resolve();
+        },
+      },
+      exchanges: {
+        record: (workspaceId, input) => {
+          calls.push(`record:${String(input.kind)}:${String(input.to)}`);
+          records.push({ workspaceId, input });
+          return Promise.resolve({});
+        },
+      },
+      wake: {
+        deliver: (agentId, options) => {
+          calls.push(`deliver:${agentId}`);
+          delivered.push({ agentId, urgent: options?.urgent === true });
+        },
+      },
+      git: { indexLock: (path) => Promise.resolve(locks[path] ?? null) },
+      cliName: () => 'Claude',
+      stores,
+      clock,
+      autoResume: (workspaceId) => Promise.resolve(autoResumeOf[workspaceId] ?? true),
+      commitFrozen: () => false,
+    };
+    return new UsageLimitService(options) as ResumeService;
+  };
+  /** The ids the fake manager has stopped: they are no longer listed by `accountAgents`. */
+  let paused_: Set<string>;
+
+  /** Stops the account (87 %, then 90 %), then lists its agents as paused, as the manager would. */
+  const pauseTheAccount = async (windows: UsageWindow[] = [window5h(90)]) => {
+    await resuming.onUsage(state(windows.map((w) => ({ ...w, usedPercent: 87 }))));
+    await resuming.onUsage(state(windows));
+    await clock.advance(5000);
+    waiting = (members[key('claude-code', 'default')] ?? []).map((a) => paused(a));
+  };
+  const resumed = (agentId: string) =>
+    records.filter((r) => r.input.kind === 'usage-resumed' && r.input.to === agentId);
+  const sentTo = (agentId: string) => resumed(agentId).map((r) => r.input.text as string);
+  const headline = (percent = 90, label = '5 h') =>
+    `Reprise après la limite ${label} (${String(percent)} %), en pause de ${clockTime(START)} à ${clockTime(RESET_5H)}.`;
+
+  beforeEach(async () => {
+    waiting = [];
+    resumeCalls = [];
+    schedules = [];
+    locks = {};
+    blockedIds = new Set();
+    paused_ = new Set();
+    members = { [key('claude-code', 'default')]: [ORCHESTRATOR, WORKER, IDLE] };
+    resuming = await createResuming();
+  });
+
+  describe('when it is due (US2 sc.1, 2, 7)', () => {
+    it('Given the 5 h window reset, When the resume is due, Then every paused agent is resumed, the orchestrator first, and the account is no longer in pause', async () => {
+      await pauseTheAccount();
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+
+      expect(resumeCalls[0]).toBe(ORCHESTRATOR.id);
+      expect([...resumeCalls].sort()).toEqual([ORCHESTRATOR.id, WORKER.id, IDLE.id].sort());
+      expect(resuming.pausedFor('claude-code')).toBeNull();
+      expect(resuming.usageHeld('claude-code')).toBe(false);
+    });
+
+    it('Given a pause on the 5 h window and the week read at its threshold since, When the 5 h resume is due, Then nobody is resumed and each agent waits for the reset of the week (US2 sc.2)', async () => {
+      await pauseTheAccount();
+      await resuming.onUsage(state([window5h(90), weekly(91)]));
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+
+      expect(resumeCalls).toEqual([]);
+      expect(schedules.map((s) => s.agentId).sort()).toEqual(
+        [ORCHESTRATOR.id, WORKER.id, IDLE.id].sort(),
+      );
+      for (const { resume } of schedules) expect(resume).toEqual(has({ at: RESET_WEEK }));
+      expect(resuming.pausedFor('claude-code')).not.toBeNull();
+    });
+
+    it('Given that wait, When the week resets, Then the resume goes through', async () => {
+      await pauseTheAccount();
+      await resuming.onUsage(state([window5h(90), weekly(91)]));
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+      await clock.advance(4 * 24 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+      expect([...resumeCalls].sort()).toEqual([ORCHESTRATOR.id, WORKER.id, IDLE.id].sort());
+    });
+
+    it('Given the automatic resume off in one workspace, When a second window makes the resume wait, Then the agents of that workspace get no scheduled resume (US2 sc.6)', async () => {
+      autoResumeOf = { w1: true, w2: false };
+      const other = agent(13, { workspaceId: 'w2', state: 'awaiting-prompt', name: 'Claude 4' });
+      members[key('claude-code', 'default')] = [ORCHESTRATOR, other];
+      await pauseTheAccount();
+      await resuming.onUsage(state([window5h(90), weekly(91)]));
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+
+      expect(schedules.filter((s) => s.agentId === ORCHESTRATOR.id)).toHaveLength(1);
+      expect(schedules.filter((s) => s.agentId === other.id && s.resume !== null)).toEqual([]);
+    });
+
+    it('Given no known reset, When the resume is due, Then the account is resumed although the last reading is still above the threshold (O2)', async () => {
+      members[key('claude-code', 'default')] = [WORKER, IDLE];
+      await pauseTheAccount([window5h(90, { resetsAt: null })]);
+      await clock.advance(60_000);
+      await resuming.resumeAccount('claude-code', 'default');
+      expect([...resumeCalls].sort()).toEqual([WORKER.id, IDLE.id].sort());
+      const { usageLimit } = await stores.state.read();
+      expect(usageLimit.resumed).toEqual([
+        { cliId: 'claude-code', account: 'default', at: clock.now().toISOString() },
+      ]);
+    });
+
+    it('Given a resume with no known reset, When the same old reading comes again, Then nobody is stopped again; a reading taken after the resume stops them (O2)', async () => {
+      members[key('claude-code', 'default')] = [WORKER, IDLE];
+      const old = state([window5h(90, { resetsAt: null })]);
+      await pauseTheAccount([window5h(90, { resetsAt: null })]);
+      await clock.advance(60_000);
+      await resuming.resumeAccount('claude-code', 'default');
+      const before = pauses.length;
+
+      await resuming.onUsage(old);
+      await clock.advance(60_000);
+      expect(pauses).toHaveLength(before);
+
+      await clock.advance(1000);
+      await resuming.onUsage(state([window5h(91, { resetsAt: null })]));
+      await clock.advance(60_000);
+      expect(pauses.length).toBeGreaterThan(before);
+    });
+
+    it('Given an agent whose session is unknown, When the resume is due, Then it stays paused, is not told it resumed, and the others go on (US2 sc.5)', async () => {
+      await pauseTheAccount();
+      blockedIds.add(IDLE.id);
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+      expect(resumeCalls).toContain(IDLE.id);
+      expect(resumed(IDLE.id)).toEqual([]);
+      expect(resumed(WORKER.id)).toHaveLength(1);
+    });
+  });
+
+  describe('the notice usage-resumed (FR-008, FR-012, FR-013; US2 sc.3, 10)', () => {
+    it('Given an agent that was mid-turn, When it resumes, Then it gets an action with the continue sentence, and a wake once it is ready', async () => {
+      await pauseTheAccount();
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+
+      expect(resumed(WORKER.id)).toEqual([
+        {
+          workspaceId: 'w1',
+          input: has({
+            from: 'pact',
+            to: WORKER.id,
+            kind: 'usage-resumed',
+            type: 'action',
+            text: `${headline()} Reprends ton travail là où tu t'es arrêté.`,
+          }),
+        },
+      ]);
+      expect(delivered).toContainEqual({ agentId: WORKER.id, urgent: false });
+      // The agent is started again before it is told, and the notice is in the journal before the wake.
+      expect(calls.indexOf(`resume:${WORKER.id}`)).toBeLessThan(
+        calls.indexOf(`record:usage-resumed:${WORKER.id}`),
+      );
+      expect(calls.indexOf(`record:usage-resumed:${WORKER.id}`)).toBeLessThan(
+        calls.indexOf(`deliver:${WORKER.id}`),
+      );
+    });
+
+    it('Given an agent that was idle, When it resumes, Then it gets an info with the first sentence only, and no wake', async () => {
+      await pauseTheAccount();
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+
+      expect(resumed(IDLE.id)).toEqual([
+        {
+          workspaceId: 'w1',
+          input: has({ to: IDLE.id, kind: 'usage-resumed', type: 'info', text: headline() }),
+        },
+      ]);
+      expect(delivered.map((d) => d.agentId)).not.toContain(IDLE.id);
+    });
+
+    it('Given an orchestrator, When the account resumes, Then it gets an action naming the agents resumed and saying the pause counted no turn', async () => {
+      members[key('claude-code', 'default')] = [ORCHESTRATOR, WORKER];
+      await pauseTheAccount();
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+
+      expect(resumed(ORCHESTRATOR.id)).toEqual([
+        {
+          workspaceId: 'w1',
+          input: has({
+            to: ORCHESTRATOR.id,
+            kind: 'usage-resumed',
+            type: 'action',
+            text: `${headline()} Agents repris : Claude 2 · dev. La pause n'a compté aucun tour ni rapport manquant.`,
+          }),
+        },
+      ]);
+      expect(delivered).toContainEqual({ agentId: ORCHESTRATOR.id, urgent: false });
+    });
+
+    it('Given an agent not saved at the stop, When the account resumes, Then the orchestrator is told which one', async () => {
+      members[key('claude-code', 'default')] = [ORCHESTRATOR, WORKER];
+      await pauseTheAccount();
+      waiting = waiting.map((a) => (a.id === WORKER.id ? paused(WORKER, { saved: false }) : a));
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+      expect(sentTo(ORCHESTRATOR.id)[0]).toContain(" Non sauvegardé à l'arrêt : Claude 2 · dev.");
+    });
+
+    it('Given a Git lock in a worktree, When the account resumes, Then the agent is told, the lock is named and PACT erases nothing', async () => {
+      await pauseTheAccount();
+      locks['/wt/2'] = '/wt/2/.git/index.lock';
+      await clock.advance(2 * 3_600_000);
+      await resuming.resumeAccount('claude-code', 'default');
+      expect(sentTo(WORKER.id)[0]).toContain(
+        " Verrou Git trouvé dans /wt/2 : vérifie-le avant de committer, PACT ne l'a pas effacé.",
+      );
+      expect(sentTo(IDLE.id)[0]).not.toContain('Verrou Git');
+      // The agent resumed all the same: the lock is reported, not a reason to wait.
+      expect(resumeCalls).toContain(WORKER.id);
+    });
+  });
+
+  describe('« Reprendre » and « Annuler la reprise » (US2 sc.6, 8; R10)', () => {
+    it('Given a pause, When the user resumes the account from À faire, Then every agent resumes, orchestrator first, and an override covers the account until the reset', async () => {
+      await pauseTheAccount();
+      await resuming.resumeByHand('claude-code', 'default');
+
+      expect(resumeCalls[0]).toBe(ORCHESTRATOR.id);
+      expect([...resumeCalls].sort()).toEqual([ORCHESTRATOR.id, WORKER.id, IDLE.id].sort());
+      expect((await stores.state.read()).usageLimit.overrides).toEqual([
+        { cliId: 'claude-code', account: 'default', until: RESET_5H, agentId: null },
+      ]);
+      expect(resuming.pausedFor('claude-code')).toBeNull();
+    });
+
+    it('Given the account resumed by hand, When readings stay above the threshold, Then no agent gets a save or is stopped again until the reset (US2 sc.8)', async () => {
+      await pauseTheAccount();
+      await resuming.resumeByHand('claude-code', 'default');
+      const stops = pauses.length;
+      const saves = records.filter((r) => r.input.kind === 'usage-save').length;
+
+      await resuming.onUsage(state([window5h(92)]));
+      await clock.advance(60_000);
+      expect(pauses).toHaveLength(stops);
+      expect(records.filter((r) => r.input.kind === 'usage-save')).toHaveLength(saves);
+      expect(resuming.usageHeld('claude-code')).toBe(false);
+    });
+
+    it('Given the override of the account, When the window resets and the next one reaches the threshold, Then the agents are stopped again', async () => {
+      await pauseTheAccount();
+      await resuming.resumeByHand('claude-code', 'default');
+      await clock.advance(2.5 * 3_600_000);
+      await resuming.onUsage(state([window5h(87, { resetsAt: NEXT_RESET_5H })]));
+      await resuming.onUsage(state([window5h(90, { resetsAt: NEXT_RESET_5H })]));
+      await clock.advance(5000);
+      expect(pauses.length).toBeGreaterThan(3);
+    });
+
+    it('Given a pause, When the user resumes one agent from its tile, Then that agent alone resumes, with an override of its own, and the account stays in pause', async () => {
+      await pauseTheAccount();
+      await resuming.resumeAgent(WORKER.id);
+
+      expect(resumeCalls).toEqual([WORKER.id]);
+      expect((await stores.state.read()).usageLimit.overrides).toEqual([
+        { cliId: 'claude-code', account: 'default', until: RESET_5H, agentId: WORKER.id },
+      ]);
+      expect(resuming.pausedFor('claude-code')).not.toBeNull();
+    });
+
+    it('Given one agent resumed from its tile, When readings stay above the threshold, Then that agent is not stopped again, and the others stay paused', async () => {
+      await pauseTheAccount();
+      await resuming.resumeAgent(WORKER.id);
+      const stops = pauses.length;
+      members[key('claude-code', 'default')] = [WORKER];
+
+      await resuming.onUsage(state([window5h(92)]));
+      await clock.advance(60_000);
+      expect(pauses).toHaveLength(stops);
+      expect(waiting.map((a) => a.id).sort()).toEqual([ORCHESTRATOR.id, IDLE.id].sort());
+    });
+
+    it('Given scheduled resumes, When the user cancels the resume, Then each paused agent loses its scheduled resume and nobody resumes', async () => {
+      await pauseTheAccount();
+      await resuming.cancelResume('claude-code', 'default');
+
+      expect(
+        schedules
+          .filter((s) => s.resume === null)
+          .map((s) => s.agentId)
+          .sort(),
+      ).toEqual([ORCHESTRATOR.id, WORKER.id, IDLE.id].sort());
+      expect(schedules.filter((s) => s.resume !== null)).toEqual([]);
+      expect(resumeCalls).toEqual([]);
+      expect(resuming.pausedFor('claude-code')).not.toBeNull();
+    });
+  });
+});
