@@ -1,6 +1,6 @@
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -386,6 +386,22 @@ describe('fake CLI', () => {
       'utf8',
     );
     expect(mockup).toContain('<h1>écran de connexion</h1>');
+  });
+
+  it('commits on a usage-save read in .pact/events.md, without MCP (009)', async () => {
+    tmp = await mkdtemp(join(tmpdir(), 'pact-fake-'));
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: tmp, encoding: 'utf8' });
+    git('init', '-q');
+    await mkdir(join(tmp, '.pact'));
+    await writeFile(
+      join(tmp, '.pact', 'events.md'),
+      '# Événements PACT\n\n## 2030-01-01T09:00:00.000Z · usage-save · de PACT\n\nSauvegarde ton travail.\n',
+    );
+    const fake = await runFake('usage-stop', { cwd: tmp });
+    await fake.waitForPrompt(1);
+    fake.send('1 événement, lis .pact/events.md');
+    await fake.waitForHook('turn-finished');
+    expect(git('log', '--format=%s').trim()).toBe('pact: sauvegarde');
   });
 
   it('runs the statusLine of its settings with Claude Code’s payload, one per turn (005 R9)', async () => {

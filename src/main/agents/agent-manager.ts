@@ -1,4 +1,5 @@
 import { agentName } from '../../shared/agent-name';
+import type { UsagePause } from '../../shared/usage-limit';
 import { within } from '../timeout';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -38,7 +39,7 @@ import {
   type Draft,
 } from './agent-state';
 import { accountFolder, countsInAccount } from './account';
-import { AutoResume, type Clock } from './auto-resume';
+import { AutoResume, nextResume, systemClock, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
@@ -83,6 +84,7 @@ type Options = {
     | 'fetchOrigin'
     | 'remoteBranchExists'
   > &
+    Partial<Pick<GitService, 'hasUncommittedChanges'>> &
     Partial<Pick<GitService, 'exclude'>>;
   pty: PtyManager;
   hooks: Pick<HookServer, 'register' | 'unregister'>;
@@ -140,6 +142,9 @@ type Options = {
     resetAt?(cliId: string, account: string): Date | undefined;
   };
 };
+
+/** What the usage service knows of a pause; the manager adds the rest (009 R6). */
+export type PauseInfo = Omit<UsagePause, 'midTurn' | 'saved' | 'closedQuestion' | 'blocked'>;
 
 /** How long « Faire orchestrateur » waits for the restarted CLI to be up. */
 const PROMOTE_WAIT_MS = 15_000;
@@ -223,6 +228,7 @@ export class AgentManager {
   private readonly branches: BranchWatcher;
   private readonly idleMs: number;
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
+  private readonly clock: Clock;
   private readonly resumes: AutoResume;
   private readonly orchestrator: Options['orchestrator'];
   private readonly usage: Options['usage'];
@@ -279,6 +285,7 @@ export class AgentManager {
     this.submitDelayMs = options.submitDelayMs ?? 150;
     this.submitTimeoutMs = options.submitTimeoutMs ?? 5_000;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
+    this.clock = options.clock ?? systemClock;
     this.orchestrator = options.orchestrator;
     this.usage = options.usage;
     this.resumes = new AutoResume({
@@ -346,6 +353,44 @@ export class AgentManager {
       .list()
       .flatMap(({ agents }) => agents.filter(countsInAccount))
       .filter((agent) => of(agent.id)?.cliId === cliId && of(agent.id)?.account === account);
+  }
+
+  /**
+   * 009 R6 — the stop at a limit of consumption: the process ends without a crash, the agent is
+   * `paused` with what the service knows (`info`) and what only the manager can read: whether it
+   * was at work, whether the worktree is clean (nothing is committed here: FR-003) and the question
+   * the stop closes. The resume is scheduled at the reset when the workspace resumes by itself; a
+   * rate limit's own resume is replaced.
+   */
+  async pause(id: string, info: PauseInfo): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    if (agent.state === 'closed' || agent.state === 'paused') return;
+    const midTurn = WORKING_STATES.includes(agent.state);
+    const question = this.questions.get(id)?.slice(0, 200) ?? null;
+    this.questions.delete(id);
+    this.resumes.forget(id);
+    await this.stop(id);
+    // An unreadable worktree is not known to be clean.
+    const dirty = this.git.hasUncommittedChanges
+      ? await this.git.hasUncommittedChanges(agent.worktreePath).catch(() => true)
+      : true;
+    const resume = (await this.autoResumeOn(workspace.id))
+      ? nextResume(id, info.resumeAt ? new Date(info.resumeAt) : undefined, 0, this.clock.now())
+      : null;
+    const pause: UsagePause = {
+      ...info,
+      midTurn,
+      saved: !dirty,
+      closedQuestion: question !== null && question !== '' ? question : null,
+      blocked: null,
+    };
+    await this.change(workspace.id, id, ({ awaiting: _closed, ...a }) => ({
+      ...a,
+      state: 'paused',
+      pause,
+      lastError: null,
+      scheduledResume: resume,
+    }));
   }
 
   /** The agents of the workspace, those without a process marked « à reprendre ». */
@@ -543,7 +588,7 @@ export class AgentManager {
       await this.restartClosed(workspace, agent, options?.resumeWork === true);
       return;
     }
-    this.inError(id);
+    if (agent.state !== 'paused') this.inError(id);
     this.resumes.forget(id);
     await this.stop(id);
     await this.startAgain(workspace, agent, null);
@@ -840,6 +885,7 @@ export class AgentManager {
       lastError: null,
       scheduledResume: null,
       closedWhileWorking: false,
+      pause: null,
     } as const;
     await this.workspaces.update(workspace.id, (ws) => ({
       ...ws,
@@ -1394,12 +1440,13 @@ export class AgentManager {
     this.submissions.delete(id);
   }
 
-  private emit({ id, state, lastError, scheduledResume, awaiting }: Agent, kept = false) {
+  private emit({ id, state, lastError, scheduledResume, awaiting, pause }: Agent, kept = false) {
     this.onState({
       agentId: id,
       state,
       lastError,
       scheduledResume,
+      pause,
       ...(awaiting ? { awaiting } : {}),
       ...(kept ? { kept } : {}),
     });

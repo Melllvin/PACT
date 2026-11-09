@@ -376,3 +376,52 @@ describe('TodoItem of an exchange in a loop', () => {
     expect(screen.getByRole('listitem')).toBeTruthy();
   });
 });
+
+// 009 T019 — « ◆ En pause » (contracts/ui.md « À faire »): « Reprendre » and « Annuler la reprise » act on the
+// account. API fixed here: the handlers `onUsageResume(cliId, account)` and `onUsageCancelResume(cliId, account)`.
+describe('TodoItem usage-paused (009)', () => {
+  const todo = {
+    id: 'usage:claude-code:default:usage-paused' as const,
+    agentId: 'usage:claude-code:default',
+    kind: 'usage-paused' as const,
+    title: '◆ En pause · Claude Code · limite 5 h à 91 % · reprise 16:40',
+    actions: [],
+    detail: 'Question fermée : Quelle base de données ? Non sauvegardé : Claude Code 2 · dev',
+    usageLimit: { cliId: 'claude-code', account: 'default', kind: 'paused' as const },
+  };
+  const handlers = () => ({ onUsageResume: vi.fn(), onUsageCancelResume: vi.fn() });
+  const show = (extra: ReturnType<typeof handlers>) =>
+    render(
+      <ul>
+        <TodoItem todo={todo} agent={undefined} {...actions()} {...extra} />
+      </ul>,
+    );
+
+  it('shows the title and the body, and is not drawn as an error', () => {
+    show(handlers());
+    const item = screen.getByRole('listitem');
+    expect(item.getAttribute('data-kind')).toBe('usage-paused');
+    expect(item.textContent).toContain('◆ En pause');
+    expect(item.textContent).toContain('limite 5 h à 91 %');
+    expect(item.textContent).toContain('reprise 16:40');
+    expect(item.textContent).toContain('Question fermée : Quelle base de données ?');
+    expect(item.textContent).toContain('Non sauvegardé : Claude Code 2 · dev');
+    expect(item.className).not.toContain('border-destructive');
+  });
+
+  it('resumes the whole account with « Reprendre »', async () => {
+    const extra = handlers();
+    show(extra);
+    await userEvent.click(screen.getByRole('button', { name: 'Reprendre' }));
+    expect(extra.onUsageResume).toHaveBeenCalledWith('claude-code', 'default');
+    expect(extra.onUsageCancelResume).not.toHaveBeenCalled();
+  });
+
+  it('cancels the scheduled resume of the account with « Annuler la reprise »', async () => {
+    const extra = handlers();
+    show(extra);
+    await userEvent.click(screen.getByRole('button', { name: 'Annuler la reprise' }));
+    expect(extra.onUsageCancelResume).toHaveBeenCalledWith('claude-code', 'default');
+    expect(extra.onUsageResume).not.toHaveBeenCalled();
+  });
+});

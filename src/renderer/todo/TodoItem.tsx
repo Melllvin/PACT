@@ -9,6 +9,9 @@ type Props = Omit<AgentActions, 'onClose'> & {
   todo: Todo;
   /** Absent for a free terminal, which has no color nor actions. */
   agent: Agent | undefined;
+  /** 009 — « Reprendre » and « Annuler la reprise » of a « ◆ En pause »: they act on the account. */
+  onUsageResume?: (cliId: string, account: string) => void;
+  onUsageCancelResume?: (cliId: string, account: string) => void;
 };
 
 const SEPARATOR = ' · ';
@@ -49,6 +52,7 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           todo.kind === 'loop-escalated' ||
           todo.kind === 'exchange-escalated') &&
           'border-destructive/30 bg-destructive/6',
+        todo.kind === 'usage-paused' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
       )}
@@ -96,8 +100,10 @@ export function TodoActions({
   onOpenTerminal,
   onUsageDetail,
   onDecide,
+  onUsageResume,
+  onUsageCancelResume,
 }: ActionsProps) {
-  const { request, loop, publish, usage, decide, exchange } = todo;
+  const { request, loop, publish, usage, decide, exchange, usageLimit } = todo;
   return (
     <>
       {request && agent && (
@@ -195,6 +201,25 @@ export function TodoActions({
             }}
           >
             Détail
+          </Button>
+        </div>
+      )}
+      {usageLimit?.kind === 'paused' && (onUsageResume || onUsageCancelResume) && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onUsageResume?.(usageLimit.cliId, usageLimit.account);
+            }}
+          >
+            Reprendre
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onUsageCancelResume?.(usageLimit.cliId, usageLimit.account);
+            }}
+          >
+            Annuler la reprise
           </Button>
         </div>
       )}

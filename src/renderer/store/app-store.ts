@@ -221,6 +221,7 @@ const applyState =
     ...(event.lastReport ? { lastReport: event.lastReport } : {}),
     ...(event.lastError === undefined ? {} : { lastError: event.lastError }),
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
+    ...(event.pause === undefined ? {} : { pause: event.pause }),
     // Each event tells whether the agent asks a question: absent, it does not (FR-024a).
     ...(event.awaiting === undefined ? {} : { awaiting: event.awaiting }),
   });

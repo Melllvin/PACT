@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isoDate, roleSchema } from './primitives';
+import type { UsagePause } from './usage-limit';
 
 // 005 data-model.md — the usage limits of a CLI account, as the CLI reports them, and what the
 // gauge derives from them (R4, R6). Pure: shared by the main process and the renderer.
@@ -117,6 +118,30 @@ export const levelNow = (state: UsageState, thresholds: UsageThresholds, now: Da
  * when no account of that CLI is near its limit. It never blocks the launch.
  */
 export function launchWarning(
+  states: readonly UsageState[],
+  cliId: string,
+  thresholds: UsageThresholds,
+  now: Date,
+  pauses: readonly Pick<UsagePause, 'cliId' | 'windows' | 'resumeAt'>[] = [],
+): string | null {
+  const paused = pauses.find((pause) => pause.cliId === cliId);
+  const pausedText = paused ? pauseWarning(paused) : null;
+  const warning = usageWarning(states, cliId, thresholds, now);
+  return pausedText !== null && warning !== null
+    ? `${pausedText} ${warning}`
+    : (pausedText ?? warning);
+}
+
+/** 009 R12 — « PACT est en pause sur la limite 5 h jusqu'à 16:40 : … », said before the warning of 005. */
+export function pauseWarning({
+  windows,
+  resumeAt,
+}: Pick<UsagePause, 'windows' | 'resumeAt'>): string {
+  const until = resumeAt === null ? 'sa réinitialisation' : clockTime(resumeAt);
+  return `PACT est en pause sur la limite ${windows.map((w) => w.label).join(' et ')} jusqu'à ${until} : ces agents ne seront pas arrêtés avant la réinitialisation.`;
+}
+
+function usageWarning(
   states: readonly UsageState[],
   cliId: string,
   thresholds: UsageThresholds,

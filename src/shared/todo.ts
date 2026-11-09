@@ -1,5 +1,6 @@
 import { agentName } from './agent-name';
 import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
+import type { UsagePause } from './usage-limit';
 import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
@@ -207,7 +208,15 @@ export function deriveTodos(
     title: `En cours ▸ ${shellName(terminal.shell)} — ${workspace.mainBranch}`,
     actions: [],
   }));
-  const limits = usage ? usageTodos(workspace, names, usage) : [];
+  const pausedKeys = new Set(
+    agents.flatMap((agent) =>
+      agent.pause ? [`${agent.pause.cliId}\u0000${agent.pause.account}`] : [],
+    ),
+  );
+  const limits = [
+    ...(usage ? usageTodos(workspace, names, usage, pausedKeys) : []),
+    ...pausedTodos(agents, names),
+  ];
   // Array.prototype.sort is stable: the tile order holds within a kind.
   const held = agents.flatMap((agent) => wakeHeld(agent, names(agent.cliId)) ?? []);
   return [
@@ -235,13 +244,18 @@ function usageTodos(
     thresholds,
     now,
   }: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
+  /** 009 — the accounts in pause: their alert of 005 gives way to « ◆ En pause ». */
+  paused: ReadonlySet<string> = new Set(),
 ): TodoItem[] {
   // A closed agent uses no quota: its CLI alone raises no alert (006).
   const clis = new Set(
     workspace.agents.filter((agent) => agent.state !== 'closed').map((agent) => agent.cliId),
   );
   return states.flatMap((state): TodoItem[] => {
-    const alert = clis.has(state.cliId) ? usageAlert(state, thresholds, now) : null;
+    const alert =
+      clis.has(state.cliId) && !paused.has(`${state.cliId}\u0000${state.account}`)
+        ? usageAlert(state, thresholds, now)
+        : null;
     if (!alert) return [];
     const key = `usage:${state.cliId}:${state.account}`;
     const reset = alert.window.resetsAt === null ? 'inconnue' : clockTime(alert.window.resetsAt);
@@ -255,5 +269,45 @@ function usageTodos(
         usage: { cliId: state.cliId, account: state.account, level: alert.level },
       },
     ];
+  });
+}
+
+/**
+ * 009 contracts/ui.md — « ◆ En pause · <CLI> · limite <fenêtre> à <N> % · reprise <HH:MM> »: one
+ * per account of the workspace, with the questions the stop closed and the agents left unsaved.
+ */
+function pausedTodos(agents: readonly Agent[], names: (cliId: string) => string): TodoItem[] {
+  const accounts = new Map<string, { pause: UsagePause; members: Agent[] }>();
+  for (const agent of agents) {
+    if (agent.state !== 'paused' || !agent.pause) continue;
+    const key = `${agent.pause.cliId}\u0000${agent.pause.account}`;
+    const known = accounts.get(key);
+    if (known) known.members.push(agent);
+    else accounts.set(key, { pause: agent.pause, members: [agent] });
+  }
+  return [...accounts.values()].map(({ pause, members }): TodoItem => {
+    const windows = pause.windows.map((w) => `${w.label} à ${String(w.percent)} %`);
+    const named = `${windows.length > 1 ? 'limites' : 'limite'} ${windows.join(' et ')}`;
+    const resume = pause.resumeAt === null ? 'après réinitialisation' : clockTime(pause.resumeAt);
+    const questions = members.flatMap((a) =>
+      a.pause?.closedQuestion ? [a.pause.closedQuestion] : [],
+    );
+    const unsaved = members
+      .filter((a) => a.pause?.saved === false)
+      .map((a) => who(a, names(a.cliId)));
+    const detail = [
+      ...(questions.length > 0 ? [`Question fermée : ${questions.join(' · ')}`] : []),
+      ...(unsaved.length > 0 ? [`Non sauvegardé : ${unsaved.join(', ')}`] : []),
+    ].join(' ');
+    const key = `usage:${pause.cliId}:${pause.account}`;
+    return {
+      id: `${key}:usage-paused`,
+      agentId: key,
+      kind: 'usage-paused',
+      title: `◆ En pause · ${names(pause.cliId)} · ${named} · reprise ${resume}`,
+      actions: [],
+      ...(detail === '' ? {} : { detail }),
+      usageLimit: { cliId: pause.cliId, account: pause.account, kind: 'paused' },
+    };
   });
 }

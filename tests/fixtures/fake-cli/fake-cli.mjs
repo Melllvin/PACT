@@ -253,11 +253,26 @@ function stepRuns(step, args) {
   return !(step.skipEmpty && hasEmpty(args));
 }
 
+/** The blocks of `.pact/events.md` (`## <at> · <kind> · de <from>`, then the text), like get_events. */
+function parseEventsFile(file) {
+  return file
+    .split(/^## /m)
+    .slice(1)
+    .map((block) => {
+      const [head = '', ...rest] = block.split('\n');
+      const [at, kind, from] = head.split(' · ');
+      const text = rest.join('\n').trim();
+      return { at, kind, from: from?.replace(/^de /, ''), text, summary: text.split('\n')[0] };
+    });
+}
+
 /** What a pointer makes the CLI play: the first instruction it reads, else the pointer itself. */
 async function readPointer(line) {
   if (!process.env.PACT_AGENT_MCP_URL && !process.env.PACT_ORCHESTRATOR_URL) {
     try {
-      return readFileSync(join(process.cwd(), '.pact', 'events.md'), 'utf8').trim() || line;
+      const file = readFileSync(join(process.cwd(), '.pact', 'events.md'), 'utf8').trim();
+      pointerEvents = parseEventsFile(file);
+      return file || line;
     } catch {
       return line;
     }

@@ -19,6 +19,8 @@ import { guardQuit, quitQuestion } from './app-lifecycle';
 import { chooseNotify, NotificationService } from './notifications';
 import { OriginSync } from './origin-sync';
 import { UsageService } from './usage/usage-service';
+import { UsageLimitService } from './usage/usage-limit-service';
+import { systemClock } from './agents/auto-resume';
 import { createUsageServices } from './ipc/usage-handlers';
 import { createAppServices, devServerUrl, trustedSenderCheck } from './app-services';
 import { resolveShellEnv } from './env/shell-env';
@@ -170,6 +172,8 @@ void app.whenReady().then(async () => {
       ),
     onTurnFinished: (agentId) => {
       loops.turnFinished(agentId);
+      // 009 — an agent whose stop waited for the end of its turn is stopped now.
+      void usageLimit.turnFinished(agentId);
     },
     // Read when the orchestrator calls: the services below exist by then.
     tools: (orchestratorId): McpTool[] =>
@@ -187,7 +191,8 @@ void app.whenReady().then(async () => {
           loops,
           issues,
           clis: () => registry.list(),
-          usageWarning: (cliId) => usage.warning(cliId),
+          usageWarning: (cliId) => usage.warning(cliId, usageLimit.pauses()),
+          pausedFor: (cliId) => usageLimit.pausedFor(cliId),
           permissions,
           log: (entry) => {
             orchestrator.record(orchestratorId, entry);
@@ -202,6 +207,8 @@ void app.whenReady().then(async () => {
     onState: (state) => {
       emit('usage:state', state);
       syncTodos();
+      // 009 — the save instruction and the stop at the threshold of each window.
+      void usageLimit.onUsage(state);
     },
   });
   const agents: AgentManager = new AgentManager({
@@ -226,8 +233,9 @@ void app.whenReady().then(async () => {
       review.close(agentId);
     },
     // The tiles of the agents an orchestrator launches appear as the launcher's do.
-    onLaunched: (workspaceId) => {
+    onLaunched: (workspaceId, launched) => {
       emit('workspace:agentsLaunched', { workspaceId });
+      void usageLimit.launched(workspaceId, launched);
     },
     // 007 FR-005 — the count of messages of an agent restarts with each turn.
     onTurnStart: (agentId) => {
@@ -271,17 +279,29 @@ void app.whenReady().then(async () => {
     ...(clock ? { clock } : {}),
   });
   // 007 — the wake: an action event for an agent becomes one pointer line, typed once it is ready.
-  const wake = new WakeService({
+  const wake: WakeService = new WakeService({
     workspaces,
     type: (agentId, line) => agents.sendPrompt(agentId, line, 'wake'),
     inputBusy: (agentId) => agents.promptState(agentId) === 'busy',
     setNotice: (agentId, notice) => {
       void agents.setWakeNotice(agentId, notice).catch(() => undefined);
     },
-    usageCritical: (cliId) => usage.critical(cliId),
+    usageHeld: (cliId) => usageLimit.usageHeld(cliId),
     file: eventsFile({ exchanges, agents }),
   });
   agents.setWake(wake);
+  // 009 — the stop at a limit of consumption: it reads the states of UsageService and acts on the
+  // agents through the manager, the journal and the wake. 008 will freeze commits (R18).
+  const usageLimit: UsageLimitService = new UsageLimitService({
+    agents,
+    exchanges,
+    wake,
+    stores,
+    clock: clock ?? systemClock,
+    autoResume: async (workspaceId) =>
+      (await permissions.resolve(workspaceId))?.autoResume ?? false,
+    commitFrozen: () => false,
+  });
   exchanges.onRecorded((workspaceId, message) => {
     wake.notify(workspaceId, message);
   });
@@ -571,6 +591,7 @@ void app.whenReady().then(async () => {
     // Agent states stay saved as they are; the processes end with the app (FR-038).
     shutdown: async () => {
       origin.stop();
+      usageLimit.dispose();
       workspaces.dispose();
       review.dispose();
       preview.dispose();

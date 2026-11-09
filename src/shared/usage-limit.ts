@@ -1,6 +1,13 @@
 import { z } from 'zod';
+import type { Agent } from './model';
 import { isoDate } from './primitives';
-import { currentWindow, type UsageReading, type UsageState, type UsageWindow } from './usage';
+import {
+  clockTime,
+  currentWindow,
+  type UsageReading,
+  type UsageState,
+  type UsageWindow,
+} from './usage';
 
 // 009 data-model.md — the stop at a limit of consumption: the threshold of each window, the band it
 // is in, and what is kept of a pause. Pure: shared by the main process and the renderer.
@@ -129,3 +136,30 @@ export const usageLimitStateSchema = z
   })
   .default({ saves: [], overrides: [], declined: [], resumed: [] });
 export type UsageLimitState = z.infer<typeof usageLimitStateSchema>;
+
+/** contracts/events.md « usage-save » — the instruction to commit, a few points before the stop. */
+export function saveText(label: string, percent: number, stop: number, jump: boolean): string {
+  return `Limite ${label} à ${String(percent)} % (arrêt à ${String(stop)} %). Committe maintenant ton travail en cours, en local${jump ? ', dans la minute' : ''} : git add puis git commit. Ne pousse rien : le push reste à la livraison. PACT arrêtera les agents de ce compte au seuil et les reprendra après la réinitialisation.`;
+}
+
+/** contracts/events.md « usage-paused » — « limite 5 h à 91 % » or « limites 5 h à 91 % et semaine à 90 % ». */
+export function pausedText(
+  windows: readonly { label: string; percent: number }[],
+  resumeAt: string | null,
+  auto: boolean,
+): string {
+  const parts = windows.map((w) => `${w.label} à ${String(w.percent)} %`);
+  const last = parts.pop() ?? '';
+  const named = parts.length > 0 ? `limites ${parts.join(', ')} et ${last}` : `limite ${last}`;
+  const when = !auto
+    ? "Reprise à la main par l'utilisateur."
+    : resumeAt === null
+      ? 'Reprise après la réinitialisation, heure inconnue.'
+      : `Reprise prévue à ${clockTime(resumeAt)}.`;
+  return `PACT t'a mis en pause : ${named}. ${when}`;
+}
+
+/** The pauses of the agents of these workspaces, for the warning of the launcher (R12). */
+export function pausesOf(workspaces: readonly { agents: readonly Pick<Agent, 'pause'>[] }[]) {
+  return workspaces.flatMap((w) => w.agents.flatMap((a) => (a.pause ? [a.pause] : [])));
+}
