@@ -830,7 +830,13 @@ export class DeliveryService {
     found: Delivery,
     input: DeliveryDecision,
   ): Promise<Delivery> {
-    if (this.deciding.has(found.id) || found.state === 'merging') return found;
+    // A merge under way (Auto's, the other click's) is not raced: Valider finds it taken, Refuser is
+    // refused while it runs.
+    const underWay = this.merging.has(found.id) || found.state === 'merging';
+    if (underWay && input.decision === 'refuse') {
+      throw new IpcFailure('INVALID_INPUT', 'Une fusion est en cours : le refus vient trop tard.');
+    }
+    if (underWay || this.deciding.has(found.id)) return found;
     // The item may be shown while the PR is watched (a review that is owed); the CI decides below.
     if (found.state !== 'reviewing' && found.state !== 'watching') {
       throw new IpcFailure('INVALID_INPUT', 'Cette livraison n’attend pas de décision.');
@@ -859,7 +865,7 @@ export class DeliveryService {
     try {
       if (input.decision === 'validate') {
         // FR-031 — the CI, the author, the fork, the head and the login are read again in there.
-        await this.merge(workspaceId, found.id);
+        await this.merge(workspaceId, found.id, true);
         return this.current(workspaceId, found.id);
       }
       await this.save(workspaceId, found.id, { review: { ...found.review, refusedOnce: true } });
@@ -933,6 +939,29 @@ export class DeliveryService {
   }
 
   // ---- the CI and the merge (phase 4, US2) ----
+
+  /**
+   * « Ouvrir la PR »: the address rebuilt from the GitHub project of the repository and the number
+   * of the PR followed, never the stored text; `null` when there is nothing to open.
+   */
+  async prUrl(deliveryId: string): Promise<string | null> {
+    const ws = this.deps.workspaces
+      .list()
+      .find((w) => w.deliveries.some((d) => d.id === deliveryId));
+    const d = ws?.deliveries.find((x) => x.id === deliveryId);
+    if (!ws || !d?.pr || d.channel !== 'github') return null;
+    let repo: string;
+    try {
+      repo = await this.repoOf(ws.id);
+    } catch {
+      return null;
+    }
+    const [owner, name, ...rest] = repo.split('/');
+    const clean = (part: string | undefined) =>
+      part !== undefined && /^[A-Za-z0-9_.-]+$/.test(part) && part !== '.' && part !== '..';
+    if (rest.length > 0 || !clean(owner) || !clean(name)) return null;
+    return `https://github.com/${repo}/pull/${String(d.pr.number)}`;
+  }
 
   /** The request, if it is still there. */
   private find(workspaceId: string, id: string): Delivery | undefined {
@@ -1076,8 +1105,9 @@ export class DeliveryService {
   }
 
   /** One merge at a time per request, whoever asks (FR-027). */
-  private async merge(workspaceId: string, id: string): Promise<void> {
-    if (this.merging.has(id)) return;
+  private async merge(workspaceId: string, id: string, decided = false): Promise<void> {
+    // Auto does not start a merge while the user is deciding on the same request.
+    if (this.merging.has(id) || (!decided && this.deciding.has(id))) return;
     this.merging.add(id);
     try {
       await this.mergeNow(workspaceId, id);

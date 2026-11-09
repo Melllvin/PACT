@@ -82,3 +82,72 @@ describe('delivery-local', () => {
     expect(screen.getByText(/sans verdict/)).toBeTruthy();
   });
 });
+
+describe('delivery-review, « Ouvrir la PR »', () => {
+  const review = (url?: string) => {
+    const onOpenPr = vi.fn();
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:delivery-review',
+              agentId: dev.id,
+              kind: 'delivery-review',
+              title: '◎ Relire la PR #7',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD, verdict: 'accepted', ...(url ? { url } : {}) },
+            } as never
+          }
+          agent={dev}
+          {...({ onOpenPr, onDecideDelivery: vi.fn() } as object)}
+        />
+      </ul>,
+    );
+    return { onOpenPr, user: userEvent.setup() };
+  };
+
+  it('Given the link, When it is clicked, Then the main process is asked to open the PR of that delivery and the page does not navigate', async () => {
+    const { onOpenPr, user } = review('https://github.com/pact/test/pull/7');
+
+    await user.click(screen.getByRole('link', { name: 'Ouvrir la PR' }));
+
+    expect(onOpenPr).toHaveBeenCalledExactlyOnceWith('d1');
+  });
+
+  it('Given an item without an address, When it is shown, Then there is no link', () => {
+    review();
+
+    expect(screen.queryByRole('link', { name: 'Ouvrir la PR' })).toBeNull();
+  });
+
+  it('Given no handler, When the link is clicked, Then nothing breaks', async () => {
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:delivery-review',
+              agentId: dev.id,
+              kind: 'delivery-review',
+              title: '◎ Relire la PR #7',
+              actions: [],
+              delivery: {
+                id: 'd1',
+                head: HEAD,
+                verdict: null,
+                url: 'https://github.com/a/b/pull/1',
+              },
+            } as never
+          }
+          agent={dev}
+        />
+      </ul>,
+    );
+
+    await userEvent.click(screen.getByRole('link', { name: 'Ouvrir la PR' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Valider' }).disabled).toBe(true);
+  });
+});

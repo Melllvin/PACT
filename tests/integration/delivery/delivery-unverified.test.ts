@@ -73,6 +73,7 @@ describe('sc.7 — Auto never merges a PR without a verdict', () => {
 
     expect(h.mergeCalls()).toEqual([]);
     expect(h.prStateOnForge(1)).toBe('OPEN');
+    await h.waitFor(() => messagesOf('review-requested').length > 0, 'no review was requested');
     expect(messagesOf('review-requested')).toHaveLength(1);
     const [item] = reviewItems();
     expect(item?.title).toContain('sans verdict');

@@ -242,3 +242,15 @@ describe('decideDelivery', () => {
     );
   });
 });
+
+describe('openDeliveryPr', () => {
+  it('Given a delivery, When the user opens its PR, Then delivery:openPr carries the delivery and nothing else', async () => {
+    const { api, invoke } = fakeApi([workspace([delivery()])]);
+    const store = createAppStore(api);
+    await store.getState().load();
+
+    await store.getState().openDeliveryPr(DELIVERY);
+
+    expect(invoke).toHaveBeenCalledWith('delivery:openPr', { deliveryId: DELIVERY });
+  });
+});

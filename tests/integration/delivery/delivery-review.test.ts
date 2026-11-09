@@ -77,6 +77,8 @@ describe('sc.1 — the item', () => {
     });
     expect(items[0]?.title).toBe(`◎ Relire la PR #1 · ${issue} · ${short(head)}`);
     expect(h.mergeCalls()).toEqual([]);
+    // The state is written before the word to the orchestrator: wait for it, then count it.
+    await h.waitFor(() => messagesOf('review-requested').length > 0, 'no review was requested');
     expect(messagesOf('review-requested')).toHaveLength(1);
   });
 });

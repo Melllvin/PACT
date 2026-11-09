@@ -586,6 +586,7 @@ void app.whenReady().then(async () => {
         workspaces,
         delivery,
         openExternal: (url) => shell.openExternal(url),
+        prUrl: (id) => delivery.prUrl(id),
         onChange: (workspaceId, change) => {
           emit('workspace:deliveries', { workspaceId, ...change });
           syncTodos();
