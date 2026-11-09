@@ -390,7 +390,7 @@ export function WorkspaceView({
     const { onPromote, onRename } = actions;
     const canBe = clis.find((cli) => cli.id === agent.cliId)?.orchestrator;
     const reason =
-      lead && lead.id !== agent.id
+      lead && lead.state !== 'closed' && lead.id !== agent.id
         ? `${agentName(lead, cliName)} est déjà l’orchestrateur`
         : canBe === false
           ? 'Ce CLI ne sait pas être orchestrateur'
@@ -627,10 +627,12 @@ export function WorkspaceView({
           )}
           {available && hasTiles && !focused && !graphShown && (
             <TileGrid onAdd={canAdd ? launch : undefined} lead={lead ? tileOf(lead) : undefined}>
-              {agents.filter((agent) => agent !== lead).map(tileOf)}
+              {agents.filter((agent) => agent !== lead && agent.state !== 'closed').map(tileOf)}
               {workspace.freeTerminals.map((terminal) => (
                 <FreeTerminalTile key={terminal.id} terminal={terminal} terminals={terminals} />
               ))}
+              {/* #115 — the closed tiles kept (006 FR-023) come last: a new tile is never behind them. */}
+              {agents.filter((agent) => agent !== lead && agent.state === 'closed').map(tileOf)}
             </TileGrid>
           )}
         </section>

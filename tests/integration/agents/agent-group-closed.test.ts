@@ -192,3 +192,39 @@ describe('closing a closed tile, and restarting one agent alone', () => {
     expect(RESUME_PROMPT.length).toBeGreaterThan(0);
   });
 });
+
+// #112 — a closed orchestrator directs nothing: it no longer holds the role of its workspace.
+describe('a closed orchestrator and a new one', () => {
+  it('launches a new orchestrator while the old one is closed, which becomes an ordinary closed tile', async () => {
+    const ids = await group();
+    await h.manager.close(ids.lead, KEEP);
+
+    const [fresh] = await h.launch([h.draft({ orchestrator: true })]);
+    const freshId = fresh?.id ?? '';
+
+    expect(h.current(freshId)?.role).toBe('orchestrator');
+    expect(h.current(ids.lead)).toMatchObject({ state: 'closed', role: null });
+    // Its group stays closed and linked to it (FR-023).
+    expect(h.current(ids.one)).toMatchObject({ state: 'closed', launchedBy: ids.lead });
+  });
+
+  it('still refuses a second orchestrator while one is live', async () => {
+    await h.launch([h.draft({ orchestrator: true })]);
+    await expect(h.launch([h.draft({ orchestrator: true })])).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+  });
+
+  it('promotes an agent while the orchestrator is closed', async () => {
+    const ids = await group();
+    await h.manager.close(ids.lead, KEEP);
+    const [other] = await h.launch([h.draft()]);
+    const otherId = other?.id ?? '';
+    await h.waitForState(otherId, 'awaiting-prompt');
+
+    await h.manager.promoteToOrchestrator(otherId);
+
+    expect(h.current(otherId)?.role).toBe('orchestrator');
+    expect(h.current(ids.lead)?.role).toBeNull();
+  });
+});

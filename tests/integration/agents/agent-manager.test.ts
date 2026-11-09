@@ -577,6 +577,32 @@ describe('AgentManager launch of an orchestrator without a way to serve one', ()
   });
 });
 
+// #113 — a launch that fails before the CLI starts must not leave a ghost holding the role.
+describe('AgentManager launch of an orchestrator whose access cannot be prepared', () => {
+  const failing = () => ({
+    prepare: vi.fn().mockRejectedValue(new Error('ENOENT: resources/skills/pact-orchestrator')),
+    release: vi.fn(),
+  });
+
+  it('rejects, and leaves no agent, so no ghost orchestrator', async () => {
+    const manager = await createManager({ orchestrator: failing() });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(/ENOENT/);
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+    expect(await agentsOnDisk()).toEqual([]);
+    expect(manager.activeCount()).toBe(0);
+  });
+
+  it('frees the worktree and the position, so a launch can be tried again', async () => {
+    const orchestrator = failing();
+    const manager = await createManager({ orchestrator });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow();
+    expect(git(repo, 'worktree', 'list')).not.toContain('fake-1');
+    orchestrator.prepare.mockRejectedValueOnce(new Error('ENOENT again'));
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(/again/);
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+  });
+});
+
 // fix-todo-diff-notifications — a new worktree starts from origin/<main>, after a try to fetch it.
 describe('AgentManager.launch from origin', { timeout: 30_000 }, () => {
   let origin: string;
