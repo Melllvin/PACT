@@ -180,7 +180,6 @@ A reading older than 15 minutes is greyed out with its age, and hidden after an 
 - **Who consumes.** The detail gives the part of each agent of the workspace in the tokens PACT
   counted since the window began, the largest first, with its role; a closed agent keeps its part,
   marked « fermé », until the window resets; the agents of other workspaces are « autres ».
-- **Resume.** A rate limit whose message gives no time resumes at the reset the gauge knows.
 - **Stop at the limit.** PACT stops a CLI account before the CLI hits its wall. Each window has a
   stop threshold, 90 % by default, set per CLI and window in « Seuils d’alerte… » (section « Arrêt »,
   10 to 100 %). A little before it, every agent of the account is told once per reset to commit
