@@ -16,8 +16,10 @@ dans le dossier de ce skill : il vaut pour tous les rôles.
    `get_events`. `wait_for_agents` n'est qu'un secours, si tu dois attendre sans réveil.
 4. `get_changes` puis `get_file_diff` : lis ce qu'ils ont fait ; `run_tests` si besoin.
 5. Renvoie une consigne de correction, ou passe à la suite.
-6. `request_integration` : seulement après avoir lu les changements et l'état des tests. PACT
-   demande toujours la confirmation de l'utilisateur.
+6. `request_delivery({ issue, title, message })` : seulement pour une issue dont la boucle est
+   acceptée, après avoir lu les changements et l'état des tests. PACT rebase, teste, pousse et ouvre
+   la PR (ou, sans dépôt distant, demande la fusion à l'utilisateur) ; l'issue arrive dans tes
+   événements (`get_events`) : tu ne bloques pas dessus.
 
 ## Chaîne : cadrage → design → boucle → recap
 

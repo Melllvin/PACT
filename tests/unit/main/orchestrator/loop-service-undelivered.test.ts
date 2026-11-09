@@ -197,3 +197,14 @@ describe('the bases of the control of the tester (007 R12)', () => {
     await expect(loops.report(tester.id, verdict)).rejects.toThrow(/Aucune base connue/);
   });
 });
+
+// 008 T018 — where the delivery leaves the loop: a loop that does not exist is an error.
+describe('deliveryState', () => {
+  it('Given an issue without a loop, When the delivery sets its state, Then it fails', async () => {
+    const { loops } = make();
+
+    await expect(loops.deliveryState('w1', '0012-connexion', 'accepted')).rejects.toThrow(
+      'Aucune boucle',
+    );
+  });
+});

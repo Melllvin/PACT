@@ -12,7 +12,7 @@ const setup = () => {
     renameAgent: vi.fn(() => Promise.resolve()),
   };
   const services = createOrchestratorServices({
-    requests: {},
+    delivery: {},
     orchestrator: { actions: vi.fn(() => []) },
     agents: { revokeOrchestrator: vi.fn() },
     workspaces: { list: () => [], update: vi.fn() },
@@ -42,7 +42,7 @@ describe('identity channels', () => {
 
   it('does nothing without a manager', async () => {
     const services = createOrchestratorServices({
-      requests: {},
+      delivery: {},
       orchestrator: { actions: vi.fn() },
       agents: {},
       workspaces: { list: () => [], update: vi.fn() },

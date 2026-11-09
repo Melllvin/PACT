@@ -2,11 +2,12 @@ import { agentName } from './agent-name';
 import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
 import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
-// 003 data-model: the integrations asked for come after the answers, before the reviews.
+// 008 data-model: the local merges awaiting the user come after the answers, before the reviews.
 export const ORDER: TodoKind[] = [
   'answer',
   'decide',
-  'integration-request',
+  'delivery-local',
+  'delivery-review',
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',
@@ -110,9 +111,7 @@ const shellName = (path: string) => path.replace(/^.*[\\/]/, '').replace(/\.exe$
 /** The À faire items of a workspace, derived and never stored (data-model TodoItem, FR-027). */
 export function deriveTodos(
   workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'mainBranch'> &
-    Partial<
-      Pick<Workspace, 'integrationRequests' | 'loops' | 'issues' | 'publishRequests' | 'exchanges'>
-    >,
+    Partial<Pick<Workspace, 'deliveries' | 'loops' | 'issues' | 'publishRequests' | 'exchanges'>>,
   names: (cliId: string) => string,
   /** The agents with changes to review, with their number of changed files (`review:pending`). */
   toReview: Readonly<Record<string, number>> | readonly never[] = {},
@@ -133,19 +132,34 @@ export function deriveTodos(
       ) ?? [],
   );
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  // « ◎ Intégrer <agent> → <main> ? »: the orchestrator asks, the user decides (003 FR-017).
-  const requests = (workspace.integrationRequests ?? []).flatMap((request): TodoItem[] => {
-    const agent = byId.get(request.agentId);
+  // « ◎ Fusionner <agent> → <main> ? »: a project without a remote, the user decides (008 FR-008).
+  // « ◎ Relire la PR #n »: the PR of a request that asks for the eyes of the user (008 data-model).
+  const requests = (workspace.deliveries ?? []).flatMap((delivery): TodoItem[] => {
+    const agent = byId.get(delivery.agentId);
     if (!agent) return [];
+    if (delivery.channel === 'github') {
+      if (delivery.state !== 'watching' || !delivery.review.required || !delivery.pr) return [];
+      const sha = delivery.pushedHead ?? delivery.frozenCommit;
+      return [
+        {
+          id: `${delivery.id}:delivery-review`,
+          agentId: agent.id,
+          kind: 'delivery-review',
+          title: `◎ Relire la PR #${String(delivery.pr.number)} · ${delivery.issueId ?? delivery.branch} · ${sha.slice(0, 7)}${delivery.unverified ? ' · sans verdict' : ''}`,
+          actions: [],
+        },
+      ];
+    }
+    if (delivery.state !== 'reviewing') return [];
     const name = agentName(agent, names);
     return [
       {
-        id: `${request.id}:integration-request`,
+        id: `${delivery.id}:delivery-local`,
         agentId: agent.id,
-        kind: 'integration-request',
-        title: `◎ Intégrer ${name} → ${workspace.mainBranch} ?`,
+        kind: 'delivery-local',
+        title: `◎ Fusionner ${name} → ${workspace.mainBranch} ?${delivery.unverified ? ' · sans verdict' : ''}`,
         actions: [],
-        request: { id: request.id, message: request.message },
+        delivery: { id: delivery.id, head: delivery.frozenCommit },
       },
     ];
   });

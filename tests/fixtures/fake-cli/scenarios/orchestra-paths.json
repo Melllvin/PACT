@@ -10,8 +10,12 @@
       "arguments": { "agent": "Faux CLI 2", "path": "src/données à jour.ts" }
     },
     {
-      "tool": "request_integration",
-      "arguments": { "agent": "Faux CLI 2", "message": "feat: données à jour" }
+      "tool": "request_delivery",
+      "arguments": {
+        "issue": "0001-donnees",
+        "title": "Données à jour",
+        "message": "feat: données à jour"
+      }
     },
     { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 60 } }
   ]

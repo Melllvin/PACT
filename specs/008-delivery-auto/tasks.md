@@ -58,12 +58,12 @@
 
 ### Implémentation
 
-- [ ] T018 [US1] Créer `src/main/delivery/delivery-service.ts` : `request` (barrières par `deliveryGate`, gel de F, file par projet), étapes `checking` à `opening` écrites avant chaque effet, chute sur commit étranger, messages `delivery` par `ExchangeService.record`, défauts au dev par message `verdict` et `LoopService.reopen(issue, reason)` (nouveau tour compté, boucle `delivering` → `running`, escalade au plafond)
-- [ ] T019 [US1] Dans `src/main/review/integration-service.ts` : `requestId` repris dans `Integration` (R20) ; voie `local` de `DeliveryService` sur `start`
-- [ ] T020 [US1] Dans `src/main/orchestrator/tools.ts` et `src/shared/orchestrator.ts` : outil `request_delivery`, retrait de `request_integration`, refus de `close_agent` en livraison ; supprimer `src/main/orchestrator/integration-requests.ts` et ses tests, leur couverture passant à `delivery-request.test.ts` (justification dans la PR, constitution II)
-- [ ] T021 [US1] Créer `src/main/ipc/delivery-handlers.ts` (`delivery:request`, `workspace:deliveries`) ; dans `src/shared/ipc.ts`, `src/main/index.ts`, `src/renderer/store/app-store.ts` : canaux de `contracts/ui.md`, retrait de `workspace:integrationRequests`, création de `GhClient` et `DeliveryService`
-- [ ] T022 [US1] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/tiles/TileActions.tsx` : « Livrer », « Créer la PR sans verdict », « Intégrer », « Fusionner sans verdict », élément `delivery-local`, retrait de `integration-request`, nettoyage R24 dans `src/main/workspace/workspace-service.ts`
-- [ ] T023 [US1] Migrer `tests/e2e/us15-orchestrator-integrate.spec.ts` et les tests qui appelaient `request_integration` vers `request_delivery`, sans `skip` ni suppression d'attendu
+- [x] T018 [US1] Créer `src/main/delivery/delivery-service.ts` : `request` (barrières par `deliveryGate`, gel de F, file par projet), étapes `checking` à `opening` écrites avant chaque effet, chute sur commit étranger, messages `delivery` par `ExchangeService.record`, défauts au dev par message `verdict` et `LoopService.reopen(issue, reason)` (nouveau tour compté, boucle `delivering` → `running`, escalade au plafond)
+- [x] T019 [US1] Dans `src/main/review/integration-service.ts` : `requestId` repris dans `Integration` (R20) ; voie `local` de `DeliveryService` sur `start`
+- [x] T020 [US1] Dans `src/main/orchestrator/tools.ts` et `src/shared/orchestrator.ts` : outil `request_delivery`, retrait de `request_integration`, refus de `close_agent` en livraison ; supprimer `src/main/orchestrator/integration-requests.ts` et ses tests, leur couverture passant à `delivery-request.test.ts` (justification dans la PR, constitution II)
+- [x] T021 [US1] Créer `src/main/ipc/delivery-handlers.ts` (`delivery:request`, `workspace:deliveries`) ; dans `src/shared/ipc.ts`, `src/main/index.ts`, `src/renderer/store/app-store.ts` : canaux de `contracts/ui.md`, retrait de `workspace:integrationRequests`, création de `GhClient` et `DeliveryService`
+- [x] T022 [US1] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/tiles/TileActions.tsx` : « Livrer », « Créer la PR sans verdict », « Intégrer », « Fusionner sans verdict », élément `delivery-local`, retrait de `integration-request`, nettoyage R24 dans `src/main/workspace/workspace-service.ts`
+- [x] T023 [US1] Migrer `tests/e2e/us15-orchestrator-integrate.spec.ts` et les tests qui appelaient `request_integration` vers `request_delivery`, sans `skip` ni suppression d'attendu
 
 **Checkpoint** : US1 utilisable seule (PR ouverte, relue à la main sur la forge) ; PR « 008 Phase 3 US1 ».
 

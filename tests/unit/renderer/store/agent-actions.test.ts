@@ -130,29 +130,41 @@ describe('agent actions', () => {
     expect(store.getState().actionError).toBeNull();
   });
 
-  // 003 T036 — the user's answer to an integration the orchestrator asks for (FR-018).
-  it('confirms or refuses an integration request, and follows the list of the workspace', async () => {
-    const { store, invoke, emit } = await setup('integrationRequest:refuse');
-    const requestId = '00000000-0000-4000-8000-0000000000a1';
-    await store.getState().confirmIntegrationRequest(requestId, 'feat: relu');
-    expect(invoke).toHaveBeenCalledWith('integrationRequest:confirm', {
-      requestId,
-      message: 'feat: relu',
+  // 003 T036, migrated by 008 T023 — « Livrer » and the decision on a local merge.
+  it('requests a delivery and decides a merge, and follows the deliveries of the workspace', async () => {
+    const { store, invoke, emit } = await setup('delivery:decide');
+    const deliveryId = '00000000-0000-4000-8000-0000000000a1';
+    const head = 'abcdef0123456789abcdef0123456789abcdef01';
+    await store
+      .getState()
+      .requestDelivery('w1', id, { title: 'Connexion', message: 'feat: x', unverified: false });
+    expect(invoke).toHaveBeenCalledWith('delivery:request', {
+      workspaceId: 'w1',
+      agentId: id,
+      title: 'Connexion',
+      message: 'feat: x',
+      unverified: false,
     });
-    await store.getState().refuseIntegrationRequest(requestId);
+    await store.getState().decideDelivery(deliveryId, 'refuse', head);
     expect(store.getState().actionError).toBe('Refusé');
 
-    const request = {
-      id: requestId,
-      agentId: id,
-      mode: 'squash' as const,
-      message: 'feat: relu',
-      requestedAt: '2026-11-03T00:00:00.000Z',
+    const settings = {
+      auto: true,
+      mergeMode: 'squash' as const,
+      maxRounds: 3,
+      polishPasses: 0,
+      polishBrief: '',
     };
-    emit('workspace:integrationRequests', { workspaceId: 'w1', requests: [request] });
+    emit('workspace:deliveries', {
+      workspaceId: 'w1',
+      deliveries: [],
+      delivery: settings,
+      hasOrigin: true,
+    });
+    emit('workspace:deliveries', { workspaceId: 'w2', deliveries: [], delivery: settings });
     const [first, second] = store.getState().workspaces;
-    expect(first?.integrationRequests).toEqual([request]);
-    expect(second?.integrationRequests).toEqual([]);
+    expect(first).toMatchObject({ hasOrigin: true, delivery: settings });
+    expect(second?.hasOrigin).toBeUndefined();
   });
 
   it('follows the loops and their reports, and sends the user’s decision (004 US2)', async () => {

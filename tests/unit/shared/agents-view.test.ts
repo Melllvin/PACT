@@ -187,9 +187,9 @@ const terminal: FreeTerminal = { id: 'term-1', workspaceId: 'w1', cwd: '/repo', 
 
 const workspaceOf = (
   agents: Agent[],
-  extra: Partial<
-    Pick<Workspace, 'integrationRequests' | 'loops' | 'issues' | 'publishRequests'>
-  > & { freeTerminals?: FreeTerminal[] } = {},
+  extra: Partial<Pick<Workspace, 'deliveries' | 'loops' | 'issues' | 'publishRequests'>> & {
+    freeTerminals?: FreeTerminal[];
+  } = {},
 ) => ({ agents, freeTerminals: [], mainBranch: 'main', loops: [], ...extra });
 
 const todo = (
@@ -260,7 +260,7 @@ describe('agentRows', () => {
     expect(row?.pending).toBe(3);
   });
 
-  it.each(['integration-request', 'publish-issues', 'loop-escalated', 'usage-limit'] as const)(
+  it.each(['delivery-local', 'publish-issues', 'loop-escalated', 'usage-limit'] as const)(
     'sends « %s » to the head, even when it targets an agent',
     (kind) => {
       const ws = workspaceOf([agent(1)]);
@@ -312,8 +312,17 @@ describe('agentRows', () => {
       ],
       {
         freeTerminals: [terminal],
-        integrationRequests: [
-          { id: uuid(50), agentId: uuid(3), mode: 'squash', message: 'feat: x', requestedAt: iso },
+        deliveries: [
+          {
+            id: uuid(50),
+            agentId: uuid(3),
+            channel: 'local',
+            state: 'reviewing',
+            unverified: false,
+            frozenCommit: 'abcdef0123456789abcdef0123456789abcdef01',
+            title: 'x',
+            message: 'feat: x',
+          } as never,
         ],
       },
     );
@@ -321,7 +330,7 @@ describe('agentRows', () => {
     const result = view(ws, items);
     const placed = result.rows.reduce((sum, row) => sum + row.pending, result.head.length);
     expect(placed).toBe(items.length);
-    expect(result.head.map((item) => item.kind).sort()).toEqual(['info', 'integration-request']);
+    expect(result.head.map((item) => item.kind).sort()).toEqual(['delivery-local', 'info']);
   });
 });
 

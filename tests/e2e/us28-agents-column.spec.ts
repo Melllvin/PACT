@@ -7,7 +7,7 @@ import { createRepo, typeIn } from './helpers/workspace';
 
 // 006 US1 end to end (T014): the orchestrator launches three agents → four rows with their roles;
 // an agent asks → its row comes first with « ◆ Répondre », the others have no action button; a
-// click on a row opens the Focus; an integration request shows in « À traiter ».
+// click on a row opens the Focus; a merge asked for shows in « À traiter ».
 
 const env = {
   PACT_FAKE_CLI: FAKE_CLI,
@@ -60,12 +60,16 @@ test('lists every agent of the orchestrator, puts the one that asks first, opens
     ).toBeVisible();
   }
 
-  // The orchestrator asks to integrate agent 4: the request is in « À traiter » (scenario 4).
+  // 008: the orchestrator cannot request a delivery without a loop (the scenario is refused); the user
+  // asks to merge agent 4 without a verdict, and the request is in « À traiter » (scenario 4).
+  const tile4 = page.getByRole('article', { name: /^Faux CLI 4,/ });
+  await tile4.getByRole('button', { name: 'Fusionner sans verdict' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirmer' }).click();
   const head = column.getByRole('list', { name: 'À traiter' });
   await expect(
-    head.getByRole('listitem').filter({ hasText: '◎ Intégrer Faux CLI 4 → main ?' }),
+    head.getByRole('listitem').filter({ hasText: '◎ Fusionner Faux CLI 4 → main ?' }),
   ).toBeVisible();
-  await expect(head.getByRole('button', { name: '✓ Intégrer' })).toBeVisible();
+  await expect(head.getByRole('button', { name: 'Fusionner' })).toBeVisible();
 
   // Agent 3 asks a question: its row comes first with « ◆ Répondre » (scenario 2).
   const tile3 = page.getByRole('article', { name: /^Faux CLI 3,/ });

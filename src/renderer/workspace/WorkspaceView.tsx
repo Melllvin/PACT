@@ -11,7 +11,8 @@ import {
 } from '../../shared/model';
 import { agentName } from '../../shared/agent-name';
 import { agentColor } from '../../shared/agent-color';
-import type { TileMenu } from '../tiles/TileActions';
+import type { DeliveryAction, TileMenu } from '../tiles/TileActions';
+import { isFinalState } from '../../shared/delivery';
 import type { OrchestratorAction } from '../../shared/orchestrator';
 import { agentRows } from '../../shared/agents-view';
 import { deriveTodos } from '../../shared/todo';
@@ -52,10 +53,13 @@ export type AgentActions = {
   onClose: (agentId: string) => void;
   /** « Revue → »: opens the Changements tab of the agent (002 FR-002). */
   onReview?: (agentId: string) => void;
-  /** 003 US3 — « ✓ Intégrer » of a request of the orchestrator, with the message kept. */
-  onConfirmIntegration?: (requestId: string, message: string) => void;
-  /** 003 US3 — « Refuser » of a request of the orchestrator. */
-  onRefuseIntegration?: (requestId: string) => void;
+  /** 008 — « Fusionner » / « Refuser » of the merge the user is asked for, on the head shown. */
+  onDecideDelivery?: (deliveryId: string, decision: 'validate' | 'refuse', head: string) => void;
+  /** 008 — « Livrer » / « Intégrer » of an agent. */
+  onRequestDelivery?: (
+    agentId: string,
+    request: { title: string; message: string; unverified: boolean },
+  ) => void;
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
   onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
   /** 007 FR-006 — the user's decision on two agents that bounce a message. */
@@ -355,6 +359,26 @@ export function WorkspaceView({
     workspace.loops.find(
       (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
     )?.round ?? null;
+  // 008 — « Livrer » / « Intégrer » on the dev, or the lone agent, that is not already delivering.
+  const deliveryOf = (agent: Agent): DeliveryAction | undefined => {
+    const { onRequestDelivery } = actions;
+    if (!onRequestDelivery || agent.role === 'orchestrator' || agent.role === 'test') {
+      return undefined;
+    }
+    if (workspace.deliveries.some((d) => d.agentId === agent.id && !isFinalState(d.state))) {
+      return undefined;
+    }
+    const loop = workspace.loops.find((l) => l.devAgentId === agent.id && l.state === 'accepted');
+    const issue = loop && workspace.issues.find((i) => i.id === loop.issueId);
+    return {
+      remote: workspace.hasOrigin === true,
+      accepted: loop !== undefined,
+      title: issue?.title ?? agent.branch,
+      onRequest: (request) => {
+        onRequestDelivery(agent.id, request);
+      },
+    };
+  };
   // 006 — the ⋮ menu of a tile and of the Focus: « Faire orchestrateur » (US5), « Renommer » (#45).
   const menuOf = (agent: Agent): TileMenu => {
     const { onPromote, onRename } = actions;
@@ -392,6 +416,7 @@ export function WorkspaceView({
     <Tile
       key={agent.id}
       menu={menuOf(agent)}
+      delivery={deliveryOf(agent)}
       color={agentColor(agent, agents)}
       fromOrchestrator={fromOrchestrator[agent.id] !== undefined}
       round={roundOf(agent.id)}
@@ -497,6 +522,7 @@ export function WorkspaceView({
               terminals={terminals}
               pills={pills}
               menu={focusedAgent && menuOf(focusedAgent)}
+              delivery={focusedAgent && deliveryOf(focusedAgent)}
               changedFiles={changedFilesOf(focused)}
               onSelect={(agentId) => {
                 if (inReview) openReview(agentId);

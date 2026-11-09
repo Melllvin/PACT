@@ -165,9 +165,10 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onClose: state.requestCloseAgent,
                 onPromote: (id) => void state.promoteAgent(id),
                 onRename: (id, name) => void state.renameAgent(id, name),
-                onConfirmIntegration: (id, message) =>
-                  void state.confirmIntegrationRequest(id, message),
-                onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
+                onDecideDelivery: (id, decision, head) =>
+                  void state.decideDelivery(id, decision, head),
+                onRequestDelivery: (agentId, request) =>
+                  void state.requestDelivery(workspace.id, agentId, request),
                 onDecideLoop: (issueId, decision) =>
                   void state.decideLoop(workspace.id, issueId, decision),
                 onDecideExchange: (escalationId, decision) =>

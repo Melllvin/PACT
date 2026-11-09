@@ -243,6 +243,30 @@ export class GitService {
     }
   }
 
+  /** 008 FR-008 — whether the repository has a remote called `origin`: without one, no PR is possible. */
+  async hasOrigin(repo: string): Promise<boolean> {
+    try {
+      return (await this.git(repo, ['remote'])).split('\n').includes('origin');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 008 R5 — `commit` checked out detached in `dir`, a place of PACT's own (the tests run on the
+   * rebased commit there). The caller removes it with `removeDetached`.
+   */
+  async addDetached(repo: string, dir: string, commit: string): Promise<void> {
+    await mkdir(dirname(dir), { recursive: true });
+    await this.git(repo, ['worktree', 'add', '--detach', dir, commit]);
+  }
+
+  /** Removes what `addDetached` made, whatever the tests left in it. */
+  async removeDetached(repo: string, dir: string): Promise<void> {
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await this.git(repo, ['worktree', 'prune']);
+  }
+
   /** 008 R10 — whether `ref` holds a workflow of GitHub Actions (`.github/workflows/*.yml`). */
   async hasWorkflows(cwd: string, ref: string): Promise<boolean> {
     try {
@@ -292,6 +316,21 @@ export class GitService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /** The head of `branch` on origin, read without fetching; null when absent or unreachable. */
+  async remoteBranchHead(repo: string, branch: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.run(
+        repo,
+        ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      return stdout.trim().split(/\s/)[0] || null;
+    } catch {
+      return null;
     }
   }
 

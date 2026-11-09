@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { deliverySchema, deliverySettingsSchema } from './delivery';
 import { exchangesPayloadSchema } from './exchanges';
 import { orchestratorActionSchema } from './orchestrator';
 import { previewFileSchema } from './preview';
@@ -7,7 +8,6 @@ import {
   agentSchema,
   agentStateSchema,
   cliDefinitionSchema,
-  integrationRequestSchema,
   issueSchema,
   loopSchema,
   publishRequestSchema,
@@ -21,7 +21,7 @@ import {
   scheduledResumeSchema,
   workspaceSchema,
 } from './model';
-import { effortSchema, roleSchema, type Role } from './primitives';
+import { effortSchema, gitIdSchema, roleSchema, type Role } from './primitives';
 import {
   conflictFileSchema,
   fileDiffSchema,
@@ -234,16 +234,27 @@ export const ipcRequests = {
   'integration:askAgent': request(integrationRef, integrationSchema),
   'integration:finish': request(integrationRef, integrationSchema),
   'integration:cancel': request(integrationRef, none),
-  /** 003 US3 — the integrations the orchestrator asks for (FR-018, FR-019). */
-  'integrationRequest:confirm': request(
+  /** 008 US1 — « Livrer » / « Intégrer »: the user asks for a delivery of an agent (FR-001, FR-004). */
+  'delivery:request': request(
     z.object({
-      requestId: z.uuid(),
+      workspaceId: z.string(),
+      agentId: z.uuid(),
+      title: z.string().trim().min(1).max(200),
       message: z.string().trim().min(1).max(4000),
-      confirmWorking: z.boolean().optional(),
+      unverified: z.boolean().optional(),
     }),
-    integrationSchema,
+    deliverySchema,
   ),
-  'integrationRequest:refuse': request(z.object({ requestId: z.uuid() }), none),
+  /** 008 FR-008, FR-027 — « Fusionner » / « Refuser » of the local channel, on the head shown. */
+  'delivery:decide': request(
+    z.object({
+      deliveryId: z.uuid(),
+      decision: z.enum(['validate', 'refuse']),
+      head: gitIdSchema,
+      reason: z.string().max(500).optional(),
+    }),
+    deliverySchema,
+  ),
   /** 003 US5 — the journal « ◎ Actions », the latest first (FR-021). */
   /** 005 — the usage of every CLI account read so far, when the renderer loads. */
   'usage:get': request(none, z.array(usageStateSchema)),
@@ -348,10 +359,12 @@ export const ipcEvents = {
   'orchestrator:prompted': z.object({ agentId: z.uuid() }),
   /** 003 FR-021 — a new entry of an orchestrator's journal. */
   'orchestrator:action': orchestratorActionSchema.extend({ orchestratorId: z.uuid() }),
-  /** 003 FR-017 — the integrations waiting for the user, for À faire. */
-  'workspace:integrationRequests': z.object({
+  /** 008 — the deliveries of a workspace, for the tiles and À faire. */
+  'workspace:deliveries': z.object({
     workspaceId: z.string(),
-    requests: z.array(integrationRequestSchema),
+    deliveries: z.array(deliverySchema),
+    delivery: deliverySettingsSchema,
+    hasOrigin: z.boolean().optional(),
   }),
   /** 004 US2 — the loops and issues of a workspace, for the tiles and À faire. */
   'workspace:loops': z.object({

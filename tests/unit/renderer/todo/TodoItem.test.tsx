@@ -61,8 +61,9 @@ describe('TodoItem « Revue → »', () => {
   });
 });
 
-// 003 T031 — « ◎ Intégrer <agent> → <main> ? »: the message stays the user's to change (FR-018).
-describe('TodoItem of an integration the orchestrator asks for', () => {
+// 003 T031, migrated by 008 T023 — « ◎ Fusionner <agent> → <main> ? »: the merge the user is asked for.
+describe('TodoItem of a merge the user is asked for', () => {
+  const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
   /** The actions, without « Revue → » when asked. */
   const without = <T extends { onReview: unknown }>(props: T, noReview: boolean) => {
     const { onReview, ...rest } = props;
@@ -71,20 +72,19 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
   const setup = (overrides: { onReview?: boolean } = {}) => {
     const props = {
       ...actions(),
-      onConfirmIntegration: vi.fn(),
-      onRefuseIntegration: vi.fn(),
+      onDecideDelivery: vi.fn(),
     };
     const done = agent(2, { state: 'done' });
     render(
       <ul>
         <TodoItem
           todo={{
-            id: 'r1:integration-request',
+            id: 'r1:delivery-local',
             agentId: done.id,
-            kind: 'integration-request',
-            title: '◎ Intégrer Claude Code 2 → main ?',
+            kind: 'delivery-local',
+            title: '◎ Fusionner Claude Code 2 → main ?',
             actions: [],
-            request: { id: 'r1', message: 'feat: connexion' },
+            delivery: { id: 'r1', head: HEAD },
           }}
           agent={done}
           {...without(props, overrides.onReview === false)}
@@ -94,19 +94,11 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
     return { props, done };
   };
 
-  it('integrates with the message the user edited', async () => {
+  it('merges on the head it shows', async () => {
     const user = userEvent.setup();
     const { props } = setup();
-    expect(screen.getByText('◎ Intégrer Claude Code 2 → main ?')).toBeTruthy();
-    const message = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message de commit' });
-    expect(message.value).toBe('feat: connexion');
-    await user.clear(message);
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '✓ Intégrer' }).disabled).toBe(
-      true,
-    );
-    await user.type(message, 'feat: connexion relue ');
-    await user.click(screen.getByRole('button', { name: '✓ Intégrer' }));
-    expect(props.onConfirmIntegration).toHaveBeenCalledWith('r1', 'feat: connexion relue');
+    await user.click(screen.getByRole('button', { name: 'Fusionner' }));
+    expect(props.onDecideDelivery).toHaveBeenCalledWith('r1', 'validate', HEAD);
     // Not a tile action: no « Autoriser » nor « Relancer » here.
     expect(screen.queryByRole('button', { name: /Autoriser|Relancer/ })).toBeNull();
   });
@@ -115,7 +107,7 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
     const user = userEvent.setup();
     const { props, done } = setup();
     await user.click(screen.getByRole('button', { name: 'Refuser' }));
-    expect(props.onRefuseIntegration).toHaveBeenCalledWith('r1');
+    expect(props.onDecideDelivery).toHaveBeenCalledWith('r1', 'refuse', HEAD);
     await user.click(screen.getByRole('button', { name: 'Revue →' }));
     expect(props.onReview).toHaveBeenCalledWith(done.id);
   });
@@ -374,5 +366,58 @@ describe('TodoItem of an exchange in a loop', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Couper' }));
     expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});
+
+// 008 T022 — a todo needs no handler it does not use.
+describe('TodoItem without handlers', () => {
+  it('shows the buttons of its agent and clicks through without a handler', async () => {
+    const user = userEvent.setup();
+    const failed = agent(5, {
+      state: 'error',
+      lastError: { code: null, kind: 'crash', message: 'Boum' },
+    });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: 'a5:prompt',
+            agentId: failed.id,
+            kind: 'prompt',
+            title: '✕ Erreur · claude-code 5',
+            actions: [],
+          }}
+          agent={failed}
+        />
+      </ul>,
+    );
+    for (const name of ['Journal', 'Relancer', 'Reprendre']) {
+      await user.click(screen.getByRole('button', { name }));
+    }
+    expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});
+
+// 008 data-model — « ◎ Relire la PR #n »: shown with its agent, without the buttons of a tile.
+describe('TodoItem of a PR to review', () => {
+  it('shows the title and the work of its agent, and no button', () => {
+    const dev = agent(6, { state: 'done' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: 'd1:delivery-review',
+            agentId: dev.id,
+            kind: 'delivery-review',
+            title: '◎ Relire la PR #3 · 0012-connexion · 1234567 · sans verdict',
+            actions: [],
+          }}
+          agent={dev}
+        />
+      </ul>,
+    );
+    expect(screen.getByRole('listitem').getAttribute('data-kind')).toBe('delivery-review');
+    expect(screen.getByText(/Relire la PR #3/)).toBeTruthy();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 });

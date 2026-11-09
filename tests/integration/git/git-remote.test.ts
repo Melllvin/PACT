@@ -306,6 +306,23 @@ describe('pushBranch (research R7)', () => {
   });
 });
 
+describe('remoteBranchHead (the lease of a new request)', () => {
+  it('Given a branch on the remote, When read, Then it gives its head', async () => {
+    const f = git(dev, 'rev-parse', 'HEAD');
+    await service.pushBranch(repo, { commit: f, branch: 'feat/connexion', expected: null });
+    await expect(service.remoteBranchHead(repo, 'feat/connexion')).resolves.toBe(f);
+  });
+
+  it('Given a branch absent from the remote, When read, Then it gives null', async () => {
+    await expect(service.remoteBranchHead(repo, 'feat/absente')).resolves.toBeNull();
+  });
+
+  it('Given a remote that cannot be reached, When read, Then it gives null and does not throw', async () => {
+    git(repo, 'remote', 'set-url', 'origin', join(root, 'nowhere.git'));
+    await expect(service.remoteBranchHead(repo, 'feat/connexion')).resolves.toBeNull();
+  });
+});
+
 describe('deleteRemoteBranch (research R18)', () => {
   it('Given the branch still at the merged commit, When deleted, Then it is gone from the remote and main stays', async () => {
     const f = git(dev, 'rev-parse', 'HEAD');

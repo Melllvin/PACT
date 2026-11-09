@@ -4,7 +4,7 @@ import { roleProfileSchema, roleSchema, type CliDefinition } from '../../shared/
 import { profileWarnings, profilesOf } from '../../shared/roles';
 import type { AgentManager } from '../agents/agent-manager';
 import type { ExchangeService } from '../orchestrator/exchange-service';
-import type { IntegrationRequests } from '../orchestrator/integration-requests';
+import type { DeliveryService } from '../delivery/delivery-service';
 import type { IssueService } from '../orchestrator/issues';
 import type { LoopService } from '../orchestrator/loop-service';
 import type { OrchestratorService } from '../orchestrator/orchestrator-service';
@@ -14,7 +14,8 @@ import type { WorkspaceService } from '../workspace/workspace-service';
 // journal and the withdrawal of its role.
 
 type Dependencies = {
-  requests: Pick<IntegrationRequests, 'confirm' | 'refuse'>;
+  /** 008 — the deliveries: the user's « Livrer » and « Fusionner ». */
+  delivery: Pick<DeliveryService, 'request' | 'decide'>;
   orchestrator: Pick<OrchestratorService, 'actions'>;
   /** 007 — the journal; absent in the suites that do not use it. */
   exchanges?: Pick<ExchangeService, 'decide'>;
@@ -31,7 +32,7 @@ type Dependencies = {
 };
 
 export function createOrchestratorServices({
-  requests,
+  delivery,
   orchestrator,
   exchanges,
   agents,
@@ -42,11 +43,9 @@ export function createOrchestratorServices({
   issues,
 }: Dependencies) {
   return {
-    'integrationRequest:confirm': (input: IpcInput<'integrationRequest:confirm'>) =>
-      requests.confirm(input),
-    'integrationRequest:refuse': async (input: IpcInput<'integrationRequest:refuse'>) => {
-      await requests.refuse(input);
-    },
+    'delivery:request': ({ workspaceId, ...input }: IpcInput<'delivery:request'>) =>
+      delivery.request(workspaceId, { ...input, requestedBy: 'user' }),
+    'delivery:decide': (input: IpcInput<'delivery:decide'>) => delivery.decide(input),
     'orchestrator:actions': ({ agentId }: IpcInput<'orchestrator:actions'>) =>
       orchestrator.actions(agentId),
     'orchestrator:revoke': async ({ agentId }: IpcInput<'orchestrator:revoke'>) => {

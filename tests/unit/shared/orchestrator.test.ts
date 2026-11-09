@@ -83,7 +83,7 @@ describe('orchestratorActionSchema', () => {
       'send_prompt',
       'launch_agent',
       'close_agent',
-      'request_integration',
+      'request_delivery',
       'run_tests',
     ]) {
       expect(orchestratorActionSchema.safeParse({ ...action, tool }).success).toBe(true);
