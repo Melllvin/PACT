@@ -292,6 +292,21 @@ export class LoopService {
     return reopened;
   }
 
+  /**
+   * 008 R6, R12, FR-007 — where the delivery leaves the loop: `delivering` while a request runs,
+   * `accepted` when it ends without the dev having to work again, `running` (same round, nothing
+   * counted) when the verdict no longer holds for the head, `merged` and the issue `done` at the merge.
+   */
+  async deliveryState(
+    workspaceId: string,
+    issueId: string,
+    state: 'delivering' | 'accepted' | 'running' | 'merged',
+  ): Promise<void> {
+    if (!this.get(workspaceId, issueId)) throw new Error(`Aucune boucle pour ${issueId}.`);
+    await this.save(workspaceId, issueId, (l) => ({ ...l, state }));
+    if (state === 'merged') await this.setIssue(workspaceId, issueId, 'done');
+  }
+
   /** A hand-off report of an agent; the reason it is refused, or `null`. */
   async report(agentId: string, report: HandoffReport): Promise<string | null> {
     this.reported.add(agentId);

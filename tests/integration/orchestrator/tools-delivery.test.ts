@@ -104,7 +104,7 @@ describe('request_delivery', () => {
       expect.objectContaining({
         tool: 'request_delivery',
         outcome: 'refused',
-        reason: expect.stringContaining(reason),
+        reason: expect.stringContaining(reason) as unknown,
       }),
     );
   });

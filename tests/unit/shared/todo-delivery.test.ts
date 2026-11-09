@@ -101,8 +101,8 @@ describe('« ◎ Fusionner <agent> → <main> ? » (US1 sc.7, sc.12)', () => {
 
   it('Given an item awaiting the user, When the items are ordered, Then it comes where the integration request did: after the answers, before the issues to publish', () => {
     expect(ORDER).toContain('delivery-local');
-    expect(ORDER.indexOf('delivery-local' as never)).toBeGreaterThan(ORDER.indexOf('decide'));
-    expect(ORDER.indexOf('delivery-local' as never)).toBeLessThan(ORDER.indexOf('publish-issues'));
+    expect(ORDER.indexOf('delivery-local')).toBeGreaterThan(ORDER.indexOf('decide'));
+    expect(ORDER.indexOf('delivery-local')).toBeLessThan(ORDER.indexOf('publish-issues'));
   });
 });
 

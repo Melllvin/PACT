@@ -286,6 +286,8 @@ export const workspaceSchema = z
     /** 008 — the settings of the delivery and the requests, written at every step (R2, R11). */
     delivery: deliverySettingsSchema.default(defaultDeliverySettings),
     deliveries: z.array(deliverySchema).default([]),
+    /** 008 — the repository has a remote called `origin`: « Livrer » instead of « Intégrer ». */
+    hasOrigin: z.boolean().optional(),
     lastOpenedAt: isoDate,
     status: z.enum(['available', 'unavailable']),
   })
@@ -368,8 +370,8 @@ export type TodoItem = {
   kind: TodoKind;
   title: string;
   actions: TileAction[];
-  /** 003 US3 — the integration the orchestrator asks for, for `integration-request`. */
-  request?: { id: string; message: string };
+  /** 008 contracts/ui.md — the delivery the user decides on, and the commit shown, for `delivery-local`. */
+  delivery?: { id: string; head: string };
   /** 004 FR-018 — the loop stopped after 3 rounds, for `loop-escalated`. */
   loop?: { issueId: string };
   /** 007 FR-006 — the escalation of an exchange in a loop, and its last message as text. */
@@ -386,7 +388,8 @@ export type TodoItem = {
 export type TodoKind =
   | 'answer'
   | 'decide'
-  | 'integration-request'
+  | 'delivery-local'
+  | 'delivery-review'
   | 'publish-issues'
   | 'loop-escalated'
   | 'exchange-escalated'

@@ -209,13 +209,14 @@ export class WorkspaceService {
       const known = available ? await this.git.knownDefaultBranch(path) : undefined;
       const mainBranch = known?.branch ?? saved?.mainBranch ?? '';
       if (known && !known.settled) resolving.push({ id, path });
+      // 008 R24 — `request_integration` is gone: nothing can answer a request saved by an older app.
+      const legacy = (saved?.integrationRequests.length ?? 0) > 0;
       this.open_.set(id, {
         agents: [],
         freeTerminals: [],
         quickLaunchCounters: { freeTerminal: 0 },
         permissionOverride: null,
         testCommand: null,
-        integrationRequests: [],
         delivery: defaultDeliverySettings(),
         deliveries: [],
         roleProfiles: {},
@@ -226,12 +227,15 @@ export class WorkspaceService {
         exchanges: { messages: [], escalations: [] },
         lastOpenedAt: this.now().toISOString(),
         ...saved,
+        // 008 R24 — `request_integration` is gone: nothing can answer a request saved by an older app.
+        integrationRequests: [],
         mainBranch,
         id,
         path,
         name: basename(path),
         status: available ? 'available' : 'unavailable',
       });
+      if (legacy) await this.stores.workspace(id).write(this.open_.get(id) as Workspace);
     }
     for (const { id, path } of resolving) this.resolveWithOrigin(id, path);
     return this.list();

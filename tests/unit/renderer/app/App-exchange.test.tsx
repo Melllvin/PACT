@@ -25,6 +25,8 @@ const looping = (): Workspace => {
     permissionOverride: null,
     testCommand: null,
     integrationRequests: [],
+    deliveries: [],
+    delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
     roleProfiles: {},
     issues: [],
     loops: [],

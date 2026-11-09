@@ -36,7 +36,7 @@ const MUST_SAY: Record<string, string[]> = {
     'list_agents',
     'send_prompt',
     'wait_for_agents',
-    'request_integration',
+    'request_delivery',
     'Cadrage',
     'Design',
     'Boucle',

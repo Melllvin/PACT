@@ -227,10 +227,7 @@ test('US1 sc.11: a lone agent with a remote cannot « Livrer »; « Créer la PR
   await page.getByRole('button', { name: 'Choisir un dépôt Git…' }).click();
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  await launcher
-    .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
-    .click();
+  // The counter of « Faux CLI » starts at 1: one agent, no click on « + ».
   await launcher.getByRole('button', { name: 'Lancer 1 agent' }).click();
   await page.keyboard.press('Enter'); // 1m: « Toujours autoriser »
   const tile = page.getByRole('article', { name: /^Faux CLI 1,/ });

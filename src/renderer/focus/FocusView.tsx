@@ -12,7 +12,7 @@ import { exchangeMessageSchema, type ExchangeMessage } from '../../shared/exchan
 import type { OrchestratorAction } from '../../shared/orchestrator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TerminalView } from '../tiles/TerminalView';
-import { TileActions, type TileMenu } from '../tiles/TileActions';
+import { TileActions, type DeliveryAction, type TileMenu } from '../tiles/TileActions';
 import { visibleTabs } from './visible-tabs';
 import { agentColor } from '../../shared/agent-color';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
@@ -28,6 +28,8 @@ type Props = Omit<AgentActions, 'onClose'> & {
   onClose?: AgentActions['onClose'];
   /** 006 — the ⋮ menu of the footer: « Faire orchestrateur » and « Renommer ». */
   menu?: TileMenu | undefined;
+  /** 008 — « Livrer » / « Intégrer » of the footer. */
+  delivery?: DeliveryAction | undefined;
   /** #43 — files of the diff of the agent; absent: `changes` given means there are some. */
   changedFiles?: number;
   tab?: FocusTab;
@@ -99,6 +101,7 @@ export function FocusView({
   onLog,
   onCancelAutoResume,
   menu,
+  delivery,
   changedFiles,
 }: Props) {
   const terminalBox = useRef<HTMLDivElement>(null);
@@ -247,6 +250,7 @@ export function FocusView({
             onCancelAutoResume(agent.id);
           }}
           menu={menu}
+          delivery={delivery}
         />
       </footer>
     </section>

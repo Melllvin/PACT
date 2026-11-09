@@ -5,13 +5,15 @@ import { Button } from '@/components/ui/button';
 import type { AgentActions } from '../workspace/WorkspaceView';
 import { cn } from '@/lib/utils';
 
-type Props = Omit<AgentActions, 'onClose'> & {
+type Props = Partial<Omit<AgentActions, 'onClose'>> & {
   todo: Todo;
   /** Absent for a free terminal, which has no color nor actions. */
   agent: Agent | undefined;
 };
 
+const none = () => undefined;
 const SEPARATOR = ' · ';
+const LOCAL_VERB = '◎ Fusionner';
 
 /**
  * One request, in the color of its agent, with the same buttons as its tile (FR-028). Its title
@@ -41,7 +43,8 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
       className={cn(
         'flex origin-top animate-unfold flex-col gap-2.5 overflow-hidden rounded-xl border border-white/6 bg-surface p-3 motion-reduce:animate-none',
         todo.kind === 'answer' && 'border-waiting/30 bg-waiting/6',
-        (todo.kind === 'integration-request' ||
+        (todo.kind === 'delivery-local' ||
+          todo.kind === 'delivery-review' ||
           todo.kind === 'publish-issues' ||
           todo.kind === 'decide') &&
           'border-primary/30 bg-primary/6',
@@ -54,7 +57,14 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
       )}
     >
       <span className="font-mono text-[12px] leading-[1.5] break-words text-foreground">
-        {what}
+        {todo.kind === 'delivery-local' && what?.startsWith(LOCAL_VERB) ? (
+          <>
+            <span>{LOCAL_VERB}</span>
+            <span>{what.slice(LOCAL_VERB.length)}</span>
+          </>
+        ) : (
+          what
+        )}
       </span>
       {who !== undefined && (
         <span className="order-first flex items-center gap-2 text-[12px] text-[#a1a1aa]">
@@ -81,14 +91,12 @@ type ActionsProps = Props;
 export function TodoActions({
   todo,
   agent,
-  onAnswer,
-  onResume,
-  onRestart,
-  onLog,
-  onCancelAutoResume,
+  onAnswer = none,
+  onResume = none,
+  onRestart = none,
+  onLog = none,
+  onCancelAutoResume = none,
   onReview,
-  onConfirmIntegration,
-  onRefuseIntegration,
   onDecideLoop,
   onDecideExchange,
   onConfirmPublish,
@@ -96,18 +104,15 @@ export function TodoActions({
   onOpenTerminal,
   onUsageDetail,
   onDecide,
+  onDecideDelivery,
 }: ActionsProps) {
-  const { request, loop, publish, usage, decide, exchange } = todo;
+  const { delivery, loop, publish, usage, decide, exchange } = todo;
   return (
     <>
-      {request && agent && (
-        <IntegrationRequest
-          request={request}
-          onConfirm={(message) => {
-            onConfirmIntegration?.(request.id, message);
-          }}
-          onRefuse={() => {
-            onRefuseIntegration?.(request.id);
+      {delivery && agent && (
+        <DeliveryLocal
+          onDecide={(decision) => {
+            onDecideDelivery?.(delivery.id, decision, delivery.head);
           }}
           onReview={
             onReview &&
@@ -206,90 +211,86 @@ export function TodoActions({
           }}
         />
       )}
-      {agent && !request && !loop && !publish && !decide && !exchange && (
-        <TileActions
-          state={agent.state}
-          question={todo.actions.includes('open-terminal')}
-          scheduledResume={agent.scheduledResume}
-          onAnswer={(answer) => {
-            onAnswer(agent.id, answer);
-          }}
-          onOpenTerminal={
-            onOpenTerminal
-              ? () => {
-                  onOpenTerminal(agent.id);
-                }
-              : undefined
-          }
-          onResume={() => {
-            onResume(agent.id);
-          }}
-          onRestart={() => {
-            onRestart(agent.id);
-          }}
-          onLog={() => {
-            onLog(agent.id);
-          }}
-          onCancelAutoResume={() => {
-            onCancelAutoResume(agent.id);
-          }}
-          onReview={
-            todo.kind === 'review' && onReview
-              ? () => {
-                  onReview(agent.id);
-                }
-              : undefined
-          }
-        />
-      )}
+      {agent &&
+        todo.kind !== 'delivery-review' &&
+        !delivery &&
+        !loop &&
+        !publish &&
+        !decide &&
+        !exchange && (
+          <TileActions
+            state={agent.state}
+            question={todo.actions.includes('open-terminal')}
+            scheduledResume={agent.scheduledResume}
+            onAnswer={(answer) => {
+              onAnswer(agent.id, answer);
+            }}
+            onOpenTerminal={
+              onOpenTerminal
+                ? () => {
+                    onOpenTerminal(agent.id);
+                  }
+                : undefined
+            }
+            onResume={() => {
+              onResume(agent.id);
+            }}
+            onRestart={() => {
+              onRestart(agent.id);
+            }}
+            onLog={() => {
+              onLog(agent.id);
+            }}
+            onCancelAutoResume={() => {
+              onCancelAutoResume(agent.id);
+            }}
+            onReview={
+              todo.kind === 'review' && onReview
+                ? () => {
+                    onReview(agent.id);
+                  }
+                : undefined
+            }
+          />
+        )}
     </>
   );
 }
 
-/** « ◎ Intégrer <agent> → <main> ? »: the message stays the user's to change (003 FR-018). */
-function IntegrationRequest({
-  request,
-  onConfirm,
-  onRefuse,
+/** « ◎ Fusionner <agent> → <main> ? »: one click, then the button waits for the answer (FR-027). */
+function DeliveryLocal({
+  onDecide,
   onReview,
 }: {
-  request: { id: string; message: string };
-  onConfirm: (message: string) => void;
-  onRefuse: () => void;
+  onDecide: (decision: 'validate' | 'refuse') => void;
   onReview: (() => void) | undefined;
 }) {
-  const [message, setMessage] = useState(request.message);
+  const [sent, setSent] = useState(false);
   return (
-    <form
-      className="flex flex-col gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onConfirm(message.trim());
-      }}
-    >
-      <textarea
-        aria-label="Message de commit"
-        rows={2}
-        value={message}
-        onChange={(event) => {
-          setMessage(event.target.value);
+    <div className="flex flex-wrap gap-1.5">
+      <Button
+        variant="accept"
+        disabled={sent}
+        onClick={() => {
+          setSent(true);
+          onDecide('validate');
         }}
-        className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/50"
-      />
-      <div className="flex flex-wrap gap-1.5">
-        <Button type="submit" variant="accept" disabled={message.trim() === ''}>
-          ✓ Intégrer
+      >
+        Fusionner
+      </Button>
+      <Button
+        onClick={() => {
+          onDecide('refuse');
+        }}
+      >
+        Refuser
+      </Button>
+      {onReview && (
+        <Button variant="ghost" onClick={onReview}>
+          Revue →
         </Button>
-        <Button type="button" onClick={onRefuse}>
-          Refuser
-        </Button>
-        {onReview && (
-          <Button type="button" variant="ghost" onClick={onReview}>
-            Revue →
-          </Button>
-        )}
-      </div>
-    </form>
+      )}
+    </div>
   );
 }
 

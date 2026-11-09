@@ -144,7 +144,8 @@ export async function createDeliveryHarness(
         [FAKE_GH, ...args],
         { cwd, env: ghEnv, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
         (error, stdout, stderr) => {
-          error ? reject(Object.assign(error, { stderr, code: error.code })) : resolve(stdout);
+          if (error) reject(Object.assign(new Error(error.message), { stderr, code: error.code }));
+          else resolve(stdout);
         },
       );
       child.stdin?.end(input ?? '');

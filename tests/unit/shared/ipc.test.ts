@@ -186,15 +186,29 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
   'integration:askAgent': { valid: { integrationId }, invalid: [{}] },
   'integration:finish': { valid: { integrationId }, invalid: [{ integrationId: 'x' }] },
   'integration:cancel': { valid: { integrationId }, invalid: [{}] },
-  'integrationRequest:confirm': {
-    valid: { requestId: integrationId, message: 'feat: x', confirmWorking: true },
+  'delivery:request': {
+    valid: { workspaceId: 'w1', agentId, title: 'Connexion', message: 'feat: x', unverified: true },
     invalid: [
-      { requestId: integrationId },
-      { requestId: 'x', message: 'feat' },
-      { requestId: integrationId, message: '  ' },
+      { workspaceId: 'w1', agentId, title: 'Connexion' },
+      { workspaceId: 'w1', agentId, title: '  ', message: 'feat' },
+      { workspaceId: 'w1', agentId: 'x', title: 'Connexion', message: 'feat' },
     ],
   },
-  'integrationRequest:refuse': { valid: { requestId: integrationId }, invalid: [{}] },
+  'delivery:decide': {
+    valid: {
+      deliveryId: integrationId,
+      decision: 'validate',
+      head: 'abcdef0123456789abcdef0123456789abcdef01',
+    },
+    invalid: [
+      { deliveryId: integrationId, decision: 'validate' },
+      {
+        deliveryId: integrationId,
+        decision: 'merge',
+        head: 'abcdef0123456789abcdef0123456789abcdef01',
+      },
+    ],
+  },
   'orchestrator:actions': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
   'orchestrator:revoke': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
   'orchestrator:promote': { valid: { agentId }, invalid: [{}, { agentId: 'x' }] },
@@ -329,8 +343,8 @@ describe('IPC event schemas', () => {
       'term:exit',
       'usage:state',
       'workspace:agentsLaunched',
+      'workspace:deliveries',
       'workspace:exchanges',
-      'workspace:integrationRequests',
       'workspace:issues',
       'workspace:loops',
       'workspace:status',

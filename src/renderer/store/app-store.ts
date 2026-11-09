@@ -115,9 +115,17 @@ export type AppState = {
   confirmRestartAgent: (resumeWork: boolean) => Promise<void>;
   /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
   cancelAutoResume: (agentId: string) => Promise<void>;
-  /** 003 US3 — the user's answer to an integration the orchestrator asks for (FR-018). */
-  confirmIntegrationRequest: (requestId: string, message: string) => Promise<void>;
-  refuseIntegrationRequest: (requestId: string) => Promise<void>;
+  /** 008 US1 — « Livrer » / « Intégrer » of an agent, and « Fusionner » / « Refuser » of the local merge. */
+  requestDelivery: (
+    workspaceId: string,
+    agentId: string,
+    request: { title: string; message: string; unverified: boolean },
+  ) => Promise<void>;
+  decideDelivery: (
+    deliveryId: string,
+    decision: 'validate' | 'refuse',
+    head: string,
+  ) => Promise<void>;
   /** 003 US5 — the journal « ◎ Actions » of an orchestrator, the latest first (FR-021). */
   orchestratorActions: Record<string, OrchestratorAction[]>;
   loadOrchestratorActions: (agentId: string) => Promise<void>;
@@ -411,10 +419,17 @@ export function createAppStore(api: PactApi) {
               },
             });
           }),
-          api.on('workspace:integrationRequests', ({ workspaceId, requests }) => {
+          api.on('workspace:deliveries', ({ workspaceId, deliveries, delivery, hasOrigin }) => {
             set({
               workspaces: get().workspaces.map((w) =>
-                w.id === workspaceId ? { ...w, integrationRequests: requests } : w,
+                w.id === workspaceId
+                  ? {
+                      ...w,
+                      deliveries,
+                      delivery,
+                      ...(hasOrigin === undefined ? {} : { hasOrigin }),
+                    }
+                  : w,
               ),
             });
           }),
@@ -635,11 +650,11 @@ export function createAppStore(api: PactApi) {
       },
       cancelAutoResume: (agentId) => act(() => api.invoke('agent:cancelAutoResume', { agentId })),
 
-      confirmIntegrationRequest: (requestId, message) =>
-        act(() => api.invoke('integrationRequest:confirm', { requestId, message })),
+      requestDelivery: (workspaceId, agentId, request) =>
+        act(() => api.invoke('delivery:request', { workspaceId, agentId, ...request })),
 
-      refuseIntegrationRequest: (requestId) =>
-        act(() => api.invoke('integrationRequest:refuse', { requestId })),
+      decideDelivery: (deliveryId, decision, head) =>
+        act(() => api.invoke('delivery:decide', { deliveryId, decision, head })),
 
       decideLoop: (workspaceId, issueId, decision) =>
         act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),

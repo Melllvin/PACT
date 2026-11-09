@@ -30,13 +30,7 @@ const setup = (foreground = false) => {
   return { service, notify, activate, state };
 };
 
-const NOTIFIED: TodoKind[] = [
-  'answer',
-  'decide',
-  'integration-request',
-  'rate-limit',
-  'usage-limit',
-];
+const NOTIFIED: TodoKind[] = ['answer', 'decide', 'delivery-local', 'rate-limit', 'usage-limit'];
 
 describe('NotificationService', () => {
   it.each([
@@ -95,8 +89,8 @@ describe('NotificationService', () => {
   it('never carries the text of an agent: only the title of the item', () => {
     const { service, notify } = setup();
     service.update('w1', [
-      item('integration-request', 'a1', {
-        request: { id: 'r1', message: 'SECRET du message de l’agent' },
+      item('delivery-local', 'a1', {
+        delivery: { id: 'r1', head: 'SECRET du message de l’agent' },
       }),
     ]);
     expect(JSON.stringify(notify.mock.calls)).not.toContain('SECRET');

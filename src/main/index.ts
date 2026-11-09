@@ -1,5 +1,6 @@
 import { agentName } from '../shared/agent-name';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +31,9 @@ import { createPreviewServices } from './ipc/preview-handlers';
 import { createReviewServices } from './ipc/review-handlers';
 import { openStores } from './persistence/store';
 import { PtyManager } from './pty/pty-manager';
-import { IntegrationRequests } from './orchestrator/integration-requests';
+import { DeliveryService } from './delivery/delivery-service';
+import { GhClient, type GhRun } from './delivery/gh-client';
+import type { TestRun } from '../shared/review';
 import { ExchangeService } from './orchestrator/exchange-service';
 import { WakeService, eventsFile } from './orchestrator/wake-service';
 import { OrchestratorService } from './orchestrator/orchestrator-service';
@@ -183,7 +186,7 @@ void app.whenReady().then(async () => {
           tests,
           exchanges,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
-          requests,
+          delivery,
           loops,
           issues,
           clis: () => registry.list(),
@@ -249,7 +252,6 @@ void app.whenReady().then(async () => {
       syncTodos();
       // 003 R5 — what the orchestrator of the workspace waits for.
       orchestrator.agentState(event);
-      requests.agentState(event);
       // 002 US1 — « Revue → » follows the agents that are done with changes (FR-002).
       const workspace = workspaces
         .list()
@@ -375,8 +377,8 @@ void app.whenReady().then(async () => {
     },
     onState: (state) => {
       emit('integration:state', state);
-      // 003 US3 — an integration the orchestrator asked for: its outcome is told back.
-      requests.integrationState(state);
+      // 008 — a merge the delivery asked for: its outcome is told back.
+      delivery.integrationState(state);
       if (state.state !== 'integrated') return;
       // main moved: what is left to review changes with it.
       const workspace = workspaces
@@ -385,15 +387,45 @@ void app.whenReady().then(async () => {
       if (workspace) void review.updatePending(workspace.id);
     },
   });
-  const requests: IntegrationRequests = new IntegrationRequests({
-    workspaces,
-    integration,
-    git,
-    notify: (workspaceId, event) => {
-      orchestrator.push(workspaceId, event);
+  // 008 — the tests of a delivery run on the rebased commit, in a place of their own.
+  const deliveryRuns = new Map<string, (run: TestRun) => void>();
+  const deliveryTests = new TestRunner({
+    env: resolveShellEnv,
+    onUpdate: (run) => {
+      if (run.status !== 'running') deliveryRuns.get(run.agentId)?.(run);
     },
-    onChange: (workspaceId, list) => {
-      emit('workspace:integrationRequests', { workspaceId, requests: list });
+  });
+  const ghRun: GhRun = async (args, { cwd, input }) => {
+    const command = ghCommand(process.env);
+    if (!command) throw Object.assign(new Error('gh absent'), { code: 'ENOENT' });
+    const run = promisify(execFile);
+    const child = run(command.file, [...command.args, ...args], {
+      cwd,
+      env: await resolveShellEnv(),
+      encoding: 'utf8',
+    });
+    if (input !== undefined) child.child.stdin?.end(input);
+    return (await child).stdout;
+  };
+  const delivery: DeliveryService = new DeliveryService({
+    workspaces,
+    git,
+    gh: (repoPath) => new GhClient({ run: ghRun, cwd: repoPath }),
+    loops,
+    integration,
+    exchanges,
+    deliveriesDir: join(app.getPath('userData'), 'deliveries'),
+    runTests: (cwd, command) =>
+      new Promise((resolve) => {
+        const id = randomUUID();
+        deliveryRuns.set(id, (run) => {
+          deliveryRuns.delete(id);
+          resolve({ passed: run.status === 'passed', tail: run.outputTail });
+        });
+        void deliveryTests.run({ agentId: id, cwd, port: null }, command, id);
+      }),
+    onChange: (workspaceId, change) => {
+      emit('workspace:deliveries', { workspaceId, ...change });
       syncTodos();
     },
   });
@@ -482,6 +514,17 @@ void app.whenReady().then(async () => {
     await freeTerminals.restore(id);
     void review.updatePending(id);
     void origin.sync(id);
+    // 008 — « Livrer » (a remote) or « Intégrer » (none) on the tiles.
+    const path = workspaces.get(id)?.path;
+    if (path === undefined) return;
+    const hasOrigin = await git.hasOrigin(path);
+    const ws = await workspaces.update(id, (current) => ({ ...current, hasOrigin }));
+    emit('workspace:deliveries', {
+      workspaceId: id,
+      deliveries: ws.deliveries,
+      delivery: ws.delivery,
+      hasOrigin,
+    });
   };
 
   for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
@@ -534,7 +577,7 @@ void app.whenReady().then(async () => {
       ...createPreviewServices({ preview }),
       ...createUsageServices({ usage, stores }),
       ...createOrchestratorServices({
-        requests,
+        delivery,
         orchestrator,
         exchanges,
         agents,

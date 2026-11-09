@@ -57,12 +57,12 @@ describe('Given a workspace saved with integration requests', () => {
       ...ws,
       integrationRequests: [request(1), request(2)],
     }));
-    expect(before.get(opened.id).integrationRequests).toHaveLength(2);
+    expect(before.get(opened.id)?.integrationRequests).toHaveLength(2);
 
     const after = new WorkspaceService({ git: new GitService({ env }), stores });
     await after.restore();
 
-    expect(after.get(opened.id).integrationRequests).toEqual([]);
+    expect(after.get(opened.id)?.integrationRequests).toEqual([]);
     expect((await stores.workspace(opened.id).read())?.integrationRequests).toEqual([]);
     await rm(userData, { recursive: true, force: true });
   });

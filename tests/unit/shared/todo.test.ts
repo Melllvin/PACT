@@ -174,13 +174,17 @@ describe('deriveTodos', () => {
     expect(todos.map((t) => t.id)).toEqual(['a1:answer']);
   });
 
-  it('asks to integrate what the orchestrator proposes, after answers and before reviews', () => {
+  it('asks to merge what a local delivery proposes, after answers and before reviews', () => {
+    const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
     const request = {
       id: 'r1',
       agentId: 'a2',
-      mode: 'squash' as const,
+      channel: 'local',
+      state: 'reviewing',
+      unverified: false,
+      frozenCommit: HEAD,
+      title: 'Connexion',
       message: 'feat: connexion',
-      requestedAt: '2026-11-03T00:00:00.000Z',
     };
     const todos = deriveTodos(
       {
@@ -190,17 +194,17 @@ describe('deriveTodos', () => {
           agent(3, { state: 'awaiting-answer' }),
         ]),
         // A request for an agent already gone gives nothing.
-        integrationRequests: [request, { ...request, id: 'r2', agentId: 'a9' }],
+        deliveries: [request, { ...request, id: 'r2', agentId: 'a9' }] as never,
       },
       names,
       { a1: 1 },
     );
-    expect(todos.map((t) => t.id)).toEqual(['a3:answer', 'r1:integration-request', 'a1:review']);
+    expect(todos.map((t) => t.id)).toEqual(['a3:answer', 'r1:delivery-local', 'a1:review']);
     expect(todos[1]).toMatchObject({
       agentId: 'a2',
-      kind: 'integration-request',
-      title: '◎ Intégrer Claude Code 2 → main ?',
-      request: { id: 'r1', message: 'feat: connexion' },
+      kind: 'delivery-local',
+      title: '◎ Fusionner Claude Code 2 → main ?',
+      delivery: { id: 'r1', head: HEAD },
     });
   });
 
@@ -530,15 +534,18 @@ describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', 
           agent(4, { state: 'error', lastError: rateLimited }),
           blocked(5, 1, { state: 'awaiting-prompt' }),
         ]),
-        integrationRequests: [
+        deliveries: [
           {
             id: 'r1',
             agentId: 'a1',
-            mode: 'squash' as const,
+            channel: 'local',
+            state: 'reviewing',
+            unverified: false,
+            frozenCommit: 'abcdef0123456789abcdef0123456789abcdef01',
+            title: 'Connexion',
             message: 'feat',
-            requestedAt: '2026-11-03T00:00:00.000Z',
           },
-        ],
+        ] as never,
       },
       names,
       { a1: 1, a2: 4, a5: 2 },
@@ -547,7 +554,7 @@ describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', 
       'a3:answer',
       'a2:decide',
       'a5:decide',
-      'r1:integration-request',
+      'r1:delivery-local',
       'a4:rate-limit',
       'a1:review',
     ]);

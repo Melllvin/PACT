@@ -1,4 +1,5 @@
 import { agentName } from '../../shared/agent-name';
+import { isFinalState } from '../../shared/delivery';
 import { unifiedText } from '../../shared/diff';
 import { IpcFailure } from '../../shared/ipc';
 import {
@@ -18,7 +19,7 @@ import type { PermissionService } from '../agents/permission-service';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
 import type { EventSummary, ExchangeService, WaitResult } from './exchange-service';
-import type { IntegrationRequests } from './integration-requests';
+import type { DeliveryService } from '../delivery/delivery-service';
 import type { IssueService } from './issues';
 import type { LoopService } from './loop-service';
 import type { McpTool, ToolResult } from './mcp';
@@ -60,7 +61,8 @@ export type ToolDependencies = {
   /** 007 — the shared reading of the journal, for `get_events`. */
   exchanges?: ExchangeReads & Pick<ExchangeService, 'record'> & Partial<ExchangeWrites>;
   /** The integrations waiting for the user (US3). */
-  requests: Pick<IntegrationRequests, 'request'>;
+  /** 008 — `request_delivery`: the barriers and the run of a delivery. */
+  delivery: Pick<DeliveryService, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
   loops: Pick<LoopService, 'start' | 'next' | 'get'>;
   /** 004 US3 — the issues of the workspace, published once the user confirms. */
@@ -83,7 +85,7 @@ const MAX_WAIT_S = 60;
 
 const MAX_PROMPT = 8000;
 const MAX_MESSAGE = 4000;
-const MODES = ['squash', 'keep-commits'] as const;
+const MAX_TITLE = 200;
 
 /** Refused with its reason: the orchestrator reads it and adapts. */
 class Refusal extends Error {}
@@ -505,6 +507,14 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       ['agent'],
       async (args) => {
         const agent = resolve(stringArg(args, 'agent'));
+        const running = workspace().deliveries.find(
+          (d) => !isFinalState(d.state) && (d.agentId === agent.id || d.testAgentId === agent.id),
+        );
+        if (running) {
+          throw new Refusal(
+            `${nameOf(agent)} est dans une livraison en cours (${running.state}) : attends son issue.`,
+          );
+        }
         await asRefusal(() => deps.agents.close(agent.id, { removeWorktree: false }));
         return reply(`${nameOf(agent)} fermé ; worktree et branche ${agent.branch} gardés.`, {
           closed: true,
@@ -513,32 +523,40 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       },
     ),
     tool(
-      'request_integration',
-      'Demande à l’utilisateur d’intégrer le travail d’un agent dans la branche principale, avec un message de commit. Rien n’est intégré sans sa confirmation ; l’issue arrive dans tes événements (get_events). Lis get_changes et les tests avant.',
+      'request_delivery',
+      'Demande la livraison d’une issue acceptée : PACT rebase, teste, pousse et ouvre la PR (ou propose la fusion à l’utilisateur sans dépôt distant). Rend la main tout de suite ; l’issue arrive dans tes événements (get_events). Lis get_changes et les tests avant.',
       {
-        agent: agentArgument,
+        issue: { type: 'string', minLength: 1 },
+        title: { type: 'string', minLength: 1, maxLength: MAX_TITLE },
         message: { type: 'string', minLength: 1, maxLength: MAX_MESSAGE },
-        mode: { type: 'string', enum: [...MODES] },
       },
-      ['agent', 'message'],
+      ['issue', 'message', 'title'],
       async (args) => {
-        const agent = resolve(stringArg(args, 'agent'));
-        const message = stringArg(args, 'message');
-        if (message.trim() === '' || message.length > MAX_MESSAGE) {
+        const issue = stringArg(args, 'issue').trim();
+        const title = stringArg(args, 'title').trim();
+        const message = stringArg(args, 'message').trim();
+        if (title === '' || title.length > MAX_TITLE) {
+          throw new Refusal(`Titre de 1 à ${String(MAX_TITLE)} caractères attendu.`);
+        }
+        if (message === '' || message.length > MAX_MESSAGE) {
           throw new Refusal(`Message de 1 à ${String(MAX_MESSAGE)} caractères attendu.`);
         }
-        const mode = argument(args, 'mode') ?? 'squash';
-        if (mode !== 'squash' && mode !== 'keep-commits') {
-          throw new Refusal('Mode « squash » ou « keep-commits » attendu.');
-        }
-        const request = await deps.requests.request(workspace().id, {
-          agentId: agent.id,
+        const ws = workspace();
+        const loop = ws.loops.filter((l) => l.issueId === issue).at(-1);
+        if (!loop) throw new Refusal(`Aucune boucle pour l’issue « ${issue} ».`);
+        const request = await deps.delivery.request(ws.id, {
+          agentId: loop.devAgentId,
+          title,
           message,
-          mode,
+          requestedBy: 'orchestrator',
         });
-        return reply(`Demande d’intégration de ${nameOf(agent)} proposée à l’utilisateur.`, {
-          requestId: request.id,
-          status: 'waiting-user',
+        if (request.state === 'refused') {
+          throw new Refusal(request.reason ?? 'La livraison est refusée.');
+        }
+        return reply(`Livraison de l’issue ${issue} lancée (${request.state}).`, {
+          deliveryId: request.id,
+          state: request.state,
+          commit: request.frozenCommit.slice(0, 7),
         });
       },
     ),
@@ -712,6 +730,7 @@ function describe(event: EventSummary, name: string): string {
     case 'report-missing':
       return `${name} a fini son tour sans rapport.`;
     case 'publish':
+    case 'delivery':
       return event.summary;
     default:
       return `${name} : ${event.summary}`;

@@ -462,23 +462,25 @@ describe('App tile actions (US3)', () => {
     expect(invoke).toHaveBeenCalledWith('agent:cancelAutoResume', { agentId: failed.id });
   });
 
-  // 003 US3 — the integration the orchestrator asks for, decided in À faire (FR-018).
-  it('confirms and refuses an integration request from À faire', async () => {
+  // 003 US3, migrated by 008 T023 — the merge the user is asked for, decided in À faire (FR-008).
+  it('refuses and merges a local delivery from À faire', async () => {
     const worker = { ...failed, state: 'done' as const };
-    const requestId = '7f9c2a4e-1b3d-4c5e-8f6a-0b1c2d3e4f5a';
-    const request = {
-      id: requestId,
+    const deliveryId = '7f9c2a4e-1b3d-4c5e-8f6a-0b1c2d3e4f5a';
+    const head = 'abcdef0123456789abcdef0123456789abcdef01';
+    const delivery = {
+      id: deliveryId,
       agentId: worker.id,
-      mode: 'squash' as const,
+      channel: 'local',
+      state: 'reviewing',
+      unverified: false,
+      frozenCommit: head,
+      title: 'La fonction',
       message: 'feat: la fonction',
-      requestedAt: '2026-11-03T03:00:00.000Z',
     };
     const invoke = vi.fn<Invoke>((channel) =>
       channel === 'app:getState'
         ? Promise.resolve({
-            workspaces: [
-              { ...workspace('w1', 'w1'), agents: [worker], integrationRequests: [request] },
-            ],
+            workspaces: [{ ...workspace('w1', 'w1'), agents: [worker], deliveries: [delivery] }],
             recents: [],
             clis: [],
             permission: null,
@@ -488,13 +490,62 @@ describe('App tile actions (US3)', () => {
     const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
     render(<App store={store} getPathForFile={() => ''} />);
     const column = await screen.findByRole('complementary', { name: 'Agents' });
-    await userEvent.click(within(column).getByRole('button', { name: '✓ Intégrer' }));
-    expect(invoke).toHaveBeenCalledWith('integrationRequest:confirm', {
-      requestId,
-      message: 'feat: la fonction',
-    });
     await userEvent.click(within(column).getByRole('button', { name: 'Refuser' }));
-    expect(invoke).toHaveBeenCalledWith('integrationRequest:refuse', { requestId });
+    expect(invoke).toHaveBeenCalledWith('delivery:decide', {
+      deliveryId,
+      decision: 'refuse',
+      head,
+    });
+    await userEvent.click(within(column).getByRole('button', { name: 'Fusionner' }));
+    expect(invoke).toHaveBeenCalledWith('delivery:decide', {
+      deliveryId,
+      decision: 'validate',
+      head,
+    });
+  });
+
+  // 008 T022 — « Livrer » from the tile of a dev whose loop is accepted, with a remote.
+  it('requests a delivery from the tile of an accepted dev', async () => {
+    const dev = agent(2, { cliId: 'aider', state: 'done', role: 'dev', branch: 'feat/x' });
+    const tester = agent(3, { cliId: 'aider', state: 'done', role: 'test' });
+    const invoke = vi.fn<Invoke>((channel) =>
+      channel === 'app:getState'
+        ? Promise.resolve({
+            workspaces: [
+              {
+                ...workspace('w1', 'w1'),
+                hasOrigin: true,
+                agents: [dev, tester],
+                issues: [{ id: '0001-x', title: 'La fonction', state: 'ready' }],
+                loops: [
+                  {
+                    issueId: '0001-x',
+                    devAgentId: dev.id,
+                    testAgentId: tester.id,
+                    state: 'accepted',
+                  },
+                ],
+              },
+            ],
+            recents: [],
+            clis: [],
+            permission: null,
+          })
+        : Promise.resolve(undefined),
+    );
+    const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Livrer' }));
+    const dialog = screen.getByRole('dialog');
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /message/i }), 'feat: x');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Demander' }));
+    expect(invoke).toHaveBeenCalledWith('delivery:request', {
+      workspaceId: 'w1',
+      agentId: dev.id,
+      title: 'La fonction',
+      message: 'feat: x',
+      unverified: false,
+    });
   });
 
   it('answers an agent from its tile', async () => {

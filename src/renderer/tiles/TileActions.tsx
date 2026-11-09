@@ -32,6 +32,17 @@ export type TileActionHandlers = {
   onOpenTerminal?: (() => void) | undefined;
 };
 
+/**
+ * 008 — « Livrer » / « Intégrer » of a dev, by remote and loop (contracts/ui.md). `accepted`: the
+ * agent is the dev of an accepted loop; `title`: the issue title, or the branch.
+ */
+export type DeliveryAction = {
+  remote: boolean;
+  accepted: boolean;
+  title: string;
+  onRequest: (request: { title: string; message: string; unverified: boolean }) => void;
+};
+
 /** The ⋮ menu of a tile and of the Focus (006): « Faire orchestrateur » and « Renommer ». */
 export type TileMenu = {
   /** US5 — `reason`: why the option is unavailable; `working`: the agent restarts mid-task. */
@@ -63,6 +74,8 @@ type TileActionsProps = TileActionHandlers & {
   scheduledResume?: ScheduledResume | null;
   /** 006 — the ⋮ menu; absent: no menu. */
   menu?: TileMenu | undefined;
+  /** 008 — the delivery actions; absent: none. */
+  delivery?: DeliveryAction | undefined;
 };
 
 /** « Plus d’actions »: the menu, the confirmation of the promotion and the field of the rename. */
@@ -213,6 +226,7 @@ function StateActions({
   onAlways,
   onReview,
   onOpenTerminal,
+  delivery,
   question = false,
   scheduledResume = null,
 }: Omit<TileActionsProps, 'menu'>) {
@@ -283,12 +297,15 @@ function StateActions({
       </span>
     );
   }
-  if (onReview && (state === 'done' || state === 'awaiting-prompt')) {
+  if ((onReview ?? delivery) && (state === 'done' || state === 'awaiting-prompt')) {
     return (
       <span className={GROUP}>
-        <Button variant="primary" onClick={onReview}>
-          Revue →
-        </Button>
+        {delivery && <DeliveryButtons delivery={delivery} />}
+        {onReview && (
+          <Button variant="primary" onClick={onReview}>
+            Revue →
+          </Button>
+        )}
       </span>
     );
   }
@@ -298,4 +315,165 @@ function StateActions({
 /** HH:MM in the local time zone, as the rate limit banners of the CLIs give it. */
 function resumeTime({ at }: ScheduledResume) {
   return new Date(at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+const NEEDS_LOOP = 'demande une boucle acceptée';
+
+/** « Livrer » / « Intégrer », and their no-verdict twin when the agent has no accepted loop. */
+function DeliveryButtons({ delivery }: { delivery: DeliveryAction }) {
+  const { remote, accepted, title } = delivery;
+  const [asking, setAsking] = useState<'verified' | 'unverified' | null>(null);
+  const main = remote ? 'Livrer' : 'Intégrer';
+  const twin = remote ? 'Créer la PR sans verdict' : 'Fusionner sans verdict';
+  return (
+    <>
+      <Button
+        variant="primary"
+        disabled={!accepted}
+        title={accepted ? undefined : NEEDS_LOOP}
+        aria-description={accepted ? undefined : NEEDS_LOOP}
+        onClick={() => {
+          setAsking('verified');
+        }}
+      >
+        {main}
+      </Button>
+      {!accepted && (
+        <>
+          <span className="sr-only">{NEEDS_LOOP}</span>
+          <Button
+            onClick={() => {
+              setAsking('unverified');
+            }}
+          >
+            {twin}
+          </Button>
+        </>
+      )}
+      {asking !== null && remote && (
+        <RequestDialog
+          title={title}
+          unverified={asking === 'unverified'}
+          onClose={() => {
+            setAsking(null);
+          }}
+          onRequest={delivery.onRequest}
+        />
+      )}
+      {asking !== null && !remote && (
+        <Dialog
+          open
+          onOpenChange={() => {
+            setAsking(null);
+          }}
+        >
+          <DialogContent aria-describedby={undefined} className="w-[min(440px,calc(100vw-32px))]">
+            <DialogBody>
+              <DialogTitle>
+                {asking === 'unverified' ? 'Fusionner sans verdict ?' : 'Intégrer ?'}
+              </DialogTitle>
+              <DialogDescription>
+                {asking === 'unverified'
+                  ? 'Aucun testeur n’a donné de verdict : la fusion te sera demandée, sans preuve.'
+                  : 'La fusion te sera demandée dans À faire.'}
+              </DialogDescription>
+            </DialogBody>
+            <DialogFooter className="justify-end">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => {
+                  setAsking(null);
+                }}
+              >
+                Annuler
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => {
+                  setAsking(null);
+                  delivery.onRequest({
+                    title,
+                    message: title,
+                    unverified: asking === 'unverified',
+                  });
+                }}
+              >
+                Confirmer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
+  );
+}
+
+/** The title (pre-filled) and the message of the pull request. */
+function RequestDialog({
+  title: initial,
+  unverified,
+  onClose,
+  onRequest,
+}: {
+  title: string;
+  unverified: boolean;
+  onClose: () => void;
+  onRequest: DeliveryAction['onRequest'];
+}) {
+  const [title, setTitle] = useState(initial);
+  const [message, setMessage] = useState('');
+  const ready = title.trim() !== '' && message.trim() !== '';
+  return (
+    <Dialog
+      open
+      onOpenChange={() => {
+        onClose();
+      }}
+    >
+      <DialogContent aria-describedby={undefined} className="w-[min(480px,calc(100vw-32px))]">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!ready) return;
+            onClose();
+            onRequest({ title: title.trim(), message: message.trim(), unverified });
+          }}
+        >
+          <DialogBody>
+            <DialogTitle>{unverified ? 'Créer la PR sans verdict' : 'Livrer'}</DialogTitle>
+            <label className="flex flex-col gap-1 text-[12.5px]">
+              Titre
+              <Input
+                value={title}
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                }}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-[12.5px]">
+              Message
+              <textarea
+                rows={3}
+                value={message}
+                onChange={(event) => {
+                  setMessage(event.target.value);
+                }}
+                className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/50"
+              />
+            </label>
+          </DialogBody>
+          <DialogFooter className="justify-end">
+            <Button type="button" variant="ghost" size="md" onClick={onClose}>
+              Annuler
+            </Button>
+            <Button type="submit" variant="primary" size="md" disabled={!ready}>
+              Demander
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }

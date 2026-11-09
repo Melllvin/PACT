@@ -86,6 +86,8 @@ export type IntegrationRequest = {
   message: string;
   after: Integration['after'];
   confirmWorking?: boolean | undefined;
+  /** 008 R20 — the delivery that asks for it: its states carry the id. */
+  requestId?: string | undefined;
 };
 
 /** main is checked again once when it moved during the integration (FR-022). */
@@ -184,6 +186,7 @@ export class IntegrationService {
     let integration: Integration = {
       id,
       agentId: agent.id,
+      ...(request.requestId === undefined ? {} : { requestId: request.requestId }),
       mode: request.mode,
       message: request.message,
       after: request.after,
