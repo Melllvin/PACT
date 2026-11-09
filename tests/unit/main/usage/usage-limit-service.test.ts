@@ -1066,6 +1066,7 @@ describe('a reading too old (US3; R11)', () => {
   };
   type StaleService = ServiceLike & {
     dispose(): void;
+    agentChanged(): void;
     decideStale(cliId: string, account: string, decision: 'stop' | 'later'): Promise<void>;
   };
 
@@ -1163,6 +1164,26 @@ describe('a reading too old (US3; R11)', () => {
       expect(new Set(timeouts)).toEqual(new Set([MIN]));
     });
 
+    it('Given no agent at work, When minutes go by, Then the check stops by itself and an agent that starts working arms it again', async () => {
+      members[key('claude-code', 'default')] = [B];
+      await read(85);
+      await clock.advance(5 * MIN);
+      expect(timeouts).toEqual([MIN]);
+      members[key('claude-code', 'default')] = [A, B];
+      stale.agentChanged();
+      await clock.advance(16 * MIN);
+      expect(offers).toEqual([has({ cliId: 'claude-code', step: 1 })]);
+    });
+
+    it('Given the service is disposed, When time goes by, Then the check no longer runs', async () => {
+      await read(85);
+      stale.dispose();
+      const armed = timeouts.length;
+      await clock.advance(20 * MIN);
+      expect(timeouts).toHaveLength(armed);
+      expect(offers).toEqual([]);
+    });
+
     it('Given a reading 14 and 15 minutes old, When the checks run, Then nothing is offered; at 16 minutes, one offer at step 1 (US3 sc.1)', async () => {
       await read(82);
       await clock.advance(15 * MIN);
@@ -1209,7 +1230,8 @@ describe('a reading too old (US3; R11)', () => {
 
   describe('never alone (SC-006)', () => {
     it('Given an offer nobody answers, When hours go by, Then no agent is told to save, woken or paused', async () => {
-      await read(84);
+      // The reset is far (the week): a window reset meanwhile would be read at 0 % (R11).
+      await stale.onUsage(state([window5h(84, { resetsAt: RESET_WEEK })]));
       await clock.advance(6 * 3_600_000);
       expect(offers).toHaveLength(1);
       expect(offers[0]?.step).toBeGreaterThanOrEqual(1);
@@ -1291,6 +1313,50 @@ describe('a reading too old (US3; R11)', () => {
       expect(offers).toEqual([]);
       await clock.advance(MIN);
       expect(offers).toEqual([has({ step: 1, windows: [has({ percent: 83 })] })]);
+    });
+  });
+
+  describe('an answer with nothing to answer', () => {
+    it('Given no reading, When the user answers, Then nothing happens', async () => {
+      await decide('stop');
+      await decide('later');
+      expect(pauses).toEqual([]);
+      expect(records).toEqual([]);
+      expect(await declined()).toEqual([]);
+    });
+
+    it('Given a reading far from the threshold, When a late answer comes, Then nothing is kept or sent', async () => {
+      await read(40);
+      await clock.advance(20 * MIN);
+      await decide('stop');
+      await decide('later');
+      expect(pauses).toEqual([]);
+      expect(records).toEqual([]);
+      expect(await declined()).toEqual([]);
+    });
+
+    it('Given an accepted stop, When the window resets before the stop, Then nobody is paused', async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+      await decide('stop');
+      // A reading whose window resets within the minute: the stop has nothing left to wait for.
+      await stale.onUsage(
+        state([window5h(82, { resetsAt: new Date(clock.now().getTime() + 30_000).toISOString() })]),
+      );
+      await clock.advance(60_000);
+      expect(pauses).toEqual([]);
+    });
+
+    it('Given an accepted stop, When the window resets before an end of turn, Then that end of turn pauses nobody', async () => {
+      await read(82);
+      await clock.advance(16 * MIN);
+      await decide('stop');
+      await stale.onUsage(
+        state([window5h(82, { resetsAt: new Date(clock.now().getTime() + 5_000).toISOString() })]),
+      );
+      await clock.advance(10_000);
+      await stale.turnFinished(A.id);
+      expect(pauses).toEqual([]);
     });
   });
 

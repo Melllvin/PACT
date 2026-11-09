@@ -49,7 +49,8 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           todo.kind === 'loop-escalated' ||
           todo.kind === 'exchange-escalated') &&
           'border-destructive/30 bg-destructive/6',
-        todo.kind === 'usage-paused' && 'border-waiting/30 bg-waiting/6',
+        (todo.kind === 'usage-paused' || todo.kind === 'usage-stale') &&
+          'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
       )}
@@ -99,6 +100,7 @@ export function TodoActions({
   onDecide,
   onUsageResume,
   onUsageCancelResume,
+  onUsageStale,
 }: ActionsProps) {
   const { request, loop, publish, usage, decide, exchange, usageLimit } = todo;
   return (
@@ -217,6 +219,25 @@ export function TodoActions({
             }}
           >
             Annuler la reprise
+          </Button>
+        </div>
+      )}
+      {usageLimit?.kind === 'stale' && onUsageStale && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onUsageStale(usageLimit.cliId, usageLimit.account, 'stop');
+            }}
+          >
+            Arrêter par prudence
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onUsageStale(usageLimit.cliId, usageLimit.account, 'later');
+            }}
+          >
+            Pas maintenant
           </Button>
         </div>
       )}

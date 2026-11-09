@@ -50,6 +50,7 @@ describe('usage handlers: the resume (009 US2)', () => {
     const limit = {
       resumeByHand: vi.fn(() => Promise.resolve()),
       cancelResume: vi.fn(() => Promise.resolve()),
+      decideStale: vi.fn(() => Promise.resolve()),
     };
     const services = createUsageServices({
       usage: { list: vi.fn(() => []), setThresholds: vi.fn() },

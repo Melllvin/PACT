@@ -1,7 +1,13 @@
 import { agentName } from './agent-name';
 import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
-import type { UsagePause } from './usage-limit';
-import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
+import {
+  heaviest,
+  staleProposal,
+  type UsageDeclined,
+  type UsagePause,
+  type UsageStops,
+} from './usage-limit';
+import { clockTime, readingAge, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
 export const ORDER: TodoKind[] = [
@@ -116,7 +122,14 @@ export function deriveTodos(
   /** The agents with changes to review, with their number of changed files (`review:pending`). */
   toReview: Readonly<Record<string, number>> | readonly never[] = {},
   /** 005 — the usage of the CLI accounts, read with the thresholds at `now`. */
-  usage?: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
+  usage?: {
+    states: readonly UsageState[];
+    thresholds: UsageThresholds;
+    now: Date;
+    /** 009 US3 — the stop thresholds (90 % when absent) and the offers the user put off. */
+    stops?: UsageStops;
+    declined?: readonly UsageDeclined[];
+  },
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   // 007 R9 — with an orchestrator that is not in error, the questions of the others go to it.
@@ -215,6 +228,7 @@ export function deriveTodos(
   );
   const limits = [
     ...(usage ? usageTodos(workspace, names, usage, pausedKeys) : []),
+    ...(usage ? staleTodos(agents, names, usage) : []),
     ...pausedTodos(agents, names),
   ];
   // Array.prototype.sort is stable: the tile order holds within a kind.
@@ -309,5 +323,56 @@ function pausedTodos(agents: readonly Agent[], names: (cliId: string) => string)
       ...(detail === '' ? {} : { detail }),
       usageLimit: { cliId: pause.cliId, account: pause.account, kind: 'paused' },
     };
+  });
+}
+
+/**
+ * 009 US3 — « ◆ Limite <CLI> inconnue depuis <M> min · dernière lecture <fenêtre> à <N> % »: one
+ * per account whose reading is too old, until the user answers for this step. Only an offer.
+ */
+function staleTodos(
+  agents: readonly Agent[],
+  names: (cliId: string) => string,
+  {
+    states,
+    now,
+    stops = {},
+    declined = [],
+  }: {
+    states: readonly UsageState[];
+    now: Date;
+    stops?: UsageStops;
+    declined?: readonly UsageDeclined[];
+  },
+): TodoItem[] {
+  return states.flatMap((state): TodoItem[] => {
+    const working = agents.filter((a) => a.cliId === state.cliId && a.state === 'working').length;
+    const proposal = staleProposal(state, stops, working, now);
+    if (!proposal || !state.reading) return [];
+    const refused = declined.find(
+      (d) =>
+        d.cliId === state.cliId &&
+        d.account === state.account &&
+        d.readAt === state.reading?.readAt,
+    );
+    if (refused && refused.step >= proposal.step) return [];
+    const key = `usage:${state.cliId}:${state.account}`;
+    const window = heaviest(proposal.windows);
+    return [
+      {
+        id: `${key}:usage-stale`,
+        agentId: key,
+        kind: 'usage-stale',
+        title: `◆ Limite ${names(state.cliId)} inconnue depuis ${String(readingAge(state.reading, now).minutes)} min · dernière lecture ${window.label} à ${String(window.percent)} %`,
+        actions: [],
+        detail: 'PACT ne sait plus où en est la limite. Arrêter par prudence ?',
+        usageLimit: {
+          cliId: state.cliId,
+          account: state.account,
+          kind: 'stale',
+          step: proposal.step,
+        },
+      },
+    ];
   });
 }

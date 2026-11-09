@@ -4,14 +4,20 @@ import type { Stores } from '../persistence/store';
 import type { RecordInput } from '../orchestrator/exchange-service';
 import type { Agent, ScheduledResume } from '../../shared/model';
 import { who } from '../../shared/todo';
-import type { UsageReading, UsageState } from '../../shared/usage';
+import { readingAge, type UsageReading, type UsageState } from '../../shared/usage';
 import {
+  heaviest,
   JUMP_STOP_MS,
   limitBands,
   pausedText,
   resumedText,
   saveText,
+  STALE_CHECK_MS,
+  stalePausedText,
+  staleProposal,
   type LimitBand,
+  type StaleProposal,
+  type UsageDeclined,
   type UsageLimitState,
   type UsageOverride,
   type UsageSave,
@@ -48,7 +54,16 @@ export type UsageLimitOptions = {
   autoResume(workspaceId: string): Promise<boolean>;
   /** 008 freezes the commit of the agent (R18): no save instruction for it. */
   commitFrozen(agentId: string): boolean;
+  /**
+   * 009 US3 — the offers of a stop by caution, with the state they were judged on. Called after each
+   * reading, each answer and each check of the minute, so the renderer follows the clock of the main.
+   */
+  onStale?(offers: StaleOffer[], snapshot: StaleSnapshot): void;
 };
+
+/** R11 — an account whose reading is too old, as `staleProposal` rates it. */
+export type StaleOffer = StaleProposal & { cliId: string; account: string };
+export type StaleSnapshot = { now: string; stops: UsageStops; declined: UsageDeclined[] };
 
 const keyOf = (cliId: string, account: string) => `${cliId}\u0000${account}`;
 
@@ -57,7 +72,13 @@ const canBeTold = (agent: Agent) =>
   agent.state !== 'error' && agent.state !== 'closed' && agent.state !== 'paused';
 
 /** The stop of agents waiting for the end of their turn, or for 60 s at most (Q8, O5). */
-type Deferred = { info: PauseInfo; agents: Map<string, Agent>; timer: unknown };
+type Deferred = {
+  info: PauseInfo;
+  agents: Map<string, Agent>;
+  timer: unknown;
+  /** The notice of the stop when it is not the one of a threshold (a stop by caution). */
+  text?: string;
+};
 
 export class UsageLimitService {
   private readonly options: UsageLimitOptions;
@@ -67,6 +88,8 @@ export class UsageLimitService {
   /** The accounts in pause: what the stop of their agents was about. */
   private readonly paused = new Map<string, PauseInfo>();
   private readonly deferred = new Map<string, Deferred>();
+  /** R11 — the check of the minute, armed once an account has been read. */
+  private checkTimer: unknown = null;
   /** Calls are served one after the other: a reading never overtakes the one before it. */
   private chain: Promise<unknown> = Promise.resolve();
 
@@ -78,7 +101,10 @@ export class UsageLimitService {
   onUsage(state: UsageState): Promise<void> {
     const { reading } = state;
     if (!reading) return Promise.resolve();
-    return this.enqueue(() => this.judge(reading));
+    return this.enqueue(async () => {
+      await this.judge(reading);
+      await this.afterReading(reading);
+    });
   }
 
   /** The agent ended its turn: if its stop waited for that, it is stopped now. */
@@ -89,13 +115,13 @@ export class UsageLimitService {
         const agent = deferred.agents.get(agentId);
         if (!agent) continue;
         // The window may have reset while the stop waited: the whole deferred stop is dropped.
-        if (!this.stillStops(key)) {
+        if (!this.stillStops(key, deferred.info)) {
           this.endDeferred(key);
           continue;
         }
         deferred.agents.delete(agentId);
         if (deferred.agents.size === 0) this.endDeferred(key);
-        await this.stop(agent, deferred.info);
+        await this.stop(agent, deferred.info, deferred.text);
       }
     });
   }
@@ -223,6 +249,8 @@ export class UsageLimitService {
   }
 
   dispose(): void {
+    if (this.checkTimer !== null) this.options.clock.clearTimeout(this.checkTimer);
+    this.checkTimer = null;
     for (const key of [...this.deferred.keys()]) this.endDeferred(key);
   }
 
@@ -328,6 +356,8 @@ export class UsageLimitService {
     near: LimitBand[],
     agents: Agent[],
     now: Date,
+    /** An acceptance by caution: the instruction asks for the commit within the minute. */
+    inAMinute = false,
   ): Promise<boolean> {
     const { cliId, account } = reading;
     const told = agents.filter((agent) => canBeTold(agent) && !this.options.commitFrozen(agent.id));
@@ -378,7 +408,7 @@ export class UsageLimitService {
         window.label,
         Math.round(window.usedPercent),
         band.stop,
-        band.band === 'stop',
+        inAMinute || band.band === 'stop',
       );
       try {
         await this.options.exchanges.record(agent.workspaceId, {
@@ -424,10 +454,11 @@ export class UsageLimitService {
   }
 
   /** Q8, O5 — each agent stops at the end of its turn, all of them at 60 s at the latest. */
-  private defer(key: string, info: PauseInfo, agents: Agent[]) {
+  private defer(key: string, info: PauseInfo, agents: Agent[], text?: string) {
     const current = this.deferred.get(key);
     const deferred: Deferred = current ?? {
       info,
+      ...(text !== undefined && { text }),
       agents: new Map(),
       timer: this.options.clock.setTimeout(() => {
         void this.enqueue(() => this.expire(key));
@@ -442,17 +473,22 @@ export class UsageLimitService {
     if (!deferred) return;
     this.deferred.delete(key);
     // The window may have reset while the stop waited: nothing left to stop for.
-    if (!this.stillStops(key)) return;
+    if (!this.stillStops(key, deferred.info)) return;
     await Promise.all(
-      [...deferred.agents.values()].map((agent) => this.stop(agent, deferred.info)),
+      [...deferred.agents.values()].map((agent) => this.stop(agent, deferred.info, deferred.text)),
     );
   }
 
   /** The last reading of the account still asks for a stop (or there is none to say otherwise). */
-  private stillStops(key: string): boolean {
+  private stillStops(key: string, info: PauseInfo): boolean {
     const reading = this.readings.get(key);
     if (!reading) return true;
-    return limitBands(reading, this.stops, this.options.clock.now()).some((b) => b.band === 'stop');
+    const bands = limitBands(reading, this.stops, this.options.clock.now());
+    // A stop by caution stands until the windows it named have reset.
+    if (info.cause === 'stale') {
+      return bands.some((b) => !b.window.reset && info.windows.some((w) => w.id === b.window.id));
+    }
+    return bands.some((b) => b.band === 'stop');
   }
 
   private endDeferred(key: string) {
@@ -612,6 +648,7 @@ export class UsageLimitService {
    * resume (« Relancer », closed) is no longer in pause: it would hold its CLI until PACT restarts.
    */
   agentChanged(): void {
+    if (this.readings.size > 0) this.armCheck();
     for (const info of [...this.paused.values()]) this.forgetIfEmpty(info.cliId, info.account);
   }
 
@@ -622,8 +659,127 @@ export class UsageLimitService {
     }
   }
 
+  /**
+   * 009 US3, R11 — the user answers an offer of a stop by caution. « Pas maintenant » keeps the
+   * step it was made at; « Arrêter par prudence » is a jump over the band: the save instruction
+   * within the minute, then the stop at the end of the turn or at 60 s.
+   */
+  decideStale(cliId: string, account: string, decision: 'stop' | 'later'): Promise<void> {
+    return this.enqueue(async () => {
+      const key = keyOf(cliId, account);
+      const reading = this.readings.get(key);
+      if (!reading) return;
+      await this.load();
+      const now = this.options.clock.now();
+      const agents = this.staleAgents(cliId, account, now);
+      const proposal = staleProposal(
+        this.stateOf(reading),
+        this.stops,
+        this.workingIn(agents),
+        now,
+      );
+      if (!proposal) return;
+      // Either answer is kept with the reading: the offer of this step does not come back (the stop
+      // it asked for is on its way, and a fresh reading erases the note).
+      await this.save({
+        ...this.limit,
+        declined: [
+          ...this.limit.declined.filter((d) => d.cliId !== cliId || d.account !== account),
+          { cliId, account, readAt: reading.readAt, step: proposal.step },
+        ],
+      });
+      if (decision === 'stop') {
+        const bands = limitBands(reading, this.stops, now).filter((b) =>
+          proposal.windows.some((w) => w.id === b.window.id),
+        );
+        await this.instruct(reading, bands, agents, now, true);
+        const info: PauseInfo = { ...this.pauseInfo(reading, bands, now), cause: 'stale' };
+        const window = heaviest(info.windows);
+        const text = stalePausedText(
+          window.label,
+          window.percent,
+          readingAge(reading, now).minutes,
+        );
+        this.defer(key, info, agents, text);
+      }
+      await this.offer();
+    });
+  }
+
+  /** A reading came: a refusal made on an older one is erased, and the check of the minute runs. */
+  private async afterReading(reading: UsageReading) {
+    const { declined } = await this.load();
+    const kept = declined.filter(
+      (d) =>
+        d.cliId !== reading.cliId || d.account !== reading.account || d.readAt === reading.readAt,
+    );
+    if (kept.length !== declined.length) await this.save({ ...this.limit, declined: kept });
+    this.armCheck();
+    await this.offer();
+  }
+
+  /** R11 — one check every minute, from the first reading on; it re-arms itself. */
+  private armCheck() {
+    if (this.checkTimer !== null) return;
+    this.checkTimer = this.options.clock.setTimeout(() => {
+      this.checkTimer = null;
+      // Nothing to offer while no agent works: `agentChanged` arms the check again when one does.
+      if (this.anyWorking()) this.armCheck();
+      // The state of the last reading and answer is held: the minute does not read the file again.
+      void this.enqueue(() => this.offer(false));
+    }, STALE_CHECK_MS);
+  }
+
+  private anyWorking(): boolean {
+    return [...this.readings.values()].some((r) =>
+      this.options.agents.accountAgents(r.cliId, r.account).some((a) => a.state === 'working'),
+    );
+  }
+
+  /** The agents a stop by caution would touch: those of the account the user did not override. */
+  private staleAgents(cliId: string, account: string, now: Date): Agent[] {
+    return this.options.agents
+      .accountAgents(cliId, account)
+      .filter((agent) => !this.covered(agent, cliId, account, now));
+  }
+
+  private workingIn = (agents: Agent[]) => agents.filter((a) => a.state === 'working').length;
+
+  private stateOf = (reading: UsageReading): UsageState => ({
+    cliId: reading.cliId,
+    account: reading.account,
+    reading,
+    shares: [],
+    level: 'ok',
+  });
+
+  /** Rates every account read, and tells the offers as they stand (SC-006: it only offers). */
+  private async offer(reload = true): Promise<void> {
+    if (reload) await this.load();
+    const now = this.options.clock.now();
+    const offers: StaleOffer[] = [];
+    for (const [key, reading] of this.readings) {
+      // An answer already given is on its way; a reading from before the resume says nothing.
+      if (this.deferred.has(key) || !this.fresh(reading)) continue;
+      const { cliId, account } = reading;
+      const working = this.workingIn(this.staleAgents(cliId, account, now));
+      const proposal = staleProposal(this.stateOf(reading), this.stops, working, now);
+      if (!proposal) continue;
+      const refused = this.limit.declined.find(
+        (d) => d.cliId === cliId && d.account === account && d.readAt === reading.readAt,
+      );
+      if (refused && refused.step >= proposal.step) continue;
+      offers.push({ cliId, account, ...proposal });
+    }
+    this.options.onStale?.(offers, {
+      now: now.toISOString(),
+      stops: this.stops,
+      declined: this.limit.declined,
+    });
+  }
+
   /** The stop of one agent, then its notice, which it reads when it resumes. */
-  private async stop(agent: Agent, info: PauseInfo) {
+  private async stop(agent: Agent, info: PauseInfo, notice?: string) {
     try {
       await this.options.agents.pause(agent.id, info);
     } catch {
@@ -637,7 +793,7 @@ export class UsageLimitService {
         from: 'pact',
         to: agent.id,
         kind: 'usage-paused',
-        text: pausedText(info.windows, info.resumeAt, auto),
+        text: notice ?? pausedText(info.windows, info.resumeAt, auto),
       });
     } catch {
       // The notice is a courtesy; the pause stands.

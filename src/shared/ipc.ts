@@ -1,4 +1,4 @@
-import { usagePauseSchema } from './usage-limit';
+import { usageDeclinedSchema, usagePauseSchema, usageStopsSchema } from './usage-limit';
 import { z } from 'zod';
 import { exchangesPayloadSchema } from './exchanges';
 import { orchestratorActionSchema } from './orchestrator';
@@ -254,6 +254,8 @@ export const ipcRequests = {
   'usage:resume': request(usageAccount, none),
   /** 009 — « Annuler la reprise » of a « ◆ En pause ». */
   'usage:cancelResume': request(usageAccount, none),
+  /** 009 US3 — the answer to « ◆ Limite <CLI> inconnue depuis <M> min »: stop by caution, or later. */
+  'usage:stale': request(usageAccount.extend({ decision: z.enum(['stop', 'later']) }), none),
   /** 005 FR-010 — the alert thresholds, set by the user. */
   'settings:usageThresholds': request(usageThresholdsSchema, usageThresholdsSchema),
   'orchestrator:actions': request(
@@ -378,6 +380,12 @@ export const ipcEvents = {
   }),
   /** 005 — a new reading of a CLI account, or a change of its level. */
   'usage:state': usageStateSchema,
+  /** 009 US3 — the clock of the main process and what the offers of a stop by caution depend on. */
+  'usage:limit': z.object({
+    now: z.string(),
+    stops: usageStopsSchema,
+    declined: z.array(usageDeclinedSchema),
+  }),
   /** Agents were launched in a workspace, by the launcher or by its orchestrator (003 FR-015). */
   'workspace:agentsLaunched': z.object({
     workspaceId: z.string(),

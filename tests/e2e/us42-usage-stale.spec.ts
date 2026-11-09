@@ -51,6 +51,12 @@ test.describe('a reading too old (US3)', () => {
     if (!tile) throw new Error('no tile');
     await typeIn(page, tile, 'Travaille longtemps');
     await expect(tile).toHaveAttribute('data-state', 'working', { timeout: 30_000 });
+    // The fake CLI reports its limits after the prompt: the clock moves only once the reading is made (09:00).
+    await expect(
+      page
+        .getByRole('group', { name: 'Limites d’usage' })
+        .getByRole('button', { name: /Faux CLI 82 % · 5 h/ }),
+    ).toBeVisible({ timeout: 30_000 });
     const todos = page.getByRole('complementary', { name: 'Agents' });
     const offer = todos.getByRole('listitem').filter({ hasText: /Limite Faux CLI inconnue/ });
     return { page, tile, offer };

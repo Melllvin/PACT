@@ -7,6 +7,8 @@ import {
   type PactApi,
 } from '../../shared/ipc';
 import { agentsLaunchedBy } from '../../shared/agents-view';
+import type { MainClock } from '../workspace/UsageGauge';
+import type { UsageDeclined, UsageStops } from '../../shared/usage-limit';
 import { countsOf, toAgentDrafts, type LaunchDraft } from '../../shared/launch-draft';
 import type {
   Agent,
@@ -79,6 +81,8 @@ export type AppState = {
   usage: Record<string, UsageState>;
   /** 005 FR-010 — the alert thresholds of the gauges. */
   usageThresholds: UsageThresholds;
+  /** 009 US3 — what the offers of a stop by caution depend on, as the main process told it. */
+  usageLimit: { clock: MainClock | null; stops: UsageStops; declined: UsageDeclined[] };
   setUsageThresholds: (thresholds: UsageThresholds) => Promise<void>;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
@@ -118,6 +122,8 @@ export type AppState = {
   /** 009 R10 — « Reprendre » / « Annuler la reprise » of a « ◆ En pause »: the whole account. */
   resumeUsage: (cliId: string, account: string) => Promise<void>;
   cancelUsageResume: (cliId: string, account: string) => Promise<void>;
+  /** 009 US3 — « Arrêter par prudence » ('stop') or « Pas maintenant » ('later'). */
+  decideUsageStale: (cliId: string, account: string, decision: 'stop' | 'later') => Promise<void>;
   /** 003 US3 — the user's answer to an integration the orchestrator asks for (FR-018). */
   confirmIntegrationRequest: (requestId: string, message: string) => Promise<void>;
   refuseIntegrationRequest: (requestId: string) => Promise<void>;
@@ -325,6 +331,7 @@ export function createAppStore(api: PactApi) {
       restartingAgentId: null,
       usage: {},
       usageThresholds: DEFAULT_USAGE_THRESHOLDS,
+      usageLimit: { clock: null, stops: {}, declined: [] },
       correcting: {},
       orchestratorPrompted: {},
       orchestratorActions: {},
@@ -356,6 +363,15 @@ export function createAppStore(api: PactApi) {
         const unsubscribers = [
           api.on('usage:state', (state) => {
             set({ usage: { ...get().usage, ...byAccount([state]) } });
+          }),
+          api.on('usage:limit', ({ now, stops, declined }) => {
+            set({
+              usageLimit: {
+                clock: { mainAt: Date.parse(now), localAt: Date.now() },
+                stops,
+                declined,
+              },
+            });
           }),
           api.on('agent:state', (event) => {
             const { workspaces } = get();
@@ -641,6 +657,8 @@ export function createAppStore(api: PactApi) {
       resumeUsage: (cliId, account) => act(() => api.invoke('usage:resume', { cliId, account })),
       cancelUsageResume: (cliId, account) =>
         act(() => api.invoke('usage:cancelResume', { cliId, account })),
+      decideUsageStale: (cliId, account, decision) =>
+        act(() => api.invoke('usage:stale', { cliId, account, decision })),
 
       confirmIntegrationRequest: (requestId, message) =>
         act(() => api.invoke('integrationRequest:confirm', { requestId, message })),

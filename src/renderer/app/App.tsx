@@ -149,6 +149,7 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               usage={Object.values(state.usage)}
               focusRequest={state.focusRequest}
               usageThresholds={state.usageThresholds}
+              usageLimit={state.usageLimit}
               onUsageThresholds={(thresholds) => void state.setUsageThresholds(thresholds)}
               onAddAgents={() => {
                 state.openLauncher(workspace.id);
@@ -172,6 +173,8 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onUsageResume: (cliId, account) => void state.resumeUsage(cliId, account),
                 onUsageCancelResume: (cliId, account) =>
                   void state.cancelUsageResume(cliId, account),
+                onUsageStale: (cliId, account, decision) =>
+                  void state.decideUsageStale(cliId, account, decision),
                 onDecideLoop: (issueId, decision) =>
                   void state.decideLoop(workspace.id, issueId, decision),
                 onDecideExchange: (escalationId, decision) =>
