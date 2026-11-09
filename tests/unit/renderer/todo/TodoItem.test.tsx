@@ -425,3 +425,67 @@ describe('TodoItem usage-paused (009)', () => {
     expect(extra.onUsageResume).not.toHaveBeenCalled();
   });
 });
+
+// 009 T038 — « ◆ Limite <CLI> inconnue depuis <M> min » (contracts/ui.md « À faire »): « Arrêter par prudence » and
+// « Pas maintenant » answer for the account. API fixed here: the handler `onUsageStale(cliId, account, decision)`,
+// the decision being 'stop' or 'later' (the payload of `usage:stale`).
+describe('TodoItem usage-stale (009)', () => {
+  const todo = {
+    id: 'usage:claude-code:default:usage-stale' as const,
+    agentId: 'usage:claude-code:default',
+    kind: 'usage-stale' as const,
+    title: '◆ Limite Claude Code inconnue depuis 16 min · dernière lecture 5 h à 82 %',
+    actions: [],
+    detail: 'PACT ne sait plus où en est la limite. Arrêter par prudence ?',
+    usageLimit: { cliId: 'claude-code', account: '/comptes/a', kind: 'stale' as const, step: 1 },
+  };
+  const handlers = () => ({
+    onUsageStale: vi.fn(),
+    onUsageResume: vi.fn(),
+    onUsageCancelResume: vi.fn(),
+  });
+  const show = (extra: ReturnType<typeof handlers>) =>
+    render(
+      <ul>
+        <TodoItem todo={todo} agent={undefined} {...actions()} {...extra} />
+      </ul>,
+    );
+
+  it('shows the title and the question, and is not drawn as an error', () => {
+    show(handlers());
+    const item = screen.getByRole('listitem');
+    expect(item.getAttribute('data-kind')).toBe('usage-stale');
+    expect(item.textContent).toContain('◆ Limite Claude Code inconnue depuis 16 min');
+    expect(item.textContent).toContain('dernière lecture 5 h à 82 %');
+    expect(item.textContent).toContain(
+      'PACT ne sait plus où en est la limite. Arrêter par prudence ?',
+    );
+    expect(item.className).not.toContain('border-destructive');
+  });
+
+  it('stops the account with « Arrêter par prudence »', async () => {
+    const extra = handlers();
+    show(extra);
+    await userEvent.click(screen.getByRole('button', { name: 'Arrêter par prudence' }));
+    expect(extra.onUsageStale).toHaveBeenCalledExactlyOnceWith('claude-code', '/comptes/a', 'stop');
+  });
+
+  it('puts the offer off with « Pas maintenant »', async () => {
+    const extra = handlers();
+    show(extra);
+    await userEvent.click(screen.getByRole('button', { name: 'Pas maintenant' }));
+    expect(extra.onUsageStale).toHaveBeenCalledExactlyOnceWith(
+      'claude-code',
+      '/comptes/a',
+      'later',
+    );
+  });
+
+  it('offers these two buttons only: nothing of the pause is there to resume', () => {
+    show(handlers());
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Arrêter par prudence',
+      'Pas maintenant',
+    ]);
+  });
+});

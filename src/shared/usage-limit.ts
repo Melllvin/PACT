@@ -4,6 +4,8 @@ import { isoDate } from './primitives';
 import {
   clockTime,
   currentWindow,
+  readingAge,
+  STALE_MINUTES,
   type UsageReading,
   type UsageState,
   type UsageWindow,
@@ -67,6 +69,49 @@ export function limitBands(reading: UsageReading, stops: UsageStops, now: Date):
       window.usedPercent >= stop ? 'stop' : window.usedPercent >= stop - SAVE_BAND ? 'save' : 'ok';
     return { window, stop, band };
   });
+}
+
+export type StaleProposal = {
+  /** `floor(age / 15)`: the offer comes back at each step the user lets go by (R11). */
+  step: number;
+  /** The windows within `STALE_MARGIN` points of their threshold, as `pause.windows` has them. */
+  windows: { id: string; label: string; percent: number; resetsAt: string | null }[];
+};
+
+/**
+ * R11, FR-009 — the reading is older than 15 minutes, an agent of the account is at work, and a
+ * window is 10 points from its threshold or less: PACT offers a stop by caution. Pure; it never
+ * stops anything (SC-006).
+ */
+export function staleProposal(
+  state: UsageState,
+  stops: UsageStops,
+  workingCount: number,
+  now: Date,
+): StaleProposal | null {
+  const { reading } = state;
+  if (!reading || workingCount < 1) return null;
+  const age = readingAge(reading, now);
+  if (!age.stale) return null;
+  const windows = limitBands(reading, stops, now)
+    .filter((b) => !b.window.reset && b.window.usedPercent >= b.stop - STALE_MARGIN)
+    .map(({ window }) => ({
+      id: window.id,
+      label: window.label,
+      percent: Math.round(window.usedPercent),
+      resetsAt: window.resetsAt,
+    }));
+  if (windows.length === 0) return null;
+  return { step: Math.floor(age.minutes / STALE_MINUTES), windows };
+}
+
+/** The most loaded window of a proposal: the one the title and the notice name. */
+export const heaviest = (windows: StaleProposal['windows']) =>
+  windows.reduce((a, b) => (b.percent > a.percent ? b : a));
+
+/** contracts/events.md « usage-paused », par prudence. */
+export function stalePausedText(label: string, percent: number, minutes: number): string {
+  return `PACT t'a mis en pause par prudence : dernière lecture de la limite ${label} à ${String(percent)} %, il y a ${String(minutes)} min.`;
 }
 
 export const usagePauseSchema = z.object({

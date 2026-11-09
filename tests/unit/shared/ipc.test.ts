@@ -40,6 +40,15 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
     valid: { cliId: 'claude-code', account: 'default' },
     invalid: [{}, { account: 'a' }, { cliId: 'x', account: '' }],
   },
+  'usage:stale': {
+    valid: { cliId: 'claude-code', account: 'default', decision: 'later' },
+    invalid: [
+      {},
+      { cliId: 'claude-code', account: 'a' },
+      { cliId: 'claude-code', account: 'a', decision: 'now' },
+      { cliId: '', account: 'a', decision: 'stop' },
+    ],
+  },
   'settings:usageThresholds': {
     valid: { warn: 70, critical: 90 },
     invalid: [
@@ -348,6 +357,7 @@ describe('IPC event schemas', () => {
       'review:tests',
       'term:data',
       'term:exit',
+      'usage:limit',
       'usage:state',
       'workspace:agentsLaunched',
       'workspace:exchanges',

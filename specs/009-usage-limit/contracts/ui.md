@@ -42,6 +42,7 @@ Une section « Arrêt » sous les seuils d'alerte.
 | `usage:resume` | requête | `{ cliId, account }` | `void` ; reprend le compte et écrit la dérogation de compte |
 | `usage:cancelResume` | requête | `{ cliId, account }` | `void` |
 | `usage:stale` | requête | `{ cliId, account, decision: 'stop' \| 'later' }` | `void` |
+| `usage:limit` | événement | `{ now, stops, declined }` | l'horloge du main et ce dont dépendent les propositions d'arrêt par prudence (`deriveTodos`, `useUsageClock`) |
 
 `agent:state` porte déjà l'agent entier : `state: 'paused'` et `pause` y passent sans canal nouveau. Les éléments À faire suivent le flux existant de `deriveTodos`.
 

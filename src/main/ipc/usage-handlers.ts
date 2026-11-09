@@ -10,8 +10,8 @@ import type { UsageService } from '../usage/usage-service';
 type Dependencies = {
   usage: Pick<UsageService, 'list' | 'setThresholds'>;
   stores: Pick<Stores, 'state'>;
-  /** 009 US2 — « Reprendre » and « Annuler la reprise » of a pause. */
-  limit: Pick<UsageLimitService, 'resumeByHand' | 'cancelResume' | 'setStops'>;
+  /** 009 US2 — « Reprendre » and « Annuler la reprise » of a pause; US3 — the offer of a stop; US4 — the stop thresholds. */
+  limit: Pick<UsageLimitService, 'resumeByHand' | 'cancelResume' | 'decideStale' | 'setStops'>;
 };
 
 export function createUsageServices({ usage, stores, limit }: Dependencies) {
@@ -34,5 +34,7 @@ export function createUsageServices({ usage, stores, limit }: Dependencies) {
       limit.resumeByHand(cliId, account),
     'usage:cancelResume': ({ cliId, account }: IpcInput<'usage:cancelResume'>) =>
       limit.cancelResume(cliId, account),
+    'usage:stale': ({ cliId, account, decision }: IpcInput<'usage:stale'>) =>
+      limit.decideStale(cliId, account, decision),
   };
 }

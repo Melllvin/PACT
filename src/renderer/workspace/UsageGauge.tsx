@@ -31,11 +31,14 @@ const time = clockTime;
 export const usageKey = (state: Pick<UsageState, 'cliId' | 'account'>) =>
   `usage:${state.cliId}:${state.account}`;
 
+/** The clock of the main process at the last `usage:limit`, and ours at that moment. */
+export type MainClock = { mainAt: number; localAt: number };
+
 /**
  * The clock of the gauges: a tick every 30 s, since the age of a reading moves on without a new
  * one; a reading fresher than the last tick moves it on.
  */
-export function useUsageClock(usage: readonly UsageState[]): Date {
+export function useUsageClock(usage: readonly UsageState[], main?: MainClock): Date {
   const [tick, setTick] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => {
@@ -45,9 +48,12 @@ export function useUsageClock(usage: readonly UsageState[]): Date {
       clearInterval(timer);
     };
   }, []);
+  // 009 US3 — the main process tells its own clock (the test clock of the e2e harness is not this
+  // one): the time it gave, moved on by the time that passed here since.
+  const local = main ? main.mainAt + Math.max(0, tick.getTime() - main.localAt) : 0;
   return new Date(
     Math.max(
-      tick.getTime(),
+      main ? local : tick.getTime(),
       ...usage.map((state) => (state.reading ? Date.parse(state.reading.readAt) : 0)),
     ),
   );

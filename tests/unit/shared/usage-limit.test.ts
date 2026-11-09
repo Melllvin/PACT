@@ -208,3 +208,126 @@ describe('usageLimitStateSchema', () => {
     expect(usageLimitStateSchema.parse({})).toEqual(empty);
   });
 });
+
+// 009 T036 — US3: a reading too old to be trusted (research R11, data-model « Proposition d'arrêt par
+// prudence », spec US3 sc.1 and 4). `staleProposal(state, stops, workingCount, now)` is pure and rates
+// `{ step, windows } | null`:
+//   - `windows` names the windows within 10 points of their threshold or less (each with `id`, `label`,
+//     `percent` as `pause.windows` has them, `resetsAt` too), as `currentWindow` reads them at `now`;
+//   - `step` is `floor(age in minutes / 15)`, the age being the one `readingAge` gives (whole minutes).
+// The function is loaded by its path, so each test fails on its own while it is absent.
+describe('staleProposal (US3)', () => {
+  type Proposal = {
+    step: number;
+    windows: { id: string; label: string; percent: number; resetsAt: string | null }[];
+  };
+  type StaleProposal = (
+    state: UsageState,
+    stops: Record<string, Record<string, number>>,
+    workingCount: number,
+    now: Date,
+  ) => Proposal | null;
+
+  const staleModule = '../../../src/shared/usage-limit';
+  const propose = async (...args: Parameters<StaleProposal>) => {
+    const rule = (
+      (await import(/* @vite-ignore */ staleModule)) as { staleProposal?: StaleProposal }
+    ).staleProposal;
+    if (!rule) throw new Error('staleProposal is not exported by src/shared/usage-limit.ts');
+    return rule(...args);
+  };
+
+  /** The state of an account whose reading is `minutes` old at `now` (10:00). */
+  const aged = (minutes: number, ...windows: UsageWindow[]): UsageState => ({
+    cliId: 'claude-code',
+    account: 'default',
+    reading: {
+      cliId: 'claude-code',
+      account: 'default',
+      windows,
+      readAt: new Date(now.getTime() - minutes * 60_000).toISOString(),
+    },
+    shares: [],
+    level: 'ok',
+  });
+  const ids = (proposal: Proposal | null) => proposal?.windows.map((w) => w.id);
+
+  it('is true for a reading older than 15 minutes, a working agent and a window 10 points from the threshold (US3 sc.1)', async () => {
+    const proposal = await propose(aged(16, window('five-hour', 82)), {}, 1, now);
+    expect(proposal).toMatchObject({
+      step: 1,
+      windows: [{ id: 'five-hour', label: '5 h', percent: 82, resetsAt: later }],
+    });
+  });
+
+  it('is false without any working agent, however old the reading is (US3 sc.4)', async () => {
+    expect(await propose(aged(16, window('five-hour', 85)), {}, 0, now)).toBeNull();
+    expect(await propose(aged(240, window('five-hour', 85)), {}, 0, now)).toBeNull();
+  });
+
+  it('is false at 15 minutes and at 14 minutes: the reading must be older than 15', async () => {
+    expect(await propose(aged(14, window('five-hour', 85)), {}, 1, now)).toBeNull();
+    expect(await propose(aged(15, window('five-hour', 85)), {}, 1, now)).toBeNull();
+    expect(await propose(aged(16, window('five-hour', 85)), {}, 1, now)).not.toBeNull();
+  });
+
+  it('is true at 10 points from the threshold and false at 11 (FR-009)', async () => {
+    expect(await propose(aged(20, window('five-hour', 80)), {}, 1, now)).not.toBeNull();
+    expect(await propose(aged(20, window('five-hour', 79)), {}, 1, now)).toBeNull();
+    expect(await propose(aged(20, window('five-hour', 0)), {}, 1, now)).toBeNull();
+  });
+
+  it('counts the 10 points from the threshold of the window, not from 90 %', async () => {
+    const stops = { 'claude-code': { week: 70, 'five-hour': 100 } };
+    // The week is 10 points from 70; the 5 h window is 18 from 100.
+    expect(
+      ids(await propose(aged(20, window('week', 60), window('five-hour', 82)), stops, 1, now)),
+    ).toEqual(['week']);
+    expect(await propose(aged(20, window('five-hour', 89)), stops, 1, now)).toBeNull();
+    expect(await propose(aged(20, window('five-hour', 90)), stops, 1, now)).not.toBeNull();
+  });
+
+  it('names every window near its threshold, and only those', async () => {
+    const proposal = await propose(
+      aged(20, window('five-hour', 85), window('week', 88), window('seven_day_opus', 30)),
+      {},
+      2,
+      now,
+    );
+    expect(ids(proposal)?.sort()).toEqual(['five-hour', 'week']);
+  });
+
+  it('reads a window reset since its reading as 0 %: it is not near anything', async () => {
+    const reset = window('five-hour', 88, { resetsAt: earlier });
+    expect(await propose(aged(20, reset), {}, 1, now)).toBeNull();
+    // Another window still near its threshold keeps the proposal alive, the reset one is not named.
+    expect(ids(await propose(aged(20, reset, window('week', 85)), {}, 1, now))).toEqual(['week']);
+  });
+
+  it('is false for an account with no reading', async () => {
+    const empty: UsageState = { ...aged(20), reading: null };
+    expect(await propose(empty, {}, 3, now)).toBeNull();
+  });
+
+  it.each([
+    [16, 1],
+    [29, 1],
+    [30, 2],
+    [44, 2],
+    [45, 3],
+    [90, 6],
+  ])('is at step floor(%i / 15) = %i', async (minutes, step) => {
+    expect((await propose(aged(minutes, window('five-hour', 85)), {}, 1, now))?.step).toBe(step);
+  });
+
+  it('does not depend on the number of working agents beyond one', async () => {
+    const state = aged(20, window('five-hour', 85));
+    expect(await propose(state, {}, 1, now)).toEqual(await propose(state, {}, 7, now));
+  });
+
+  it('is judged at the `now` it is given', async () => {
+    const state = aged(10, window('five-hour', 85));
+    expect(await propose(state, {}, 1, now)).toBeNull();
+    expect((await propose(state, {}, 1, new Date(now.getTime() + 6 * 60_000)))?.step).toBe(1);
+  });
+});

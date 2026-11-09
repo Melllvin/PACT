@@ -19,6 +19,7 @@ import { guardQuit, quitQuestion } from './app-lifecycle';
 import { chooseNotify, NotificationService } from './notifications';
 import { OriginSync } from './origin-sync';
 import { UsageService } from './usage/usage-service';
+import type { UsageDeclined, UsageStops } from '../shared/usage-limit';
 import { UsageLimitService } from './usage/usage-limit-service';
 import { systemClock } from './agents/auto-resume';
 import { createUsageServices } from './ipc/usage-handlers';
@@ -204,6 +205,8 @@ void app.whenReady().then(async () => {
   // 005 — the usage limits of the CLI accounts, as the agents' CLIs report them.
   const usage = new UsageService({
     thresholds: (await stores.state.read()).usageThresholds,
+    // The readings are dated on the clock of the main process, the test clock of the e2e harness included.
+    ...(clock ? { now: () => clock.now() } : {}),
     onState: (state) => {
       emit('usage:state', state);
       syncTodos();
@@ -310,6 +313,16 @@ void app.whenReady().then(async () => {
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
     commitFrozen: () => false,
+    // 009 US3 — the renderer judges the age of a reading on the clock of this process.
+    onStale: (_offers, snapshot) => {
+      limitSnapshot = {
+        stops: snapshot.stops,
+        declined: snapshot.declined,
+        offered: snapshot.offered,
+      };
+      emit('usage:limit', snapshot);
+      syncTodos();
+    },
   });
   exchanges.onRecorded((workspaceId, message) => {
     wake.notify(workspaceId, message);
@@ -485,6 +498,12 @@ void app.whenReady().then(async () => {
     },
   });
   const pendingFiles = new Map<string, Record<string, number>>();
+  /** 009 US3 — the stop thresholds and refusals the offers of a stop by caution depend on. */
+  let limitSnapshot: {
+    stops: UsageStops;
+    declined: UsageDeclined[];
+    offered?: { cliId: string; account: string }[];
+  } = { stops: {}, declined: [] };
   const cliNameOf = (cliId: string) =>
     registry.list().find((cli) => cli.id === cliId)?.name ?? cliId;
   function syncTodos() {
@@ -495,6 +514,7 @@ void app.whenReady().then(async () => {
           states: usage.list(),
           thresholds: usage.getThresholds(),
           now: clock?.now() ?? new Date(),
+          ...limitSnapshot,
         }),
       );
     }
