@@ -100,6 +100,8 @@ async function saved(): Promise<{
     verdictCommit: string | null;
   }[];
   delivery: { auto: boolean };
+  agents: { id: string; role: string }[];
+  exchanges: { messages: { to: string; kind: string; text: string; unreadBy: string[] }[] };
 }> {
   const dir = join(launched?.userDataDir ?? '', 'workspaces');
   const [file] = await readdir(dir);
@@ -293,7 +295,7 @@ test('US4 sc.2: a configured CI that shows no check: after the silence PACT tell
 test('US4 sc.3: a red check goes back to the dev: a round is counted, nothing is merged', async () => {
   test.setTimeout(300_000);
   const page = await openWithIssue();
-  const { dev, head } = await deliver(page, true);
+  const { head } = await deliver(page, true);
 
   await setChecks(head, RED);
 
@@ -301,7 +303,21 @@ test('US4 sc.3: a red check goes back to the dev: a round is counted, nothing is
     .poll(async () => (await saved()).deliveries[0]?.state, { timeout: 120_000 })
     .toBe('ci-red');
   expect((await saved()).loops[0]).toMatchObject({ state: 'running', round: 2 });
-  await expect(dev).toContainText('« ci »', { timeout: 60_000 });
+  // The visible terminal only holds its last rows (a slow runner scrolls the line away): the proof is the
+  // journal. The verdict is addressed to the dev, names the failing check, is bounded, and the dev read it.
+  await expect
+    .poll(
+      async () => {
+        const state = await saved();
+        const devId = state.agents.find((a) => a.role === 'dev')?.id;
+        return state.exchanges.messages.find((m) => m.to === devId && m.kind === 'verdict');
+      },
+      { timeout: 60_000 },
+    )
+    .toMatchObject({ text: expect.stringContaining('« ci »'), unreadBy: [] });
+  const state = await saved();
+  const verdict = state.exchanges.messages.find((m) => m.kind === 'verdict');
+  expect(verdict?.text.length).toBeLessThanOrEqual(2000);
   expect(await mergeCalls()).toHaveLength(0);
   expect((await forge()).prs['1']?.state).toBe('OPEN');
 });

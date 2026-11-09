@@ -260,10 +260,6 @@ async function readPointer(line) {
   console.log(`MCP get_events : ${list.text}`);
   pointerEvents = list.json?.events ?? [];
   const first = (list.json?.events ?? []).find((event) => event.kind === 'instruction');
-  // What the other events say (a verdict, a notice), shown as an agent would read them.
-  for (const event of pointerEvents) {
-    if (event !== first) console.log(`Événement : ${String(event.summary ?? '')}`);
-  }
   if (!first) return line;
   const detail = await callToolFull('get_events', { id: first.id });
   console.log(`MCP get_events : ${detail.text}`);
