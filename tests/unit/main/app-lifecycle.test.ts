@@ -76,6 +76,32 @@ describe('guardQuit terminate', () => {
     expect(app.quit).toHaveBeenCalledOnce();
   });
 
+  it('joins the stop of a confirmed quit already running: shutdown is called once', async () => {
+    const { app, shutdown, quit, guard } = setup({ active: 0 });
+    let finish: () => void = () => undefined;
+    shutdown.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await quit();
+    const joined = guard.terminate();
+    await Promise.resolve();
+    finish();
+    await joined;
+    expect(shutdown).toHaveBeenCalledOnce();
+    expect(app.quit).toHaveBeenCalledOnce();
+  });
+
+  it('is a no-op once the app has quit, and a second terminate joins the first', async () => {
+    const { app, shutdown, guard } = setup({ active: 0 });
+    await Promise.all([guard.terminate(), guard.terminate()]);
+    await guard.terminate();
+    expect(shutdown).toHaveBeenCalledOnce();
+    expect(app.quit).toHaveBeenCalledOnce();
+  });
+
   it('quits even when the stop hangs, at the deadline', async () => {
     const { app, shutdown, guard } = setup({ active: 0 });
     shutdown.mockImplementation(() => new Promise<void>(() => undefined));

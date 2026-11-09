@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentSchema } from '../../../src/shared/model';
 import { RESUME_PROMPT } from '../../../src/main/agents/agent-manager';
 import { createHarness, git, type Harness } from '../orchestrator/harness';
@@ -204,8 +204,8 @@ describe('a closed orchestrator and a new one', () => {
 
     expect(h.current(freshId)?.role).toBe('orchestrator');
     expect(h.current(ids.lead)).toMatchObject({ state: 'closed', role: null });
-    // Its group stays closed and linked to it (FR-023).
-    expect(h.current(ids.one)).toMatchObject({ state: 'closed', launchedBy: ids.lead });
+    // Its group stays visible, closed (FR-023), and detached from it.
+    expect(h.current(ids.one)).toMatchObject({ state: 'closed', launchedBy: null });
   });
 
   it('still refuses a second orchestrator while one is live', async () => {
@@ -226,5 +226,41 @@ describe('a closed orchestrator and a new one', () => {
 
     expect(h.current(otherId)?.role).toBe('orchestrator');
     expect(h.current(ids.lead)?.role).toBeNull();
+  });
+
+  it('detaches the group of the old orchestrator: its closed agents become independent, and stay visible', async () => {
+    const ids = await group();
+    const [bystander] = await h.launch([h.draft()]);
+    await h.manager.close(ids.lead, KEEP);
+
+    await h.launch([h.draft({ orchestrator: true })]);
+
+    // An agent outside the group is left as it is.
+    expect(h.current(bystander?.id ?? '')).toMatchObject({ role: null, launchedBy: null });
+    for (const id of [ids.lead, ids.one, ids.two]) {
+      expect(h.current(id)).toMatchObject({ state: 'closed', launchedBy: null });
+    }
+    // Restarting one alone no longer brings back the others (no group left).
+    await h.manager.restart(ids.one);
+    await h.waitForState(ids.one, 'awaiting-prompt');
+    expect(h.current(ids.two)?.state).toBe('closed');
+    expect(h.current(ids.lead)?.state).toBe('closed');
+  });
+
+  it('keeps the old closed orchestrator, its role and its group, when the new launch fails', async () => {
+    const ids = await group();
+    const [bystander] = await h.launch([h.draft()]);
+    await h.manager.close(ids.lead, KEEP);
+    vi.spyOn(h.orchestrator, 'prepare').mockRejectedValueOnce(new Error('ENOENT skills'));
+
+    await expect(h.launch([h.draft({ orchestrator: true })])).rejects.toThrow(/ENOENT/);
+
+    expect(h.current(bystander?.id ?? '')).toMatchObject({ role: null });
+    expect(h.current(ids.lead)).toMatchObject({ state: 'closed', role: 'orchestrator' });
+    expect(h.current(ids.one)).toMatchObject({ launchedBy: ids.lead });
+    expect(h.current(ids.two)).toMatchObject({ launchedBy: ids.lead });
+    // And the group still restarts with it.
+    await h.manager.restart(ids.lead);
+    await h.waitForState(ids.one, 'awaiting-prompt');
   });
 });

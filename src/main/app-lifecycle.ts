@@ -34,7 +34,13 @@ export function guardQuit({
 }: Options): { terminate: () => Promise<void> } {
   let phase: 'open' | 'busy' | 'done' = 'open';
   let terminated = false;
-  const stopAndQuit = async () => {
+  // One stop at a time: a SIGTERM during the stop of a confirmed quit joins it.
+  let stopping: Promise<void> | null = null;
+  const stopAndQuit = () => {
+    stopping ??= stop();
+    return stopping;
+  };
+  const stop = async () => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, deadlineMs);
@@ -67,7 +73,7 @@ export function guardQuit({
      * whatever phase the guard is in, with the same stop as a confirmed quit.
      */
     terminate: async () => {
-      if (phase === 'done' || terminated) return;
+      if (phase === 'done') return;
       terminated = true;
       phase = 'busy';
       await stopAndQuit();
