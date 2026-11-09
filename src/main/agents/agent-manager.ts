@@ -1344,9 +1344,14 @@ export class AgentManager {
     running.idle = setTimeout(() => {
       const idle = running.adapter.mapOutput(running.output.text(), { idleMs: this.idleMs });
       if (!idle) return;
-      // #108 — a quiet prompt says « ready » to a starting agent only, never over a request.
-      if (idle.type === 'session-started' && this.find(id).agent.state !== 'starting') return;
+      // #108, #110 — what a quiet screen says only counts where it can: « ready » ends a start,
+      // never a request; a dropped turn ends a turn or a request, never a wait for a prompt.
+      // Read and set aside either way: an old line must not count later.
+      const state = this.find(id).agent.state;
       running.output.consume();
+      if (idle.type === 'session-started' && state !== 'starting') return;
+      if (idle.type === 'turn-finished' && state !== 'working' && state !== 'awaiting-answer')
+        return;
       void this.apply(id, idle);
     }, this.idleMs);
   }

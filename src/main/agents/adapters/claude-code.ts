@@ -205,7 +205,7 @@ export class ClaudeCodeAdapter implements CliAdapter {
 
   readonly denyEndsTurn = true;
 
-  mapOutput(chunk: string, _ctx: OutputContext): AgentSignal | null {
+  mapOutput(chunk: string, ctx: OutputContext): AgentSignal | null {
     // The folder trust question comes before any hook (T049).
     if (/Yes, I trust this folder/.test(chunk)) {
       const keys = trustKeys(chunk);
@@ -215,6 +215,10 @@ export class ClaudeCodeAdapter implements CliAdapter {
         ...(keys ? { keys } : {}),
       };
     }
+    // #110 — an interrupt or a plan rejected in the terminal drops the turn with no Stop hook.
+    // Read once the output is quiet: the line stays in the history, and a redraw prints it again
+    // while the spinner of a later turn keeps the output busy.
+    if (ctx.idleMs !== undefined && turnDropped(chunk)) return { type: 'turn-finished' };
     return null;
   }
 
@@ -401,6 +405,15 @@ function mapLeadEvent(event: HookPayload): AgentSignal | null {
  * first, unnumbered, so digits do nothing. « Yes » is reached with arrows; without both options
  * on screen the order is unknown and nothing is guessed.
  */
+const TURN_DROPPED = /Interrupted · What should Claude do instead\?|User rejected Claude's plan/g;
+/** After the line: an answer of Claude (⏺) or a dialog means the turn went on. */
+const LATER = /⏺|Do you want|❯ \d+\./;
+
+function turnDropped(chunk: string): boolean {
+  const last = [...chunk.matchAll(TURN_DROPPED)].at(-1);
+  return last !== undefined && !LATER.test(chunk.slice(last.index + last[0].length));
+}
+
 function trustKeys(chunk: string): { allow: string; deny: string } | undefined {
   const yes = chunk.indexOf('Yes, I trust this folder');
   const no = chunk.indexOf('No, exit');
