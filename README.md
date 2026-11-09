@@ -180,7 +180,23 @@ A reading older than 15 minutes is greyed out with its age, and hidden after an 
 - **Who consumes.** The detail gives the part of each agent of the workspace in the tokens PACT
   counted since the window began, the largest first, with its role; a closed agent keeps its part,
   marked « fermé », until the window resets; the agents of other workspaces are « autres ».
-- **Resume.** A rate limit whose message gives no time resumes at the reset the gauge knows.
+- **Stop at the limit.** PACT stops a CLI account before the CLI hits its wall. Each window has a
+  stop threshold, 90 % by default, set per CLI and window in « Seuils d’alerte… » (section « Arrêt »,
+  10 to 100 %). A little before it, every agent of the account is told once per reset to commit
+  and write down where it stands; at the threshold they are stopped and shown « en pause · reprise à
+  HH:MM » (« non sauvegardé » if their worktree still has changes), never as an error. PACT writes
+  no Git command and pushes nothing. While an account is paused, `launch_agent` is refused for that
+  CLI, the launcher only warns, the other CLIs and free terminals carry on, and a test run by PACT
+  goes on; its event waits in the journal until the orchestrator is back.
+- **Unknown limit.** A CLI that reports no limit (Claude Code with an API key, a generic CLI) is
+  never stopped. When a reading goes stale (over 15 minutes) near its threshold while an agent works,
+  « À traiter » offers « Arrêter par prudence »; « Pas maintenant » hides it until the reading is
+  30 minutes old. Nothing stops on an old reading without your click.
+- **Resume.** A rate limit whose message gives no time resumes at the reset the gauge knows. After a
+  stop at the limit, PACT resumes the account by itself at the reset (when the workspace resumes
+  automatically): the orchestrator first, then the agents, each in its own session with `--resume`
+  and told what happened. Otherwise, or earlier, « Reprendre » in « À traiter » or on a tile resumes
+  the account, and « Annuler la reprise » keeps it paused. Pauses survive a restart of PACT.
 
 ## Agent teams in Claude Code
 
