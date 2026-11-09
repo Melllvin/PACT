@@ -44,6 +44,7 @@ export interface DeliveryServiceDeps {
     | 'fetchRefs'
     | 'rebaseOnto'
     | 'pushBranch'
+    | 'remoteBranchHead'
     | 'addDetached'
     | 'removeDetached'
     | 'moveWorktree'
@@ -216,18 +217,16 @@ export class DeliveryService {
   }
 
   /**
-   * The head PACT last pushed to this branch and did not delete since: the lease of a new request
-   * after one that pushed and then stopped (a PR that failed to open, for instance).
+   * The lease of a first push: the remote head when PACT pushed it itself (a request that stopped
+   * after its push, a PR that failed to open for instance), else an absent branch. Anyone else's
+   * head, or a branch PACT pushed and someone deleted, is not taken for PACT's.
    */
-  private lastPush(workspaceId: string, d: Delivery): string | null {
-    return (
-      this.workspace(workspaceId)
-        .deliveries.filter(
-          (x) =>
-            x.id !== d.id && x.branch === d.branch && x.pushedHead !== null && x.cleanup !== 'done',
-        )
-        .at(-1)?.pushedHead ?? null
+  private async lease(ws: Workspace, d: Delivery): Promise<string | null> {
+    const remote = await this.deps.git.remoteBranchHead(ws.path, d.branch);
+    const ours = this.workspace(ws.id).deliveries.some(
+      (x) => x.branch === d.branch && x.pushedHead === remote,
     );
+    return remote !== null && ours ? remote : null;
   }
 
   private changed(workspaceId: string) {
@@ -432,7 +431,7 @@ export class DeliveryService {
       !(await git.pushBranch(ws.path, {
         commit: rebased,
         branch: d.branch,
-        expected: d.pushedHead ?? this.lastPush(workspaceId, d),
+        expected: d.pushedHead ?? (await this.lease(ws, d)),
       }))
     ) {
       throw new Stop(

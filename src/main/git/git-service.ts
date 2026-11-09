@@ -319,6 +319,21 @@ export class GitService {
     }
   }
 
+  /** The head of `branch` on origin, read without fetching; null when absent or unreachable. */
+  async remoteBranchHead(repo: string, branch: string): Promise<string | null> {
+    try {
+      const { stdout } = await this.run(
+        repo,
+        ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      return stdout.trim().split(/\s/)[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
   /** 008 R18 — the remote branch deleted only if it is still at `expected` (the merged head). */
   async deleteRemoteBranch(repo: string, branch: string, expected: string): Promise<boolean> {
     try {

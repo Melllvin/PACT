@@ -270,6 +270,23 @@ describe('a request after a pull request that failed to open', () => {
 
     await h.until(second.id, ['watching']);
   });
+
+  it('Given a branch PACT pushed and that was deleted on the remote since, When the dev delivers again, Then PACT pushes it as a new branch', async () => {
+    const { dev, tester } = await h.team('a');
+    h.setGhState({ failures: { prCreate: ['HTTP 502 forge down'] } });
+    const first = await h.request(dev.id);
+    await h.until(first.id, ['refused']);
+    const pushed = h.remoteHead(dev.branch) ?? '';
+    await h.gitService.deleteRemoteBranch(h.workspace().path, dev.branch, pushed);
+    expect(h.remoteHead(dev.branch)).toBeNull();
+    await h.commit(dev, { 'src/more.ts': 'export const m = 1;\n' }, 'fix after');
+    await h.workspaces.update(h.workspace().id, (ws) => ({ ...ws, loops: [] }));
+    await h.acceptLoop(dev, tester);
+
+    const second = await h.request(dev.id);
+
+    await h.until(second.id, ['watching']);
+  });
 });
 
 describe('a queue per project', () => {

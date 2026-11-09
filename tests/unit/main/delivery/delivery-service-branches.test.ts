@@ -78,6 +78,7 @@ function setup(over: Over = {}) {
     fetchRefs: vi.fn(() => Promise.resolve(true)),
     rebaseOnto: vi.fn(() => Promise.resolve({ commit: R, conflicts: [] })),
     pushBranch: vi.fn(() => Promise.resolve(true)),
+    remoteBranchHead: vi.fn(() => Promise.resolve(null)),
     addDetached: vi.fn(() => Promise.resolve()),
     removeDetached: vi.fn(() => Promise.resolve()),
     moveWorktree: vi.fn(() => Promise.resolve()),
