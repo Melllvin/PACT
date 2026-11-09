@@ -264,9 +264,10 @@ describe('edge cases of the stop at a limit', { timeout: 40_000 }, () => {
   it('Given a free terminal next to an agent, When the account is stopped, Then the agent is paused and the terminal keeps running', async () => {
     const lead = await agentAt('session-lead', 'orchestrator');
     pty.start('free-terminal', {
-      file: '/bin/sh',
-      args: ['-c', 'sleep 30'],
-      env: { PATH: process.env.PATH ?? '' },
+      // Node rather than a shell: the same long-running process on macOS and on Windows.
+      file: process.execPath,
+      args: ['-e', 'setTimeout(() => {}, 30000)'],
+      env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' },
       cwd: repo,
     });
     await stopAccount();
