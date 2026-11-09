@@ -21,6 +21,8 @@ const workspace = (id: string, name: string): Workspace => ({
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+  deliveries: [],
   roleProfiles: {},
   issues: [],
   loops: [],
@@ -339,6 +341,7 @@ describe('App launch flow (US2)', () => {
       rounds: [],
       state: 'escalated' as const,
       escalatedModel: null,
+      polish: null,
     };
     const invoke = setup([{ ...workspace('w1', 'w1'), agents: [dev], loops: [loop] }]);
     await userEvent.click(await screen.findByRole('button', { name: 'Abandonner' }));

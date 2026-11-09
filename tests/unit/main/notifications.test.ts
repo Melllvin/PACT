@@ -183,6 +183,7 @@ describe('what a notification can carry, from the real À faire items', () => {
           rounds: [],
           state: 'escalated',
           escalatedModel: null,
+          polish: null,
         },
       ],
     },

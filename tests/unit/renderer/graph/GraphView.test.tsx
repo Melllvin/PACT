@@ -23,6 +23,7 @@ const loop: Loop = {
   rounds: [],
   state: 'running',
   escalatedModel: null,
+  polish: null,
 };
 
 const names = () => 'Claude Code';

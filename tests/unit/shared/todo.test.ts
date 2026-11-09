@@ -214,6 +214,7 @@ describe('deriveTodos', () => {
       rounds: [],
       state,
       escalatedModel: null,
+      polish: null,
     });
     const todos = deriveTodos(
       {
@@ -388,7 +389,7 @@ type WithReport = Partial<Agent> & {
 const reported = (n: number, overrides: WithReport = {}): Agent => agent(n, overrides);
 
 const loopOf = (
-  state: 'running' | 'escalated' | 'passed' | 'closed',
+  state: 'running' | 'escalated' | 'polishing' | 'accepted' | 'delivering' | 'merged' | 'closed',
   devAgentId: string,
   testAgentId: string,
 ) => ({
@@ -399,6 +400,7 @@ const loopOf = (
   rounds: [],
   state,
   escalatedModel: null,
+  polish: null,
 });
 
 describe('deriveTodos — « Changements à relire » names the agent, its role and its size', () => {
@@ -431,50 +433,61 @@ describe('deriveTodos — who has no review', () => {
     expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
   });
 
-  it.each(['running', 'escalated'] as const)('gives the dev of a %s loop no review', (state) => {
-    const todos = deriveTodos(
-      {
-        ...workspace([
-          agent(1, { state: 'done', role: 'dev' }),
-          agent(2, { state: 'done', role: 'test' }),
-        ]),
-        loops: [loopOf(state, 'a1', 'a2')],
-      },
-      names,
-      { a1: 2, a2: 1 },
-    );
-    expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
-  });
-
-  it.each(['passed', 'closed'] as const)('gives the dev of a %s loop its review', (state) => {
-    const todos = deriveTodos(
-      {
-        ...workspace([agent(1, { state: 'done', role: 'dev' })]),
-        loops: [loopOf(state, 'a1', 'a2')],
-      },
-      names,
-      { a1: 2 },
-    );
-    expect(todos.map((t) => t.id)).toEqual(['a1:review']);
-  });
-
-  it.each(['running', 'escalated', 'passed', 'closed'] as const)(
-    'gives the tester of a %s loop no review',
+  it.each(['running', 'escalated', 'polishing', 'delivering'] as const)(
+    'gives the dev of a %s loop no review',
     (state) => {
       const todos = deriveTodos(
         {
           ...workspace([
-            agent(1, { state: 'working', role: 'dev' }),
+            agent(1, { state: 'done', role: 'dev' }),
             agent(2, { state: 'done', role: 'test' }),
           ]),
           loops: [loopOf(state, 'a1', 'a2')],
         },
         names,
-        { a2: 3 },
+        { a1: 2, a2: 1 },
       );
-      expect(todos.filter((t) => t.id === 'a2:review')).toEqual([]);
+      expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
     },
   );
+
+  it.each(['accepted', 'merged', 'closed'] as const)(
+    'gives the dev of a %s loop its review',
+    (state) => {
+      const todos = deriveTodos(
+        {
+          ...workspace([agent(1, { state: 'done', role: 'dev' })]),
+          loops: [loopOf(state, 'a1', 'a2')],
+        },
+        names,
+        { a1: 2 },
+      );
+      expect(todos.map((t) => t.id)).toEqual(['a1:review']);
+    },
+  );
+
+  it.each([
+    'running',
+    'escalated',
+    'polishing',
+    'accepted',
+    'delivering',
+    'merged',
+    'closed',
+  ] as const)('gives the tester of a %s loop no review', (state) => {
+    const todos = deriveTodos(
+      {
+        ...workspace([
+          agent(1, { state: 'working', role: 'dev' }),
+          agent(2, { state: 'done', role: 'test' }),
+        ]),
+        loops: [loopOf(state, 'a1', 'a2')],
+      },
+      names,
+      { a2: 3 },
+    );
+    expect(todos.filter((t) => t.id === 'a2:review')).toEqual([]);
+  });
 });
 
 describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', () => {

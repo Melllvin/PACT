@@ -33,9 +33,9 @@
 ### Implémentation
 
 - [ ] T008 Créer `src/shared/delivery.ts` selon data-model et research R25 (constantes, schémas, `ciVerdict`, `deliveryGate`, `prBody`, `checkName`) ; dans `src/shared/model.ts` : `workspace.delivery`, `workspace.deliveries`, états de `loopSchema`, `polish`, `round.kind`, `proof.commit`, bornes à 10 ; dans `src/shared/report.ts` : `commit`, `dirty`, `round` ≤ 10 ; dans `src/shared/exchanges.ts` : kind `delivery` (action) et son champ structuré (research R21)
-- [ ] T009 Créer `src/main/delivery/gh-client.ts` sur `ghCommand` de `src/main/orchestrator/issues.ts` : méthodes de `contracts/gh.md` seulement, sortie parsée et réduite aux champs du contrat
-- [ ] T010 Dans `src/main/git/git-service.ts` : `fetchRefs`, `rebaseOnto` (worktree temporaire détaché, `core.hooksPath` vide), `pushBranch`, `deleteRemoteBranch`, `statusIgnored`, `hasWorkflows(ref)`
-- [ ] T011 Dans `src/main/orchestrator/loop-service.ts` : `commit` et `dirty` au verdict ; preuve sur commit propre ; états `accepted`, `polishing`, `delivering`, `merged`, méthode `reopen` ; plus de passage de l'issue à `done` ; adapter `src/shared/todo.ts` et `src/shared/agents-view.ts` aux nouveaux états
+- [x] T009 Créer `src/main/delivery/gh-client.ts` sur `ghCommand` de `src/main/orchestrator/issues.ts` : méthodes de `contracts/gh.md` seulement, sortie parsée et réduite aux champs du contrat
+- [x] T010 Dans `src/main/git/git-service.ts` : `fetchRefs`, `rebaseOnto` (worktree temporaire détaché, `core.hooksPath` vide), `pushBranch`, `deleteRemoteBranch`, `statusIgnored`, `hasWorkflows(ref)`
+- [x] T011 Dans `src/main/orchestrator/loop-service.ts` : `commit` et `dirty` au verdict ; preuve sur commit propre ; états `accepted`, `polishing`, `delivering`, `merged`, méthode `reopen` ; plus de passage de l'issue à `done` ; adapter `src/shared/todo.ts` et `src/shared/agents-view.ts` aux nouveaux états
 
 **Checkpoint** : `npm run check` et e2e verts ; `request_integration` encore en place ; PR « 008 Phase 1-2 ».
 

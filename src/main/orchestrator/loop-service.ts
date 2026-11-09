@@ -8,10 +8,9 @@ import type { Notice } from './orchestrator-service';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
 
-// 004 R6 — the dev ↔ test loop of an issue: 3 rounds at most (FR-018), done only once PACT's own
-// run of the tests passes on the dev's current tree (FR-019), an independent tester (FR-020).
-
-export const MAX_ROUNDS = 3;
+// 004 R6 — the dev ↔ test loop of an issue: the project's ceiling of rounds (008 R11, FR-018), an
+// accepted loop only once PACT's own run of the tests passes on the dev's clean HEAD (FR-019,
+// 008 R3), an independent tester (FR-020). The issue is done at the merge, not at the proof (FR-007).
 
 export type LoopEvent = Notice;
 export type LoopDecision = 'restart' | 'take-over' | 'abandon';
@@ -22,7 +21,7 @@ export interface LoopServiceDeps {
     list(): Workspace[];
     update(id: string, change: (ws: Workspace) => Workspace): Promise<Workspace>;
   };
-  git: Pick<GitService, 'snapshot' | 'changedFiles' | 'mergeBase'>;
+  git: Pick<GitService, 'snapshot' | 'changedFiles' | 'mergeBase' | 'revParse' | 'treeOf'>;
   review: Pick<ReviewService, 'testPlan'>;
   tests: Pick<TestRunner, 'run'>;
   agents: { escalate(agentId: string, model: string): Promise<void> };
@@ -79,6 +78,11 @@ export class LoopService {
 
   private now(): string {
     return (this.deps.now?.() ?? new Date()).toISOString();
+  }
+
+  /** 008 R11 — the ceiling is read live: a lowered one escalates at the next « defects ». */
+  private maxRounds(ws: Workspace): number {
+    return ws.delivery.maxRounds;
   }
 
   private workspace(id: string): Workspace {
@@ -145,8 +149,9 @@ export class LoopService {
       devAgentId: dev,
       testAgentId: test,
       round: 1,
-      rounds: [{ n: 1, startedAt: this.now(), reports: [], proof: null, testerTouched: [] }],
+      rounds: [this.newRound(1)],
       state: 'running',
+      polish: null,
       escalatedModel: null,
     };
     await this.update(workspaceId, (current) => ({
@@ -171,6 +176,10 @@ export class LoopService {
     });
     if (delivered) sent.push({ agentId: test, kind: 'instruction' });
     return { ...loop, sent };
+  }
+
+  private newRound(n: number, kind: 'round' | 'polish' = 'round'): Loop['rounds'][number] {
+    return { n, kind, startedAt: this.now(), reports: [], proof: null, testerTouched: [] };
   }
 
   /** A message of PACT; a journal that fails must not lose the loop or the verdict. */
@@ -216,7 +225,9 @@ export class LoopService {
     const loop = this.get(workspaceId, issueId);
     if (!loop) throw new Error(`Aucune boucle pour ${issueId}.`);
     if (loop.state === 'escalated') {
-      throw new Error('Plafond de 3 tours atteint : l’utilisateur décide');
+      throw new Error(
+        `Plafond de ${String(this.maxRounds(ws))} tours atteint : l’utilisateur décide`,
+      );
     }
     if (loop.state !== 'running') throw new Error(`La boucle de ${issueId} est terminée.`);
     const last = loop.rounds.at(-1);
@@ -224,9 +235,14 @@ export class LoopService {
     if (verdict?.result !== 'defects') {
       throw new Error(`Le tour ${String(loop.round)} attend le verdict « defects » du test.`);
     }
+    return this.openRound(ws, loop);
+  }
+
+  /** The next round, with the escalation of the model at the last round of the ceiling (004 FR-007). */
+  private async openRound(ws: Workspace, loop: Loop): Promise<Loop> {
     const n = loop.round + 1;
     let escalatedModel = loop.escalatedModel;
-    if (n === MAX_ROUNDS) {
+    if (n === this.maxRounds(ws)) {
       const devAgent = ws.agents.find((a) => a.id === loop.devAgentId);
       const profile = ws.roleProfiles.dev;
       if (
@@ -239,15 +255,41 @@ export class LoopService {
         escalatedModel = profile.maxModel;
       }
     }
-    return this.save(workspaceId, issueId, (l) => ({
+    return this.save(ws.id, loop.issueId, (l) => ({
       ...l,
+      state: 'running',
       round: n,
       escalatedModel,
-      rounds: [
-        ...l.rounds,
-        { n, startedAt: this.now(), reports: [], proof: null, testerTouched: [] },
-      ],
+      rounds: [...l.rounds, this.newRound(n)],
     }));
+  }
+
+  /**
+   * 008 FR-017, FR-018 — the delivery sends the dev back: the CI is red, the user refused, the tests
+   * failed after a rebase. A counted round opens and the loop runs again; at the ceiling the loop
+   * escalates to the user and no round opens. The reason reaches the dev like a « defects ».
+   */
+  async reopen(workspaceId: string, issueId: string, reason: string): Promise<Loop> {
+    const ws = this.workspace(workspaceId);
+    const loop = this.get(workspaceId, issueId);
+    if (!loop) throw new Error(`Aucune boucle pour ${issueId}.`);
+    if (loop.state === 'closed' || loop.state === 'merged' || loop.state === 'escalated') {
+      throw new Error(`La boucle de ${issueId} est terminée.`);
+    }
+    if (loop.round >= this.maxRounds(ws)) {
+      await this.escalate(workspaceId, issueId, loop.devAgentId);
+      return this.get(workspaceId, issueId) ?? loop;
+    }
+    const reopened = await this.openRound(ws, loop);
+    await this.send(workspaceId, {
+      to: loop.devAgentId,
+      kind: 'verdict',
+      text: `Livraison de ${issueId} (tour ${String(reopened.round)}/${String(this.maxRounds(ws))}) : ${reason}`.slice(
+        0,
+        MAX_NOTICE,
+      ),
+    });
+    return reopened;
   }
 
   /** A hand-off report of an agent; the reason it is refused, or `null`. */
@@ -262,7 +304,20 @@ export class LoopService {
     }
     const { ws, loop, agent } = found;
     const role = agent.role === 'test' ? 'test' : 'dev';
-    const stored: StoredReport = { ...report, agentId, role, round: loop.round, at: this.now() };
+    // 008 R3 — the verdict is tied to the commit it judges: the head of the dev, and whether its
+    // worktree differs from it.
+    const devAgent = ws.agents.find((a) => a.id === loop.devAgentId);
+    const judged =
+      role === 'test' && report.verdict && devAgent ? await this.headOf(devAgent) : null;
+    const stored: StoredReport = {
+      ...report,
+      agentId,
+      role,
+      round: loop.round,
+      at: this.now(),
+      commit: judged?.commit ?? null,
+      dirty: judged?.dirty ?? false,
+    };
 
     if (role === 'test' && report.verdict) {
       const outside = await this.outsideTests(ws, agent);
@@ -285,7 +340,7 @@ export class LoopService {
     }
     if (role === 'test' && report.verdict?.result === 'defects') {
       const defects = report.verdict.defects.map((d) => `- ${d}`).join('\n');
-      const head = `Verdict du test sur ${loop.issueId} (tour ${String(loop.round)}/${String(MAX_ROUNDS)}) : défauts.\n`;
+      const head = `Verdict du test sur ${loop.issueId} (tour ${String(loop.round)}/${String(this.maxRounds(ws))}) : défauts.\n`;
       await this.send(ws.id, {
         to: loop.devAgentId,
         kind: 'verdict',
@@ -309,11 +364,21 @@ export class LoopService {
     } else if (
       role === 'test' &&
       report.verdict?.result === 'defects' &&
-      loop.round === MAX_ROUNDS
+      loop.round >= this.maxRounds(ws)
     ) {
       await this.escalate(ws.id, loop.issueId, agentId);
     }
     return null;
+  }
+
+  /** The head of the dev, and whether its worktree is more than that commit. */
+  private async headOf(agent: Agent): Promise<{ commit: string; dirty: boolean }> {
+    const [commit, headTree, { tree }] = await Promise.all([
+      this.deps.git.revParse(agent.worktreePath, 'HEAD'),
+      this.deps.git.treeOf(agent.worktreePath, 'HEAD'),
+      this.deps.git.snapshot(agent.worktreePath),
+    ]);
+    return { commit, dirty: tree !== headTree };
   }
 
   private async saveRound(
@@ -333,7 +398,7 @@ export class LoopService {
     this.deps.notify(workspaceId, {
       agentId,
       kind: 'loop',
-      summary: `Boucle arrêtée · ${issueId} · ${String(MAX_ROUNDS)} tours : l’utilisateur décide.`,
+      summary: `Boucle arrêtée · ${issueId} · ${String(this.maxRounds(this.workspace(workspaceId)))} tours : l’utilisateur décide.`,
     });
   }
 
@@ -343,14 +408,20 @@ export class LoopService {
     const found = this.find(run.agentId);
     if (!found || found.loop.devAgentId !== run.agentId) return;
     const { ws, loop, agent } = found;
+    // 008 R3 — the proof is on a commit: the worktree must be clean, what PACT will push.
+    const { commit, dirty } = await this.headOf(agent);
     const { tree } = await this.deps.git.snapshot(agent.worktreePath);
-    if (run.status === 'passed' && run.tree === tree) {
+    if (run.status === 'passed' && run.tree === tree && !dirty) {
+      const passes = ws.delivery.polishPasses;
       await this.saveRound(ws.id, loop.issueId, (r) => ({
         ...r,
-        proof: { tree, exitCode: 0, at: this.now() },
+        proof: { tree, commit, exitCode: 0, at: this.now() },
       }));
-      await this.save(ws.id, loop.issueId, (l) => ({ ...l, state: 'passed' }));
-      await this.setIssue(ws.id, loop.issueId, 'done');
+      await this.save(ws.id, loop.issueId, (l) =>
+        passes > 0
+          ? { ...l, state: 'polishing', polish: { done: 0, total: passes, restarted: false } }
+          : { ...l, state: 'accepted' },
+      );
       this.deps.notify(ws.id, {
         agentId: run.agentId,
         kind: 'loop',
@@ -361,7 +432,9 @@ export class LoopService {
     const why =
       run.tree !== tree
         ? 'le code a changé depuis ce passage des tests'
-        : `les tests ont échoué (${run.status})`;
+        : run.status === 'passed'
+          ? 'changements non commités : commite-les, PACT ne fait la preuve que sur un commit'
+          : `les tests ont échoué (${run.status})`;
     this.deps.notify(ws.id, {
       agentId: run.agentId,
       kind: 'loop',
@@ -391,7 +464,8 @@ export class LoopService {
         ...l,
         state: 'running',
         round: 1,
-        rounds: [{ n: 1, startedAt: this.now(), reports: [], proof: null, testerTouched: [] }],
+        polish: null,
+        rounds: [this.newRound(1)],
       }));
       await this.setIssue(workspaceId, issueId, 'in-progress');
       return;
@@ -404,7 +478,11 @@ export class LoopService {
   async closeAll(workspaceId: string): Promise<void> {
     await this.update(workspaceId, (ws) => ({
       ...ws,
-      loops: ws.loops.map((l) => (l.state === 'running' ? { ...l, state: 'closed' } : l)),
+      loops: ws.loops.map((l) =>
+        l.state === 'running' || l.state === 'polishing' || l.state === 'accepted'
+          ? { ...l, state: 'closed' }
+          : l,
+      ),
     }));
   }
 }

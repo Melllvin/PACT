@@ -1,9 +1,9 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { appendFile, copyFile, mkdir, readFile, rm, stat, utimes } from 'node:fs/promises';
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, posix, resolve } from 'node:path';
 import type { Writable } from 'node:stream';
 import { promisify } from 'node:util';
 import { parseUnifiedDiff } from '../../shared/diff';
@@ -178,7 +178,15 @@ export class GitService {
     return started;
   }
 
-  private async fetchNow(cwd: string, branch: string): Promise<boolean> {
+  private fetchNow(cwd: string, branch: string): Promise<boolean> {
+    return this.fetchRefs(cwd, [branch]);
+  }
+
+  /**
+   * 008 R13 — one explicit refspec per branch, nothing else: never `refs/pull/*`, never `--all`, no
+   * tag. `false`, without throwing, when it fails.
+   */
+  async fetchRefs(cwd: string, branches: readonly string[]): Promise<boolean> {
     try {
       await this.run(
         cwd,
@@ -190,7 +198,7 @@ export class GitService {
           '--no-recurse-submodules',
           '--quiet',
           'origin',
-          `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
+          ...branches.map((b) => `+refs/heads/${b}:refs/remotes/origin/${b}`),
         ],
         { GIT_TERMINAL_PROMPT: '0' },
         REMOTE_TIMEOUT_MS,
@@ -199,6 +207,156 @@ export class GitService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * 008 R5 — `commit` replayed on `onto` in a temporary detached worktree (`dir`), hooks off: the
+   * worktree of the dev is never touched. `commit` is the result R, or null with the conflicting
+   * files; nothing is left behind either way. `onto` already holding `commit`: R is `commit`.
+   */
+  async rebaseOnto(
+    repo: string,
+    { commit, onto, dir }: { commit: string; onto: string; dir: string },
+  ): Promise<{ commit: string | null; conflicts: string[] }> {
+    if (await this.isAncestor(repo, commit, onto)) return { commit, conflicts: [] };
+    const base = await this.mergeBase(repo, commit, onto);
+    const noHooks = await mkdtemp(join(tmpdir(), 'pact-no-hooks-'));
+    const config = ['-c', `core.hooksPath=${noHooks}`, '-c', 'commit.gpgsign=false'];
+    await mkdir(dirname(dir), { recursive: true });
+    try {
+      await this.git(repo, [...config, 'worktree', 'add', '--detach', dir, commit]);
+      try {
+        await this.git(dir, [...config, 'rebase', '--onto', onto, base]);
+        return { commit: await this.git(dir, ['rev-parse', 'HEAD']), conflicts: [] };
+      } catch (error) {
+        const conflicts = (await this.git(dir, ['diff', '--name-only', '--diff-filter=U']))
+          .split('\n')
+          .filter((path) => path !== '');
+        if (conflicts.length === 0) throw error;
+        await this.git(dir, [...config, 'rebase', '--abort']).catch(() => undefined);
+        return { commit: null, conflicts };
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      await rm(noHooks, { recursive: true, force: true });
+      await this.git(repo, ['worktree', 'prune']);
+    }
+  }
+
+  /** 008 R10 — whether `ref` holds a workflow of GitHub Actions (`.github/workflows/*.yml`). */
+  async hasWorkflows(cwd: string, ref: string): Promise<boolean> {
+    try {
+      const out = await this.gitRaw(cwd, [
+        'ls-tree',
+        '--name-only',
+        ref,
+        '--',
+        '.github/workflows/',
+      ]);
+      return out.split('\n').some((path) => /\.ya?ml$/i.test(path));
+    } catch {
+      return false;
+    }
+  }
+
+  private async isAncestor(cwd: string, ancestor: string, of: string): Promise<boolean> {
+    try {
+      await this.git(cwd, ['merge-base', '--is-ancestor', ancestor, of]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 008 R7 — `commit` pushed as `branch`, only if the remote still holds `expected` (`null`: the
+   * branch is not there). `false` when the lease or the network refuses; the remote is then as it was.
+   */
+  async pushBranch(
+    repo: string,
+    { commit, branch, expected }: { commit: string; branch: string; expected: string | null },
+  ): Promise<boolean> {
+    try {
+      await this.run(
+        repo,
+        [
+          'push',
+          '--quiet',
+          'origin',
+          `${commit}:refs/heads/${branch}`,
+          `--force-with-lease=refs/heads/${branch}:${expected ?? ''}`,
+        ],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 008 R18 — the remote branch deleted only if it is still at `expected` (the merged head). */
+  async deleteRemoteBranch(repo: string, branch: string, expected: string): Promise<boolean> {
+    try {
+      await this.run(
+        repo,
+        [
+          'push',
+          '--quiet',
+          'origin',
+          `--force-with-lease=refs/heads/${branch}:${expected}`,
+          `:refs/heads/${branch}`,
+        ],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 008 R17 — what a worktree holds besides its commit: the changed files (staged, unstaged,
+   * deleted), the untracked ones, the ignored `.env*` and the other ignored paths (`node_modules/`,
+   * collapsed). The ignored ones never make a worktree « dirty », but `.env*` must not be lost.
+   */
+  async statusIgnored(cwd: string): Promise<{
+    modified: string[];
+    untracked: string[];
+    ignoredEnv: string[];
+    ignoredOther: string[];
+  }> {
+    const out = await this.gitRaw(cwd, [
+      'status',
+      '--porcelain=v1',
+      '-z',
+      '--ignored=matching',
+      '--untracked-files=all',
+    ]);
+    const result = {
+      modified: [] as string[],
+      untracked: [] as string[],
+      ignoredEnv: [] as string[],
+      ignoredOther: [] as string[],
+    };
+    const entries = out.split('\0');
+    for (let entry = entries.shift(); entry !== undefined; entry = entries.shift()) {
+      if (entry.length < 4) continue;
+      const code = entry.slice(0, 2);
+      const path = entry.slice(3);
+      // A rename or a copy is followed by its origin.
+      if (/[RC]/.test(code)) entries.shift();
+      if (code === '??') result.untracked.push(path);
+      else if (code === '!!') {
+        const name = posix.basename(path);
+        (name.startsWith('.env') && !path.endsWith('/')
+          ? result.ignoredEnv
+          : result.ignoredOther
+        ).push(path);
+      } else result.modified.push(path);
+    }
+    return result;
   }
 
   async initRepo(path: string): Promise<void> {

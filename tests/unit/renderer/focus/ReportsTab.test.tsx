@@ -6,7 +6,7 @@ import { agent } from '../tiles/fixtures';
 // 004 T027 — « ◎ Rapports »: the latest report of each agent, its issue, status and round.
 
 const names = (id: string) => ({ 'claude-code': 'Claude Code' })[id] ?? id;
-const loop = (issueId: string, state: 'running' | 'passed', round: number) => ({
+const loop = (issueId: string, state: 'running' | 'merged', round: number) => ({
   issueId,
   devAgentId: agent(2).id,
   testAgentId: agent(3).id,
@@ -14,6 +14,7 @@ const loop = (issueId: string, state: 'running' | 'passed', round: number) => ({
   rounds: [],
   state,
   escalatedModel: null,
+  polish: null,
 });
 const at = '2026-11-03T10:00:00.000Z';
 
@@ -30,7 +31,7 @@ describe('ReportsTab', () => {
       <ReportsTab
         reports={reports}
         agents={[agent(1), agent(2), agent(3), agent(4)]}
-        loops={[loop('0011-panier', 'passed', 3), loop('0012-connexion', 'passed', 1)]}
+        loops={[loop('0011-panier', 'merged', 3), loop('0012-connexion', 'merged', 1)]}
         name={names}
       />,
     );

@@ -65,6 +65,8 @@ const base = (): Workspace => ({
   permissionOverride: null,
   testCommand: 'npm test',
   integrationRequests: [],
+  delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+  deliveries: [],
   roleProfiles: {},
   issues: [issue()],
   loops: [],
@@ -81,6 +83,9 @@ const git = (mergeBase: (cwd: string, a: string, b: string) => Promise<string>) 
   snapshot: vi.fn(() => Promise.resolve({ commit: 'c', tree: TREE })),
   changedFiles: vi.fn(() => Promise.resolve(touched.map((path) => ({ path })))),
   mergeBase: vi.fn(mergeBase),
+  // 008 R3 — the head of the dev and its tree.
+  revParse: vi.fn(() => Promise.resolve('c'.repeat(40))),
+  treeOf: vi.fn(() => Promise.resolve(TREE)),
 });
 const make = (over: Record<string, unknown> = {}, ag: Agent = tester) => {
   current = base();

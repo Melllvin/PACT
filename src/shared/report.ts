@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { isoDate, repoPathSchema, roleSchema } from './primitives';
+import { gitIdSchema, isoDate, repoPathSchema, roleSchema } from './primitives';
 
 // 004 contracts/handoff-report.md — what an agent with a role tells at the end of its work.
 
@@ -39,8 +39,12 @@ export type HandoffReport = z.infer<typeof handoffReportSchema>;
 export const storedReportSchema = handoffReportFields.extend({
   agentId: z.uuid(),
   role: roleSchema,
-  round: z.int().min(1).max(3),
+  round: z.int().min(1).max(10),
   at: isoDate,
+  /** 008 R3 — the head of the dev when the verdict came; `null` in files saved before. */
+  commit: gitIdSchema.nullable().default(null),
+  /** 008 R3 — the worktree of the dev differed from that commit. */
+  dirty: z.boolean().default(false),
 });
 export type StoredReport = z.infer<typeof storedReportSchema>;
 

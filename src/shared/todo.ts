@@ -30,7 +30,11 @@ function reviewedLater(agent: Agent, loops: readonly Loop[]): boolean {
   return loops.some(
     (loop) =>
       loop.testAgentId === agent.id ||
-      (loop.devAgentId === agent.id && (loop.state === 'running' || loop.state === 'escalated')),
+      (loop.devAgentId === agent.id &&
+        (loop.state === 'running' ||
+          loop.state === 'escalated' ||
+          loop.state === 'polishing' ||
+          loop.state === 'delivering')),
   );
 }
 
