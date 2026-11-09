@@ -240,6 +240,38 @@ describe('one request at a time', () => {
   });
 });
 
+describe('two requests at once', () => {
+  it('Given two requests of the same dev at the same time, When both pass the barriers, Then only one runs and the other is refused naming the first', async () => {
+    const { dev } = await h.team('a');
+
+    const [one, two] = await Promise.all([h.request(dev.id), h.request(dev.id)]);
+
+    const refused = [one, two].filter((d) => d.state === 'refused');
+    expect(refused).toHaveLength(1);
+    expect(refused[0]?.reason).toMatch(/^Une livraison est déjà en cours/);
+    const kept = one.state === 'refused' ? two : one;
+    await h.until(kept.id, ['watching']);
+    expect(h.ghLog().filter((args) => args[0] === 'pr' && args[1] === 'create')).toHaveLength(1);
+  });
+});
+
+describe('a request after a pull request that failed to open', () => {
+  it('Given a branch pushed by PACT whose PR failed to open, When the dev delivers a new commit, Then PACT pushes over its own push and opens the PR', async () => {
+    const { dev, tester } = await h.team('a');
+    h.setGhState({ failures: { prCreate: ['HTTP 502 forge down'] } });
+    const first = await h.request(dev.id);
+    await h.until(first.id, ['refused']);
+    expect(h.remoteHead(dev.branch)).toBeTruthy();
+    await h.commit(dev, { 'src/more.ts': 'export const m = 1;\n' }, 'fix after');
+    await h.workspaces.update(h.workspace().id, (ws) => ({ ...ws, loops: [] }));
+    await h.acceptLoop(dev, tester);
+
+    const second = await h.request(dev.id);
+
+    await h.until(second.id, ['watching']);
+  });
+});
+
 describe('a queue per project', () => {
   it('Given two requests of the same project, When they run, Then the second waits for the first to leave its local steps', async () => {
     const one = await h.team('a');

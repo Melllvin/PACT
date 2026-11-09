@@ -215,6 +215,21 @@ export class DeliveryService {
     return this.current(workspaceId, delivery.id);
   }
 
+  /**
+   * The head PACT last pushed to this branch and did not delete since: the lease of a new request
+   * after one that pushed and then stopped (a PR that failed to open, for instance).
+   */
+  private lastPush(workspaceId: string, d: Delivery): string | null {
+    return (
+      this.workspace(workspaceId)
+        .deliveries.filter(
+          (x) =>
+            x.id !== d.id && x.branch === d.branch && x.pushedHead !== null && x.cleanup !== 'done',
+        )
+        .at(-1)?.pushedHead ?? null
+    );
+  }
+
   private changed(workspaceId: string) {
     const ws = this.workspace(workspaceId);
     this.deps.onChange?.(workspaceId, { deliveries: ws.deliveries, delivery: ws.delivery });
@@ -242,10 +257,16 @@ export class DeliveryService {
     delivery: Delivery,
   ): Promise<Stop | null> {
     const head = delivery.frozenCommit;
+    // Read again, now that this request is written: of two requests at once, the first one written
+    // runs and the later one is refused (T012, one request that is not final per dev).
+    const written = this.workspace(ws.id).deliveries;
     const inFlight =
-      ws.deliveries.find(
-        (d) => d.agentId === agent.id && d.id !== delivery.id && !isFinalState(d.state),
-      )?.state ?? null;
+      written
+        .slice(
+          0,
+          written.findIndex((d) => d.id === delivery.id),
+        )
+        .find((d) => d.agentId === agent.id && !isFinalState(d.state))?.state ?? null;
     // Another request first: the other barriers are about a loop it already holds.
     if (inFlight !== null) {
       return new Stop('refused', `Une livraison est déjà en cours (${inFlight}).`, 'refused');
@@ -411,7 +432,7 @@ export class DeliveryService {
       !(await git.pushBranch(ws.path, {
         commit: rebased,
         branch: d.branch,
-        expected: d.pushedHead,
+        expected: d.pushedHead ?? this.lastPush(workspaceId, d),
       }))
     ) {
       throw new Stop(
