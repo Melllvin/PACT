@@ -76,6 +76,11 @@ export class UsageLimitService {
       for (const [key, deferred] of [...this.deferred]) {
         const agent = deferred.agents.get(agentId);
         if (!agent) continue;
+        // The window may have reset while the stop waited: the whole deferred stop is dropped.
+        if (!this.stillStops(key)) {
+          this.endDeferred(key);
+          continue;
+        }
         deferred.agents.delete(agentId);
         if (deferred.agents.size === 0) this.endDeferred(key);
         await this.stop(agent, deferred.info);
@@ -346,12 +351,17 @@ export class UsageLimitService {
     if (!deferred) return;
     this.deferred.delete(key);
     // The window may have reset while the stop waited: nothing left to stop for.
-    const reading = this.readings.get(key);
-    const now = this.options.clock.now();
-    if (reading && !limitBands(reading, this.stops, now).some((b) => b.band === 'stop')) return;
+    if (!this.stillStops(key)) return;
     await Promise.all(
       [...deferred.agents.values()].map((agent) => this.stop(agent, deferred.info)),
     );
+  }
+
+  /** The last reading of the account still asks for a stop (or there is none to say otherwise). */
+  private stillStops(key: string): boolean {
+    const reading = this.readings.get(key);
+    if (!reading) return true;
+    return limitBands(reading, this.stops, this.options.clock.now()).some((b) => b.band === 'stop');
   }
 
   private endDeferred(key: string) {

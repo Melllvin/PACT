@@ -472,6 +472,16 @@ describe('a reading that jumps over the band (FR-005, Q8; US1 sc.7, O5)', () => 
     expect(pauses).toEqual([]);
   });
 
+  it('Given a deferred stop, When the window resets and then an agent ends its turn, Then it is not paused', async () => {
+    await service.onUsage(state([window5h(85)]));
+    await service.onUsage(state([window5h(92)]));
+    await clock.advance(10_000);
+    await service.onUsage(state([window5h(92, { resetsAt: '2030-01-01T08:59:00.000Z' })]));
+    await service.turnFinished(A.id);
+    await clock.advance(60_000);
+    expect(pauses).toEqual([]);
+  });
+
   it('Given a first reading above the threshold, When it comes, Then it is a jump too: the save goes, the stop waits', async () => {
     await service.onUsage(state([window5h(93)]));
     expect(savesTo(A.id)).toHaveLength(1);
