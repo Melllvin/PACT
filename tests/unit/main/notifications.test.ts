@@ -30,7 +30,14 @@ const setup = (foreground = false) => {
   return { service, notify, activate, state };
 };
 
-const NOTIFIED: TodoKind[] = ['answer', 'decide', 'delivery-local', 'rate-limit', 'usage-limit'];
+const NOTIFIED: TodoKind[] = [
+  'answer',
+  'decide',
+  'delivery-local',
+  'delivery-review',
+  'rate-limit',
+  'usage-limit',
+];
 
 describe('NotificationService', () => {
   it.each([
@@ -93,6 +100,22 @@ describe('NotificationService', () => {
         delivery: { id: 'r1', head: 'SECRET du message de l’agent' },
       }),
     ]);
+    expect(JSON.stringify(notify.mock.calls)).not.toContain('SECRET');
+  });
+
+  // 008 T037 — « ◎ Relire la PR #n » calls the user away, like the local merge (data-model TodoKind).
+  it('never carries the text of an agent in the notification of a PR to review: only the title of the item', () => {
+    const { service, notify } = setup();
+    service.update('w1', [
+      item('delivery-review', 'a1', {
+        title: '◎ Relire la PR #7 · 0012-connexion · abcdef0',
+        delivery: { id: 'r1', head: 'SECRET du message de l’agent' },
+      }),
+    ]);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'w1', agentId: 'a1' }),
+    );
     expect(JSON.stringify(notify.mock.calls)).not.toContain('SECRET');
   });
 
