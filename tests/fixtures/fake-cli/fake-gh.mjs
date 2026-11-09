@@ -20,6 +20,7 @@
 //                     author:{login}, isCrossRepository, mergeStateStatus, frozenHead, title, body } }
 //                   The head of an open PR follows its branch in gitRemote unless frozenHead is true; when it
 //                   moves, a mergeStateStatus BEHIND or DIRTY becomes CLEAN (the branch was brought up to date).
+//   alreadyExists   n → every `pr create` fails with « a pull request for branch … already exists: <url>/pull/n »
 //   nextPr          number of the next PR (default: 1 + the highest)
 //   checks          { "<sha>": [{ id, name, status, conclusion }] }
 //   statuses        { "<sha>": [{ context, state }] }
@@ -248,6 +249,13 @@ if (
   const body = readFileSync(0, 'utf8');
   const failure = shift('prCreate');
   if (failure !== null) fail(1, failure);
+  // 008 US6: a PR the forge made earlier and that `pr create` reports as existing, whatever its author,
+  // fork or base (what a crash between `pr create` and the note of its number leaves behind).
+  if (state.alreadyExists)
+    fail(
+      1,
+      `a pull request for branch "${head}" into branch "${base}" already exists:\n${remote}/pull/${String(state.alreadyExists)}`,
+    );
   const open = Object.values(state.prs).find(
     (pr) =>
       pr.state === 'OPEN' &&

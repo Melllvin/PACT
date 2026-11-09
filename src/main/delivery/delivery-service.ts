@@ -107,6 +107,14 @@ export type DeliveryDecision = {
 /** The request fell while its steps ran (its agent was closed): they stop, nothing more is done. */
 class Abandoned extends Error {}
 
+type PushPlan = {
+  ws: Workspace;
+  gh: Forge;
+  agent: Agent;
+  rebased: string;
+  login: string;
+};
+
 /** The run of a request ends here, with the state it ends in and what to tell. */
 class Stop extends Error {
   constructor(
@@ -362,7 +370,9 @@ export class DeliveryService {
     const ours =
       remote === rebased ||
       this.workspace(ws.id).deliveries.some(
-        (x) => x.branch === d.branch && x.pushedHead === remote,
+        (x) =>
+          x.branch === d.branch &&
+          (x.pushedHead === remote || x.pactCommits.includes(remote ?? '')),
       );
     return remote !== null && ours ? remote : null;
   }
@@ -499,13 +509,33 @@ export class DeliveryService {
   }
 
   private async steps(workspaceId: string, id: string, login: string): Promise<void> {
-    const { git } = this.deps;
-    let d = await this.save(workspaceId, id, { state: 'syncing' });
     const ws = this.workspace(workspaceId);
     const gh = this.forge(ws);
+    // US6 sc.1, SC-005 — a request that stopped in `pushing` or `opening` goes on from the commit it
+    // recorded (`pactCommits`, written before the tests): a new rebase would give another commit,
+    // and the branch PACT may have pushed already would no longer be recognised as its own.
+    const recorded = this.current(workspaceId, id);
+    const again =
+      (recorded.state === 'pushing' || recorded.state === 'opening') && recorded.pr === null;
+    const d = again ? recorded : await this.save(workspaceId, id, { state: 'syncing' });
     const agent = ws.agents.find((a) => a.id === d.agentId) as Agent;
     await this.ensureHead(agent, d);
+    const rebased = again ? (d.pactCommits.at(-1) as string) : await this.rebased(ws, d);
+    await this.pushAndOpen(workspaceId, this.current(workspaceId, id), {
+      ws,
+      gh,
+      agent,
+      rebased,
+      login,
+    });
+  }
 
+  /** R5 — the request brought up to date on the target, and its tests run on the result. */
+  private async rebased(ws: Workspace, start: Delivery): Promise<string> {
+    const { git } = this.deps;
+    const workspaceId = ws.id;
+    const id = start.id;
+    let d = start;
     if (!(await git.fetchRefs(ws.path, [d.target]))) {
       throw new Stop('refused', 'Le dépôt distant est injoignable (fetch).', 'refused');
     }
@@ -545,6 +575,18 @@ export class DeliveryService {
 
     const red = await this.testsOn(ws, d, rebased);
     if (red) throw red;
+    return rebased;
+  }
+
+  /** The push of the recorded commit, then the PR: opened, resumed from an earlier request, or adopted. */
+  private async pushAndOpen(
+    workspaceId: string,
+    start: Delivery,
+    { ws, gh, agent, rebased, login }: PushPlan,
+  ): Promise<void> {
+    const { git } = this.deps;
+    const id = start.id;
+    let d = start;
     await this.ensureHead(agent, d);
 
     // R22 — the PR of a request that fell is read by its number before anything is pushed.
@@ -569,6 +611,7 @@ export class DeliveryService {
     const issue = ws.issues.find((i) => i.id === d.issueId);
     const tester = d.testAgentId;
     let pr: { number: number; url: string };
+    let adopted = false;
     if (resumed) {
       // R22 — after the push, the head of the PR must be the commit PACT pushed.
       const view = await gh.prView(resumed.number);
@@ -602,11 +645,13 @@ export class DeliveryService {
           }),
         });
       } catch (error) {
-        throw new Stop(
-          'refused',
-          error instanceof GhFailure ? error.reason : 'gh a échoué.',
-          'refused',
-        );
+        const reason = error instanceof GhFailure ? error.reason : 'gh a échoué.';
+        // A crash between `gh pr create` and the note of its number: gh says which PR exists. The
+        // number is read from that answer (never searched, FR-030) and the PR is checked (FR-031).
+        const existing = /already exists:\s*\S*\/pull\/(\d+)\s*$/.exec(reason)?.[1];
+        if (existing === undefined) throw new Stop('refused', reason, 'refused');
+        pr = await this.adopt(workspaceId, gh, d, { number: Number(existing), rebased, login });
+        adopted = true;
       }
     }
     d = await this.save(workspaceId, id, {
@@ -616,7 +661,7 @@ export class DeliveryService {
       workspaceId,
       d,
       'pr-opened',
-      `PR #${String(pr.number)} ${resumed ? 'reprise' : 'ouverte'} · ${this.label(d)} · ${short(rebased)}`,
+      `PR #${String(pr.number)} ${resumed || adopted ? 'reprise' : 'ouverte'} · ${this.label(d)} · ${short(rebased)}`,
       {
         pr: { number: pr.number, url: pr.url },
         commit: rebased,
@@ -625,6 +670,38 @@ export class DeliveryService {
     await this.catchUp(workspaceId, agent, d, rebased);
     await this.save(workspaceId, id, { state: 'watching' });
     this.watcher.track(workspaceId, id);
+  }
+
+  /**
+   * FR-031 — the PR that gh reports as existing for the branch is followed only if it is PACT's: our
+   * account as author, not from a fork, the commit PACT pushed as head, the target as base. Anything
+   * else ends the request in French; no text of the PR (title, body) is read nor carried.
+   */
+  private async adopt(
+    workspaceId: string,
+    gh: Forge,
+    d: Delivery,
+    { number, rebased, login }: { number: number; rebased: string; login: string },
+  ): Promise<{ number: number; url: string }> {
+    const refuse = (why: string) =>
+      new Stop(
+        'refused',
+        `La PR #${String(number)} existe déjà pour ${d.branch} mais ${why} : PACT ne la suit pas et n’en crée pas d’autre. Vérifie-la sur GitHub, ferme-la si elle n’est pas la tienne, puis relance la livraison.`,
+        'foreign',
+      );
+    let view;
+    try {
+      view = await gh.prView(number);
+    } catch {
+      throw refuse('elle n’a pas pu être lue');
+    }
+    if (view.state !== 'OPEN') throw refuse('elle n’est plus ouverte');
+    if (view.author.login !== login) throw refuse('son auteur n’est pas ton compte');
+    if (view.isCrossRepository) throw refuse('elle vient d’un autre dépôt');
+    if (view.headRefOid !== rebased) throw refuse('sa tête n’est pas le commit poussé par PACT');
+    if (view.baseRefName !== d.target) throw refuse(`sa base n’est pas ${d.target}`);
+    const repo = await this.repoOf(workspaceId);
+    return { number, url: `https://github.com/${repo}/pull/${String(number)}` };
   }
 
   /**
