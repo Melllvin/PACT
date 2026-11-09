@@ -704,4 +704,44 @@ describe('delivery chain (008)', () => {
       });
     });
   });
+  describe('reopen and closeAll edges (008)', () => {
+    it('Given no loop for the issue, When reopen is asked, Then it fails', async () => {
+      await expect(loops.reopen('w1', 'absente', 'CI rouge')).rejects.toThrow(
+        'Aucune boucle pour absente.',
+      );
+    });
+
+    it('Given a merged loop, When reopen is asked, Then it fails: the loop is over', async () => {
+      await start();
+      setLoop({ state: 'merged' });
+      await expect(loops.reopen('w1', '0012-connexion', 'CI rouge')).rejects.toThrow(
+        'est terminée',
+      );
+    });
+
+    it('Given accepted and polishing loops, When the orchestrator role is withdrawn, Then they close', async () => {
+      await start();
+      setLoop({ state: 'accepted' });
+      await loops.closeAll('w1');
+      expect(loop()?.state).toBe('closed');
+      setLoop({ state: 'polishing' });
+      await loops.closeAll('w1');
+      expect(loop()?.state).toBe('closed');
+    });
+
+    it('Given no test command, When the tester accepts, Then PACT tells it cannot lay the proof', async () => {
+      d.review.testPlan.mockImplementationOnce((agentId: string) =>
+        Promise.resolve({
+          target: { agentId, cwd: dev.worktreePath, port: dev.port },
+          command: null as unknown as string,
+          tree: TREE,
+        }),
+      );
+      await start();
+      await loops.report(tester.id, accepted);
+      expect(loop()?.rounds[0]?.proof).toBeNull();
+      const last = notify.mock.calls.at(-1)?.[1] as { summary: string };
+      expect(last.summary).toContain('aucune commande de tests');
+    });
+  });
 });

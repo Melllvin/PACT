@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, posix, resolve } from 'node:path';
 import type { Writable } from 'node:stream';
 import { promisify } from 'node:util';
 import { parseUnifiedDiff } from '../../shared/diff';
@@ -229,9 +229,7 @@ export class GitService {
         await this.git(dir, [...config, 'rebase', '--onto', onto, base]);
         return { commit: await this.git(dir, ['rev-parse', 'HEAD']), conflicts: [] };
       } catch (error) {
-        const conflicts = (
-          await this.git(dir, ['diff', '--name-only', '--diff-filter=U']).catch(() => '')
-        )
+        const conflicts = (await this.git(dir, ['diff', '--name-only', '--diff-filter=U']))
           .split('\n')
           .filter((path) => path !== '');
         if (conflicts.length === 0) throw error;
@@ -343,16 +341,15 @@ export class GitService {
       ignoredOther: [] as string[],
     };
     const entries = out.split('\0');
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i] ?? '';
+    for (let entry = entries.shift(); entry !== undefined; entry = entries.shift()) {
       if (entry.length < 4) continue;
       const code = entry.slice(0, 2);
       const path = entry.slice(3);
       // A rename or a copy is followed by its origin.
-      if (/[RC]/.test(code)) i++;
+      if (/[RC]/.test(code)) entries.shift();
       if (code === '??') result.untracked.push(path);
       else if (code === '!!') {
-        const name = path.replace(/\/$/, '').split('/').at(-1) ?? '';
+        const name = posix.basename(path);
         (name.startsWith('.env') && !path.endsWith('/')
           ? result.ignoredEnv
           : result.ignoredOther

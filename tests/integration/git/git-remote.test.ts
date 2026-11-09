@@ -375,10 +375,57 @@ describe('statusIgnored (FR-034, Q25, research R17)', () => {
     expect(status.modified.concat(status.untracked)).not.toContain('.env.example');
   });
 
+  it('Given a renamed file, When read, Then the new path is modified and the old one is not listed apart', async () => {
+    git(tree, 'mv', 'a.txt', 'b.txt');
+    const status = await service.statusIgnored(tree);
+    expect(status.modified).toEqual(['b.txt']);
+    expect(status.untracked).toEqual([]);
+  });
+
   it('Given only node_modules ignored, When read, Then the worktree counts as clean for the other fields', async () => {
     await write(join(tree, 'node_modules', 'left-pad', 'index.js'), 'x\n');
     const status = await service.statusIgnored(tree);
     expect([status.modified, status.untracked, status.ignoredEnv]).toEqual([[], [], []]);
     expect(status.ignoredOther.length).toBeGreaterThan(0);
+  });
+});
+
+describe('hasWorkflows (research R10)', () => {
+  it('Given a ref with a workflow file, When asked, Then true', async () => {
+    await write(join(dev, '.github', 'workflows', 'ci.yml'), 'name: ci\n');
+    commitAll(dev, 'ci: workflow');
+    expect(await service.hasWorkflows(dev, 'HEAD')).toBe(true);
+  });
+
+  it('Given a ref with no workflow, When asked, Then false', async () => {
+    expect(await service.hasWorkflows(dev, 'HEAD')).toBe(false);
+  });
+
+  it('Given a ref that does not exist, When asked, Then false and no throw', async () => {
+    expect(await service.hasWorkflows(dev, 'refs/heads/nope')).toBe(false);
+  });
+});
+
+describe('rebaseOnto: a failure that is not a conflict (research R5)', () => {
+  it('Given a replay that fails with no conflicting file, When asked, Then it throws and leaves nothing behind', async () => {
+    await colleaguePushes('main', 'main.txt', 'from main\n');
+    await service.fetchRefs(repo, ['main']);
+    // No identity anywhere: the replay cannot commit, and no file is in conflict.
+    const lonely = new GitService({
+      env: {
+        PATH: process.env.PATH,
+        HOME: root,
+        GIT_CONFIG_GLOBAL: '/dev/null',
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'user.useConfigOnly',
+        GIT_CONFIG_VALUE_0: 'true',
+      },
+    });
+    const dir = join(root, 'delivery-bad');
+    await expect(
+      lonely.rebaseOnto(repo, { commit: git(dev, 'rev-parse', 'HEAD'), onto: 'origin/main', dir }),
+    ).rejects.toThrow();
+    expect(existsSync(dir)).toBe(false);
   });
 });
