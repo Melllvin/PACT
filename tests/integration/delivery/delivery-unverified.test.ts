@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TodoItem } from '../../../src/shared/model';
 import { deriveTodos } from '../../../src/shared/todo';
@@ -286,7 +287,12 @@ describe('sc.11 — after the merge, no worktree is removed', () => {
     expect(
       tryGit(h.repo, 'rev-parse', '--verify', '--quiet', `refs/heads/${base.branch}`),
     ).not.toBeNull();
-    expect(git(h.repo, 'worktree', 'list', '--porcelain')).toContain(base.dev.worktreePath);
+    // git writes `C:/…` on Windows: compare the worktrees it lists as paths, not as text.
+    const listed = git(h.repo, 'worktree', 'list', '--porcelain')
+      .split('\n')
+      .filter((line) => line.startsWith('worktree '))
+      .map((line) => resolve(line.slice('worktree '.length).trim()));
+    expect(listed).toContain(resolve(base.dev.worktreePath));
     expect(messagesOf('merged')).toHaveLength(1);
   });
 });
