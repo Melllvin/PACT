@@ -18,7 +18,8 @@
 //   login           the account of `gh` (default 'pact-user'); loggedIn: false → `auth status` fails
 //   prs             { "<n>": { number, state OPEN|CLOSED|MERGED, headRefName, headRefOid, baseRefName,
 //                     author:{login}, isCrossRepository, mergeStateStatus, frozenHead, title, body } }
-//                   The head of an open PR follows its branch in gitRemote unless frozenHead is true.
+//                   The head of an open PR follows its branch in gitRemote unless frozenHead is true; when it
+//                   moves, a mergeStateStatus BEHIND or DIRTY becomes CLEAN (the branch was brought up to date).
 //   nextPr          number of the next PR (default: 1 + the highest)
 //   checks          { "<sha>": [{ id, name, status, conclusion }] }
 //   statuses        { "<sha>": [{ context, state }] }
@@ -164,6 +165,10 @@ const refreshHead = (pr) => {
   const head = headOf(pr.headRefName);
   if (head && head !== pr.headRefOid) {
     pr.headRefOid = head;
+    // As the forge does: a push that brings the branch up to date settles BEHIND and DIRTY (008 US4 sc.5).
+    if (pr.mergeStateStatus === 'BEHIND' || pr.mergeStateStatus === 'DIRTY') {
+      pr.mergeStateStatus = 'CLEAN';
+    }
     dirty = true;
   }
 };
