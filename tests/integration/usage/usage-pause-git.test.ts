@@ -77,7 +77,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }, 30_000);
 
-const pausedWith = async (git2: object) => {
+const pausedWith = async (git2: object, autoResume = false) => {
   manager = new AgentManager({
     workspaces,
     registry,
@@ -89,6 +89,7 @@ const pausedWith = async (git2: object) => {
       Promise.resolve({ ...gitEnv, FAKE_CLI_SCENARIO: scenarioPath('prompt-then-done') }),
     isPortInUse: () => Promise.resolve(false),
     usage: { statusLine: () => 'PACT', follow: () => undefined, release: () => undefined },
+    autoResume: () => Promise.resolve(autoResume),
   });
   const [started] = await manager.launch({
     workspaceId: workspace.id,
@@ -130,5 +131,20 @@ describe('AgentManager.pause with a worktree it cannot read', () => {
     const real = new GitService({ env: gitEnv });
     const blind = Object.create(real, { hasUncommittedChanges: { value: undefined } }) as object;
     expect((await pausedWith(blind))?.pause?.saved).toBe(false);
+  }, 30_000);
+});
+
+describe('AgentManager.pause, the edges of R6', () => {
+  it('Given an agent already paused, When it is paused again, Then nothing changes', async () => {
+    const first = await pausedWith(new GitService({ env: gitEnv }));
+    expect(first?.state).toBe('paused');
+    await manager?.pause(first?.id ?? '', { ...info, pausedAt: '2030-01-01T10:00:00.000Z' });
+    const again = workspaces.get(workspace.id)?.agents.find((a) => a.id === first?.id);
+    expect(again?.pause).toEqual(first?.pause);
+  }, 30_000);
+
+  it('Given the automatic resume on and no known reset, When the agent is paused, Then a resume is still scheduled', async () => {
+    const paused = await pausedWith(new GitService({ env: gitEnv }), true);
+    expect(paused?.scheduledResume).not.toBeNull();
   }, 30_000);
 });

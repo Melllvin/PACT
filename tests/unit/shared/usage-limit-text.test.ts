@@ -44,6 +44,12 @@ describe('pausedText', () => {
     );
   });
 
+  it('still writes a sentence when no window is named', () => {
+    expect(pausedText([], null, false)).toBe(
+      "PACT t'a mis en pause : limite . Reprise à la main par l'utilisateur.",
+    );
+  });
+
   it('says the user resumes by hand when the automatic resume is off', () => {
     expect(pausedText([{ label: '5 h', percent: 90 }], RESET, false)).toBe(
       "PACT t'a mis en pause : limite 5 h à 90 %. Reprise à la main par l'utilisateur.",
