@@ -578,6 +578,22 @@ describe('Claude Code terminal and dialogs', () => {
     expect(adapter.denyEndsTurn).toBe(true);
   });
 
+  // #110 — captured on Claude Code 2.1.319: neither runs a Stop hook.
+  it('reads an interrupt or a plan rejected in the terminal as the end of the turn, once quiet', () => {
+    const interrupted =
+      '  Git propose me\n  ⎿  Interrupted · What should Claude do instead?\n───\n❯ \n───\n  ⏸ manual mode on';
+    const rejected = "⏺ Updated plan\n  ⎿  User rejected Claude's plan:\n     ╭───╮\n❯ \n";
+    expect(adapter.mapOutput(interrupted, { idleMs: 3000 })).toEqual({ type: 'turn-finished' });
+    expect(adapter.mapOutput(rejected, { idleMs: 3000 })).toEqual({ type: 'turn-finished' });
+    // A redraw prints the history again while a turn goes on: never read before the output is quiet.
+    expect(adapter.mapOutput(interrupted, {})).toBeNull();
+    // Nor when the turn went on after the line, as an older line printed again by a redraw.
+    const later = `${interrupted}\n❯ Fix the test\n⏺ Reading the file`;
+    expect(adapter.mapOutput(later, { idleMs: 3000 })).toBeNull();
+    const dialog = `${interrupted}\n Bash command\n Do you want to proceed?\n❯ 1. Yes\n  2. No`;
+    expect(adapter.mapOutput(dialog, { idleMs: 3000 })).toBeNull();
+  });
+
   it('reads the reset hour of a rate-limit message as the next such time', () => {
     const now = new Date(2026, 8, 24, 14, 0);
     const at = (text: string) =>

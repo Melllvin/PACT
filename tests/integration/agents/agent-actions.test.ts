@@ -235,6 +235,34 @@ describe('AgentManager.answer', { timeout: 30_000 }, () => {
     expect(events.slice(from).find((e) => e.agentId === agent.id)?.state).toBe('starting');
   });
 
+  // #110 — a turn dropped in the terminal ends the request it was on.
+  it('ends a request when the quiet output reads as a dropped turn', async () => {
+    scenario = 'ask-permission';
+    const agent = await launchOne();
+    const map = adapter.mapOutput.bind(adapter);
+    vi.spyOn(adapter, 'mapOutput').mockImplementation((chunk, ctx) =>
+      ctx.idleMs === undefined ? map(chunk, ctx) : { type: 'turn-finished' },
+    );
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    await waitForState(agent.id, 'done');
+  });
+
+  // #110 — the history printed again by a redraw never ends a wait for a prompt.
+  it('keeps an agent that waits for a prompt when the quiet output reads as a dropped turn', async () => {
+    const agent = await launchOne();
+    await waitForState(agent.id, 'awaiting-prompt');
+    const map = adapter.mapOutput.bind(adapter);
+    vi.spyOn(adapter, 'mapOutput').mockImplementation((chunk, ctx) =>
+      ctx.idleMs === undefined ? map(chunk, ctx) : { type: 'turn-finished' },
+    );
+    pty.resize(agent.id, 100, 30);
+    await new Promise((resolve) => setTimeout(resolve, IDLE_QUESTION_MS + 1000));
+    expect(workspaces.get(workspace.id)?.agents.find((a) => a.id === agent.id)?.state).toBe(
+      'awaiting-prompt',
+    );
+  });
+
   // #108 — a quiet, empty prompt only ends a start: it never hides a request.
   it('keeps a request when the quiet output reads as a ready prompt', async () => {
     scenario = 'ask-permission';

@@ -1,7 +1,8 @@
 // Terminal output as text for CliAdapter.mapOutput. TUIs place words with cursor moves (raw Codex
 // capture, T049), and a PTY chunk may cut a phrase in two.
 
-const TAIL_CHARS = 500;
+// #110 — long enough for a plan Claude Code prints back in a box after its last line.
+const TAIL_CHARS = 2000;
 
 /* eslint-disable no-control-regex -- terminal escape sequences are the point here */
 const CURSOR_MOVE = /\x1b\[[0-9;]*[CGHf]/g;
