@@ -406,6 +406,18 @@ describe('Claude Code hook payloads (captured in T049)', () => {
     ).toEqual({ type: 'awaiting-answer', summary: 'Claude pose une question', question: true });
   });
 
+  // #107 — « 1 » there is « Yes, and use auto mode »: it would raise the agent's permission level.
+  it('PermissionRequest of ExitPlanMode → a plan to approve in the terminal, never keyed', () => {
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'ExitPlanMode',
+        tool_input: {},
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Valider le plan ?', question: true });
+  });
+
   it('Notification elicitation_dialog → a question', () => {
     expect(
       adapter.mapHookEvent({

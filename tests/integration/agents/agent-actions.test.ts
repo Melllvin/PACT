@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeAdapter } from '../../../src/main/agents/adapters/fake';
+import { IDLE_QUESTION_MS } from '../../../src/main/agents/adapters/generic';
 import { AgentManager, type AgentStateEvent } from '../../../src/main/agents/agent-manager';
 import { CliRegistry } from '../../../src/main/agents/cli-registry';
 import { HookServer } from '../../../src/main/agents/hook-server';
@@ -227,8 +228,27 @@ describe('AgentManager.answer', { timeout: 30_000 }, () => {
     pty.write(agent.id, 'Supprime le fichier\r');
     await waitForState(agent.id, 'awaiting-answer');
     const written = vi.spyOn(pty, 'write');
+    const from = events.length;
     await manager.answer(agent.id, 'allow');
     expect(written).toHaveBeenCalledWith(agent.id, 'Y');
+    // #108 — such a screen comes before the start: the agent starts, it is not working.
+    expect(events.slice(from).find((e) => e.agentId === agent.id)?.state).toBe('starting');
+  });
+
+  // #108 — a quiet, empty prompt only ends a start: it never hides a request.
+  it('keeps a request when the quiet output reads as a ready prompt', async () => {
+    scenario = 'ask-permission';
+    const agent = await launchOne();
+    const map = adapter.mapOutput.bind(adapter);
+    vi.spyOn(adapter, 'mapOutput').mockImplementation((chunk, ctx) =>
+      ctx.idleMs === undefined ? map(chunk, ctx) : { type: 'session-started' },
+    );
+    pty.write(agent.id, 'Supprime le fichier\r');
+    await waitForState(agent.id, 'awaiting-answer');
+    await new Promise((resolve) => setTimeout(resolve, IDLE_QUESTION_MS + 1000));
+    expect(workspaces.get(workspace.id)?.agents.find((a) => a.id === agent.id)?.state).toBe(
+      'awaiting-answer',
+    );
   });
 
   // #104 — the CLI drops its turn on a refusal and sends no end of turn.

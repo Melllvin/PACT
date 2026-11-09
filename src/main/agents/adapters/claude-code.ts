@@ -327,6 +327,8 @@ function permissions(level: PermissionLevel, pactTools: boolean) {
 
 /** Claude Code's multiple-choice question tool (FR-024a). */
 const QUESTION_TOOL = 'AskUserQuestion';
+/** Claude Code's plan approval, a choice of how to go on (#107). */
+const PLAN_TOOL = 'ExitPlanMode';
 
 function mapEvent(event: HookPayload): AgentSignal | null {
   const signal = mapLeadEvent(event);
@@ -350,6 +352,10 @@ function mapLeadEvent(event: HookPayload): AgentSignal | null {
       if (event.tool_name === QUESTION_TOOL) {
         const summary = event.tool_input?.questions?.[0]?.question ?? 'Claude pose une question';
         return { type: 'awaiting-answer', summary, question: true };
+      }
+      // #107 — its « 1 » is « Yes, and use auto mode »: the user picks in the terminal.
+      if (event.tool_name === PLAN_TOOL) {
+        return { type: 'awaiting-answer', summary: 'Valider le plan ?', question: true };
       }
       const tool = event.tool_name ?? 'Outil';
       const command = event.tool_input?.command;

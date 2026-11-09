@@ -508,9 +508,10 @@ export class AgentManager {
     this.pty.write(id, keys ? keys[answer] : running.adapter.answerKeys(answer));
     // #104 — a CLI that drops its turn on a refusal says nothing more: it waits for a prompt.
     const ends = answer === 'deny' && running.adapter.denyEndsTurn === true;
+    // #108 — a start screen (its own keys) leads to the CLI's start, not to a turn.
     await this.change(workspace.id, id, ({ awaiting: _answered, ...a }) => ({
       ...a,
-      state: ends ? 'awaiting-prompt' : 'working',
+      state: keys ? 'starting' : ends ? 'awaiting-prompt' : 'working',
       alwaysAllowRules:
         rule === undefined || a.alwaysAllowRules.includes(rule)
           ? a.alwaysAllowRules
@@ -1343,6 +1344,8 @@ export class AgentManager {
     running.idle = setTimeout(() => {
       const idle = running.adapter.mapOutput(running.output.text(), { idleMs: this.idleMs });
       if (!idle) return;
+      // #108 — a quiet prompt says « ready » to a starting agent only, never over a request.
+      if (idle.type === 'session-started' && this.find(id).agent.state !== 'starting') return;
       running.output.consume();
       void this.apply(id, idle);
     }, this.idleMs);
