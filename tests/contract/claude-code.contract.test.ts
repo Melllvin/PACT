@@ -406,6 +406,18 @@ describe('Claude Code hook payloads (captured in T049)', () => {
     ).toEqual({ type: 'awaiting-answer', summary: 'Claude pose une question', question: true });
   });
 
+  // #107 — « 1 » there is « Yes, and use auto mode »: it would raise the agent's permission level.
+  it('PermissionRequest of ExitPlanMode → a plan to approve in the terminal, never keyed', () => {
+    expect(
+      adapter.mapHookEvent({
+        ...common,
+        hook_event_name: 'PermissionRequest',
+        tool_name: 'ExitPlanMode',
+        tool_input: {},
+      }),
+    ).toEqual({ type: 'awaiting-answer', summary: 'Valider le plan ?', question: true });
+  });
+
   it('Notification elicitation_dialog → a question', () => {
     expect(
       adapter.mapHookEvent({
@@ -541,8 +553,29 @@ describe('Claude Code terminal and dialogs', () => {
         'Quick safety check: Is this a project you created or one you trust?\n❯ No, exit\n  Yes, I trust this folder',
         {},
       ),
-    ).toEqual({ type: 'awaiting-answer', summary: 'Faire confiance au dossier ?' });
+    ).toMatchObject({ type: 'awaiting-answer', summary: 'Faire confiance au dossier ?' });
     expect(adapter.mapOutput('❯ Ajoute un test', {})).toBeNull();
+  });
+
+  // #103 — 2.1.319 lists « No, exit » first, unnumbered: digits do nothing there.
+  it('answers the folder trust question by moving to « Yes » then Enter', () => {
+    const noFirst = adapter.mapOutput(
+      'Quick safety check\n\u001b[36m❯ No, exit\u001b[39m\n  Yes, I trust this folder\nEnter to confirm',
+      {},
+    );
+    expect(noFirst).toMatchObject({ keys: { allow: '\u001b[B\r', deny: '\u001b' } });
+    const yesFirst = adapter.mapOutput('❯ 1. Yes, I trust this folder\n  2. No, exit', {});
+    expect(yesFirst).toMatchObject({ keys: { allow: '\r', deny: '\u001b' } });
+  });
+
+  it('leaves the trust keys out when the options are not both on screen', () => {
+    const partial = adapter.mapOutput('  Yes, I trust this folder', {});
+    expect(partial).toEqual({ type: 'awaiting-answer', summary: 'Faire confiance au dossier ?' });
+  });
+
+  // #104 — Claude Code interrupts its turn on a refusal and sends no Stop.
+  it('ends its turn when a request is refused', () => {
+    expect(adapter.denyEndsTurn).toBe(true);
   });
 
   it('reads the reset hour of a rate-limit message as the next such time', () => {
