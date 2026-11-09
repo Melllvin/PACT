@@ -26,6 +26,7 @@ import { resolveShellEnv } from './env/shell-env';
 import { GitService } from './git/git-service';
 import { createAgentServices, forwardTerminalEvents } from './ipc/agent-handlers';
 import { createEventEmitter, registerHandlers } from './ipc/handlers';
+import { createDeliveryServices } from './ipc/delivery-handlers';
 import { createOrchestratorServices } from './ipc/orchestrator-handlers';
 import { createPreviewServices } from './ipc/preview-handlers';
 import { createReviewServices } from './ipc/review-handlers';
@@ -414,6 +415,11 @@ void app.whenReady().then(async () => {
     loops,
     integration,
     exchanges,
+    agents: { close: (id, options) => agents.close(id, options) },
+    // The e2e runs read the CI faster than every 30 s.
+    ...(process.env.PACT_TEST_MODE === '1' && Number(process.env.PACT_CI_POLL_MS) > 0
+      ? { pollMs: Number(process.env.PACT_CI_POLL_MS) }
+      : {}),
     deliveriesDir: join(app.getPath('userData'), 'deliveries'),
     runTests: (cwd, command) =>
       new Promise((resolve) => {
@@ -528,6 +534,8 @@ void app.whenReady().then(async () => {
   };
 
   for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
+  // 008 — the PR that were followed are read again, the merges that were under way are checked.
+  void delivery.resume();
   wake.restore();
   workspaces.startWatching(AVAILABILITY_CHECK_MS);
   origin.start();
@@ -574,6 +582,14 @@ void app.whenReady().then(async () => {
         pty,
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
+      ...createDeliveryServices({
+        workspaces,
+        delivery,
+        onChange: (workspaceId, change) => {
+          emit('workspace:deliveries', { workspaceId, ...change });
+          syncTodos();
+        },
+      }),
       ...createPreviewServices({ preview }),
       ...createUsageServices({ usage, stores }),
       ...createOrchestratorServices({
@@ -619,6 +635,7 @@ void app.whenReady().then(async () => {
       preview.dispose();
       tests.dispose();
       integration.dispose();
+      delivery.dispose();
       orchestrator.dispose();
       wake.dispose();
       usage.stop();

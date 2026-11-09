@@ -194,6 +194,14 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       { workspaceId: 'w1', agentId: 'x', title: 'Connexion', message: 'feat' },
     ],
   },
+  'delivery:settings': {
+    valid: { workspaceId: 'w1', settings: { auto: true } },
+    invalid: [
+      { workspaceId: 'w1' },
+      { settings: { auto: true } },
+      { workspaceId: 'w1', settings: { auto: 'yes' } },
+    ],
+  },
   'delivery:decide': {
     valid: {
       deliveryId: integrationId,

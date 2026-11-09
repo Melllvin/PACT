@@ -45,6 +45,14 @@ import { FAKE_GH } from '../../fixtures/fake-cli/paths';
 //   decide({ deliveryId, decision: 'validate' | 'refuse', head, reason? }): Promise<Delivery>
 //       phase 3 uses it for the local channel only (« Fusionner » / « Refuser »).
 //   integrationState(integration): follows the integrations started with a `requestId`.
+//
+// 008 phase 4 (T025) adds, to the same service (API fixed by delivery-merge.test.ts):
+//   agents: { close(agentId, { removeWorktree: false }) }   AgentManager: the dev and the tester close
+//       at the merge, nothing is removed (FR-007); the harness records each call (`closed`)
+//   pollMs?: number   the rhythm of the CI watcher (CI_POLL_MS by default): given only by the options
+//       `pollMs` of the harness, so that the suites of phase 3 keep the 30 s of production
+//   settingsChanged(workspaceId): Promise<void>   told by `delivery:settings` once the settings are
+//       written: the PR waiting for a review are merged if Auto is now on (FR-011, sc.8)
 
 export const gitEnv = {
   ...process.env,
@@ -81,7 +89,15 @@ process.exit(existsSync('FAIL') ? 1 : 0);
 export type DeliveryHarness = Awaited<ReturnType<typeof createDeliveryHarness>>;
 
 export async function createDeliveryHarness(
-  options: { remote?: boolean; ghRemote?: string; ghMissing?: boolean } = {},
+  options: {
+    remote?: boolean;
+    ghRemote?: string;
+    ghMissing?: boolean;
+    /** Phase 4: the CI watcher reads this often. */
+    pollMs?: number;
+    /** Phase 4: the checks the target branch requires (a CI is configured when there are some). */
+    required?: string[];
+  } = {},
 ) {
   const withRemote = options.remote ?? true;
   const root = realpathSync.native(await mkdtemp(join(tmpdir(), 'pact-delivery-')));
@@ -121,7 +137,7 @@ export async function createDeliveryHarness(
       login: 'pact-user',
       prs: {},
       checks: {},
-      required: [],
+      required: options.required ?? [],
     }),
   );
   writeFileSync(ghLogFile, '');
@@ -133,11 +149,17 @@ export async function createDeliveryHarness(
   ghEnv.FAKE_GH_LOG = ghLogFile;
 
   const timeline: string[] = [];
-  const ghRun: GhRun = (args, { cwd, input }) => {
+  // A one-shot hook before a call of `gh`: what happens on the forge or on the remote between two
+  // calls of PACT (a commit pushed between the read of the checks and the merge, a held merge…).
+  const ghHooks: { match: (args: string[]) => boolean; run: (args: string[]) => Promise<void> }[] =
+    [];
+  const ghRun: GhRun = async (args, { cwd, input }) => {
     timeline.push(`gh:${args.slice(0, 2).join(' ')}`);
     if (options.ghMissing) {
       return Promise.reject(Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' }));
     }
+    const hook = ghHooks.findIndex((x) => x.match(args));
+    if (hook !== -1) await (ghHooks.splice(hook, 1)[0] as (typeof ghHooks)[number]).run(args);
     return new Promise((resolve, reject) => {
       const child = execFile(
         process.execPath,
@@ -237,6 +259,21 @@ export async function createDeliveryHarness(
     return original.pushBranch(...args);
   });
 
+  // The agents the delivery closes at the merge (phase 4): the state of the PR at that moment is kept,
+  // to show that nothing is closed before the forge says « merged » (US2 sc.7).
+  const closed: { id: string; removeWorktree: boolean; prState: string | null }[] = [];
+  const agentsDep = {
+    close: (id: string, options: { removeWorktree: boolean }) => {
+      closed.push({
+        id,
+        removeWorktree: options.removeWorktree,
+        prState:
+          (Object.values(ghStateNow().prs)[0] as { state?: string } | undefined)?.state ?? null,
+      });
+      return Promise.resolve();
+    },
+  };
+
   const gh = new GhClient({ run: ghRun, cwd: repo });
   const delivery = new DeliveryService({
     workspaces,
@@ -245,6 +282,8 @@ export async function createDeliveryHarness(
     loops,
     integration,
     exchanges,
+    agents: agentsDep,
+    ...(options.pollMs === undefined ? {} : { pollMs: options.pollMs }),
     deliveriesDir: join(userData, 'deliveries'),
     runTests,
     onChange: (_id: string, change: unknown) => changes.push(change),
@@ -506,6 +545,71 @@ export async function createDeliveryHarness(
   const setGhState = (patch: Record<string, unknown>) => {
     writeFileSync(ghState, JSON.stringify({ ...ghStateNow(), ...patch }));
   };
+  type RawCheck = { id: number; name: string; status: string; conclusion: string | null };
+  const rawState = () =>
+    JSON.parse(readFileSync(ghState, 'utf8')) as {
+      prs: Record<string, object>;
+      checks?: object;
+      merges?: { number: number; mode: string; head: string }[];
+    } & Record<string, unknown>;
+  /** The checks the forge shows on `sha` (phase 4). */
+  const setChecks = (sha: string, checks: RawCheck[]) => {
+    const state = rawState();
+    writeFileSync(
+      ghState,
+      JSON.stringify({ ...state, checks: { ...(state.checks as object), [sha]: checks } }),
+    );
+  };
+  const GREEN: RawCheck[] = [{ id: 11, name: 'ci', status: 'completed', conclusion: 'success' }];
+  const RUNNING: RawCheck[] = [{ id: 11, name: 'ci', status: 'in_progress', conclusion: null }];
+  /** Changes fields of PR `number` on the forge (author, fork…). */
+  const patchPr = (number: number, patch: Record<string, unknown>) => {
+    const state = rawState();
+    const { prs } = state;
+    writeFileSync(
+      ghState,
+      JSON.stringify({
+        ...state,
+        prs: { ...prs, [String(number)]: { ...prs[String(number)], ...patch } },
+      }),
+    );
+  };
+  const prHead = (number = 1) => ghStateNow().prs[String(number)]?.headRefOid ?? '';
+  const prStateOnForge = (number = 1) =>
+    (rawState().prs as Record<string, { state: string }>)[String(number)]?.state;
+  const merges = () =>
+    (rawState().merges ?? []) as { number: number; mode: string; head: string }[];
+  const mergeCalls = () => ghLog().filter(([a, b]) => a === 'pr' && b === 'merge');
+  /** Auto, as `delivery:settings` sets it: written, then the service told. */
+  const setSettings = async (patch: Record<string, unknown>) => {
+    await workspaces.update(workspaceId, (ws) => ({
+      ...ws,
+      delivery: { ...ws.delivery, ...patch },
+    }));
+    await (delivery as unknown as { settingsChanged(id: string): Promise<void> }).settingsChanged(
+      workspaceId,
+    );
+  };
+  /** Runs `run` just before the first call of `gh` that `match` accepts. */
+  const beforeGh = (match: (args: string[]) => boolean, run: (args: string[]) => Promise<void>) => {
+    ghHooks.push({ match, run });
+  };
+  /** Holds the first call that `match` accepts until `release()`; `reached` says it is waiting. */
+  const holdGh = (match: (args: string[]) => boolean) => {
+    let release = () => {};
+    let reached = () => {};
+    const waiting = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    beforeGh(match, async () => {
+      reached();
+      await gate;
+    });
+    return { reached: waiting, release };
+  };
   const remoteHead = (branch: string) =>
     withRemote ? tryGit(bare, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`) : null;
   const refsOf = (cwd: string) => git(cwd, 'for-each-ref', '--format=%(refname)');
@@ -547,6 +651,18 @@ export async function createDeliveryHarness(
     ghLog,
     ghStateNow,
     setGhState,
+    setChecks,
+    GREEN,
+    RUNNING,
+    patchPr,
+    prHead,
+    prStateOnForge,
+    merges,
+    mergeCalls,
+    setSettings,
+    beforeGh,
+    holdGh,
+    closed,
     remoteHead,
     refsOf,
     /** The request of the orchestrator for `dev`, as `request_delivery` makes it. */

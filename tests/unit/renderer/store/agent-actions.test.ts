@@ -119,6 +119,16 @@ describe('agent actions', () => {
     expect(second?.roleProfiles).toEqual(profiles);
   });
 
+  // 008 T030 — the switch Auto and the other settings of the delivery.
+  it('sends the settings of the delivery to the main process', async () => {
+    const { store, invoke } = await setup();
+    await store.getState().setDeliverySettings('w1', { auto: true });
+    expect(invoke).toHaveBeenCalledWith('delivery:settings', {
+      workspaceId: 'w1',
+      settings: { auto: true },
+    });
+  });
+
   it('sends the answer, « Reprendre » and « Relancer » to the main process', async () => {
     const { store, invoke } = await setup();
     await store.getState().answerAgent(id, 'allow');

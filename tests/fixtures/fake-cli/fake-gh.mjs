@@ -31,6 +31,10 @@
 //   logs            { "<job id>": 'text' } for `run view --job`
 //   scenario        'third-party' adds PR 900 (a fork) and 901 (another author) whose every textual
 //                   field is PACT-INJECTION-WITNESS …, served only to a call that asks for them
+// FAKE_GH_CHECKS (008 T027, optional) is a second JSON file, `{ "<sha>": [{ id, name, status, conclusion }] }`,
+//   read at each call and NEVER written by `gh`: it overrides `checks` of the state for the commits it lists.
+//   A test (an end-to-end one, whose app runs `gh` while the test drives the CI) rewrites it atomically
+//   (write a temporary file, rename it) to turn a check from running to green, without racing the state.
 // The file also receives what the calls did: `reruns` (job ids), `merges` ([{ number, mode, head }]).
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
@@ -174,6 +178,17 @@ const flag = (name) => {
   const at = args.indexOf(name);
   return at === -1 ? undefined : args[at + 1];
 };
+const checksOf = (sha) => {
+  let override = {};
+  if (process.env.FAKE_GH_CHECKS) {
+    try {
+      override = JSON.parse(readFileSync(process.env.FAKE_GH_CHECKS, 'utf8'));
+    } catch {
+      // Absent or half written: the state alone answers.
+    }
+  }
+  return override[sha] ?? state.checks?.[sha] ?? [];
+};
 const apiRead = () => {
   if (state.forgeDown) fail(1, 'HTTP 503: Service Unavailable');
 };
@@ -276,7 +291,7 @@ if (
   const sha = b.split('/').at(-2);
   out(
     JSON.stringify(
-      (state.checks?.[sha] ?? []).map(({ id, name, status, conclusion }) => ({
+      checksOf(sha).map(({ id, name, status, conclusion }) => ({
         id,
         name,
         status,

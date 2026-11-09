@@ -548,6 +548,27 @@ describe('App tile actions (US3)', () => {
     });
   });
 
+  // 008 T030 — the switch Auto of the delivery bar goes out as the settings of the workspace.
+  it('turns Auto on from the delivery bar', async () => {
+    const invoke = vi.fn<Invoke>((channel) =>
+      channel === 'app:getState'
+        ? Promise.resolve({
+            workspaces: [{ ...workspace('w1', 'w1'), hasOrigin: true, agents: [] }],
+            recents: [],
+            clis: [],
+            permission: null,
+          })
+        : Promise.resolve(undefined),
+    );
+    const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} />);
+    await userEvent.click(await screen.findByRole('switch', { name: /Auto/ }));
+    expect(invoke).toHaveBeenCalledWith('delivery:settings', {
+      workspaceId: 'w1',
+      settings: { auto: true },
+    });
+  });
+
   it('answers an agent from its tile', async () => {
     const invoke = setup([{ ...failed, state: 'awaiting-answer' }]);
     const tiles = await screen.findByRole('region', { name: 'Tuiles' });
