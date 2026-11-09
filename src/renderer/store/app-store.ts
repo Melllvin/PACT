@@ -82,7 +82,12 @@ export type AppState = {
   /** 005 FR-010 — the alert thresholds of the gauges. */
   usageThresholds: UsageThresholds;
   /** 009 US3 — what the offers of a stop by caution depend on, as the main process told it. */
-  usageLimit: { clock: MainClock | null; stops: UsageStops; declined: UsageDeclined[] };
+  usageLimit: {
+    clock: MainClock | null;
+    stops: UsageStops;
+    declined: UsageDeclined[];
+    offered?: { cliId: string; account: string }[];
+  };
   setUsageThresholds: (thresholds: UsageThresholds) => Promise<void>;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
@@ -364,12 +369,13 @@ export function createAppStore(api: PactApi) {
           api.on('usage:state', (state) => {
             set({ usage: { ...get().usage, ...byAccount([state]) } });
           }),
-          api.on('usage:limit', ({ now, stops, declined }) => {
+          api.on('usage:limit', ({ now, stops, declined, offered }) => {
             set({
               usageLimit: {
                 clock: { mainAt: Date.parse(now), localAt: Date.now() },
                 stops,
                 declined,
+                offered,
               },
             });
           }),

@@ -156,7 +156,12 @@ type Props = {
   usageThresholds?: UsageThresholds;
   onUsageThresholds?: (thresholds: UsageThresholds) => void;
   /** 009 US3 — the clock of the main process, the stop thresholds and the refusals of the offers. */
-  usageLimit?: { clock: MainClock | null; stops: UsageStops; declined: UsageDeclined[] };
+  usageLimit?: {
+    clock: MainClock | null;
+    stops: UsageStops;
+    declined: UsageDeclined[];
+    offered?: { cliId: string; account: string }[];
+  };
   /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
@@ -217,7 +222,11 @@ export function WorkspaceView({
       states: usage,
       thresholds: usageThresholds,
       now,
-      ...(usageLimit && { stops: usageLimit.stops, declined: usageLimit.declined }),
+      ...(usageLimit && {
+        stops: usageLimit.stops,
+        declined: usageLimit.declined,
+        offered: usageLimit.offered,
+      }),
     },
   );
   const agentsView = agentRows(workspace, todos, cliName, now);

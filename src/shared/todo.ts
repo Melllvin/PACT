@@ -129,6 +129,8 @@ export function deriveTodos(
     /** 009 US3 — the stop thresholds (90 % when absent) and the offers the user put off. */
     stops?: UsageStops;
     declined?: readonly UsageDeclined[];
+    /** 009 US3 — the accounts the main process offers a stop by caution for, when it said. */
+    offered?: readonly { cliId: string; account: string }[];
   },
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
@@ -338,14 +340,20 @@ function staleTodos(
     now,
     stops = {},
     declined = [],
+    offered,
   }: {
     states: readonly UsageState[];
     now: Date;
     stops?: UsageStops;
     declined?: readonly UsageDeclined[];
+    offered?: readonly { cliId: string; account: string }[];
   },
 ): TodoItem[] {
   return states.flatMap((state): TodoItem[] => {
+    // Only the main process knows the account of an agent and its overrides (FR-009).
+    if (offered && !offered.some((o) => o.cliId === state.cliId && o.account === state.account)) {
+      return [];
+    }
     const working = agents.filter((a) => a.cliId === state.cliId && a.state === 'working').length;
     const proposal = staleProposal(state, stops, working, now);
     if (!proposal || !state.reading) return [];

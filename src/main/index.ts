@@ -315,7 +315,11 @@ void app.whenReady().then(async () => {
     commitFrozen: () => false,
     // 009 US3 — the renderer judges the age of a reading on the clock of this process.
     onStale: (_offers, snapshot) => {
-      limitSnapshot = { stops: snapshot.stops, declined: snapshot.declined };
+      limitSnapshot = {
+        stops: snapshot.stops,
+        declined: snapshot.declined,
+        offered: snapshot.offered,
+      };
       emit('usage:limit', snapshot);
       syncTodos();
     },
@@ -495,7 +499,11 @@ void app.whenReady().then(async () => {
   });
   const pendingFiles = new Map<string, Record<string, number>>();
   /** 009 US3 — the stop thresholds and refusals the offers of a stop by caution depend on. */
-  let limitSnapshot: { stops: UsageStops; declined: UsageDeclined[] } = { stops: {}, declined: [] };
+  let limitSnapshot: {
+    stops: UsageStops;
+    declined: UsageDeclined[];
+    offered?: { cliId: string; account: string }[];
+  } = { stops: {}, declined: [] };
   const cliNameOf = (cliId: string) =>
     registry.list().find((cli) => cli.id === cliId)?.name ?? cliId;
   function syncTodos() {

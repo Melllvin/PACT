@@ -385,6 +385,7 @@ export const ipcEvents = {
     now: z.string(),
     stops: usageStopsSchema,
     declined: z.array(usageDeclinedSchema),
+    offered: z.array(usageAccount),
   }),
   /** Agents were launched in a workspace, by the launcher or by its orchestrator (003 FR-015). */
   'workspace:agentsLaunched': z.object({

@@ -1157,6 +1157,21 @@ describe('deriveTodos — usage-stale (009)', () => {
     });
   });
 
+  describe('the accounts the main process offered (FR-009: an agent of the account)', () => {
+    const two = [aged(20, 85, { account: '/a' }), aged(20, 85, { account: '/b' })];
+
+    it('keeps only the accounts offered, when the main process said which', () => {
+      const items = stale([agent(1, { state: 'working' })], two, {
+        offered: [{ cliId: 'claude-code', account: '/a' }],
+      });
+      expect(items.map((t) => t.agentId)).toEqual(['usage:claude-code:/a']);
+    });
+
+    it('gives no item when the main process offered none', () => {
+      expect(stale([agent(1, { state: 'working' })], two, { offered: [] })).toEqual([]);
+    });
+  });
+
   it('lists after the answers and before the rate limits', () => {
     const todos = deriveTodos(
       workspace([

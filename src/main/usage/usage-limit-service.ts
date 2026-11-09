@@ -63,7 +63,13 @@ export type UsageLimitOptions = {
 
 /** R11 — an account whose reading is too old, as `staleProposal` rates it. */
 export type StaleOffer = StaleProposal & { cliId: string; account: string };
-export type StaleSnapshot = { now: string; stops: UsageStops; declined: UsageDeclined[] };
+export type StaleSnapshot = {
+  now: string;
+  stops: UsageStops;
+  declined: UsageDeclined[];
+  /** The accounts offered, the only ones the renderer lists. */
+  offered: { cliId: string; account: string }[];
+};
 
 const keyOf = (cliId: string, account: string) => `${cliId}\u0000${account}`;
 
@@ -775,6 +781,7 @@ export class UsageLimitService {
       now: now.toISOString(),
       stops: this.stops,
       declined: this.limit.declined,
+      offered: offers.map(({ cliId, account }) => ({ cliId, account })),
     });
   }
 
