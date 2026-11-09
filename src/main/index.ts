@@ -252,6 +252,8 @@ void app.whenReady().then(async () => {
             .find((a) => a.id === event.agentId)?.lastReport
         : undefined;
       emit('agent:state', kept ? { ...event, lastReport: kept } : event);
+      // 009 — an agent out of its pause by « Relancer » or closed frees its account.
+      if (event.state !== 'paused') usageLimit.agentChanged();
       // Working again, an agent has left its last report behind it.
       if (event.state === 'working' && !late) void keepReport(event.agentId, null);
       syncTodos();
@@ -276,6 +278,11 @@ void app.whenReady().then(async () => {
     // FR-035: « reprise auto » of screen 1m, off until chosen.
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
+    // 009 R8, R10 — a paused agent resumes with its whole account, or alone from its tile.
+    onPausedDue: (agent) => {
+      if (agent.pause) void usageLimit.resumeAccount(agent.pause.cliId, agent.pause.account);
+    },
+    onPausedResume: (agent) => usageLimit.resumeAgent(agent.id, agent),
     ...(clock ? { clock } : {}),
   });
   // 007 — the wake: an action event for an agent becomes one pointer line, typed once it is ready.
@@ -297,6 +304,8 @@ void app.whenReady().then(async () => {
     exchanges,
     wake,
     stores,
+    git,
+    cliName: (cliId) => registry.list().find((cli) => cli.id === cliId)?.name ?? cliId,
     clock: clock ?? systemClock,
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
@@ -504,7 +513,10 @@ void app.whenReady().then(async () => {
     void origin.sync(id);
   };
 
-  for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
+  const restored = await workspaces.restore();
+  // 009 R9 — the accounts in pause hold again before the first reading.
+  usageLimit.restorePauses(restored.flatMap((workspace) => workspace.agents));
+  for (const workspace of restored) await prepareWorkspace(workspace.id);
   wake.restore();
   workspaces.startWatching(AVAILABILITY_CHECK_MS);
   origin.start();
@@ -552,7 +564,7 @@ void app.whenReady().then(async () => {
       }),
       ...createReviewServices({ review, tests, integration, workspaces }),
       ...createPreviewServices({ preview }),
-      ...createUsageServices({ usage, stores }),
+      ...createUsageServices({ usage, stores, limit: usageLimit }),
       ...createOrchestratorServices({
         requests,
         orchestrator,

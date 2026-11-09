@@ -1,0 +1,10 @@
+{
+  "output": ["Travail en cours"],
+  "usage": [
+    { "five_hour": 80, "seven_day": 20, "resets_at": 1893492900, "tokens": 800 },
+    { "five_hour": 87, "seven_day": 20, "resets_at": 1893492900, "tokens": 1600 },
+    { "five_hour": 90, "seven_day": 20, "resets_at": 1893492900, "tokens": 2400 }
+  ],
+  "onPointer": "commit",
+  "files": [{ "write": "travail.txt", "content": "du travail non committé\n" }]
+}

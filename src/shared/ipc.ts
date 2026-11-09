@@ -95,6 +95,8 @@ const nonEmpty = z.string().trim().min(1);
 const absolutePath = z.string().regex(/^(\/|[A-Za-z]:[\\/]|\\\\)/, 'chemin absolu attendu');
 const agentRef = z.object({ agentId: z.uuid() });
 const fileRef = agentRef.extend({ path: repoPathSchema });
+/** 009 — a CLI account: the key of its pause and of its overrides. */
+const usageAccount = z.strictObject({ cliId: nonEmpty, account: nonEmpty });
 const integrationRef = z.object({ integrationId: z.uuid() });
 const commentText = reviewCommentSchema.shape.text;
 const port = z.int().min(1).max(65535);
@@ -248,6 +250,10 @@ export const ipcRequests = {
   /** 003 US5 — the journal « ◎ Actions », the latest first (FR-021). */
   /** 005 — the usage of every CLI account read so far, when the renderer loads. */
   'usage:get': request(none, z.array(usageStateSchema)),
+  /** 009 R10 — « Reprendre » of a « ◆ En pause »: the account resumes, with an override. */
+  'usage:resume': request(usageAccount, none),
+  /** 009 — « Annuler la reprise » of a « ◆ En pause ». */
+  'usage:cancelResume': request(usageAccount, none),
   /** 005 FR-010 — the alert thresholds, set by the user. */
   'settings:usageThresholds': request(usageThresholdsSchema, usageThresholdsSchema),
   'orchestrator:actions': request(
