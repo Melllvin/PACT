@@ -138,7 +138,11 @@ export function deriveTodos(
     const agent = byId.get(delivery.agentId);
     if (!agent) return [];
     if (delivery.channel === 'github') {
-      if (delivery.state !== 'watching' || !delivery.review.required || !delivery.pr) return [];
+      // Asked while it is watched (a PR without a verdict), or once the CI turned green and Auto does not merge.
+      const asked =
+        (delivery.state === 'watching' && delivery.review.required) ||
+        delivery.state === 'reviewing';
+      if (!asked || !delivery.pr) return [];
       const sha = delivery.pushedHead ?? delivery.frozenCommit;
       return [
         {

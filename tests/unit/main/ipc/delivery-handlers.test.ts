@@ -68,7 +68,7 @@ afterEach(async () => {
 const wire = (workspaces: WorkspaceService) => {
   const delivery = { settingsChanged: vi.fn(() => Promise.resolve()) };
   const onChange = vi.fn();
-  const handlers = createDeliveryServices({ workspaces, delivery, onChange } as never);
+  const handlers = createDeliveryServices({ workspaces, delivery, onChange });
   const settings = (workspaceId: string, patch: Partial<DeliverySettings>) =>
     handlers['delivery:settings']({ workspaceId, settings: patch });
   return { delivery, onChange, settings };

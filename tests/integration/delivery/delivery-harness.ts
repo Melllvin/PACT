@@ -287,7 +287,7 @@ export async function createDeliveryHarness(
     deliveriesDir: join(userData, 'deliveries'),
     runTests,
     onChange: (_id: string, change: unknown) => changes.push(change),
-  } as unknown as ConstructorParameters<typeof DeliveryService>[0]);
+  });
   followers.push((state) => {
     (delivery as unknown as { integrationState(i: Integration): void }).integrationState(state);
   });

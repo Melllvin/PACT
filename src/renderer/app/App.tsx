@@ -167,6 +167,8 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onRename: (id, name) => void state.renameAgent(id, name),
                 onDecideDelivery: (id, decision, head) =>
                   void state.decideDelivery(id, decision, head),
+                onDeliverySettings: (settings) =>
+                  void state.setDeliverySettings(workspace.id, settings),
                 onRequestDelivery: (agentId, request) =>
                   void state.requestDelivery(workspace.id, agentId, request),
                 onDecideLoop: (issueId, decision) =>

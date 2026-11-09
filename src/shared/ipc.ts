@@ -255,6 +255,23 @@ export const ipcRequests = {
     }),
     deliverySchema,
   ),
+  /**
+   * 008 FR-019, FR-020 — the settings of the delivery of a project (Auto first): only the keys given
+   * change; the bounds are checked by the handler, which says which field is out of them.
+   */
+  'delivery:settings': request(
+    z.object({
+      workspaceId: z.string(),
+      settings: z.object({
+        auto: z.boolean().optional(),
+        mergeMode: z.string().optional(),
+        maxRounds: z.number().optional(),
+        polishPasses: z.number().optional(),
+        polishBrief: z.string().optional(),
+      }),
+    }),
+    deliverySettingsSchema,
+  ),
   /** 003 US5 — the journal « ◎ Actions », the latest first (FR-021). */
   /** 005 — the usage of every CLI account read so far, when the renderer loads. */
   'usage:get': request(none, z.array(usageStateSchema)),

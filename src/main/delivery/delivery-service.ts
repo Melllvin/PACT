@@ -17,14 +17,27 @@ import type { IntegrationService } from '../review/integration-service';
 import { detectTestCommandIn } from '../review/test-runner';
 import { isTestPath, type LoopService } from '../orchestrator/loop-service';
 import type { RecordInput } from '../orchestrator/exchange-service';
+import type { AgentManager } from '../agents/agent-manager';
+import { CiWatcher } from './ci-watcher';
 import { GhFailure, type GhClient } from './gh-client';
 
 // 008 R2 — the delivery of an accepted issue, from the barriers to the pull request: the state of the
 // request is written before each effect (data-model), the steps run in a queue per project (like
 // `IntegrationService.enqueue`), and every result wakes the orchestrator through the journal (R21).
-// The CI watch and the merge come with the next phases.
+// The CI is read by the `CiWatcher`; the merge happens when it turns green and Auto is on, or when the
+// user validates (phase 5): always with `--match-head-commit`, never `--auto` (FR-009, FR-010, FR-031).
 
-export type Forge = Pick<GhClient, 'availability' | 'prCreate'>;
+export type Forge = Pick<
+  GhClient,
+  | 'availability'
+  | 'prCreate'
+  | 'prView'
+  | 'prMerge'
+  | 'checkRuns'
+  | 'statuses'
+  | 'requiredChecks'
+  | 'rerunJob'
+>;
 
 export interface DeliveryServiceDeps {
   workspaces: {
@@ -48,11 +61,16 @@ export interface DeliveryServiceDeps {
     | 'addDetached'
     | 'removeDetached'
     | 'moveWorktree'
+    | 'hasWorkflows'
   >;
   /** One client, or one per repository (`gh` runs in the repository of the project). */
   gh: Forge | ((repoPath: string) => Forge);
   loops: Pick<LoopService, 'reopen' | 'deliveryState' | 'get'>;
   integration: Pick<IntegrationService, 'start'>;
+  /** The dev and the tester close at the merge; nothing is removed (FR-007, FR-039). */
+  agents: Pick<AgentManager, 'close'>;
+  /** The rhythm of the CI watcher; `CI_POLL_MS` by default. */
+  pollMs?: number;
   exchanges: { record(workspaceId: string, draft: RecordInput): Promise<ExchangeMessage> };
   /** `<userData>/deliveries`: the place of the tests on the rebased commit, removed after. */
   deliveriesDir: string;
@@ -85,10 +103,10 @@ class Stop extends Error {
   constructor(
     readonly state: DeliveryState,
     readonly reason: string,
-    readonly outcome: 'refused' | 'dropped' | 'conflicted' | 'tests-failed',
+    readonly outcome: 'refused' | 'dropped' | 'conflicted' | 'tests-failed' | 'ci-red' | 'closed',
     /** What the orchestrator reads after the issue: the commit, the files. */
     readonly detail = '',
-    /** `conflicted` and `tests-failed` send the dev back for a counted round. */
+    /** `conflicted`, `tests-failed` and `ci-red` send the dev back for a counted round. */
     readonly reopen = false,
   ) {
     super(reason);
@@ -104,8 +122,68 @@ export class DeliveryService {
   private readonly queues = new Map<string, Promise<unknown>>();
   /** A decision in progress, by request: a second click finds it taken (FR-027). */
   private readonly deciding = new Set<string>();
+  /** A merge in progress, by request: a second one never leaves, whoever asks (FR-027). */
+  private readonly merging = new Set<string>();
+  /** `<owner>/<repo>` of each project, read once from `gh repo view`. */
+  private readonly repos = new Map<string, string>();
+  private readonly watcher: CiWatcher;
 
-  constructor(private readonly deps: DeliveryServiceDeps) {}
+  constructor(private readonly deps: DeliveryServiceDeps) {
+    this.watcher = new CiWatcher({
+      workspaces: {
+        get: (id) => deps.workspaces.get(id),
+        list: () => deps.workspaces.list(),
+        update: async (id, change) => {
+          const ws = await deps.workspaces.update(id, change);
+          deps.onChange?.(id, { deliveries: ws.deliveries, delivery: ws.delivery });
+          return ws;
+        },
+      },
+      forge: (workspaceId) => this.forge(this.workspace(workspaceId)),
+      repo: (workspaceId) => this.repoOf(workspaceId),
+      workflows: (workspaceId, target) =>
+        deps.git.hasWorkflows(this.workspace(workspaceId).path, `origin/${target}`),
+      on: {
+        green: ({ workspaceId, deliveryId }) => this.onGreen(workspaceId, deliveryId),
+        red: ({ workspaceId, deliveryId, failing }) => this.onRed(workspaceId, deliveryId, failing),
+        dropped: ({ workspaceId, deliveryId, head }) =>
+          this.onDropped(workspaceId, deliveryId, head),
+        alert: ({ workspaceId, deliveryId, reason, checks }) =>
+          this.onAlert(workspaceId, deliveryId, reason, checks),
+        closed: ({ workspaceId, deliveryId, state }) =>
+          this.onClosedOnForge(workspaceId, deliveryId, state),
+      },
+      ...(deps.pollMs === undefined ? {} : { pollMs: deps.pollMs }),
+    });
+  }
+
+  /** The follow of the PR that were `watching` when the app stopped, and the merges that were under way. */
+  async resume(): Promise<void> {
+    for (const ws of this.deps.workspaces.list()) {
+      for (const d of ws.deliveries) {
+        if (d.state !== 'merging' || d.channel !== 'github' || d.pr === null) continue;
+        // R2 — `merging` was written before the call: the forge says whether it went through.
+        try {
+          const pr = await this.forge(ws).prView(d.pr.number);
+          if (pr.state === 'MERGED') await this.merged(ws.id, d.id);
+          else if (pr.state === 'OPEN') await this.save(ws.id, d.id, { state: 'watching' });
+          else await this.onClosedOnForge(ws.id, d.id, pr.state);
+        } catch {
+          await this.save(ws.id, d.id, { state: 'watching' });
+        }
+      }
+    }
+    this.watcher.resume();
+  }
+
+  private async repoOf(workspaceId: string): Promise<string> {
+    const known = this.repos.get(workspaceId);
+    if (known !== undefined) return known;
+    const forge = await this.forge(this.workspace(workspaceId)).availability();
+    if (!forge.ok) throw new GhFailure(forge.reason);
+    this.repos.set(workspaceId, forge.repo.nameWithOwner);
+    return forge.repo.nameWithOwner;
+  }
 
   private forge(ws: Workspace): Forge {
     const { gh } = this.deps;
@@ -483,6 +561,7 @@ export class DeliveryService {
     );
     await this.catchUp(workspaceId, agent, d, rebased);
     await this.save(workspaceId, id, { state: 'watching' });
+    this.watcher.track(workspaceId, id);
   }
 
   /** The head of the dev is still F: a commit PACT did not make drops the request (R6). */
@@ -531,13 +610,19 @@ export class DeliveryService {
 
   /** A request ends: its final state, the loop where it goes next, the word to the orchestrator. */
   private async end(workspaceId: string, id: string, stop: Stop): Promise<Delivery> {
+    this.watcher.untrack(id);
     // The loop and the word to the orchestrator come first: a final state is read as « all done ».
     let d = this.current(workspaceId, id);
     const issue = d.issueId;
     const loop = issue === null ? null : this.deps.loops.get(workspaceId, issue);
     let text: string;
-    if (stop.outcome === 'refused') {
-      text = `Livraison refusée · ${this.label(d)} · ${stop.reason}`;
+    const outcome: NonNullable<ExchangeMessage['delivery']>['outcome'] =
+      stop.outcome === 'closed' ? 'alert' : stop.outcome;
+    if (stop.outcome === 'refused' || stop.outcome === 'closed') {
+      text =
+        stop.outcome === 'closed'
+          ? `Livraison · PR #${String(this.prOf(d).number)} · ${stop.reason}`
+          : `Livraison refusée · ${this.label(d)} · ${stop.reason}`;
       // The verdict and the proof still stand: the loop is as it was.
       if (loop?.state === 'delivering') {
         await this.deps.loops.deliveryState(workspaceId, loop.issueId, 'accepted');
@@ -553,7 +638,9 @@ export class DeliveryService {
       const what =
         stop.outcome === 'conflicted'
           ? `Conflit au recalage · ${this.label(d)} · ${stop.detail}`
-          : `Tests rouges sur ${stop.detail} · ${this.label(d)}`;
+          : stop.outcome === 'ci-red'
+            ? `CI rouge · PR #${String(this.prOf(d).number)} · ${stop.detail}`
+            : `Tests rouges sur ${stop.detail} · ${this.label(d)}`;
       text =
         reopened === null
           ? what
@@ -561,7 +648,7 @@ export class DeliveryService {
             ? `${what} : plafond atteint, l’utilisateur décide`
             : `${what} : tour ${String(reopened.round)} ouvert`;
     }
-    await this.tell(workspaceId, d, stop.outcome, text);
+    await this.tell(workspaceId, d, outcome, text);
     d = await this.save(workspaceId, id, { state: stop.state, reason: stop.reason });
     return d;
   }
@@ -572,7 +659,7 @@ export class DeliveryService {
     d: Delivery,
     outcome: NonNullable<ExchangeMessage['delivery']>['outcome'],
     text: string,
-    extra: { pr?: { number: number; url: string }; commit?: string } = {},
+    extra: { pr?: { number: number; url: string }; commit?: string; checks?: string[] } = {},
   ): Promise<void> {
     const ws = this.workspace(workspaceId);
     const lead = ws.agents.find((a) => a.role === 'orchestrator');
@@ -705,9 +792,291 @@ export class DeliveryService {
     }
   }
 
-  /** Nothing runs by itself between two requests: the queue is just promises. */
+  // ---- the CI and the merge (phase 4, US2) ----
+
+  /** The request, if it is still there. */
+  private find(workspaceId: string, id: string): Delivery | undefined {
+    return this.deps.workspaces.get(workspaceId)?.deliveries.find((d) => d.id === id);
+  }
+
+  private prOf(d: Delivery): { number: number; url: string } {
+    const pr = d.pr as NonNullable<Delivery['pr']>;
+    return { number: pr.number, url: pr.url };
+  }
+
+  /**
+   * The CI turned green (FR-010, FR-011): Auto is read now. Auto on, a verdict and no review owed:
+   * merge. Otherwise the user is asked, once (FR-012).
+   */
+  private async onGreen(workspaceId: string, id: string): Promise<void> {
+    const d = this.find(workspaceId, id);
+    if (!d || d.channel !== 'github' || d.pr === null) return;
+    if (d.state !== 'watching' && d.state !== 'reviewing') return;
+    const auto = this.workspace(workspaceId).delivery.auto && !d.unverified && !d.review.required;
+    if (auto) {
+      await this.merge(workspaceId, id);
+      return;
+    }
+    if (d.state === 'reviewing') return;
+    const saved = await this.save(workspaceId, id, { state: 'reviewing' });
+    await this.tell(
+      workspaceId,
+      saved,
+      'review-requested',
+      `Relecture demandée · PR #${String(d.pr.number)}`,
+      { pr: this.prOf(saved) },
+    );
+  }
+
+  /** A check failed: the names go back to the dev for a counted round; with no verdict, only a signal. */
+  private async onRed(workspaceId: string, id: string, failing: string[]): Promise<void> {
+    const d = this.find(workspaceId, id);
+    if (!d?.pr || (d.state !== 'watching' && d.state !== 'reviewing')) return;
+    const names = failing.map((name) => `« ${name} »`).join(', ');
+    await this.end(
+      workspaceId,
+      id,
+      new Stop(
+        'ci-red',
+        `La CI de la PR #${String(d.pr.number)} est rouge : ${names} (noms de checks rapportés par la forge). Corrige, commite, puis redemande un verdict.`,
+        'ci-red',
+        names,
+        !d.unverified,
+      ),
+    );
+  }
+
+  /** The head of the PR is not a commit of PACT (FR-004): the request falls, the PR is kept. */
+  private async onDropped(workspaceId: string, id: string, head: string): Promise<void> {
+    const d = this.find(workspaceId, id);
+    if (!d || (d.state !== 'watching' && d.state !== 'reviewing')) return;
+    await this.end(
+      workspaceId,
+      id,
+      new Stop(
+        'dropped',
+        `Le commit ${short(head)} de ${d.branch} n’est pas de PACT.`,
+        'dropped',
+        `commit ${short(head)} étranger à PACT`,
+      ),
+    );
+  }
+
+  private async onAlert(
+    workspaceId: string,
+    id: string,
+    reason: 'stalled' | 'forge-down',
+    checks: string[],
+  ): Promise<void> {
+    const d = this.find(workspaceId, id);
+    if (!d?.pr || isFinalState(d.state)) return;
+    const why =
+      reason === 'stalled'
+        ? `check bloqué, relancé sans succès : ${checks.map((c) => `« ${c} »`).join(', ')}`
+        : 'la forge ne répond plus depuis 10 min';
+    await this.tell(workspaceId, d, 'alert', `Livraison · PR #${String(d.pr.number)} · ${why}`, {
+      pr: this.prOf(d),
+      checks,
+    });
+  }
+
+  /** The PR is no longer open on the forge: merged by someone (FR-036), or closed. */
+  private async onClosedOnForge(workspaceId: string, id: string, state: string): Promise<void> {
+    if (this.merging.has(id)) return;
+    this.merging.add(id);
+    try {
+      await this.settleClosed(workspaceId, id, state);
+    } finally {
+      this.merging.delete(id);
+    }
+  }
+
+  /** Same, for the caller that already holds the merge lock of the request. */
+  private async settleClosed(workspaceId: string, id: string, state: string): Promise<void> {
+    const d = this.find(workspaceId, id);
+    if (!d?.pr || isFinalState(d.state)) return;
+    if (state === 'MERGED') {
+      await this.merged(workspaceId, id);
+      return;
+    }
+    await this.end(
+      workspaceId,
+      id,
+      new Stop('closed-on-forge', 'La PR a été fermée sur la forge.', 'closed'),
+    );
+  }
+
+  /** FR-011 — Auto turned on: the PR that wait for a review, green, are merged if everything holds. */
+  settingsChanged(workspaceId: string): Promise<void> {
+    const ws = this.workspace(workspaceId);
+    if (!ws.delivery.auto) return Promise.resolve();
+    for (const d of ws.deliveries) {
+      if (
+        d.channel === 'github' &&
+        d.state === 'reviewing' &&
+        !d.unverified &&
+        !d.review.required &&
+        d.ci?.verdict === 'green'
+      ) {
+        void this.merge(workspaceId, d.id);
+      }
+    }
+    return Promise.resolve();
+  }
+
+  /** One merge at a time per request, whoever asks (FR-027). */
+  private async merge(workspaceId: string, id: string): Promise<void> {
+    if (this.merging.has(id)) return;
+    this.merging.add(id);
+    try {
+      await this.mergeNow(workspaceId, id);
+    } catch (error) {
+      const d = this.find(workspaceId, id);
+      if (d?.pr && !isFinalState(d.state)) {
+        const reason =
+          error instanceof Error ? error.message.slice(0, MAX_TAIL) : 'Échec inattendu.';
+        const saved = await this.save(workspaceId, id, { state: 'merge-failed', reason });
+        await this.tell(
+          workspaceId,
+          saved,
+          'alert',
+          `Livraison · PR #${String(d.pr.number)} · ${reason}`,
+          { pr: this.prOf(saved) },
+        );
+      }
+    } finally {
+      this.merging.delete(id);
+    }
+  }
+
+  /**
+   * FR-031 — what is read again just before any merge: the author, the repository of origin, the
+   * branches, the head, the verdict and the login of `gh`. A difference: nothing is merged.
+   */
+  private async recheck(
+    gh: Forge,
+    d: Delivery,
+  ): Promise<
+    | { ok: true; head: string }
+    | { ok: false; kind: 'state'; state: string }
+    | { ok: false; kind: 'dropped'; head: string }
+    | { ok: false; kind: 'alert'; reason: string }
+  > {
+    const pr = d.pr as NonNullable<Delivery['pr']>;
+    const view = await gh.prView(pr.number);
+    if (view.state !== 'OPEN') return { ok: false, kind: 'state', state: view.state };
+    const head = view.headRefOid;
+    if (!d.pactCommits.includes(head)) return { ok: false, kind: 'dropped', head };
+    const alert = (reason: string) => ({ ok: false as const, kind: 'alert' as const, reason });
+    if (view.author.login !== pr.expectedAuthor) {
+      return alert('l’auteur de la PR n’est plus le compte attendu.');
+    }
+    if (view.isCrossRepository) return alert('la PR vient maintenant d’un autre dépôt (fork).');
+    if (view.headRefName !== d.branch || view.baseRefName !== d.target) {
+      return alert('les branches de la PR ne sont plus celles de la demande.');
+    }
+    if (d.ci?.verdict !== 'green' || d.ci.head !== head) {
+      return alert(`la CI verte lue ne porte pas sur la tête ${short(head)}.`);
+    }
+    if (!d.unverified && d.verdictCommit !== head) {
+      return alert(`le verdict ne porte pas sur la tête ${short(head)}.`);
+    }
+    const who = await gh.availability();
+    if (!who.ok) return alert(`gh n’est plus utilisable : ${who.reason}`);
+    if (who.login !== pr.expectedAuthor) return alert('le compte de gh a changé.');
+    return { ok: true, head };
+  }
+
+  private async mergeNow(workspaceId: string, id: string): Promise<void> {
+    const d = this.current(workspaceId, id);
+    if (d.channel !== 'github' || d.pr === null) return;
+    if (d.state !== 'watching' && d.state !== 'reviewing') return;
+    const ws = this.workspace(workspaceId);
+    const gh = this.forge(ws);
+    const checked = await this.recheck(gh, d);
+    if (!checked.ok) {
+      if (checked.kind === 'dropped') {
+        await this.onDropped(workspaceId, id, checked.head);
+      } else if (checked.kind === 'state') {
+        await this.settleClosed(workspaceId, id, checked.state);
+      } else {
+        const saved = await this.save(workspaceId, id, {
+          state: 'merge-failed',
+          reason: checked.reason,
+        });
+        await this.tell(
+          workspaceId,
+          saved,
+          'alert',
+          `Livraison · PR #${String(d.pr.number)} · pas de fusion : ${checked.reason}`,
+          { pr: this.prOf(saved) },
+        );
+      }
+      return;
+    }
+    // R2 — written before the call: after a restart, `pr view` says whether it went through.
+    await this.save(workspaceId, id, { state: 'merging', reason: null });
+    // The mode is the one of the project now; Auto turned off since does not cancel a merge that left.
+    const mode = this.workspace(workspaceId).delivery.mergeMode;
+    try {
+      await gh.prMerge(d.pr.number, mode, checked.head);
+    } catch (error) {
+      const reason = error instanceof GhFailure ? error.reason : 'gh a échoué.';
+      const saved = await this.save(workspaceId, id, { state: 'merge-failed', reason });
+      await this.tell(
+        workspaceId,
+        saved,
+        'merge-failed',
+        `Fusion refusée par la forge · PR #${String(d.pr.number)} · ${reason}`,
+        { pr: this.prOf(saved) },
+      );
+      return;
+    }
+    await this.merged(workspaceId, id, mode);
+  }
+
+  /**
+   * The forge says « merged » (FR-007): the loop is merged and the issue done, the orchestrator is
+   * told, then the dev and the tester close. Their worktrees stay: the cleanup has its own rules.
+   */
+  private async merged(workspaceId: string, id: string, mode?: string): Promise<void> {
+    this.watcher.untrack(id);
+    const d = this.current(workspaceId, id);
+    if (d.state === 'merged') return;
+    // The final state comes last: it is read as « all done » (the loop, the word, the agents).
+    if (d.issueId !== null && this.deps.loops.get(workspaceId, d.issueId)) {
+      await this.deps.loops.deliveryState(workspaceId, d.issueId, 'merged');
+    }
+    const number = this.prOf(d).number;
+    await this.tell(
+      workspaceId,
+      d,
+      'merged',
+      `PR #${String(number)} fusionnée${mode === undefined ? '' : ` (${mode})`}`,
+      {
+        pr: this.prOf(d),
+        commit: d.pushedHead ?? d.frozenCommit,
+      },
+    );
+    // A PR without a verdict leaves the agent as it is: its worktree is the user's to clean (FR-039).
+    if (!d.unverified) {
+      for (const agentId of [d.agentId, d.testAgentId]) {
+        if (agentId === null) continue;
+        try {
+          await this.deps.agents.close(agentId, { removeWorktree: false });
+        } catch {
+          // An agent that cannot close stays: the merge is done and told.
+        }
+      }
+    }
+    await this.save(workspaceId, id, { state: 'merged', reason: null });
+  }
+
+  /** The timers of the CI watch stop; the queues are just promises. */
   dispose(): void {
+    this.watcher.dispose();
     this.queues.clear();
     this.deciding.clear();
+    this.merging.clear();
   }
 }

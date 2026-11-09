@@ -12,7 +12,7 @@ import {
 import { agentName } from '../../shared/agent-name';
 import { agentColor } from '../../shared/agent-color';
 import type { DeliveryAction, TileMenu } from '../tiles/TileActions';
-import { isFinalState } from '../../shared/delivery';
+import { isFinalState, type DeliverySettings } from '../../shared/delivery';
 import type { OrchestratorAction } from '../../shared/orchestrator';
 import { agentRows } from '../../shared/agents-view';
 import { deriveTodos } from '../../shared/todo';
@@ -39,6 +39,7 @@ import { TileGrid } from '../tiles/TileGrid';
 import { AgentsColumn } from '../agents/AgentsColumn';
 import { GraphView } from '../graph/GraphView';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
+import { DeliveryBar } from '../delivery/DeliveryBar';
 import { EmptyWorkspace } from './EmptyWorkspace';
 
 /** The tile actions, each about one agent (FR-024, FR-037). */
@@ -60,6 +61,8 @@ export type AgentActions = {
     agentId: string,
     request: { title: string; message: string; unverified: boolean },
   ) => void;
+  /** 008 FR-019 — the settings of the delivery of the project that changed (« Auto » first). */
+  onDeliverySettings?: (settings: Partial<DeliverySettings>) => void;
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
   onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
   /** 007 FR-006 — the user's decision on two agents that bounce a message. */
@@ -626,6 +629,15 @@ export function WorkspaceView({
                 <FreeTerminalTile key={terminal.id} terminal={terminal} terminals={terminals} />
               ))}
             </TileGrid>
+          )}
+          {available && (
+            <DeliveryBar
+              auto={workspace.delivery.auto}
+              hasOrigin={workspace.hasOrigin === true}
+              onToggleAuto={(auto) => {
+                actions.onDeliverySettings?.({ auto });
+              }}
+            />
           )}
         </section>
         {/* Décision takes the place of À faire while a review is open (FR-004), and Intégration

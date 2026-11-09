@@ -130,7 +130,7 @@ function setup(deliveries: Delivery[] = [delivery()]) {
     repo: () => Promise.resolve('pact/test'),
     workflows: () => Promise.resolve(true),
     on,
-  } as never);
+  });
   return {
     watcher,
     forge,

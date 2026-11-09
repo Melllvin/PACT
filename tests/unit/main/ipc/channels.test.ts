@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createAppServices } from '../../../../src/main/app-services';
 import { createAgentServices } from '../../../../src/main/ipc/agent-handlers';
+import { createDeliveryServices } from '../../../../src/main/ipc/delivery-handlers';
 import { createOrchestratorServices } from '../../../../src/main/ipc/orchestrator-handlers';
 import { createPreviewServices } from '../../../../src/main/ipc/preview-handlers';
 import { createReviewServices } from '../../../../src/main/ipc/review-handlers';
@@ -29,6 +30,7 @@ describe('IPC channels', () => {
       ...Object.keys(createAgentServices({} as never)),
       ...Object.keys(createReviewServices({} as never)),
       ...Object.keys(createOrchestratorServices({} as never)),
+      ...Object.keys(createDeliveryServices({} as never)),
       ...Object.keys(createPreviewServices({} as never)),
       ...Object.keys(createUsageServices({} as never)),
     ]);

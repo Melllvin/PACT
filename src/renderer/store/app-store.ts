@@ -1,3 +1,4 @@
+import type { DeliverySettings } from '../../shared/delivery';
 import { createStore } from 'zustand/vanilla';
 import {
   ipcErrorSchema,
@@ -121,6 +122,8 @@ export type AppState = {
     agentId: string,
     request: { title: string; message: string; unverified: boolean },
   ) => Promise<void>;
+  /** 008 FR-019 — the settings of the delivery of a project (« Auto » first). */
+  setDeliverySettings: (workspaceId: string, settings: Partial<DeliverySettings>) => Promise<void>;
   decideDelivery: (
     deliveryId: string,
     decision: 'validate' | 'refuse',
@@ -652,6 +655,9 @@ export function createAppStore(api: PactApi) {
 
       requestDelivery: (workspaceId, agentId, request) =>
         act(() => api.invoke('delivery:request', { workspaceId, agentId, ...request })),
+
+      setDeliverySettings: (workspaceId, settings) =>
+        act(() => api.invoke('delivery:settings', { workspaceId, settings })),
 
       decideDelivery: (deliveryId, decision, head) =>
         act(() => api.invoke('delivery:decide', { deliveryId, decision, head })),
