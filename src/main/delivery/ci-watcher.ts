@@ -39,20 +39,22 @@ export interface CiWatcherDeps {
     green(found: Found & { ci: CiStatus }): void | Promise<void>;
     red(found: Found & { ci: CiStatus; failing: string[] }): void | Promise<void>;
     /** The head of the PR is not a commit of PACT (FR-004). */
-    dropped(found: Found & { head: string }): void | Promise<void>;
+    dropped(found: Found & { head: string }): boolean | undefined | Promise<boolean | undefined>;
     alert(
       found: Found & { reason: 'stalled' | 'forge-down'; checks: string[] },
     ): void | Promise<void>;
     /** The PR is no longer open on the forge: merged or closed, by someone else or by us. */
-    closed?(found: Found & { state: string }): void | Promise<void>;
+    closed?(found: Found & { state: string }): boolean | undefined | Promise<boolean | undefined>;
   };
   /** The rhythm of the reads; `CI_POLL_MS` unless a test goes faster. */
   pollMs?: number;
 }
 
 /** The states of a request whose PR is read. */
-const READ_STATES: readonly string[] = ['watching', 'reviewing', 'merging', 'merge-failed'];
+export const READ_STATES: readonly string[] = ['watching', 'reviewing', 'merging', 'merge-failed'];
 const STALLED = ['cancelled', 'timed_out', 'stale', 'action_required'];
+/** A failed merge waits for the user: it is read this many times less often than a followed PR. */
+const MERGE_FAILED_SLOWDOWN = 10;
 
 type Entry = { timer: ReturnType<typeof setTimeout> | null; workspaceId: string };
 
@@ -74,11 +76,14 @@ export class CiWatcher {
     this.start(workspaceId, deliveryId, this.pollMs);
   }
 
-  /** After a restart: each request that was `watching` is read at once. */
-  resume(): void {
+  /**
+   * After a restart: each request in one of `states` is read at once. `watching` alone by default;
+   * the service asks for every state that is read in session (`READ_STATES`).
+   */
+  resume(states: readonly string[] = ['watching']): void {
     for (const ws of this.deps.workspaces.list()) {
       for (const d of ws.deliveries) {
-        if (d.state === 'watching' && d.pr !== null) this.start(ws.id, d.id, 0);
+        if (d.pr !== null && states.includes(d.state)) this.start(ws.id, d.id, 0);
       }
     }
   }
@@ -110,7 +115,12 @@ export class CiWatcher {
       void this.read(deliveryId, entry).finally(() => {
         // The read may have ended the follow: only a followed request goes on.
         if (this.entries.get(deliveryId) === entry && !this.stopped) {
-          this.schedule(deliveryId, entry, this.pollMs);
+          const failed = this.delivery(entry.workspaceId, deliveryId)?.state === 'merge-failed';
+          this.schedule(
+            deliveryId,
+            entry,
+            failed ? this.pollMs * MERGE_FAILED_SLOWDOWN : this.pollMs,
+          );
         }
       });
     }, delay);
@@ -158,13 +168,18 @@ export class CiWatcher {
 
     if (pr.state !== 'OPEN') {
       this.untrack(id);
-      await this.deps.on.closed?.({ ...found, state: pr.state });
+      // A hook that did not take it (`false`) leaves the request followed: nothing is left unread.
+      if ((await this.deps.on.closed?.({ ...found, state: pr.state })) === false) {
+        this.start(workspaceId, id, this.pollMs);
+      }
       return;
     }
     const head = pr.headRefOid;
     if (!d.pactCommits.includes(head)) {
       this.untrack(id);
-      await this.deps.on.dropped({ ...found, head });
+      if ((await this.deps.on.dropped({ ...found, head })) === false) {
+        this.start(workspaceId, id, this.pollMs);
+      }
       return;
     }
 
@@ -218,6 +233,7 @@ export class CiWatcher {
     });
 
     const rerun = [...(previous?.rerun ?? [])];
+    const rerunKeys = [...(previous?.rerunKeys ?? [])];
     const stalled = checks.filter(
       (c) => c.status === 'completed' && STALLED.includes(c.conclusion ?? ''),
     );
@@ -225,7 +241,9 @@ export class CiWatcher {
     if (verdict === 'stalled') {
       const repo = await this.deps.repo(workspaceId);
       for (const check of stalled) {
-        if (check.job === null || rerun.includes(check.job)) continue;
+        // A rerun renews the id of the job: it is counted by the name of the check on this head.
+        const key = `${head}:${check.name}`;
+        if (check.job === null || rerunKeys.includes(key) || rerun.includes(check.job)) continue;
         try {
           await forge.rerunJob(repo, check.job);
           reran = true;
@@ -233,6 +251,7 @@ export class CiWatcher {
           // A rerun the forge refuses is not retried: the user is told next.
         }
         rerun.push(check.job);
+        rerunKeys.push(key);
       }
     }
 
@@ -245,6 +264,7 @@ export class CiWatcher {
       emptySince,
       failingSince: null,
       rerun,
+      rerunKeys,
       readAt: now,
     };
     if (!this.alive(id, entry)) return;
@@ -289,6 +309,7 @@ export class CiWatcher {
       emptySince: previous?.emptySince ?? null,
       failingSince,
       rerun: previous?.rerun ?? [],
+      ...(previous?.rerunKeys === undefined ? {} : { rerunKeys: previous.rerunKeys }),
       readAt: now,
     };
     this.greenFor.delete(id);

@@ -98,6 +98,8 @@ export const ciStatusSchema = z.object({
   emptySince: isoDate.nullable(),
   failingSince: isoDate.nullable(),
   rerun: z.array(z.int()),
+  /** `<head>:<name>` of the checks rerun: a rerun renews the id of the job, never the name. */
+  rerunKeys: z.array(z.string()).optional(),
   readAt: isoDate,
 });
 export type CiStatus = z.infer<typeof ciStatusSchema>;

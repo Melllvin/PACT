@@ -133,7 +133,7 @@ function setup(
 type Hooks = {
   onGreen(w: string, id: string): Promise<void>;
   onRed(w: string, id: string, failing: string[]): Promise<void>;
-  onDropped(w: string, id: string, head: string): Promise<void>;
+  onDropped(w: string, id: string, head: string): Promise<boolean>;
   onAlert(w: string, id: string, reason: string, checks: string[]): Promise<void>;
   onClosedOnForge(w: string, id: string, state: string): Promise<void>;
 };
@@ -176,6 +176,20 @@ describe('resume after a restart', () => {
     expect(s.current().state).toBe('watching');
     s.service.dispose();
   });
+
+  it.each(['reviewing', 'merge-failed'] as const)(
+    'a %s request is read again after a restart: a PR merged meanwhile ends merged',
+    async (state) => {
+      const s = setup(delivery({ state }), {
+        gh: { prView: vi.fn(() => Promise.resolve(view({ state: 'MERGED' }))) },
+      });
+      await s.service.resume();
+      await vi.waitFor(() => {
+        expect(s.current().state).toBe('merged');
+      });
+      s.service.dispose();
+    },
+  );
 
   it('leaves alone a request that is not merging', async () => {
     const s = setup(delivery({ state: 'reviewing' }));
@@ -225,16 +239,28 @@ describe('the hooks of the watcher', () => {
     s.service.dispose();
   });
 
-  it('green, red and dropped ignore a request that is gone or not followed', async () => {
+  it('green and red ignore a request that is gone or not followed', async () => {
     const s = setup(delivery({ state: 'merge-failed' }));
     for (const id of [ID, uuid(77)]) {
       await hooks(s).onGreen('w1', id);
       await hooks(s).onRed('w1', id, ['ci']);
-      await hooks(s).onDropped('w1', id, HEAD);
+      await hooks(s).onDropped('w1', uuid(77), HEAD);
     }
     expect(s.current().state).toBe('merge-failed');
     expect(s.exchanges.record).not.toHaveBeenCalled();
     s.service.dispose();
+  });
+
+  it('a foreign head drops a failed merge too, and a finished request is left alone', async () => {
+    const failed = setup(delivery({ state: 'merge-failed' }));
+    await hooks(failed).onDropped('w1', ID, 'b'.repeat(40));
+    expect(failed.current().state).toBe('dropped');
+    expect(failed.told()).toContain('dropped');
+    const done = setup(delivery({ state: 'merged' }));
+    await hooks(done).onDropped('w1', ID, 'b'.repeat(40));
+    expect(done.current().state).toBe('merged');
+    failed.service.dispose();
+    done.service.dispose();
   });
 
   it('green on a local request does nothing', async () => {
@@ -437,6 +463,30 @@ describe('the inner edges', () => {
     expect(s.gh.prMerge).toHaveBeenCalledTimes(1);
     release();
     await first;
+    expect(s.current().state).toBe('merged');
+    s.service.dispose();
+  });
+
+  it('a foreign head during a merge in progress is left to the watcher, which asks again', async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const s = setup(delivery(), {
+      gh: {
+        prMerge: vi.fn(async () => {
+          await gate;
+        }),
+      },
+    });
+    const merging = inner(s).merge('w1', ID);
+    await vi.waitFor(() => {
+      expect(s.gh.prMerge).toHaveBeenCalled();
+    });
+    expect(await hooks(s).onDropped('w1', ID, 'b'.repeat(40))).toBe(false);
+    release();
+    await merging;
+    expect(await hooks(s).onDropped('w1', ID, 'b'.repeat(40))).toBe(true);
     expect(s.current().state).toBe('merged');
     s.service.dispose();
   });

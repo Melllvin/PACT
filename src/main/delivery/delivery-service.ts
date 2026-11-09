@@ -18,7 +18,7 @@ import { detectTestCommandIn } from '../review/test-runner';
 import { isTestPath, type LoopService } from '../orchestrator/loop-service';
 import type { RecordInput } from '../orchestrator/exchange-service';
 import type { AgentManager } from '../agents/agent-manager';
-import { CiWatcher } from './ci-watcher';
+import { CiWatcher, READ_STATES } from './ci-watcher';
 import { GhFailure, type GhClient } from './gh-client';
 
 // 008 R2 — the delivery of an accepted issue, from the barriers to the pull request: the state of the
@@ -173,7 +173,7 @@ export class DeliveryService {
         }
       }
     }
-    this.watcher.resume();
+    this.watcher.resume(READ_STATES);
   }
 
   private async repoOf(workspaceId: string): Promise<string> {
@@ -847,9 +847,18 @@ export class DeliveryService {
   }
 
   /** The head of the PR is not a commit of PACT (FR-004): the request falls, the PR is kept. */
-  private async onDropped(workspaceId: string, id: string, head: string): Promise<void> {
+  private async onDropped(workspaceId: string, id: string, head: string): Promise<boolean> {
     const d = this.find(workspaceId, id);
-    if (!d || (d.state !== 'watching' && d.state !== 'reviewing')) return;
+    if (!d || isFinalState(d.state)) return true;
+    // A merge under way finishes first; the watcher keeps the request and reads it again.
+    if (this.merging.has(id)) return false;
+    await this.drop(workspaceId, id, head);
+    return true;
+  }
+
+  /** Same, for the caller that already holds the merge lock of the request. */
+  private async drop(workspaceId: string, id: string, head: string): Promise<void> {
+    const d = this.current(workspaceId, id);
     await this.end(
       workspaceId,
       id,
@@ -881,14 +890,16 @@ export class DeliveryService {
   }
 
   /** The PR is no longer open on the forge: merged by someone (FR-036), or closed. */
-  private async onClosedOnForge(workspaceId: string, id: string, state: string): Promise<void> {
-    if (this.merging.has(id)) return;
+  private async onClosedOnForge(workspaceId: string, id: string, state: string): Promise<boolean> {
+    // A merge under way finishes first; the watcher keeps the request and reads it again.
+    if (this.merging.has(id)) return false;
     this.merging.add(id);
     try {
       await this.settleClosed(workspaceId, id, state);
     } finally {
       this.merging.delete(id);
     }
+    return true;
   }
 
   /** Same, for the caller that already holds the merge lock of the request. */
@@ -996,7 +1007,7 @@ export class DeliveryService {
     const checked = await this.recheck(gh, d);
     if (!checked.ok) {
       if (checked.kind === 'dropped') {
-        await this.onDropped(workspaceId, id, checked.head);
+        await this.drop(workspaceId, id, checked.head);
       } else if (checked.kind === 'state') {
         await this.settleClosed(workspaceId, id, checked.state);
       } else {
