@@ -59,6 +59,19 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       {},
     ],
   },
+  'settings:usageStops': {
+    valid: { 'claude-code': { 'five-hour': 10, week: 100 }, codex: {} },
+    invalid: [
+      { 'claude-code': { week: 9 } },
+      { 'claude-code': { week: 101 } },
+      { 'claude-code': { week: 80.5 } },
+      { 'claude-code': { week: '80' } },
+      { '': { week: 80 } },
+      { 'claude-code': { '': 80 } },
+      [],
+    ],
+  },
+  'usage:stops': { valid: undefined, invalid: [{ extra: true }] },
   'workspace:open': {
     valid: { path: absolute },
     invalid: [{}, { path: '' }, { path: 'relative/repo' }],

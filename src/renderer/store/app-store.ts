@@ -89,6 +89,11 @@ export type AppState = {
     offered?: { cliId: string; account: string }[];
   };
   setUsageThresholds: (thresholds: UsageThresholds) => Promise<void>;
+  /** 009 US4 — the stop thresholds, per CLI and window. */
+  /** Null until the settings asked for them (`loadUsageStops`). */
+  usageStops: UsageStops | null;
+  loadUsageStops: () => Promise<void>;
+  setUsageStops: (stops: UsageStops) => Promise<void>;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
@@ -337,6 +342,7 @@ export function createAppStore(api: PactApi) {
       usage: {},
       usageThresholds: DEFAULT_USAGE_THRESHOLDS,
       usageLimit: { clock: null, stops: {}, declined: [] },
+      usageStops: null,
       correcting: {},
       orchestratorPrompted: {},
       orchestratorActions: {},
@@ -691,6 +697,16 @@ export function createAppStore(api: PactApi) {
       setUsageThresholds: (thresholds) =>
         act(async () => {
           set({ usageThresholds: await api.invoke('settings:usageThresholds', thresholds) });
+        }),
+
+      loadUsageStops: () =>
+        act(async () => {
+          set({ usageStops: await api.invoke('usage:stops') });
+        }),
+
+      setUsageStops: (stops) =>
+        act(async () => {
+          set({ usageStops: await api.invoke('settings:usageStops', stops) });
         }),
 
       setRoleProfiles: (workspaceId, profiles) =>

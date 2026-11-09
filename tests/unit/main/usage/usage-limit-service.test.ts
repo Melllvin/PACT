@@ -1433,3 +1433,234 @@ describe('a reading too old (US3; R11)', () => {
     });
   });
 });
+
+// 009 T044 — US4: a threshold changed applies at once (research R6 « Seuil changé »; spec US4 sc.2, 3; FR-001).
+// The describe has its own setup: it only relies on the clock, the stores and the recorders above.
+//
+// API fixed here for the dev (see the report, « API fixées »):
+//   service.setStops(stops: UsageStops): Promise<void>   the new thresholds, already written to `state.json` by the IPC
+//                                                        handler (`settings:usageStops`); the service re-judges the last
+//                                                        reading of every account with them. Lowered under the
+//                                                        consumption = a jump over the band (save « dans la minute »,
+//                                                        stop at the end of the turn or at 60 s); raised above every
+//                                                        window of a paused account = `resumeAccount`.
+// The test writes the stops to the store as the handler does, then calls `setStops`.
+
+describe('a threshold changed applies at once (US4)', () => {
+  type Stops = Record<string, Record<string, number>>;
+  type StopsService = ServiceLike & { setStops(stops: Stops): Promise<void> };
+
+  let waiting: Agent[];
+  let resumeCalls: string[];
+  let thresholds: StopsService;
+  const OWNER = agent(20, { name: 'Claude 1', state: 'working', worktreePath: '/wt/20' });
+  const OTHER = agent(21, {
+    workspaceId: 'w2',
+    name: 'Claude 2',
+    state: 'awaiting-prompt',
+    worktreePath: '/wt/21',
+  });
+  const stopped = new Set<string>();
+
+  const build = async () => {
+    const { UsageLimitService } = await load();
+    const options: ResumeOptions = {
+      agents: {
+        accountAgents: (cliId, account) =>
+          (members[key(cliId, account)] ?? []).filter((a) => !stopped.has(a.id)),
+        pause: (agentId, pause) => {
+          calls.push(`pause:${agentId}`);
+          pauses.push({ agentId, pause });
+          stopped.add(agentId);
+          return Promise.resolve();
+        },
+        pausedAgents: (cliId, account) =>
+          waiting.filter((a) => a.pause?.cliId === cliId && a.pause.account === account),
+        resumePaused: (agentId) => {
+          resumeCalls.push(agentId);
+          waiting = waiting.filter((a) => a.id !== agentId);
+          stopped.delete(agentId);
+          return Promise.resolve('resumed' as const);
+        },
+        schedule: () => Promise.resolve(),
+      },
+      exchanges: {
+        record: (workspaceId, input) => {
+          calls.push(`record:${String(input.kind)}:${String(input.to)}`);
+          records.push({ workspaceId, input });
+          return Promise.resolve({});
+        },
+      },
+      wake: {
+        deliver: (agentId, deliverOptions) => {
+          delivered.push({ agentId, urgent: deliverOptions?.urgent === true });
+        },
+      },
+      git: { indexLock: () => Promise.resolve(null) },
+      cliName: () => 'Claude',
+      stores,
+      clock,
+      autoResume: () => Promise.resolve(true),
+      commitFrozen: () => false,
+    };
+    return new UsageLimitService(options) as StopsService;
+  };
+
+  /** What the handler `settings:usageStops` does, then the call the service must serve. */
+  const change = async (stops: Stops) => {
+    const saved = await stores.state.read();
+    await stores.state.write({ ...saved, usageStops: stops });
+    await thresholds.setStops(stops);
+  };
+
+  /** Lists the agents as the manager would after the stop: paused, with their pause. */
+  const listPaused = () => {
+    waiting = (members[key('claude-code', 'default')] ?? []).map(
+      (a) =>
+        ({
+          ...a,
+          state: 'paused',
+          sessionId: `session-${a.id.slice(-2)}`,
+          pause: {
+            ...pauses.find((p) => p.agentId === a.id)?.pause,
+            midTurn: a.state === 'working',
+            saved: true,
+            closedQuestion: null,
+            blocked: null,
+          },
+        }) as Agent,
+    );
+  };
+
+  beforeEach(async () => {
+    waiting = [];
+    resumeCalls = [];
+    stopped.clear();
+    members = { [key('claude-code', 'default')]: [OWNER, OTHER] };
+    thresholds = await build();
+  });
+
+  it('Given 80 % read, When the threshold goes down to 70 %, Then each agent gets a save at once, « dans la minute », and nobody is stopped yet', async () => {
+    await thresholds.onUsage(state([window5h(80)]));
+    expect(records).toEqual([]);
+
+    await change({ 'claude-code': { 'five-hour': 70 } });
+
+    for (const target of [OWNER, OTHER]) {
+      expect(savesTo(target.id).map((r) => r.input.text)).toEqual([saveText('5 h', 80, 70, true)]);
+    }
+    expect(delivered.filter((d) => d.urgent).map((d) => d.agentId)).toEqual([OWNER.id, OTHER.id]);
+    expect(pauses).toEqual([]);
+  });
+
+  it('Given that lowered threshold, When 60 s pass, Then every agent is paused, once, with the window and the reset', async () => {
+    await thresholds.onUsage(state([window5h(80)]));
+    await change({ 'claude-code': { 'five-hour': 70 } });
+    await clock.advance(59_000);
+    expect(pauses).toEqual([]);
+    await clock.advance(1000);
+
+    expect(pauses.map((p) => p.agentId).sort()).toEqual([OWNER.id, OTHER.id].sort());
+    expect(pauses[0]?.pause).toEqual(
+      has({
+        cliId: 'claude-code',
+        account: 'default',
+        cause: 'threshold',
+        windows: [{ id: 'five-hour', label: '5 h', percent: 80, resetsAt: RESET_5H }],
+        resumeAt: RESET_5H,
+      }),
+    );
+    await clock.advance(120_000);
+    expect(pauses).toHaveLength(2);
+  });
+
+  it('Given that lowered threshold, When an agent ends its turn, Then it is paused then, without waiting for the 60 s', async () => {
+    await thresholds.onUsage(state([window5h(80)]));
+    await change({ 'claude-code': { 'five-hour': 70 } });
+    await thresholds.turnFinished(OWNER.id);
+    expect(pauses.map((p) => p.agentId)).toEqual([OWNER.id]);
+  });
+
+  it('Given 80 % read, When the threshold goes down to 82 %, Then the agents get a save (the band starts at 79 %) and are not stopped', async () => {
+    await thresholds.onUsage(state([window5h(80)]));
+    await change({ 'claude-code': { 'five-hour': 82 } });
+    expect(records.filter((r) => r.input.kind === 'usage-save')).toHaveLength(2);
+    await clock.advance(120_000);
+    expect(pauses).toEqual([]);
+  });
+
+  it('Given a lowered threshold for the week only, When the 5 h window is far from its own, Then only the week counts', async () => {
+    await thresholds.onUsage(state([window5h(20), weekly(60)]));
+    await change({ 'claude-code': { week: 55 } });
+    expect(savesTo(OWNER.id).map((r) => r.input.text)).toEqual([saveText('semaine', 60, 55, true)]);
+    await clock.advance(60_000);
+    expect(pauses).toHaveLength(2);
+    expect(pauses[0]?.pause.windows.map((w) => w.id)).toEqual(['week']);
+  });
+
+  it('Given the same thresholds saved again, When setStops runs, Then nothing is sent and nobody is stopped', async () => {
+    await thresholds.onUsage(state([window5h(80)]));
+    await change({ 'claude-code': { 'five-hour': 90 } });
+    await clock.advance(120_000);
+    expect(records).toEqual([]);
+    expect(pauses).toEqual([]);
+  });
+
+  it('Given a threshold lowered for another CLI, When setStops runs, Then the account of Claude is not touched', async () => {
+    await thresholds.onUsage(state([window5h(80)]));
+    await change({ codex: { 'five-hour': 10 } });
+    await clock.advance(120_000);
+    expect(records).toEqual([]);
+    expect(pauses).toEqual([]);
+  });
+
+  it('Given no reading yet, When the threshold changes, Then it is kept and nobody is touched (a CLI without a reading is never stopped)', async () => {
+    await change({ 'claude-code': { 'five-hour': 10 } });
+    await clock.advance(120_000);
+    expect(records).toEqual([]);
+    expect(pauses).toEqual([]);
+    // The next reading is judged with the new threshold.
+    await thresholds.onUsage(state([window5h(5)]));
+    expect(records).toEqual([]);
+    await thresholds.onUsage(state([window5h(11)]));
+    expect(records.filter((r) => r.input.kind === 'usage-save')).toHaveLength(2);
+  });
+
+  it('Given a paused account, When the threshold goes above its window, Then every agent resumes (sc. 3) and the account is no longer in pause', async () => {
+    await thresholds.onUsage(state([window5h(87)]));
+    await thresholds.onUsage(state([window5h(90)]));
+    await clock.advance(5000);
+    listPaused();
+    expect(thresholds.pausedFor('claude-code')).not.toBeNull();
+
+    await change({ 'claude-code': { 'five-hour': 95 } });
+
+    expect(resumeCalls.sort()).toEqual([OWNER.id, OTHER.id].sort());
+    expect(thresholds.pausedFor('claude-code')).toBeNull();
+    expect(thresholds.usageHeld('claude-code')).toBe(false);
+  });
+
+  it('Given a paused account on two windows, When the threshold of one goes up but the other is still at its threshold, Then nobody resumes', async () => {
+    await thresholds.onUsage(state([window5h(87), weekly(87)]));
+    await thresholds.onUsage(state([window5h(90), weekly(90)]));
+    await clock.advance(5000);
+    listPaused();
+
+    await change({ 'claude-code': { 'five-hour': 95 } });
+
+    expect(resumeCalls).toEqual([]);
+    expect(thresholds.pausedFor('claude-code')).not.toBeNull();
+  });
+
+  it('Given a paused account, When the threshold stays at or under the consumption, Then nobody resumes', async () => {
+    await thresholds.onUsage(state([window5h(87)]));
+    await thresholds.onUsage(state([window5h(90)]));
+    await clock.advance(5000);
+    listPaused();
+
+    await change({ 'claude-code': { 'five-hour': 90 } });
+    await change({ 'claude-code': { 'five-hour': 85 } });
+
+    expect(resumeCalls).toEqual([]);
+  });
+});

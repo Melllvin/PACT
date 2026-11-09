@@ -128,6 +128,8 @@ const request = <I extends z.ZodType, O extends z.ZodType>(input: I, output: O) 
   output,
 });
 const none = z.undefined();
+/** The stops sent by the renderer are always whole: no default to fall back on. */
+const usageStopsInput = usageStopsSchema.unwrap();
 
 export const ipcRequests = {
   'app:getState': request(
@@ -258,6 +260,10 @@ export const ipcRequests = {
   'usage:stale': request(usageAccount.extend({ decision: z.enum(['stop', 'later']) }), none),
   /** 005 FR-010 — the alert thresholds, set by the user. */
   'settings:usageThresholds': request(usageThresholdsSchema, usageThresholdsSchema),
+  /** 009 US4 — the stop thresholds per CLI and window, set by the user (10 to 100). */
+  'settings:usageStops': request(usageStopsInput, usageStopsSchema),
+  /** 009 US4 — the stop thresholds saved, when the settings open. */
+  'usage:stops': request(none, usageStopsSchema),
   'orchestrator:actions': request(
     z.object({ agentId: z.uuid() }),
     z.array(orchestratorActionSchema),

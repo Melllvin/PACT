@@ -162,6 +162,10 @@ type Props = {
     declined: UsageDeclined[];
     offered?: { cliId: string; account: string }[];
   };
+  /** 009 US4 — the stop thresholds, and their change. */
+  usageStops?: UsageStops | null;
+  onOpenUsageStops?: () => void;
+  onUsageStops?: (stops: UsageStops) => void;
   /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
@@ -195,6 +199,9 @@ export function WorkspaceView({
   usageThresholds,
   onUsageThresholds,
   usageLimit,
+  usageStops,
+  onOpenUsageStops,
+  onUsageStops,
   review,
   fromOrchestrator = {},
   loopReports = [],
@@ -479,6 +486,8 @@ export function WorkspaceView({
           onDetail={setUsageDetail}
           {...(usageThresholds && { thresholds: usageThresholds })}
           {...(onUsageThresholds && { onThresholds: onUsageThresholds })}
+          {...(onOpenUsageStops && { onOpenStops: onOpenUsageStops })}
+          {...(usageStops && onUsageStops && { stops: usageStops, onStops: onUsageStops })}
         />
       }
     />

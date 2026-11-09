@@ -151,6 +151,9 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               usageThresholds={state.usageThresholds}
               usageLimit={state.usageLimit}
               onUsageThresholds={(thresholds) => void state.setUsageThresholds(thresholds)}
+              usageStops={state.usageStops}
+              onOpenUsageStops={() => void state.loadUsageStops()}
+              onUsageStops={(stops) => void state.setUsageStops(stops)}
               onAddAgents={() => {
                 state.openLauncher(workspace.id);
               }}
