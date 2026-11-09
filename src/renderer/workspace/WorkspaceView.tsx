@@ -1,3 +1,4 @@
+import type { UsageStops } from '../../shared/usage-limit';
 import type { UsageState, UsageThresholds } from '../../shared/usage';
 import { UsageGauges, useUsageClock } from './UsageGauge';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -152,6 +153,10 @@ type Props = {
   /** 005 FR-010 — the alert thresholds of the gauges, and their change. */
   usageThresholds?: UsageThresholds;
   onUsageThresholds?: (thresholds: UsageThresholds) => void;
+  /** 009 US4 — the stop thresholds, and their change. */
+  usageStops?: UsageStops | null;
+  onOpenUsageStops?: () => void;
+  onUsageStops?: (stops: UsageStops) => void;
   /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
@@ -184,6 +189,9 @@ export function WorkspaceView({
   usage = [],
   usageThresholds,
   onUsageThresholds,
+  usageStops,
+  onOpenUsageStops,
+  onUsageStops,
   review,
   fromOrchestrator = {},
   loopReports = [],
@@ -459,6 +467,8 @@ export function WorkspaceView({
           onDetail={setUsageDetail}
           {...(usageThresholds && { thresholds: usageThresholds })}
           {...(onUsageThresholds && { onThresholds: onUsageThresholds })}
+          {...(onOpenUsageStops && { onOpenStops: onOpenUsageStops })}
+          {...(usageStops && onUsageStops && { stops: usageStops, onStops: onUsageStops })}
         />
       }
     />
