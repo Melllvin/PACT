@@ -1,5 +1,6 @@
 import type { IpcInput } from '../../shared/ipc';
 import type { UsageThresholds } from '../../shared/usage';
+import type { UsageStops } from '../../shared/usage-limit';
 import type { Stores } from '../persistence/store';
 import type { UsageLimitService } from '../usage/usage-limit-service';
 import type { UsageService } from '../usage/usage-service';
@@ -10,7 +11,7 @@ type Dependencies = {
   usage: Pick<UsageService, 'list' | 'setThresholds'>;
   stores: Pick<Stores, 'state'>;
   /** 009 US2 — « Reprendre » and « Annuler la reprise » of a pause. */
-  limit: Pick<UsageLimitService, 'resumeByHand' | 'cancelResume'>;
+  limit: Pick<UsageLimitService, 'resumeByHand' | 'cancelResume' | 'setStops'>;
 };
 
 export function createUsageServices({ usage, stores, limit }: Dependencies) {
@@ -22,6 +23,13 @@ export function createUsageServices({ usage, stores, limit }: Dependencies) {
       usage.setThresholds(thresholds);
       return thresholds;
     },
+    'settings:usageStops': async (stops: UsageStops) => {
+      const state = await stores.state.read();
+      await stores.state.write({ ...state, usageStops: stops });
+      await limit.setStops(stops);
+      return stops;
+    },
+    'usage:stops': async () => (await stores.state.read()).usageStops,
     'usage:resume': ({ cliId, account }: IpcInput<'usage:resume'>) =>
       limit.resumeByHand(cliId, account),
     'usage:cancelResume': ({ cliId, account }: IpcInput<'usage:cancelResume'>) =>

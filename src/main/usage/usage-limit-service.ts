@@ -135,6 +135,27 @@ export class UsageLimitService {
     return this.enqueue(() => this.resume(cliId, account, false));
   }
 
+  /**
+   * R6 « Seuil changé » (US4) — `settings:usageStops` has written the thresholds: every account is
+   * judged again on its last reading. A threshold lowered under the consumption is a jump over the
+   * band (a save, then the stop in 60 s at most); one raised above every window of an account in
+   * pause resumes it.
+   */
+  setStops(_stops: UsageStops): Promise<void> {
+    return this.enqueue(async () => {
+      await this.load();
+      const now = this.options.clock.now();
+      for (const [key, reading] of [...this.readings]) {
+        const stillStops = limitBands(reading, this.stops, now).some((b) => b.band === 'stop');
+        if (this.paused.has(key) && !stillStops) {
+          await this.resume(reading.cliId, reading.account, false);
+        } else {
+          await this.judge(reading);
+        }
+      }
+    });
+  }
+
   /** R10 — « Reprendre » of À faire: the account resumes now, and an override covers it. */
   resumeByHand(cliId: string, account: string): Promise<void> {
     return this.enqueue(() => this.resume(cliId, account, true));

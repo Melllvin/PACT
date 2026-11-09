@@ -12,6 +12,7 @@ import {
   type UsageState,
   type UsageThresholds,
 } from '../../shared/usage';
+import { windowsOf, type UsageStops } from '../../shared/usage-limit';
 import { ROLE_LABELS } from '../../shared/roles';
 import { UsageThresholdsDialog } from '../settings/UsageThresholds';
 import { cn } from '@/lib/utils';
@@ -249,6 +250,19 @@ export function UsageGauge({
   );
 }
 
+/** 009 US4 — one row per CLI that has a gauge, its windows from the readings. */
+function stopClis(
+  usage: readonly UsageState[],
+  clis: readonly Pick<CliDefinition, 'id' | 'name'>[],
+) {
+  const ids = [...new Set(usage.map((state) => state.cliId))];
+  return ids.map((cliId) => ({
+    cliId,
+    name: clis.find((cli) => cli.id === cliId)?.name ?? cliId,
+    windows: windowsOf(cliId, usage),
+  }));
+}
+
 /** Every gauge of the workspace; nothing without a reading (FR-006). */
 export function UsageGauges({
   workspace,
@@ -259,6 +273,9 @@ export function UsageGauges({
   detail = null,
   onDetail,
   onThresholds,
+  stops,
+  onStops,
+  onOpenStops,
 }: {
   workspace: Pick<Workspace, 'agents'> & Partial<Pick<Workspace, 'id'>>;
   usage: readonly UsageState[];
@@ -269,6 +286,11 @@ export function UsageGauges({
   detail?: string | null;
   onDetail?: (key: string | null) => void;
   onThresholds?: (thresholds: UsageThresholds) => void;
+  /** 009 US4 — the stop thresholds of the CLIs, shown in the settings. */
+  stops?: UsageStops;
+  onStops?: (stops: UsageStops) => void;
+  /** The settings open: the stop thresholds are asked for. */
+  onOpenStops?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const gauges = workspaceGauges(workspace, usage, now);
@@ -293,6 +315,7 @@ export function UsageGauges({
             })}
             {...(onThresholds && {
               onThresholds: () => {
+                onOpenStops?.();
                 setEditing(true);
               },
             })}
@@ -303,6 +326,14 @@ export function UsageGauges({
         <UsageThresholdsDialog
           thresholds={thresholds}
           onSave={onThresholds}
+          {...(stops &&
+            onStops && {
+              stopSettings: {
+                stops,
+                clis: stopClis(usage, clis),
+                onSave: onStops,
+              },
+            })}
           onClose={() => {
             setEditing(false);
           }}
