@@ -212,7 +212,8 @@ export class GitService {
    */
   async indexLock(worktree: string): Promise<string | null> {
     const raw = await this.git(worktree, ['rev-parse', '--git-path', 'index.lock']);
-    const path = isAbsolute(raw) ? raw : join(worktree, raw);
+    // Git writes forward slashes even on Windows: the path is given back in the platform's own form.
+    const path = isAbsolute(raw) ? resolve(raw) : join(worktree, raw);
     return (await stat(path).then(
       () => true,
       () => false,
