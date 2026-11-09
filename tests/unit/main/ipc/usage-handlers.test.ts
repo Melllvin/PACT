@@ -85,3 +85,87 @@ describe('usage handlers: the resume (009 US2)', () => {
     );
   });
 });
+
+// 009 T044 — US4: `settings:usageStops` and `usage:stops` (contracts/ui.md « IPC »; research R6 « Seuil changé »).
+//
+// API fixed here for the dev (see the report, « API fixées »): `createUsageServices` serves, on top of the others,
+//   'settings:usageStops'  (stops: UsageStops) => Promise<UsageStops>   writes `usageStops` into `state.json` (the rest
+//                                                                        of the state untouched), THEN calls
+//                                                                        `limit.setStops(stops)` (the service reads the
+//                                                                        state again), and answers the saved stops
+//   'usage:stops'          () => Promise<UsageStops>                    the current `usageStops` of `state.json`
+// `limit` gets a third method, `setStops(stops): Promise<void>`, of the `UsageLimitService`.
+
+describe('usage handlers: the stop thresholds (009 US4)', () => {
+  type Stops = Record<string, Record<string, number>>;
+  type StopChannels = {
+    'settings:usageStops': (stops: Stops) => Promise<Stops>;
+    'usage:stops': () => Promise<Stops>;
+  };
+
+  const build = (initial: Stops = {}) => {
+    let saved: Record<string, unknown> = {
+      recents: [],
+      usageThresholds: { warn: 80, critical: 95 },
+      usageStops: initial,
+    };
+    const order: string[] = [];
+    const stores = {
+      state: {
+        read: vi.fn(() => Promise.resolve(saved)),
+        write: vi.fn((value: Record<string, unknown>) => {
+          order.push('write');
+          saved = value;
+          return Promise.resolve();
+        }),
+      },
+    };
+    const limit = {
+      setStops: vi.fn(() => {
+        order.push('setStops');
+        return Promise.resolve();
+      }),
+    };
+    const services = createUsageServices({
+      usage: { list: vi.fn(() => []), setThresholds: vi.fn() },
+      stores: stores as never,
+      limit: limit as never,
+    }) as unknown as StopChannels;
+    return { services, limit, order, saved: () => saved };
+  };
+
+  it('Given new thresholds, When the renderer sends settings:usageStops, Then they are saved in the state, the service is told after the write, and they are the answer', async () => {
+    const { services, limit, order, saved } = build();
+    const stops = { 'claude-code': { week: 80 }, codex: { 'five-hour': 100 } };
+    expect(await services['settings:usageStops'](stops)).toEqual(stops);
+    expect(saved()).toEqual({
+      recents: [],
+      usageThresholds: { warn: 80, critical: 95 },
+      usageStops: stops,
+    });
+    expect(limit.setStops).toHaveBeenCalledExactlyOnceWith(stops);
+    expect(order).toEqual(['write', 'setStops']);
+  });
+
+  it('Given saved thresholds, When the renderer sends new ones, Then they replace the old ones whole', async () => {
+    const { services, saved } = build({ 'claude-code': { week: 80 } });
+    await services['settings:usageStops']({ codex: { week: 70 } });
+    expect((saved() as { usageStops: unknown }).usageStops).toEqual({ codex: { week: 70 } });
+  });
+
+  it('Given saved thresholds, When the renderer asks usage:stops, Then it gets the current ones', async () => {
+    const { services } = build({ 'claude-code': { 'five-hour': 85 } });
+    expect(await services['usage:stops']()).toEqual({ 'claude-code': { 'five-hour': 85 } });
+  });
+
+  it('Given no thresholds ever saved, When the renderer asks usage:stops, Then it gets an empty record (the default 90 % applies)', async () => {
+    const { services } = build();
+    expect(await services['usage:stops']()).toEqual({});
+  });
+
+  it('Given the service fails, When the renderer sends settings:usageStops, Then the error reaches the renderer', async () => {
+    const { services, limit } = build();
+    limit.setStops.mockRejectedValueOnce(new Error('boom'));
+    await expect(services['settings:usageStops']({})).rejects.toThrow('boom');
+  });
+});
