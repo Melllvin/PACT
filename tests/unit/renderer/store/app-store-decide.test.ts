@@ -29,6 +29,7 @@ const agent = (n: number): Agent => ({
   effort: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
 });
 
 const workspace = (id: string, agents: Agent[]): Workspace => ({

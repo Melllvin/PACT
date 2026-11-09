@@ -32,6 +32,23 @@ const absolute =
 const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown[] }> = {
   'app:getState': { valid: undefined, invalid: [{ extra: true }] },
   'usage:get': { valid: undefined, invalid: [{ extra: true }] },
+  'usage:resume': {
+    valid: { cliId: 'claude-code', account: 'default' },
+    invalid: [{}, { cliId: 'claude-code' }, { cliId: '', account: 'a' }],
+  },
+  'usage:cancelResume': {
+    valid: { cliId: 'claude-code', account: 'default' },
+    invalid: [{}, { account: 'a' }, { cliId: 'x', account: '' }],
+  },
+  'usage:stale': {
+    valid: { cliId: 'claude-code', account: 'default', decision: 'later' },
+    invalid: [
+      {},
+      { cliId: 'claude-code', account: 'a' },
+      { cliId: 'claude-code', account: 'a', decision: 'now' },
+      { cliId: '', account: 'a', decision: 'stop' },
+    ],
+  },
   'settings:usageThresholds': {
     valid: { warn: 70, critical: 90 },
     invalid: [
@@ -42,6 +59,19 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       {},
     ],
   },
+  'settings:usageStops': {
+    valid: { 'claude-code': { 'five-hour': 10, week: 100 }, codex: {} },
+    invalid: [
+      { 'claude-code': { week: 9 } },
+      { 'claude-code': { week: 101 } },
+      { 'claude-code': { week: 80.5 } },
+      { 'claude-code': { week: '80' } },
+      { '': { week: 80 } },
+      { 'claude-code': { '': 80 } },
+      [],
+    ],
+  },
+  'usage:stops': { valid: undefined, invalid: [{ extra: true }] },
   'workspace:open': {
     valid: { path: absolute },
     invalid: [{}, { path: '' }, { path: 'relative/repo' }],
@@ -327,6 +357,7 @@ describe('IPC event schemas', () => {
       'review:tests',
       'term:data',
       'term:exit',
+      'usage:limit',
       'usage:state',
       'workspace:agentsLaunched',
       'workspace:exchanges',
@@ -473,4 +504,37 @@ describe('IpcFailure', () => {
       toIpcError(new IpcFailure('LOCAL_CHANGES', 'Changements locaux', undefined, ['a.ts'])),
     ).toEqual({ code: 'LOCAL_CHANGES', message: 'Changements locaux', files: ['a.ts'] });
   });
+});
+
+// 009 T030 — US2: the channels `usage:resume` and `usage:cancelResume` (contracts/ui.md « IPC »). They are
+// checked apart from `requestCases`, whose « cover exactly the channels » test would break the day the
+// channels exist: the dev adds the same two cases to that table (see the report).
+describe('IPC request schemas: the resume of a usage pause (009 US2)', () => {
+  type Schema = {
+    input: { safeParse(value: unknown): { success: boolean } };
+    output: { safeParse(value: unknown): { success: boolean } };
+  };
+  const channels = ipcRequests as unknown as Record<string, Schema | undefined>;
+
+  for (const channel of ['usage:resume', 'usage:cancelResume']) {
+    it(`${channel} takes a CLI and an account, and answers nothing`, () => {
+      const schema = channels[channel];
+      expect(schema, `${channel} is not declared`).toBeDefined();
+      expect(schema?.input.safeParse({ cliId: 'claude-code', account: '/comptes/a' }).success).toBe(
+        true,
+      );
+      for (const bad of [
+        {},
+        { cliId: 'claude-code' },
+        { account: 'a' },
+        { cliId: '', account: 'a' },
+        { cliId: 'x', account: '' },
+        { cliId: 'x', account: 'a', extra: 1 },
+        undefined,
+      ]) {
+        expect(schema?.input.safeParse(bad).success).toBe(false);
+      }
+      expect(schema?.output.safeParse(undefined).success).toBe(true);
+    });
+  }
 });

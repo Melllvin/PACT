@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { deriveTodos } from '../../../src/shared/todo';
 import type { Agent, FreeTerminal, Workspace } from '../../../src/shared/model';
-import type { UsageState } from '../../../src/shared/usage';
+import { clockTime, type UsageState } from '../../../src/shared/usage';
 
 // T080 — the À faire items, derived from the agents only (data-model TodoItem, FR-027, FR-028).
 
@@ -28,6 +28,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   role: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
   effort: null,
   ...overrides,
 });
@@ -895,5 +896,299 @@ describe('deriveTodos — « ✕ Échanges en boucle » (FR-006)', () => {
     expect(todos[0]?.title).toBe(
       '✕ Échanges en boucle · Claude Code 2 ↔ Claude Code 3 · 3 allers-retours',
     );
+  });
+});
+
+// 009 T019 — « ◆ En pause » (contracts/ui.md « À faire »): one item per account and per workspace, derived from the
+// `pause` of the agents; the alert of 005 gives way to it for that account. API fixed here: the body of the item
+// is `TodoItem.detail` (as for `wake-held`), and `TodoItem.usageLimit = { cliId, account, kind: 'paused' }`.
+describe('deriveTodos — usage-paused (009)', () => {
+  const RESUME = '2030-01-01T11:00:00.000Z';
+  const pauseOf = (over: Record<string, unknown> = {}) => ({
+    cliId: 'claude-code',
+    account: 'default',
+    cause: 'threshold' as const,
+    windows: [{ id: 'five-hour', label: '5 h', percent: 91, resetsAt: RESUME }],
+    resumeAt: RESUME,
+    pausedAt: '2030-01-01T09:00:00.000Z',
+    midTurn: false,
+    saved: true,
+    closedQuestion: null,
+    blocked: null,
+    ...over,
+  });
+  const paused = (n: number, pause = pauseOf(), over: Partial<Agent> = {}) =>
+    agent(n, { state: 'paused', pause, ...over });
+  const usageItems = (agents: Agent[]) =>
+    deriveTodos(workspace(agents), names).filter((todo) => todo.kind === 'usage-paused');
+
+  it('gives one item for the paused agents of an account, with the title of the contract', () => {
+    const items = usageItems([paused(1), paused(2), agent(3, { state: 'working' })]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: 'usage-paused',
+      title: `◆ En pause · Claude Code · limite 5 h à 91 % · reprise ${clockTime(RESUME)}`,
+      usageLimit: { cliId: 'claude-code', account: 'default', kind: 'paused' },
+    });
+    expect(items[0]?.id.endsWith(':usage-paused')).toBe(true);
+  });
+
+  it('gives one item per account: another account, or another CLI, has its own', () => {
+    const items = usageItems([
+      paused(1),
+      paused(2, pauseOf({ account: '/comptes/travail' })),
+      paused(3, pauseOf({ cliId: 'codex' }), { cliId: 'codex' }),
+    ]);
+    expect(items.map((i) => i.usageLimit)).toEqual(
+      expect.arrayContaining([
+        { cliId: 'claude-code', account: 'default', kind: 'paused' },
+        { cliId: 'claude-code', account: '/comptes/travail', kind: 'paused' },
+        { cliId: 'codex', account: 'default', kind: 'paused' },
+      ]),
+    );
+    expect(items).toHaveLength(3);
+    expect(new Set(items.map((i) => i.id)).size).toBe(3);
+  });
+
+  it('names in its body the closed questions and the agents not saved, and only those', () => {
+    const [item] = usageItems([
+      paused(1),
+      paused(2, pauseOf({ saved: false, closedQuestion: 'Quelle base de données ?' }), {
+        role: 'dev',
+      }),
+    ]);
+    expect(item?.kind).toBe('usage-paused');
+    expect(item?.detail).toContain('Question fermée : Quelle base de données ?');
+    expect(item?.detail).toContain('Non sauvegardé : Claude Code 2 · dev');
+    expect(item?.detail).not.toContain('Non sauvegardé : Claude Code 1');
+  });
+
+  it('names no unsaved agent and no question when everything was saved', () => {
+    const [item] = usageItems([paused(1), paused(2)]);
+    expect(item?.kind).toBe('usage-paused');
+    expect(item?.detail ?? '').not.toContain('Non sauvegardé');
+    expect(item?.detail ?? '').not.toContain('Question fermée');
+  });
+
+  it('lists after the answers and before the rate limits, and a paused agent asks nothing else of the user', () => {
+    const todos = deriveTodos(
+      workspace([
+        agent(1, { state: 'error', lastError: rateLimited }),
+        paused(2),
+        agent(3, { state: 'awaiting-answer' }),
+      ]),
+      names,
+    );
+    expect(todos.map((t) => t.kind)).toEqual(['answer', 'usage-paused', 'rate-limit']);
+  });
+
+  it('is not an error: a paused agent raises no rate-limit item', () => {
+    const todos = deriveTodos(workspace([paused(1)]), names);
+    expect(todos.map((t) => t.kind)).toEqual(['usage-paused']);
+  });
+
+  describe('and the alert of 005', () => {
+    const NOW = new Date('2030-01-01T09:05:00.000Z');
+    const reading = (account: string): UsageState => ({
+      cliId: 'claude-code',
+      account,
+      reading: {
+        cliId: 'claude-code',
+        account,
+        readAt: NOW.toISOString(),
+        windows: [
+          { id: 'five-hour', label: '5 h', usedPercent: 91, resetsAt: RESUME, minutes: 300 },
+        ],
+      },
+      shares: [],
+      level: 'critical',
+    });
+    const kinds = (agents: Agent[], states: UsageState[]) =>
+      deriveTodos(
+        workspace(agents),
+        names,
+        {},
+        {
+          states,
+          thresholds: { warn: 80, critical: 95 },
+          now: NOW,
+        },
+      )
+        .filter((t) => t.kind === 'usage-limit' || t.kind === 'usage-paused')
+        .map((t) => `${t.kind}:${t.usageLimit?.account ?? t.usage?.account ?? ''}`);
+
+    it('is absent for an account in pause', () => {
+      expect(kinds([paused(1)], [reading('default')])).toEqual(['usage-paused:default']);
+    });
+
+    it('stays for another account of the same CLI that is not paused', () => {
+      expect(kinds([paused(1), agent(2)], [reading('default'), reading('/autre')])).toEqual(
+        expect.arrayContaining(['usage-paused:default', 'usage-limit:/autre']),
+      );
+      expect(kinds([paused(1), agent(2)], [reading('default'), reading('/autre')])).toHaveLength(2);
+    });
+  });
+});
+
+// 009 T038 — « ◆ Limite <CLI> inconnue depuis <M> min » (contracts/ui.md « À faire », research R11, spec US3):
+// one item per account whose reading is too old (`staleProposal`), derived from the usage given to `deriveTodos`.
+// API fixed here: the `usage` argument gains two optional fields, `stops` (UsageStops, 90 % when absent) and
+// `declined` (UsageDeclined[]); the working agents counted are those of the workspace on the CLI of the account.
+// The body is `TodoItem.detail`, and `TodoItem.usageLimit = { cliId, account, kind: 'stale', step }`.
+describe('deriveTodos — usage-stale (009)', () => {
+  const NOW = new Date('2030-01-01T09:20:00.000Z');
+  const RESET = '2030-01-01T11:00:00.000Z';
+  const readAtOf = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000).toISOString();
+  const aged = (
+    minutes: number,
+    percent = 82,
+    over: { cliId?: string; account?: string } = {},
+  ): UsageState => {
+    const { cliId = 'claude-code', account = 'default' } = over;
+    return {
+      cliId,
+      account,
+      reading: {
+        cliId,
+        account,
+        readAt: readAtOf(minutes),
+        windows: [
+          { id: 'five-hour', label: '5 h', usedPercent: percent, resetsAt: RESET, minutes: 300 },
+        ],
+      },
+      shares: [],
+      level: 'ok',
+    };
+  };
+  const usageOf = (states: UsageState[], extra: Record<string, unknown> = {}) => ({
+    states,
+    // Above the readings used here: the alert of 005 stays out of these items.
+    thresholds: { warn: 99, critical: 100 },
+    now: NOW,
+    ...extra,
+  });
+  const stale = (agents: Agent[], states: UsageState[], extra: Record<string, unknown> = {}) =>
+    deriveTodos(workspace(agents), names, {}, usageOf(states, extra)).filter(
+      (todo) => todo.kind === 'usage-stale',
+    );
+
+  it('gives one item for an old reading and an agent at work, with the title and the body of the contract', () => {
+    const items = stale([agent(1, { state: 'working' })], [aged(16)]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: 'usage-stale',
+      title: '◆ Limite Claude Code inconnue depuis 16 min · dernière lecture 5 h à 82 %',
+      detail: 'PACT ne sait plus où en est la limite. Arrêter par prudence ?',
+      usageLimit: { cliId: 'claude-code', account: 'default', kind: 'stale', step: 1 },
+    });
+    expect(items[0]?.id.endsWith(':usage-stale')).toBe(true);
+  });
+
+  it('shows the age of the reading as it is now', () => {
+    const [item] = stale([agent(1)], [aged(37)]);
+    expect(item?.title).toContain('inconnue depuis 37 min');
+    expect(item?.usageLimit).toMatchObject({ step: 2 });
+  });
+
+  it('gives nothing at 15 minutes or less, without agent at work, or far from the threshold', () => {
+    expect(stale([agent(1)], [aged(15)])).toEqual([]);
+    expect(stale([agent(1)], [aged(14)])).toEqual([]);
+    expect(
+      stale([agent(1, { state: 'awaiting-prompt' }), agent(2, { state: 'done' })], [aged(40)]),
+    ).toEqual([]);
+    expect(stale([agent(1)], [aged(40, 79)])).toEqual([]);
+    expect(stale([agent(1)], [aged(40, 80)])).toHaveLength(1);
+  });
+
+  it('reads the threshold of the window from `stops`', () => {
+    const stops = { 'claude-code': { 'five-hour': 100 } };
+    expect(stale([agent(1)], [aged(40, 85)], { stops })).toEqual([]);
+    expect(stale([agent(1)], [aged(40, 90)], { stops })).toHaveLength(1);
+  });
+
+  it('gives one item per account, each with its own identity', () => {
+    const items = stale(
+      [agent(1), agent(2, { cliId: 'codex' })],
+      [aged(20), aged(20, 85, { cliId: 'codex' })],
+    );
+    expect(items.map((i) => i.usageLimit?.cliId).sort()).toEqual(['claude-code', 'codex']);
+    expect(new Set(items.map((i) => i.id)).size).toBe(2);
+  });
+
+  it('gives nothing for the CLI of which the workspace has no agent at work', () => {
+    const items = stale(
+      [agent(1, { cliId: 'codex', state: 'working' }), agent(2, { state: 'done' })],
+      [aged(20), aged(20, 85, { cliId: 'codex' })],
+    );
+    expect(items.map((i) => i.usageLimit?.cliId)).toEqual(['codex']);
+  });
+
+  describe('and the refusals (US3 sc.2)', () => {
+    const declined = (step: number, minutes = 20) => [
+      { cliId: 'claude-code', account: 'default', readAt: readAtOf(minutes), step },
+    ];
+
+    it('hides the step the user declined on this very reading', () => {
+      expect(stale([agent(1)], [aged(20)], { declined: declined(1) })).toEqual([]);
+      expect(stale([agent(1)], [aged(29)], { declined: declined(1, 29) })).toEqual([]);
+    });
+
+    it('brings it back at the next step of 15 minutes', () => {
+      const [item] = stale([agent(1)], [aged(31)], { declined: declined(1, 31) });
+      expect(item?.usageLimit).toMatchObject({ step: 2 });
+      expect(item?.title).toContain('inconnue depuis 31 min');
+    });
+
+    it('ignores a refusal made on another reading: a fresh reading erased it', () => {
+      const older = [
+        {
+          cliId: 'claude-code',
+          account: 'default',
+          readAt: readAtOf(50),
+          step: 3,
+        },
+      ];
+      expect(stale([agent(1)], [aged(20)], { declined: older })).toHaveLength(1);
+    });
+
+    it('ignores a refusal of another account', () => {
+      const other = [{ cliId: 'claude-code', account: '/autre', readAt: readAtOf(20), step: 1 }];
+      expect(stale([agent(1)], [aged(20)], { declined: other })).toHaveLength(1);
+    });
+  });
+
+  describe('the accounts the main process offered (FR-009: an agent of the account)', () => {
+    const two = [aged(20, 85, { account: '/a' }), aged(20, 85, { account: '/b' })];
+
+    it('keeps only the accounts offered, when the main process said which', () => {
+      const items = stale([agent(1, { state: 'working' })], two, {
+        offered: [{ cliId: 'claude-code', account: '/a' }],
+      });
+      expect(items.map((t) => t.agentId)).toEqual(['usage:claude-code:/a']);
+    });
+
+    it('gives no item when the main process offered none', () => {
+      expect(stale([agent(1, { state: 'working' })], two, { offered: [] })).toEqual([]);
+    });
+  });
+
+  it('lists after the answers and before the rate limits', () => {
+    const todos = deriveTodos(
+      workspace([
+        agent(1, { state: 'error', lastError: rateLimited }),
+        agent(2, { state: 'awaiting-answer' }),
+        agent(3, { state: 'working' }),
+      ]),
+      names,
+      {},
+      usageOf([aged(20)]),
+    );
+    expect(todos.map((t) => t.kind)).toEqual(['answer', 'usage-stale', 'rate-limit']);
+  });
+
+  it('gives no item without usage, as before', () => {
+    expect(
+      deriveTodos(workspace([agent(1)]), names).filter((t) => t.kind === 'usage-stale'),
+    ).toEqual([]);
   });
 });

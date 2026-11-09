@@ -46,6 +46,7 @@ const agent = (position: number, overrides: Partial<Agent> = {}): Agent => ({
   role: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
   effort: null,
   ...overrides,
 });
@@ -103,6 +104,7 @@ describe('Agent', () => {
       'awaiting-answer',
       'done',
       'error',
+      'paused',
       'closed',
     ]);
   });

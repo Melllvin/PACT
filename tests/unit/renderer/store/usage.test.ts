@@ -20,11 +20,16 @@ const usageState = (cliId: string, percent: number): UsageState => ({
   level: 'ok',
 });
 
-function fakeApi(usage: () => Promise<UsageState[]>) {
+function fakeApi(
+  usage: () => Promise<UsageState[]>,
+  stopsOf: () => Promise<unknown> = () => Promise.resolve({}),
+) {
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
   const invoke = vi.fn((channel: string, input?: unknown) => {
     if (channel === 'usage:get') return usage();
     if (channel === 'settings:usageThresholds') return Promise.resolve(input);
+    if (channel === 'usage:stops') return stopsOf();
+    if (channel === 'settings:usageStops') return Promise.resolve(input);
     return Promise.resolve({
       workspaces: [],
       recents: [],
@@ -101,5 +106,21 @@ describe('usage in the store', () => {
     await store.getState().setUsageThresholds({ warn: 60, critical: 85 });
     expect(invoke).toHaveBeenCalledWith('settings:usageThresholds', { warn: 60, critical: 85 });
     expect(store.getState().usageThresholds).toEqual({ warn: 60, critical: 85 });
+  });
+
+  it('loads the stop thresholds, and saves new ones (009 US4)', async () => {
+    const stops = { 'claude-code': { week: 80 } };
+    const { api, invoke } = fakeApi(
+      () => Promise.resolve([]),
+      () => Promise.resolve(stops),
+    );
+    const store = createAppStore(api);
+    await store.getState().load();
+    expect(store.getState().usageStops).toBeNull();
+    await store.getState().loadUsageStops();
+    expect(store.getState().usageStops).toEqual(stops);
+    await store.getState().setUsageStops({ codex: { 'five-hour': 70 } });
+    expect(invoke).toHaveBeenCalledWith('settings:usageStops', { codex: { 'five-hour': 70 } });
+    expect(store.getState().usageStops).toEqual({ codex: { 'five-hour': 70 } });
   });
 });

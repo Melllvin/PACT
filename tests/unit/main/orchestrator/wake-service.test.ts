@@ -6,11 +6,11 @@ import type { Agent, Workspace } from '../../../../src/shared/model';
 // for 5 s, then type ONE pointer, unless the agent cannot take it. Fake clock only: no real wait.
 //
 // API fixed here for the dev (see the report, « API fixées »):
-//   new WakeService({ workspaces: { get, list }, type, inputBusy, setNotice, usageCritical })
+//   new WakeService({ workspaces: { get, list }, type, inputBusy, setNotice, usageHeld })
 //     type(agentId, line)        types the one-line pointer (AgentManager.sendPrompt, origin 'wake')
 //     inputBusy(agentId)         the prompt of the agent holds something (draft not empty)
 //     setNotice(agentId, notice) Agent.wakeNotice: 'input' | 'cap' | null, saved and announced
-//     usageCritical(cliId)       usageAlert(...).level === 'critical' for an account of this CLI
+//     usageHeld(cliId)       an account of this CLI is in pause, or has a window at its stop threshold (009 R13)
 //   notify(workspaceId, message)   a message was recorded (ExchangeService.onRecorded)
 //   agentChanged(agentId)          the state or the prompt of the agent changed: try again
 //   restore()                      after a restart: announce what is still unread
@@ -35,7 +35,7 @@ type WakeOptions = {
   type(agentId: string, line: string): unknown;
   inputBusy(agentId: string): boolean;
   setNotice(agentId: string, notice: Notice): void;
-  usageCritical(cliId: string): boolean;
+  usageHeld(cliId: string): boolean;
 };
 type WakeModule = { WakeService: new (options: WakeOptions) => WakeLike };
 
@@ -56,7 +56,7 @@ let current: Workspace;
 let typed: { agentId: string; line: string }[];
 let notices: { agentId: string; notice: Notice }[];
 let busy: boolean;
-let critical: boolean;
+let usageIsHeld: boolean;
 let wake: WakeLike;
 let counter: number;
 
@@ -74,7 +74,7 @@ const create = async () => {
     setNotice: (agentId, notice) => {
       notices.push({ agentId, notice });
     },
-    usageCritical: () => critical,
+    usageHeld: () => usageIsHeld,
   });
 };
 
@@ -133,7 +133,7 @@ beforeEach(async () => {
   typed = [];
   notices = [];
   busy = false;
-  critical = false;
+  usageIsHeld = false;
   counter = 0;
   wake = await create();
 });
@@ -361,25 +361,25 @@ describe('the cap of 20 wakes an hour (FR-016, R7)', () => {
 });
 
 describe('the usage cut (FR-016, R7)', () => {
-  it('Given a critical level for the CLI, When an action arrives, Then it is held, and the pointer comes once below the threshold', async () => {
-    critical = true;
+  it('Given the usage held for the CLI (009 « usageHeld »), When an action arrives, Then it is held, and the pointer comes once below the threshold', async () => {
+    usageIsHeld = true;
     push();
     await advance(5000);
     await advance(120_000);
     expect(typed).toEqual([]);
-    critical = false;
+    usageIsHeld = false;
     await advance(31_000);
     expect(lines()).toEqual(['1 événement, lis get_events']);
   });
 });
 
 describe('an urgent wake (FR-017)', () => {
-  it('Given the cap reached and a critical level, When deliver({ urgent: true }) is called, Then the pointer is typed anyway', async () => {
+  it('Given the cap reached and the usage held, When deliver({ urgent: true }) is called, Then the pointer is typed anyway', async () => {
     for (let i = 0; i < 20; i++) {
       push();
       await advance(5000);
     }
-    critical = true;
+    usageIsHeld = true;
     push();
     await advance(5000);
     expect(typed).toHaveLength(20);
@@ -409,6 +409,84 @@ describe('an urgent wake (FR-017)', () => {
     wake.deliver(LEAD);
     await advance(1000);
     expect(typed).toHaveLength(20);
+  });
+});
+
+describe('a save instruction goes through (009 FR-004, 007 FR-017)', () => {
+  const fillCap = async () => {
+    for (let i = 0; i < 20; i++) {
+      push();
+      await advance(5000);
+    }
+    expect(typed).toHaveLength(20);
+  };
+
+  it('Given the cap of 20 wakes reached, When a usage-save arrives, Then its pointer is typed at the end of the window, without deliver', async () => {
+    await fillCap();
+    push('usage-save');
+    await advance(5000);
+    expect(typed).toHaveLength(21);
+    expect(lines().at(-1)).toBe('1 événement, lis get_events');
+    expect(notices.filter((n) => n.notice === 'cap')).toEqual([]);
+  });
+
+  it('Given the usage held, When a usage-save arrives, Then its pointer is typed at the end of the window', async () => {
+    usageIsHeld = true;
+    push('usage-save');
+    await advance(5000);
+    expect(lines()).toEqual(['1 événement, lis get_events']);
+  });
+
+  it('Given the usage held, When a usage-save and a report are pending, Then the one pointer announces both', async () => {
+    usageIsHeld = true;
+    push('report');
+    push('usage-save');
+    await advance(5000);
+    expect(lines()).toEqual(['2 événements, lis get_events']);
+  });
+
+  it('Given the usage held, When only a report is pending, Then it stays held: the exception is for usage-save only', async () => {
+    usageIsHeld = true;
+    push('report');
+    await advance(5000);
+    expect(typed).toEqual([]);
+  });
+
+  it('Given the usage held and a held report, When a usage-save arrives later, Then the pointer announces both at once', async () => {
+    usageIsHeld = true;
+    push('report');
+    await advance(5000);
+    expect(typed).toEqual([]);
+    push('usage-save');
+    await advance(5000);
+    expect(lines()).toEqual(['2 événements, lis get_events']);
+  });
+
+  it('Given a busy prompt, When a usage-save arrives, Then nothing is typed: the busy prompt still holds', async () => {
+    busy = true;
+    push('usage-save');
+    await advance(5000);
+    expect(typed).toEqual([]);
+    await advance(60_000);
+    expect(typed).toEqual([]);
+  });
+
+  it('Given an agent awaiting an answer, When a usage-save arrives, Then nothing is typed, and the pointer comes once the agent is back at its prompt', async () => {
+    setState(LEAD, 'awaiting-answer');
+    push('usage-save');
+    await advance(20_000);
+    expect(typed).toEqual([]);
+    setState(LEAD, 'awaiting-prompt');
+    wake.agentChanged(LEAD);
+    await advance(1);
+    expect(lines()).toEqual(['1 événement, lis get_events']);
+  });
+
+  it('Given the pointer of a usage-save, When it is typed, Then it holds no word of the instruction', async () => {
+    push('usage-save');
+    await advance(5000);
+    expect(lines()).toEqual(['1 événement, lis get_events']);
+    expect(lines().join(' ')).not.toMatch(/commit|limite|pousse/i);
   });
 });
 

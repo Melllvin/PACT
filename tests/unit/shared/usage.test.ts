@@ -213,6 +213,60 @@ describe('launchWarning', () => {
     expect(launchWarning([old], 'claude-code', thresholds, NOW)).toBeNull();
     expect(levelNow(old, thresholds, NOW)).toBe('ok');
   });
+
+  // 009 T018 — R12, contracts/events.md « Lanceur de l'utilisateur »: the pause comes first. API fixed here:
+  // `launchWarning(states, cliId, thresholds, now, pauses = [])`, `pauses` being the `Agent.pause` of the
+  // account(s) in pause; only the ones of `cliId` count.
+  describe('during a pause at a limit (009 R12)', () => {
+    const RESET = new Date('2026-11-03T16:40:00').toISOString();
+    const pause = (cliId: string, label = '5 h', resumeAt: string | null = RESET) => ({
+      cliId,
+      account: 'default',
+      cause: 'threshold' as const,
+      windows: [{ id: 'five-hour', label, percent: 90, resetsAt: resumeAt }],
+      resumeAt,
+      pausedAt: NOW.toISOString(),
+      midTurn: false,
+      saved: true,
+      closedQuestion: null,
+      blocked: null,
+    });
+    const warn = (
+      states: UsageState[],
+      pauses: ReturnType<typeof pause>[],
+      cliId = 'claude-code',
+    ) =>
+      (
+        launchWarning as unknown as (
+          ...args: [UsageState[], string, typeof thresholds, Date, ReturnType<typeof pause>[]]
+        ) => string | null
+      )(states, cliId, thresholds, NOW, pauses);
+    const PAUSE_TEXT =
+      "PACT est en pause sur la limite 5 h jusqu'à 16:40 : ces agents ne seront pas arrêtés avant la réinitialisation.";
+
+    it('says the pause, with the window and the resume time, even when no gauge is near its limit', () => {
+      expect(warn([state('claude-code', 40)], [pause('claude-code')])).toBe(PAUSE_TEXT);
+    });
+
+    it('puts the pause before the warning of 005, which keeps its own text', () => {
+      const text = warn([state('claude-code', 85)], [pause('claude-code')]);
+      expect(text?.startsWith(PAUSE_TEXT)).toBe(true);
+      expect(text).toContain('Limite 5 h à 85 % : ces agents risquent de s’arrêter avant 16:40');
+    });
+
+    it('ignores the pause of another CLI', () => {
+      expect(warn([state('claude-code', 85)], [pause('codex')])).toBe(
+        'Limite 5 h à 85 % : ces agents risquent de s’arrêter avant 16:40',
+      );
+      expect(warn([state('claude-code', 40)], [pause('codex')])).toBeNull();
+    });
+
+    it('keeps the warning of 005 as it was when nothing is paused', () => {
+      expect(warn([state('claude-code', 85)], [])).toBe(
+        'Limite 5 h à 85 % : ces agents risquent de s’arrêter avant 16:40',
+      );
+    });
+  });
 });
 
 describe('workspaceShares (005 US3)', () => {

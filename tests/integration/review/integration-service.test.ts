@@ -80,6 +80,7 @@ const agent = (id: string, worktreePath: string, state: AgentState = 'done'): Ag
   role: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
   effort: null,
 });
 

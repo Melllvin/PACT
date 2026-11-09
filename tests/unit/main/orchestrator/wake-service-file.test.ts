@@ -59,7 +59,7 @@ beforeEach(() => {
     },
     inputBusy: () => false,
     setNotice: () => undefined,
-    usageCritical: () => false,
+    usageHeld: () => false,
     file: { applies: () => true, write },
   });
 });

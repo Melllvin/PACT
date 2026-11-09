@@ -18,6 +18,7 @@ import { AmbientCanvas } from '../effects/AmbientCanvas';
 import { WorkspaceView } from '../workspace/WorkspaceView';
 import { RoleProfilesDialog } from '../settings/RoleProfiles';
 import { launchWarning } from '../../shared/usage';
+import { pausesOf } from '../../shared/usage-limit';
 import { Button } from '@/components/ui/button';
 import { Legend } from './Legend';
 import { BUILD_INFO, formatBuildInfo } from '../../shared/build-info';
@@ -148,7 +149,11 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               usage={Object.values(state.usage)}
               focusRequest={state.focusRequest}
               usageThresholds={state.usageThresholds}
+              usageLimit={state.usageLimit}
               onUsageThresholds={(thresholds) => void state.setUsageThresholds(thresholds)}
+              usageStops={state.usageStops}
+              onOpenUsageStops={() => void state.loadUsageStops()}
+              onUsageStops={(stops) => void state.setUsageStops(stops)}
               onAddAgents={() => {
                 state.openLauncher(workspace.id);
               }}
@@ -168,6 +173,11 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onConfirmIntegration: (id, message) =>
                   void state.confirmIntegrationRequest(id, message),
                 onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
+                onUsageResume: (cliId, account) => void state.resumeUsage(cliId, account),
+                onUsageCancelResume: (cliId, account) =>
+                  void state.cancelUsageResume(cliId, account),
+                onUsageStale: (cliId, account, decision) =>
+                  void state.decideUsageStale(cliId, account, decision),
                 onDecideLoop: (issueId, decision) =>
                   void state.decideLoop(workspace.id, issueId, decision),
                 onDecideExchange: (escalationId, decision) =>
@@ -262,7 +272,13 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               localChanges={launcher.localChanges ?? false}
               profiles={launching.roleProfiles}
               usageWarning={(cliId) =>
-                launchWarning(Object.values(state.usage), cliId, state.usageThresholds, new Date())
+                launchWarning(
+                  Object.values(state.usage),
+                  cliId,
+                  state.usageThresholds,
+                  new Date(),
+                  pausesOf(workspaces),
+                )
               }
               onLaunch={(draft) => void state.requestLaunch(draft)}
               onClose={state.closeLauncher}

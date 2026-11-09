@@ -295,3 +295,22 @@ describe('UsageService', () => {
     });
   });
 });
+
+describe('009 — reading and warning during a pause', () => {
+  it('gives the latest reading of an account, or null before any', () => {
+    const { usage } = service();
+    expect(usage.reading('claude-code', 'default')).toBeNull();
+    usage.record(source(), sample(42));
+    expect(usage.reading('claude-code', 'default')?.windows[0]?.usedPercent).toBe(42);
+    expect(usage.reading('claude-code', 'autre')).toBeNull();
+  });
+
+  it('puts the pause of its CLI before the warning of 005', () => {
+    const { usage } = service();
+    const pause = [
+      { cliId: 'claude-code', windows: [{ label: '5 h' }], resumeAt: null },
+    ] as unknown as Parameters<typeof usage.warning>[1];
+    expect(usage.warning('claude-code', pause)).toContain('PACT est en pause sur la limite 5 h');
+    expect(usage.warning('claude-code')).toBeNull();
+  });
+});

@@ -31,6 +31,7 @@ const agent = (n: number, state: Agent['state'], color: Agent['color']): Agent =
   role: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
   effort: null,
 });
 

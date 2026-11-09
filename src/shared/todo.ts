@@ -1,6 +1,13 @@
 import { agentName } from './agent-name';
 import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
-import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
+import {
+  heaviest,
+  staleProposal,
+  type UsageDeclined,
+  type UsagePause,
+  type UsageStops,
+} from './usage-limit';
+import { clockTime, readingAge, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
 // 003 data-model: the integrations asked for come after the answers, before the reviews.
 export const ORDER: TodoKind[] = [
@@ -10,6 +17,8 @@ export const ORDER: TodoKind[] = [
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',
+  'usage-paused',
+  'usage-stale',
   'rate-limit',
   'usage-limit',
   'wake-held',
@@ -21,7 +30,7 @@ export const ORDER: TodoKind[] = [
 const plural = (count: number, word: string) => `${String(count)} ${word}${count > 1 ? 's' : ''}`;
 
 /** « <CLI> <number> · <role> »: which agent, and what it does. */
-const who = (agent: Agent, cli: string) =>
+export const who = (agent: Agent, cli: string) =>
   [agentName(agent, () => cli), ...(agent.role ? [agent.role] : [])].join(' · ');
 
 /** Who gets no « Changements à relire »: the orchestrator, and the agents of a loop until it ends. */
@@ -113,7 +122,16 @@ export function deriveTodos(
   /** The agents with changes to review, with their number of changed files (`review:pending`). */
   toReview: Readonly<Record<string, number>> | readonly never[] = {},
   /** 005 — the usage of the CLI accounts, read with the thresholds at `now`. */
-  usage?: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
+  usage?: {
+    states: readonly UsageState[];
+    thresholds: UsageThresholds;
+    now: Date;
+    /** 009 US3 — the stop thresholds (90 % when absent) and the offers the user put off. */
+    stops?: UsageStops;
+    declined?: readonly UsageDeclined[];
+    /** 009 US3 — the accounts the main process offers a stop by caution for, when it said. */
+    offered?: readonly { cliId: string; account: string }[];
+  },
 ): TodoItem[] {
   const agents = [...workspace.agents].sort((a, b) => a.position - b.position);
   // 007 R9 — with an orchestrator that is not in error, the questions of the others go to it.
@@ -205,7 +223,16 @@ export function deriveTodos(
     title: `En cours ▸ ${shellName(terminal.shell)} — ${workspace.mainBranch}`,
     actions: [],
   }));
-  const limits = usage ? usageTodos(workspace, names, usage) : [];
+  const pausedKeys = new Set(
+    agents.flatMap((agent) =>
+      agent.pause ? [`${agent.pause.cliId}\u0000${agent.pause.account}`] : [],
+    ),
+  );
+  const limits = [
+    ...(usage ? usageTodos(workspace, names, usage, pausedKeys) : []),
+    ...(usage ? staleTodos(agents, names, usage) : []),
+    ...pausedTodos(agents, names),
+  ];
   // Array.prototype.sort is stable: the tile order holds within a kind.
   const held = agents.flatMap((agent) => wakeHeld(agent, names(agent.cliId)) ?? []);
   return [
@@ -233,13 +260,18 @@ function usageTodos(
     thresholds,
     now,
   }: { states: readonly UsageState[]; thresholds: UsageThresholds; now: Date },
+  /** 009 — the accounts in pause: their alert of 005 gives way to « ◆ En pause ». */
+  paused: ReadonlySet<string> = new Set(),
 ): TodoItem[] {
   // A closed agent uses no quota: its CLI alone raises no alert (006).
   const clis = new Set(
     workspace.agents.filter((agent) => agent.state !== 'closed').map((agent) => agent.cliId),
   );
   return states.flatMap((state): TodoItem[] => {
-    const alert = clis.has(state.cliId) ? usageAlert(state, thresholds, now) : null;
+    const alert =
+      clis.has(state.cliId) && !paused.has(`${state.cliId}\u0000${state.account}`)
+        ? usageAlert(state, thresholds, now)
+        : null;
     if (!alert) return [];
     const key = `usage:${state.cliId}:${state.account}`;
     const reset = alert.window.resetsAt === null ? 'inconnue' : clockTime(alert.window.resetsAt);
@@ -251,6 +283,103 @@ function usageTodos(
         title: `◆ Limite ${names(state.cliId)} à ${String(alert.percent)} % · ${alert.window.label} · réinitialisation ${reset}`,
         actions: [],
         usage: { cliId: state.cliId, account: state.account, level: alert.level },
+      },
+    ];
+  });
+}
+
+/**
+ * 009 contracts/ui.md — « ◆ En pause · <CLI> · limite <fenêtre> à <N> % · reprise <HH:MM> »: one
+ * per account of the workspace, with the questions the stop closed and the agents left unsaved.
+ */
+function pausedTodos(agents: readonly Agent[], names: (cliId: string) => string): TodoItem[] {
+  const accounts = new Map<string, { pause: UsagePause; members: Agent[] }>();
+  for (const agent of agents) {
+    if (agent.state !== 'paused' || !agent.pause) continue;
+    const key = `${agent.pause.cliId}\u0000${agent.pause.account}`;
+    const known = accounts.get(key);
+    if (known) known.members.push(agent);
+    else accounts.set(key, { pause: agent.pause, members: [agent] });
+  }
+  return [...accounts.values()].map(({ pause, members }): TodoItem => {
+    const windows = pause.windows.map((w) => `${w.label} à ${String(w.percent)} %`);
+    const named = `${windows.length > 1 ? 'limites' : 'limite'} ${windows.join(' et ')}`;
+    const resume = pause.resumeAt === null ? 'après réinitialisation' : clockTime(pause.resumeAt);
+    const questions = members.flatMap((a) =>
+      a.pause?.closedQuestion ? [a.pause.closedQuestion] : [],
+    );
+    const unsaved = members
+      .filter((a) => a.pause?.saved === false)
+      .map((a) => who(a, names(a.cliId)));
+    const detail = [
+      ...(questions.length > 0 ? [`Question fermée : ${questions.join(' · ')}`] : []),
+      ...(unsaved.length > 0 ? [`Non sauvegardé : ${unsaved.join(', ')}`] : []),
+    ].join(' ');
+    const key = `usage:${pause.cliId}:${pause.account}`;
+    return {
+      id: `${key}:usage-paused`,
+      agentId: key,
+      kind: 'usage-paused',
+      title: `◆ En pause · ${names(pause.cliId)} · ${named} · reprise ${resume}`,
+      actions: [],
+      ...(detail === '' ? {} : { detail }),
+      usageLimit: { cliId: pause.cliId, account: pause.account, kind: 'paused' },
+    };
+  });
+}
+
+/**
+ * 009 US3 — « ◆ Limite <CLI> inconnue depuis <M> min · dernière lecture <fenêtre> à <N> % »: one
+ * per account whose reading is too old, until the user answers for this step. Only an offer.
+ */
+function staleTodos(
+  agents: readonly Agent[],
+  names: (cliId: string) => string,
+  {
+    states,
+    now,
+    stops = {},
+    declined = [],
+    offered,
+  }: {
+    states: readonly UsageState[];
+    now: Date;
+    stops?: UsageStops;
+    declined?: readonly UsageDeclined[];
+    offered?: readonly { cliId: string; account: string }[];
+  },
+): TodoItem[] {
+  return states.flatMap((state): TodoItem[] => {
+    // Only the main process knows the account of an agent and its overrides (FR-009).
+    if (offered && !offered.some((o) => o.cliId === state.cliId && o.account === state.account)) {
+      return [];
+    }
+    const working = agents.filter((a) => a.cliId === state.cliId && a.state === 'working').length;
+    const proposal = staleProposal(state, stops, working, now);
+    if (!proposal || !state.reading) return [];
+    const refused = declined.find(
+      (d) =>
+        d.cliId === state.cliId &&
+        d.account === state.account &&
+        d.readAt === state.reading?.readAt,
+    );
+    if (refused && refused.step >= proposal.step) return [];
+    const key = `usage:${state.cliId}:${state.account}`;
+    const window = heaviest(proposal.windows);
+    return [
+      {
+        id: `${key}:usage-stale`,
+        agentId: key,
+        kind: 'usage-stale',
+        title: `◆ Limite ${names(state.cliId)} inconnue depuis ${String(readingAge(state.reading, now).minutes)} min · dernière lecture ${window.label} à ${String(window.percent)} %`,
+        actions: [],
+        detail: 'PACT ne sait plus où en est la limite. Arrêter par prudence ?',
+        usageLimit: {
+          cliId: state.cliId,
+          account: state.account,
+          kind: 'stale',
+          step: proposal.step,
+        },
       },
     ];
   });

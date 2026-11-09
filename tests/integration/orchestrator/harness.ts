@@ -85,7 +85,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
         setNotice: (agentId, notice) => {
           void manager.setWakeNotice(agentId, notice).catch(() => undefined);
         },
-        usageCritical: () => false,
+        usageHeld: () => false,
         file: eventsFile({
           exchanges,
           agents: {
@@ -118,6 +118,15 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
   const pending = { ids: [] as string[] };
   /** 005 — the usage warning of each CLI, as UsageService would tell; set by a suite. */
   const usageWarnings: Record<string, string> = {};
+  /**
+   * 009 — the pause of the account of each CLI, as `UsageLimitService.pausedFor` would tell; set by a suite.
+   * Given to the tools by a spread, so that the harness compiles before `pausedFor` is a dependency.
+   */
+  const usagePauses: Record<
+    string,
+    { windows: { label: string }[]; resumeAt: string | null } | undefined
+  > = {};
+  const pausedForTools = { pausedFor: (cliId: string) => usagePauses[cliId] ?? null };
   const typed: { agentId: string; origin: string }[] = [];
   const review = new ReviewService({ git: gitService, workspaces });
   /** What `orchestrator:report` announced, in order (004 US2). */
@@ -160,6 +169,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
           issues,
           clis: () => registry.list(),
           usageWarning: (cliId) => usageWarnings[cliId] ?? null,
+          ...pausedForTools,
           permissions,
           ...withExchanges,
           log: (entry) => {
@@ -332,6 +342,7 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     orchestrator,
     pending,
     usageWarnings,
+    usagePauses,
     typed,
     /** 007 — the wake, as the app wires it; `deliver(id)` skips the window of 5 s. */
     wake,

@@ -36,6 +36,7 @@ const agent = (overrides: Partial<Agent> = {}): Agent => ({
   role: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
   effort: null,
   ...overrides,
 });
@@ -346,5 +347,45 @@ describe('the pointer is not the initial prompt (R11)', () => {
     current = applySignal(current, { type: 'prompt-submitted', prompt: POINTER });
     current = applySignal(current, { type: 'prompt-submitted', prompt: 'Autre consigne' });
     expect(current.initialPrompt).toBe('Corrige a.ts\nPuis b.ts');
+  });
+});
+
+// 009 T004 — a paused agent has no process: no signal and no exit changes it (research R1, data-model
+// « Transitions »).
+
+describe('a paused agent', () => {
+  const paused = {
+    ...agent({ sessionId: 'session-1' }),
+    state: 'paused',
+    pause: {
+      cliId: 'claude-code',
+      account: 'default',
+      cause: 'threshold',
+      windows: [{ id: 'five-hour', label: '5 h', percent: 91, resetsAt: null }],
+      resumeAt: null,
+      pausedAt: '2026-11-08T10:00:00.000Z',
+      midTurn: false,
+      saved: true,
+      closedQuestion: null,
+      blocked: null,
+    },
+  } as unknown as Agent;
+
+  const signals: AgentSignal[] = [
+    { type: 'session-started', sessionId: 'session-2' },
+    { type: 'prompt-submitted' },
+    { type: 'prompt-submitted', prompt: 'continue' },
+    { type: 'awaiting-answer', summary: 'Exécuter ?' },
+    { type: 'turn-finished' },
+    { type: 'failed', kind: 'rate-limit', message: 'Limite atteinte' },
+    { type: 'failed', kind: 'crash', message: 'boom' },
+  ];
+
+  it.each(signals)('stays as it is on the signal %j', (signal) => {
+    expect(applySignal(paused, signal)).toBe(paused);
+  });
+
+  it.each([0, 1, null])('stays paused when the process ends with code %j', (code) => {
+    expect(applyExit(paused, code)).toBe(paused);
   });
 });

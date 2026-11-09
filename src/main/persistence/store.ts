@@ -7,6 +7,7 @@ import {
   recentProjectsSchema,
   workspaceSchema,
 } from '../../shared/model';
+import { usageLimitStateSchema, usageStopsSchema } from '../../shared/usage-limit';
 import { DEFAULT_USAGE_THRESHOLDS, usageThresholdsSchema } from '../../shared/usage';
 
 // research.md R9 — JSON files in userData, validated by zod, written atomically.
@@ -105,6 +106,10 @@ export const appStateSchema = z.object({
   permission: permissionPreferenceSchema.nullable(),
   /** 005 FR-012 — the alert thresholds of the usage gauges; absent before 005. */
   usageThresholds: usageThresholdsSchema.default(DEFAULT_USAGE_THRESHOLDS),
+  /** 009 R2 — the stop threshold of each window, per CLI; absent before 009. */
+  usageStops: usageStopsSchema,
+  /** 009 — the saves sent, the overrides and the refusals of a stop by prudence. */
+  usageLimit: usageLimitStateSchema,
 });
 export type AppState = z.infer<typeof appStateSchema>;
 
@@ -114,6 +119,8 @@ const emptyAppState = (): AppState => ({
   customClis: [],
   permission: null,
   usageThresholds: DEFAULT_USAGE_THRESHOLDS,
+  usageStops: {},
+  usageLimit: { saves: [], overrides: [], declined: [], resumed: [] },
 });
 
 /** Workspace ids are hashes of the repository path: anything else could escape the folder. */

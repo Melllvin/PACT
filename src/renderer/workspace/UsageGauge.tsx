@@ -12,6 +12,7 @@ import {
   type UsageState,
   type UsageThresholds,
 } from '../../shared/usage';
+import { windowsOf, type UsageStops } from '../../shared/usage-limit';
 import { ROLE_LABELS } from '../../shared/roles';
 import { UsageThresholdsDialog } from '../settings/UsageThresholds';
 import { cn } from '@/lib/utils';
@@ -30,11 +31,14 @@ const time = clockTime;
 export const usageKey = (state: Pick<UsageState, 'cliId' | 'account'>) =>
   `usage:${state.cliId}:${state.account}`;
 
+/** The clock of the main process at the last `usage:limit`, and ours at that moment. */
+export type MainClock = { mainAt: number; localAt: number };
+
 /**
  * The clock of the gauges: a tick every 30 s, since the age of a reading moves on without a new
  * one; a reading fresher than the last tick moves it on.
  */
-export function useUsageClock(usage: readonly UsageState[]): Date {
+export function useUsageClock(usage: readonly UsageState[], main?: MainClock): Date {
   const [tick, setTick] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => {
@@ -44,9 +48,12 @@ export function useUsageClock(usage: readonly UsageState[]): Date {
       clearInterval(timer);
     };
   }, []);
+  // 009 US3 — the main process tells its own clock (the test clock of the e2e harness is not this
+  // one): the time it gave, moved on by the time that passed here since.
+  const local = main ? main.mainAt + Math.max(0, tick.getTime() - main.localAt) : 0;
   return new Date(
     Math.max(
-      tick.getTime(),
+      main ? local : tick.getTime(),
       ...usage.map((state) => (state.reading ? Date.parse(state.reading.readAt) : 0)),
     ),
   );
@@ -249,6 +256,19 @@ export function UsageGauge({
   );
 }
 
+/** 009 US4 — one row per CLI that has a gauge, its windows from the readings. */
+function stopClis(
+  usage: readonly UsageState[],
+  clis: readonly Pick<CliDefinition, 'id' | 'name'>[],
+) {
+  const ids = [...new Set(usage.map((state) => state.cliId))];
+  return ids.map((cliId) => ({
+    cliId,
+    name: clis.find((cli) => cli.id === cliId)?.name ?? cliId,
+    windows: windowsOf(cliId, usage),
+  }));
+}
+
 /** Every gauge of the workspace; nothing without a reading (FR-006). */
 export function UsageGauges({
   workspace,
@@ -259,6 +279,9 @@ export function UsageGauges({
   detail = null,
   onDetail,
   onThresholds,
+  stops,
+  onStops,
+  onOpenStops,
 }: {
   workspace: Pick<Workspace, 'agents'> & Partial<Pick<Workspace, 'id'>>;
   usage: readonly UsageState[];
@@ -269,6 +292,11 @@ export function UsageGauges({
   detail?: string | null;
   onDetail?: (key: string | null) => void;
   onThresholds?: (thresholds: UsageThresholds) => void;
+  /** 009 US4 — the stop thresholds of the CLIs, shown in the settings. */
+  stops?: UsageStops;
+  onStops?: (stops: UsageStops) => void;
+  /** The settings open: the stop thresholds are asked for. */
+  onOpenStops?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const gauges = workspaceGauges(workspace, usage, now);
@@ -293,6 +321,7 @@ export function UsageGauges({
             })}
             {...(onThresholds && {
               onThresholds: () => {
+                onOpenStops?.();
                 setEditing(true);
               },
             })}
@@ -303,6 +332,14 @@ export function UsageGauges({
         <UsageThresholdsDialog
           thresholds={thresholds}
           onSave={onThresholds}
+          {...(stops &&
+            onStops && {
+              stopSettings: {
+                stops,
+                clis: stopClis(usage, clis),
+                onSave: onStops,
+              },
+            })}
           onClose={() => {
             setEditing(false);
           }}
