@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   MAX_REASON,
+  MAX_REBASES_IN_A_ROW,
+  checkName,
   deliveryGate,
   isFinalState,
   prBody,
@@ -38,6 +40,7 @@ export type Forge = Pick<
   | 'statuses'
   | 'requiredChecks'
   | 'rerunJob'
+  | 'jobLog'
 >;
 
 export interface DeliveryServiceDeps {
@@ -72,6 +75,8 @@ export interface DeliveryServiceDeps {
   agents: Pick<AgentManager, 'close'>;
   /** The rhythm of the CI watcher; `CI_POLL_MS` by default. */
   pollMs?: number;
+  /** The silence of a configured CI that is signalled; 10 min by default (a test goes faster). */
+  silentMs?: number | undefined;
   exchanges: { record(workspaceId: string, draft: RecordInput): Promise<ExchangeMessage> };
   /** `<userData>/deliveries`: the place of the tests on the rebased commit, removed after. */
   deliveriesDir: string;
@@ -94,7 +99,7 @@ export type DeliveryRequest = {
 
 export type DeliveryDecision = {
   deliveryId: string;
-  decision: 'validate' | 'refuse';
+  decision: 'validate' | 'refuse' | 'wait' | 'review';
   head: string;
   reason?: string | undefined;
 };
@@ -162,8 +167,10 @@ export class DeliveryService {
           this.onAlert(workspaceId, deliveryId, reason, checks),
         closed: ({ workspaceId, deliveryId, state }) =>
           this.onClosedOnForge(workspaceId, deliveryId, state),
+        behind: ({ workspaceId, deliveryId, head }) => this.onBehind(workspaceId, deliveryId, head),
       },
       ...(deps.pollMs === undefined ? {} : { pollMs: deps.pollMs }),
+      silentMs: deps.silentMs,
     });
   }
 
@@ -461,7 +468,6 @@ export class DeliveryService {
       throw new Stop('refused', 'Le dépôt distant est injoignable (fetch).', 'refused');
     }
     const onto = `origin/${d.target}`;
-    const redo = `Recale ta branche sur ${onto} (git rebase ${onto}), résous les conflits, commite, puis redemande un verdict.`;
     const rebase = await git
       .rebaseOnto(ws.path, {
         commit: d.frozenCommit,
@@ -472,7 +478,7 @@ export class DeliveryService {
         const why = error instanceof Error ? error.message.slice(0, MAX_TAIL) : 'erreur de git';
         throw new Stop(
           'conflicted',
-          `Recalage impossible sur ${onto} : ${why}. ${redo}`,
+          `Recalage impossible sur ${onto} : ${why}. ${this.redo(onto)}`,
           'conflicted',
           'recalage impossible',
           true,
@@ -482,7 +488,7 @@ export class DeliveryService {
       const files = rebase.conflicts.join(', ');
       throw new Stop(
         'conflicted',
-        `Conflit au recalage sur ${onto} : ${files}. ${redo}`,
+        `Conflit au recalage sur ${onto} : ${files}. ${this.redo(onto)}`,
         'conflicted',
         files,
         true,
@@ -495,25 +501,8 @@ export class DeliveryService {
       verdictCommit: d.unverified ? null : rebased,
     });
 
-    const dir = join(this.deps.deliveriesDir, d.id);
-    await git.addDetached(ws.path, dir, rebased);
-    try {
-      const command = ws.testCommand ?? (await detectTestCommandIn(dir));
-      if (command !== null) {
-        const run = await this.deps.runTests(dir, command);
-        if (!run.passed) {
-          throw new Stop(
-            'tests-failed',
-            `Tests rouges sur ${short(rebased)}${run.tail ? ` : ${run.tail.slice(-MAX_TAIL)}` : ''}`,
-            'tests-failed',
-            short(rebased),
-            true,
-          );
-        }
-      }
-    } finally {
-      await git.removeDetached(ws.path, dir);
-    }
+    const red = await this.testsOn(ws, d, rebased);
+    if (red) throw red;
     await this.ensureHead(agent, d);
 
     // R22 — the PR of a request that fell is read by its number before anything is pushed.
@@ -639,6 +628,33 @@ export class DeliveryService {
       );
     }
     return earlier;
+  }
+
+  private redo(onto: string): string {
+    return `Recale ta branche sur ${onto} (git rebase ${onto}), résous les conflits, commite, puis redemande un verdict.`;
+  }
+
+  /** The tests of PACT on the rebased commit, in a place of PACT's own: `null` when they pass (or are none). */
+  private async testsOn(ws: Workspace, d: Delivery, rebased: string): Promise<Stop | null> {
+    const { git } = this.deps;
+    const dir = join(this.deps.deliveriesDir, d.id);
+    await git.addDetached(ws.path, dir, rebased);
+    try {
+      const command = ws.testCommand ?? (await detectTestCommandIn(dir));
+      if (command === null) return null;
+      const run = await this.deps.runTests(dir, command);
+      return run.passed
+        ? null
+        : new Stop(
+            'tests-failed',
+            `Tests rouges sur ${short(rebased)}${run.tail ? ` : ${run.tail.slice(-MAX_TAIL)}` : ''}`,
+            'tests-failed',
+            short(rebased),
+            true,
+          );
+    } finally {
+      await git.removeDetached(ws.path, dir);
+    }
   }
 
   /** The head of the dev is still F: a commit PACT did not make drops the request (R6). */
@@ -768,6 +784,9 @@ export class DeliveryService {
     const workspaceId = owner.id;
     const found = this.current(workspaceId, input.deliveryId);
     if (found.channel === 'github') return this.decideOnForge(workspaceId, found, input);
+    if (input.decision === 'wait' || input.decision === 'review') {
+      throw new IpcFailure('INVALID_INPUT', 'Cette décision ne concerne qu’une PR.');
+    }
     if (found.state !== 'reviewing') {
       throw new IpcFailure('INVALID_INPUT', 'Cette livraison n’attend pas de décision.');
     }
@@ -851,6 +870,9 @@ export class DeliveryService {
     if (input.head !== (found.pushedHead ?? found.frozenCommit)) {
       throw new IpcFailure('INVALID_INPUT', 'La tête a changé depuis l’affichage : recharge.');
     }
+    if (input.decision === 'wait' || input.decision === 'review') {
+      return this.answerSilence(workspaceId, found);
+    }
     // FR-013 — a CI that is configured and has no green check on this head forbids « Valider ».
     if (
       input.decision === 'validate' &&
@@ -883,6 +905,24 @@ export class DeliveryService {
     } finally {
       this.deciding.delete(found.id);
     }
+  }
+
+  /**
+   * « Attendre encore » / « Relire » of a silent CI (FR-016): the silence counts again from now, the item
+   * goes and comes back after 10 more minutes if nothing shows. « Relire » says the same to PACT: the PR is
+   * opened by the main process (`prUrl`), nothing is merged here. On the alert of the rebases the same answer
+   * is « Compris »: the count starts again. A second click on an item already answered changes nothing.
+   */
+  private async answerSilence(workspaceId: string, found: Delivery): Promise<Delivery> {
+    const silent = found.ci?.verdict === 'silent' ? found.ci : null;
+    const alerted = found.rebases >= MAX_REBASES_IN_A_ROW;
+    if (silent === null && !alerted) return found;
+    return this.save(workspaceId, found.id, {
+      ...(silent
+        ? { ci: { ...silent, emptySince: new Date().toISOString(), verdict: 'pending' as const } }
+        : {}),
+      ...(alerted ? { rebases: 0 } : {}),
+    });
   }
 
   private async refuseLocal(workspaceId: string, d: Delivery, reason: string | undefined) {
@@ -1007,7 +1047,7 @@ export class DeliveryService {
       id,
       new Stop(
         'ci-red',
-        `La CI de la PR #${String(d.pr.number)} est rouge : ${names} (noms de checks rapportés par la forge). Corrige, commite, puis redemande un verdict.`,
+        `La CI de la PR #${String(d.pr.number)} est rouge : ${names} (noms de checks rapportés par la forge). Pour lire le journal d’un check : get_ci_log({ check }). Corrige, commite, puis redemande un verdict.`,
         'ci-red',
         names,
         !d.unverified,
@@ -1056,6 +1096,127 @@ export class DeliveryService {
       pr: this.prOf(d),
       checks,
     });
+  }
+
+  /**
+   * FR-017 — main moved or a conflict: the PR is rebased on `origin/<target>`, the tests of PACT run on R,
+   * R is pushed (lease on the head just read), and a new CI is awaited. No round is counted. A conflict or
+   * red tests end the request (`conflicted`, `tests-failed`) with a counted round. `true`: the head moved
+   * or the request ended; `false`: nothing to do (already up to date, a merge under way). The lock of the
+   * merge is held: neither a merge nor a second rebase meets this one.
+   */
+  private async onBehind(workspaceId: string, id: string, head: string): Promise<boolean> {
+    if (this.merging.has(id)) return false;
+    this.merging.add(id);
+    try {
+      const result = await this.enqueue(workspaceId, () =>
+        this.rebaseAfterPr(workspaceId, id, head),
+      );
+      if (result instanceof Stop) await this.end(workspaceId, id, result);
+      return result !== false;
+    } finally {
+      this.merging.delete(id);
+    }
+  }
+
+  private async rebaseAfterPr(
+    workspaceId: string,
+    id: string,
+    head: string,
+  ): Promise<Stop | boolean> {
+    const { git } = this.deps;
+    let d = this.current(workspaceId, id);
+    const ws = this.workspace(workspaceId);
+    // A fetch that fails leaves the old `origin/<target>`: the PR is then already on it, and nothing moves.
+    await git.fetchRefs(ws.path, [d.target]);
+    const onto = `origin/${d.target}`;
+    const rebase = await git.rebaseOnto(ws.path, {
+      commit: head,
+      onto,
+      dir: join(this.deps.deliveriesDir, d.id),
+    });
+    if (rebase.commit === null) {
+      const files = rebase.conflicts.join(', ');
+      return new Stop(
+        'conflicted',
+        `Conflit au recalage sur ${onto} : ${files}. ${this.redo(onto)}`,
+        'conflicted',
+        files,
+        true,
+      );
+    }
+    const rebased = rebase.commit;
+    if (rebased === head) return false;
+    const red = await this.testsOn(ws, d, rebased);
+    if (red) return red;
+    // The PR may have changed while the tests ran: the lease fails then, and nothing is lost.
+    if (!(await git.pushBranch(ws.path, { commit: rebased, branch: d.branch, expected: head }))) {
+      return new Stop(
+        'refused',
+        `Le push de ${d.branch} est refusé : la branche distante a bougé.`,
+        'refused',
+      );
+    }
+    d = await this.save(workspaceId, id, {
+      state: 'watching',
+      reason: null,
+      pactCommits: [...new Set([...d.pactCommits, rebased])],
+      verdictCommit: d.unverified ? null : rebased,
+      pushedHead: rebased,
+      rebases: d.rebases + 1,
+    });
+    const agent = ws.agents.find((a) => a.id === d.agentId) as Agent;
+    await this.catchUp(workspaceId, agent, { ...d, frozenCommit: head }, rebased);
+    if (d.rebases === MAX_REBASES_IN_A_ROW) {
+      await this.tell(
+        workspaceId,
+        d,
+        'alert',
+        `Livraison · PR #${String(this.prOf(d).number)} · ${String(d.rebases)} recalages de suite : main continue de bouger`,
+        { pr: this.prOf(d), commit: rebased },
+      );
+    }
+    return true;
+  }
+
+  /**
+   * R15, FR-032 — the end of the log of a failed check, for the dev of a request whose PR PACT follows.
+   * Everything is checked before `gh` is asked for a log: the caller is the dev of the request, the request
+   * has not fallen (a red one keeps its PR), the check belongs to the head it was read on and is a failed
+   * job of Actions, and the PR is still open, ours and not a fork. Otherwise a refusal, with nothing read.
+   */
+  async ciLog(
+    agentId: string,
+    check: string,
+  ): Promise<{ check: string; conclusion: string; log: string }> {
+    const refuse = (why: string) => new IpcFailure('INVALID_INPUT', why);
+    const ws = this.deps.workspaces
+      .list()
+      .find((w) => w.deliveries.some((d) => d.agentId === agentId));
+    const d = ws?.deliveries.filter((x) => x.agentId === agentId).at(-1);
+    if (!ws || !d?.pr) throw refuse('Aucune PR suivie pour toi : pas de journal à lire.');
+    if (!READ_STATES.includes(d.state) && d.state !== 'ci-red') {
+      throw refuse('Ta demande de livraison est terminée ou tombée : pas de journal à lire.');
+    }
+    const found = d.ci?.checks.find((c) => c.name === checkName(check));
+    if (!d.ci || !found) throw refuse('Ce check n’existe pas sur la tête courante de la PR.');
+    if (found.job === null || found.status !== 'completed' || found.conclusion !== 'failure') {
+      throw refuse('Ce check n’est pas un job GitHub Actions en échec : pas de journal à lire.');
+    }
+    const gh = this.forge(ws);
+    const view = await gh.prView(d.pr.number);
+    if (
+      view.state !== 'OPEN' ||
+      view.isCrossRepository ||
+      view.author.login !== d.pr.expectedAuthor ||
+      view.headRefName !== d.branch ||
+      view.baseRefName !== d.target ||
+      view.headRefOid !== d.ci.head ||
+      !d.pactCommits.includes(view.headRefOid)
+    ) {
+      throw refuse('La PR n’est plus celle de PACT : pas de journal à lire.');
+    }
+    return { check: found.name, conclusion: found.conclusion, log: await gh.jobLog(found.job) };
   }
 
   /** The PR is no longer open on the forge: merged by someone (FR-036), or closed. */

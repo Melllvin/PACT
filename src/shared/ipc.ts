@@ -249,7 +249,7 @@ export const ipcRequests = {
   'delivery:decide': request(
     z.object({
       deliveryId: z.uuid(),
-      decision: z.enum(['validate', 'refuse']),
+      decision: z.enum(['validate', 'refuse', 'wait', 'review']),
       head: gitIdSchema,
       reason: z.string().max(MAX_REASON).optional(),
     }),

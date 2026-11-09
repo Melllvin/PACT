@@ -126,7 +126,7 @@ export type AppState = {
   setDeliverySettings: (workspaceId: string, settings: Partial<DeliverySettings>) => Promise<void>;
   decideDelivery: (
     deliveryId: string,
-    decision: 'validate' | 'refuse',
+    decision: 'validate' | 'refuse' | 'wait' | 'review',
     head: string,
     reason?: string,
   ) => Promise<void>;

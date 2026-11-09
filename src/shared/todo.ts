@@ -1,4 +1,5 @@
 import { agentName } from './agent-name';
+import { MAX_REBASES_IN_A_ROW } from './delivery';
 import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
 import { clockTime, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
@@ -8,6 +9,8 @@ export const ORDER: TodoKind[] = [
   'decide',
   'delivery-local',
   'delivery-review',
+  'delivery-silent-ci',
+  'delivery-alert',
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',
@@ -138,27 +141,54 @@ export function deriveTodos(
     const agent = byId.get(delivery.agentId);
     if (!agent) return [];
     if (delivery.channel === 'github') {
-      // Asked while it is watched (a PR without a verdict), or once the CI turned green and Auto does not merge.
-      const asked =
-        (delivery.state === 'watching' && delivery.review.required) ||
-        delivery.state === 'reviewing';
-      if (!asked || !delivery.pr) return [];
+      const { pr } = delivery;
+      if (!pr) return [];
       const sha = delivery.pushedHead ?? delivery.frozenCommit;
-      return [
-        {
-          id: `${delivery.id}:delivery-review`,
-          agentId: agent.id,
-          kind: 'delivery-review',
-          title: `◎ Relire la PR #${String(delivery.pr.number)} · ${delivery.issueId ?? delivery.branch} · ${sha.slice(0, 7)}${delivery.unverified ? ' · sans verdict' : ''}`,
-          actions: [],
-          delivery: {
-            id: delivery.id,
-            head: sha,
-            url: delivery.pr.url,
-            verdict: delivery.unverified ? null : 'accepted',
-          },
+      const label = delivery.issueId ?? delivery.branch;
+      const watching = delivery.state === 'watching';
+      const item = (kind: TodoKind, title: string, verdict?: 'accepted' | null): TodoItem => ({
+        id: `${delivery.id}:${kind}`,
+        agentId: agent.id,
+        kind,
+        title,
+        actions: [],
+        delivery: {
+          id: delivery.id,
+          head: sha,
+          url: pr.url,
+          ...(verdict === undefined ? {} : { verdict }),
         },
-      ];
+      });
+      const items: TodoItem[] = [];
+      // 008 US4 — « ◆ CI muette »: a configured CI that shows no check for 10 min (FR-016), on this head.
+      if (watching && delivery.ci?.verdict === 'silent' && delivery.ci.head === sha) {
+        items.push(
+          item('delivery-silent-ci', `◆ CI muette · PR #${String(pr.number)} · 10 min sans check`),
+        );
+      }
+      // « ◆ Livraison »: the PR was brought up to date again and again (FR-017), the user is told.
+      if (
+        (watching || delivery.state === 'reviewing') &&
+        delivery.rebases >= MAX_REBASES_IN_A_ROW
+      ) {
+        items.push(
+          item(
+            'delivery-alert',
+            `◆ Livraison · ${label} · ${String(delivery.rebases)} recalages de suite`,
+          ),
+        );
+      }
+      // Asked while it is watched (a PR without a verdict), or once the CI turned green and Auto does not merge.
+      if ((watching && delivery.review.required) || delivery.state === 'reviewing') {
+        items.push(
+          item(
+            'delivery-review',
+            `◎ Relire la PR #${String(pr.number)} · ${label} · ${sha.slice(0, 7)}${delivery.unverified ? ' · sans verdict' : ''}`,
+            delivery.unverified ? null : 'accepted',
+          ),
+        );
+      }
+      return items;
     }
     if (delivery.state !== 'reviewing') return [];
     const name = agentName(agent, names);

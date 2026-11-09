@@ -155,13 +155,15 @@ export function ciVerdict(input: {
   emptySince: string | null;
   now: string;
   readFailed: boolean;
+  /** The silence that is signalled; `SILENT_CI_MS` unless a test goes faster. */
+  silentMs?: number | undefined;
 }): CiVerdict {
   const { checks, required, configured, emptySince, now, readFailed } = input;
   if (readFailed) return 'unknown';
   if (checks.length === 0) {
     if (configured === false && required !== null && required.length === 0) return 'green';
     const waited = emptySince === null ? 0 : Date.parse(now) - Date.parse(emptySince);
-    return waited >= SILENT_CI_MS ? 'silent' : 'pending';
+    return waited >= (input.silentMs ?? SILENT_CI_MS) ? 'silent' : 'pending';
   }
   const finished = (check: { status: string }) => check.status === 'completed';
   if (checks.some((c) => finished(c) && c.conclusion === 'failure')) return 'red';

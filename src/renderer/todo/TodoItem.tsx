@@ -52,6 +52,8 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           todo.kind === 'loop-escalated' ||
           todo.kind === 'exchange-escalated') &&
           'border-destructive/30 bg-destructive/6',
+        (todo.kind === 'delivery-silent-ci' || todo.kind === 'delivery-alert') &&
+          'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
       )}
@@ -123,7 +125,45 @@ export function TodoActions({
           }}
         />
       )}
-      {delivery && agent && todo.kind !== 'delivery-review' && (
+      {delivery && agent && todo.kind === 'delivery-silent-ci' && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onDecideDelivery?.(delivery.id, 'wait', delivery.head);
+            }}
+          >
+            Attendre encore
+          </Button>
+          <Button
+            onClick={() => {
+              onDecideDelivery?.(delivery.id, 'review', delivery.head);
+              onOpenPr?.(delivery.id);
+            }}
+          >
+            Relire
+          </Button>
+        </div>
+      )}
+      {delivery && agent && todo.kind === 'delivery-alert' && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onOpenPr?.(delivery.id);
+            }}
+          >
+            Ouvrir la PR
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onDecideDelivery?.(delivery.id, 'wait', delivery.head);
+            }}
+          >
+            Compris
+          </Button>
+        </div>
+      )}
+      {delivery && agent && todo.kind === 'delivery-local' && (
         <DeliveryLocal
           onDecide={(decision) => {
             onDecideDelivery?.(delivery.id, decision, delivery.head);

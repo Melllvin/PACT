@@ -142,14 +142,14 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T041 [P] [US4] Tests dans `tests/integration/delivery/delivery-ci-states.test.ts` : sc.1 (sans workflow ni requis : Auto fusionne après le verdict, sinon relecture) ; sc.2 et 7 (CI configurée muette : alerte à 10 min, « Attendre encore » repousse, « Relire » ouvre la PR, Valider refusé, fusion faite sur la forge constatée) ; sc.3 et 4 (rouge → nom du check borné au dev, tour compté ; au plafond, escalade sans nouveau tour) ; sc.5 (`mergeStateStatus` `BEHIND` ou `DIRTY` → recalage, nouvelle CI ; 3 de suite → alerte) ; sc.6 (PR fermée ou fusionnée à la main → demande close, dit) ; protection illisible → CI réputée configurée (research R10)
-- [ ] T042 [P] [US4] Tests dans `tests/integration/orchestrator/agent-tools-ci-log.test.ts` : `get_ci_log` sc.8 (rendu borné avec la note pour une PR suivie ; refus sans lecture pour PR non suivie, fork, demande tombée, autre agent)
-- [ ] T043 [P] [US4] E2E dans `tests/e2e/us53-ci-states.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-ci.json` : sc.1, 2, 3 et 5
+- [x] T041 [P] [US4] Tests dans `tests/integration/delivery/delivery-ci-states.test.ts` : sc.1 (sans workflow ni requis : Auto fusionne après le verdict, sinon relecture) ; sc.2 et 7 (CI configurée muette : alerte à 10 min, « Attendre encore » repousse, « Relire » ouvre la PR, Valider refusé, fusion faite sur la forge constatée) ; sc.3 et 4 (rouge → nom du check borné au dev, tour compté ; au plafond, escalade sans nouveau tour) ; sc.5 (`mergeStateStatus` `BEHIND` ou `DIRTY` → recalage, nouvelle CI ; 3 de suite → alerte) ; sc.6 (PR fermée ou fusionnée à la main → demande close, dit) ; protection illisible → CI réputée configurée (research R10)
+- [x] T042 [P] [US4] Tests dans `tests/integration/orchestrator/agent-tools-ci-log.test.ts` : `get_ci_log` sc.8 (rendu borné avec la note pour une PR suivie ; refus sans lecture pour PR non suivie, fork, demande tombée, autre agent)
+- [x] T043 [P] [US4] E2E dans `tests/e2e/us53-ci-states.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-ci.json` : sc.1, 2, 3 et 5
 
 ### Implémentation
 
-- [ ] T044 [US4] Dans `src/main/delivery/ci-watcher.ts` et `src/main/delivery/delivery-service.ts` : CI configurée (R10), `emptySince`, élément `delivery-silent-ci` et ses décisions `wait` et `review`, CI rouge vers le dev, recalage après la PR et compteur `rebases`, PR close sur la forge
-- [ ] T045 [US4] Dans `src/main/orchestrator/agent-tools.ts` : outil `get_ci_log` (research R15) ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : `delivery-silent-ci`, `delivery-alert`
+- [x] T044 [US4] Dans `src/main/delivery/ci-watcher.ts` et `src/main/delivery/delivery-service.ts` : CI configurée (R10), `emptySince`, élément `delivery-silent-ci` et ses décisions `wait` et `review`, CI rouge vers le dev, recalage après la PR et compteur `rebases`, PR close sur la forge
+- [x] T045 [US4] Dans `src/main/orchestrator/agent-tools.ts` : outil `get_ci_log` (research R15) ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : `delivery-silent-ci`, `delivery-alert`
 
 **Checkpoint** : US4 livrée ; PR « 008 Phase 7 US4 ».
 

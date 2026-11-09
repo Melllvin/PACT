@@ -213,7 +213,8 @@ async function savedAll(): Promise<{
   loops: { state: string; round: number }[];
   issues: { id: string; state: string }[];
   delivery: { auto: boolean };
-  exchanges: { messages: { to: string; kind: string; text: string }[] };
+  agents: { id: string; role: string }[];
+  exchanges: { messages: { to: string; kind: string; text: string; unreadBy: string[] }[] };
 }> {
   const dir = join(launched?.userDataDir ?? '', 'workspaces');
   const [file] = await readdir(dir);
@@ -229,6 +230,22 @@ async function acceptedAgain() {
   await expect
     .poll(async () => (await savedAll()).loops[0]?.state, { timeout: 90_000 })
     .toBe('accepted');
+  // PACT wakes the orchestrator 5 s after the proof (« N événements, lis get_events »): a call typed into
+  // its terminal before that pointer is read gets glued to it (« Outil inconnu »). Let the wake settle.
+  await expect
+    .poll(
+      async () => {
+        const state = await savedAll();
+        const lead = state.agents.find((a) => a.role === 'orchestrator')?.id ?? '';
+        // -1 while the word of the proof has not reached the orchestrator yet.
+        if (!state.exchanges.messages.some((m) => m.to === lead && m.text.includes('au tour 2'))) {
+          return -1;
+        }
+        return state.exchanges.messages.filter((m) => m.unreadBy.includes(lead)).length;
+      },
+      { timeout: 60_000 },
+    )
+    .toBe(0);
 }
 
 /** From a launched team to PR #1 open and its CI green: the item waits for the user. */

@@ -393,6 +393,8 @@ export type TodoKind =
   | 'decide'
   | 'delivery-local'
   | 'delivery-review'
+  | 'delivery-silent-ci'
+  | 'delivery-alert'
   | 'publish-issues'
   | 'loop-escalated'
   | 'exchange-escalated'
