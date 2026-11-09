@@ -421,3 +421,157 @@ describe('TodoItem of a PR to review', () => {
     expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 });
+
+// 008 T037 — « ◎ Relire la PR #n » with its decisions (US3 sc.1 to 3, FR-013, FR-027, contracts/ui.md).
+//
+// RED until T040. Assumed API: the item is `{ kind: 'delivery-review', delivery: { id, head, url,
+// verdict } }`, `head` being the head of the PR the user is asked to merge, `url` the link of the PR,
+// `verdict` `'accepted'` or `null` (a PR without a verdict). TodoItem takes `onDecideDelivery(
+// deliveryId, decision, head, reason?)`. « Valider » decides once and stays disabled until the item is
+// gone; « Refuser » opens a field named « motif » and the button « Refuser » stays disabled while the
+// reason is empty or blank; the reason is the fourth argument. « Ouvrir la PR » is a link to `url`.
+describe('TodoItem « Relire la PR » (delivery-review)', () => {
+  const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
+  const PR_URL = 'https://github.com/pact/test/pull/7';
+  const dev = agent(2, { state: 'done', role: 'dev' });
+
+  const setup = (verdict: 'accepted' | null = 'accepted') => {
+    const onDecideDelivery = vi.fn();
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:delivery-review',
+              agentId: dev.id,
+              kind: 'delivery-review',
+              title:
+                verdict === null
+                  ? '◎ Relire la PR #7 · 0012-connexion · abcdef0 · sans verdict'
+                  : '◎ Relire la PR #7 · 0012-connexion · abcdef0',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD, url: PR_URL, verdict },
+            } as never
+          }
+          agent={dev}
+          {...{ ...actions(), onDecideDelivery }}
+        />
+      </ul>,
+    );
+    return { onDecideDelivery, user: userEvent.setup() };
+  };
+
+  it('Given the item, When it is shown, Then it gives the PR, the commit and the verdict, and the buttons Valider, Refuser and the link of the PR', () => {
+    setup();
+
+    expect(screen.getByRole('listitem').getAttribute('data-kind')).toBe('delivery-review');
+    expect(screen.getAllByText(/Relire la PR #7/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/abcdef0/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('listitem').textContent).toMatch(/verdict/i);
+    expect(screen.getByRole('listitem').textContent).not.toMatch(/sans verdict/i);
+    expect(screen.getByRole('button', { name: 'Valider' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Refuser' })).toBeTruthy();
+    const link = screen.getAllByRole('link').find((a) => a.getAttribute('href') === PR_URL);
+    expect(link).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Fusionner' })).toBeNull();
+  });
+
+  it('Given a PR without a verdict, When it is shown, Then it says « sans verdict »', () => {
+    setup(null);
+
+    expect(screen.getByRole('listitem').textContent).toMatch(/sans verdict/);
+  });
+
+  it('Given the item, When Valider is clicked, Then the delivery is validated on the head shown', async () => {
+    const { onDecideDelivery, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(onDecideDelivery).toHaveBeenCalledExactlyOnceWith('d1', 'validate', HEAD);
+  });
+
+  it('Given a click on Valider, When the answer has not come, Then the button is disabled and a second click asks nothing (sc.2, FR-027)', async () => {
+    const { onDecideDelivery, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Valider' }).disabled).toBe(true);
+    expect(onDecideDelivery).toHaveBeenCalledOnce();
+  });
+
+  it('Given the item, When it is shown, Then no field of reason is there until Refuser is clicked', async () => {
+    const { onDecideDelivery, user } = setup();
+    expect(screen.queryByRole('textbox')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    expect(screen.getByRole('textbox', { name: /motif/i })).toBeTruthy();
+    expect(onDecideDelivery).not.toHaveBeenCalled();
+  });
+
+  it('Given the field of reason, When it is empty or blank, Then Refuser is disabled and a click asks nothing (sc.3)', async () => {
+    const { onDecideDelivery, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    const refuse = screen.getByRole<HTMLButtonElement>('button', { name: 'Refuser' });
+    expect(refuse.disabled).toBe(true);
+    await user.click(refuse);
+    await user.type(screen.getByRole('textbox', { name: /motif/i }), '   ');
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Refuser' }).disabled).toBe(true);
+    expect(onDecideDelivery).not.toHaveBeenCalled();
+  });
+
+  it('Given a reason, When Refuser is clicked, Then the delivery is refused on the head shown, with the reason', async () => {
+    const { onDecideDelivery, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    await user.type(screen.getByRole('textbox', { name: /motif/i }), 'Le cas vide manque.');
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    expect(onDecideDelivery).toHaveBeenCalledExactlyOnceWith(
+      'd1',
+      'refuse',
+      HEAD,
+      'Le cas vide manque.',
+    );
+  });
+
+  it('Given a reason written by someone with markup, When the item is shown, Then nothing of it is rendered as an element', async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    await user.type(
+      screen.getByRole('textbox', { name: /motif/i }),
+      '<img src=x onerror=alert(1)>',
+    );
+
+    expect(document.querySelector('img')).toBeNull();
+  });
+
+  it('Given no handler, When Valider is clicked, Then nothing breaks', async () => {
+    const user = userEvent.setup();
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:delivery-review',
+              agentId: dev.id,
+              kind: 'delivery-review',
+              title: '◎ Relire la PR #7 · 0012-connexion · abcdef0',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD, url: PR_URL, verdict: 'accepted' },
+            } as never
+          }
+          agent={dev}
+        />
+      </ul>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});

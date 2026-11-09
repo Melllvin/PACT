@@ -370,8 +370,11 @@ export type TodoItem = {
   kind: TodoKind;
   title: string;
   actions: TileAction[];
-  /** 008 contracts/ui.md — the delivery the user decides on, and the commit shown, for `delivery-local`. */
-  delivery?: { id: string; head: string };
+  /**
+   * 008 contracts/ui.md — the delivery the user decides on and the head shown. `delivery-review` adds
+   * the link of the PR and its verdict (`null`: a PR without a verdict).
+   */
+  delivery?: { id: string; head: string; url?: string; verdict?: 'accepted' | null };
   /** 004 FR-018 — the loop stopped after 3 rounds, for `loop-escalated`. */
   loop?: { issueId: string };
   /** 007 FR-006 — the escalation of an exchange in a loop, and its last message as text. */

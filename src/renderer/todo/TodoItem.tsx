@@ -105,11 +105,25 @@ export function TodoActions({
   onUsageDetail,
   onDecide,
   onDecideDelivery,
+  onOpenPr,
 }: ActionsProps) {
   const { delivery, loop, publish, usage, decide, exchange } = todo;
   return (
     <>
-      {delivery && agent && (
+      {delivery && agent && todo.kind === 'delivery-review' && (
+        <DeliveryReview
+          key={`${delivery.id}:${delivery.head}`}
+          delivery={delivery}
+          onDecide={(decision, reason) => {
+            if (decision === 'validate') onDecideDelivery?.(delivery.id, decision, delivery.head);
+            else onDecideDelivery?.(delivery.id, decision, delivery.head, reason);
+          }}
+          onOpen={() => {
+            onOpenPr?.(delivery.id);
+          }}
+        />
+      )}
+      {delivery && agent && todo.kind !== 'delivery-review' && (
         <DeliveryLocal
           onDecide={(decision) => {
             onDecideDelivery?.(delivery.id, decision, delivery.head);
@@ -254,6 +268,84 @@ export function TodoActions({
           />
         )}
     </>
+  );
+}
+
+/**
+ * « ◎ Relire la PR #n »: the PR, its commit and its verdict, then Valider or Refuser (FR-013). One
+ * click on Valider, then the button waits for the answer (FR-027); Refuser asks for a reason first.
+ * The reason is the user's text, shown as React text only.
+ */
+function DeliveryReview({
+  delivery,
+  onDecide,
+  onOpen,
+}: {
+  delivery: NonNullable<Todo['delivery']>;
+  onDecide: (decision: 'validate' | 'refuse', reason?: string) => void;
+  onOpen: () => void;
+}) {
+  const [sent, setSent] = useState(false);
+  const [refusing, setRefusing] = useState(false);
+  const [reason, setReason] = useState('');
+  const blank = reason.trim() === '';
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[12px] text-dim">
+        {delivery.verdict === 'accepted' ? 'Verdict : accepté' : 'sans verdict'}
+        {' · '}
+        <span className="font-mono">{delivery.head.slice(0, 7)}</span>
+      </span>
+      {refusing && (
+        <textarea
+          aria-label="Motif du refus"
+          rows={3}
+          value={reason}
+          onChange={(event) => {
+            setReason(event.target.value);
+          }}
+          className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/50"
+        />
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          variant="accept"
+          disabled={sent}
+          onClick={() => {
+            setSent(true);
+            onDecide('validate');
+          }}
+        >
+          Valider
+        </Button>
+        <Button
+          disabled={sent || (refusing && blank)}
+          onClick={() => {
+            if (!refusing) {
+              setRefusing(true);
+              return;
+            }
+            setSent(true);
+            onDecide('refuse', reason.trim());
+          }}
+        >
+          Refuser
+        </Button>
+        {delivery.url !== undefined && (
+          <a
+            href={delivery.url}
+            rel="noreferrer"
+            className="text-[12px] text-primary underline-offset-2 hover:underline"
+            onClick={(event) => {
+              event.preventDefault();
+              onOpen();
+            }}
+          >
+            Ouvrir la PR
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 

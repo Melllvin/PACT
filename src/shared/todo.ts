@@ -151,6 +151,12 @@ export function deriveTodos(
           kind: 'delivery-review',
           title: `◎ Relire la PR #${String(delivery.pr.number)} · ${delivery.issueId ?? delivery.branch} · ${sha.slice(0, 7)}${delivery.unverified ? ' · sans verdict' : ''}`,
           actions: [],
+          delivery: {
+            id: delivery.id,
+            head: sha,
+            url: delivery.pr.url,
+            verdict: delivery.unverified ? null : 'accepted',
+          },
         },
       ];
     }

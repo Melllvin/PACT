@@ -100,13 +100,13 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T031 [P] [US7] Tests dans `tests/integration/delivery/third-party.test.ts` : US7 sc.1 à 7 et 9 ; recherche de `PACT-INJECTION-WITNESS` dans le journal de 007, `deriveTodos`, l'état JSON écrit, les notices et les arguments passés aux faux agents ; aucun appel de `FAKE_GH_LOG` ne vise les PR tierces ; PR d'un fork au même nom de branche jamais adoptée (sc.4) ; login changé → pas de fusion, alerte (sc.9)
-- [ ] T032 [P] [US7] Tests dans `tests/integration/git/git-remote.test.ts` : le remote nu expose `refs/pull/1/head` ; après une livraison, aucune ref locale ne le reflète (sc.8)
-- [ ] T033 [P] [US7] E2E dans `tests/e2e/us56-third-party.spec.ts` avec `tests/fixtures/fake-cli/scenarios/third-party.json` : sc.1 et 3, SC-009 (chaîne absente des sorties des faux agents et du DOM)
+- [x] T031 [P] [US7] Tests dans `tests/integration/delivery/third-party.test.ts` : US7 sc.1 à 7 et 9 ; recherche de `PACT-INJECTION-WITNESS` dans le journal de 007, `deriveTodos`, l'état JSON écrit, les notices et les arguments passés aux faux agents ; aucun appel de `FAKE_GH_LOG` ne vise les PR tierces ; PR d'un fork au même nom de branche jamais adoptée (sc.4) ; login changé → pas de fusion, alerte (sc.9)
+- [x] T032 [P] [US7] Tests dans `tests/integration/git/git-remote.test.ts` : le remote nu expose `refs/pull/1/head` ; après une livraison, aucune ref locale ne le reflète (sc.8)
+- [x] T033 [P] [US7] E2E dans `tests/e2e/us56-third-party.spec.ts` avec `tests/fixtures/fake-cli/scenarios/third-party.json` : sc.1 et 3, SC-009 (chaîne absente des sorties des faux agents et du DOM)
 
 ### Implémentation
 
-- [ ] T034 [US7] Corriger ce que T031 à T033 révèlent dans `src/main/delivery/gh-client.ts`, `src/main/delivery/ci-watcher.ts` ou `src/shared/delivery.ts` (`checkName`) ; documenter dans la PR chaque fuite trouvée, ou son absence
+- [x] T034 [US7] Corriger ce que T031 à T033 révèlent dans `src/main/delivery/gh-client.ts`, `src/main/delivery/ci-watcher.ts` ou `src/shared/delivery.ts` (`checkName`) ; documenter dans la PR chaque fuite trouvée, ou son absence
 
 **Checkpoint** : US7 éprouvée ; PR « 008 Phase 5 US7 ».
 
@@ -120,15 +120,15 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T035 [P] [US3] Tests dans `tests/integration/delivery/delivery-review.test.ts` : sc.1 à 6 (élément, double Valider → une fusion, Refuser sans motif refusé, motif au dev en `verdict`, tour compté, PR ouverte, retour une fois après la nouvelle CI même Auto activé, nouvelle demande qui reprend la PR) ; sc.12 à 15 (reprise par numéro après les contrôles, PR fermée → nouvelle PR, auteur ou fork différent → ni reprise ni création, alerte ; tête après push vérifiée) ; FR-013 (Valider refusé si la CI est configurée et aucun check lu) ; FR-027 (Valider pendant que le dev travaille : aucun dialogue, une fusion) ; CI repassée au rouge avant la décision → élément retiré
-- [ ] T036 [P] [US3] Tests dans `tests/integration/delivery/delivery-unverified.test.ts` : sc.7 à 11 (Auto ne fusionne jamais une PR sans verdict ; Valider vérifie CI, auteur, fork et tête ; CI rouge, conflit et refus signalés sans compteur ; nouveau commit → chute, même geste qui recrée ; après fusion, aucun worktree supprimé ; la branche distante relève de T067)
-- [ ] T037 [P] [US3] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/renderer/store/delivery-store.test.ts` : `delivery-review` (lien, commit, verdict ou « sans verdict »), bouton Valider inactif après clic, champ de motif obligatoire, `delivery:decide` avec la tête affichée ; notification de `delivery-review` dans `tests/unit/main/notifications.test.ts`
-- [ ] T038 [P] [US3] E2E dans `tests/e2e/us52-review.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-review.json` : sc.2, 4, 5, 7 et SC-007
+- [x] T035 [P] [US3] Tests dans `tests/integration/delivery/delivery-review.test.ts` : sc.1 à 6 (élément, double Valider → une fusion, Refuser sans motif refusé, motif au dev en `verdict`, tour compté, PR ouverte, retour une fois après la nouvelle CI même Auto activé, nouvelle demande qui reprend la PR) ; sc.12 à 15 (reprise par numéro après les contrôles, PR fermée → nouvelle PR, auteur ou fork différent → ni reprise ni création, alerte ; tête après push vérifiée) ; FR-013 (Valider refusé si la CI est configurée et aucun check lu) ; FR-027 (Valider pendant que le dev travaille : aucun dialogue, une fusion) ; CI repassée au rouge avant la décision → élément retiré
+- [x] T036 [P] [US3] Tests dans `tests/integration/delivery/delivery-unverified.test.ts` : sc.7 à 11 (Auto ne fusionne jamais une PR sans verdict ; Valider vérifie CI, auteur, fork et tête ; CI rouge, conflit et refus signalés sans compteur ; nouveau commit → chute, même geste qui recrée ; après fusion, aucun worktree supprimé ; la branche distante relève de T067)
+- [x] T037 [P] [US3] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/renderer/store/delivery-store.test.ts` : `delivery-review` (lien, commit, verdict ou « sans verdict »), bouton Valider inactif après clic, champ de motif obligatoire, `delivery:decide` avec la tête affichée ; notification de `delivery-review` dans `tests/unit/main/notifications.test.ts`
+- [x] T038 [P] [US3] E2E dans `tests/e2e/us52-review.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-review.json` : sc.2, 4, 5, 7 et SC-007
 
 ### Implémentation
 
-- [ ] T039 [US3] Dans `src/main/delivery/delivery-service.ts` : état `reviewing`, `decide` (verrou par demande, tête attendue, `merging` avant l'appel), refus avec motif, `review.refusedOnce`, PR sans verdict, reprise de PR (research R22)
-- [ ] T040 [US3] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/store/app-store.ts`, `src/main/notifications.ts` et `src/main/ipc/delivery-handlers.ts` : élément `delivery-review`, `delivery:decide`, `NOTIFIED`
+- [x] T039 [US3] Dans `src/main/delivery/delivery-service.ts` : état `reviewing`, `decide` (verrou par demande, tête attendue, `merging` avant l'appel), refus avec motif, `review.refusedOnce`, PR sans verdict, reprise de PR (research R22)
+- [x] T040 [US3] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/store/app-store.ts`, `src/main/notifications.ts` et `src/main/ipc/delivery-handlers.ts` : élément `delivery-review`, `delivery:decide`, `NOTIFIED`
 
 **Checkpoint** : US3 livrée ; PR « 008 Phase 6 US3 ».
 

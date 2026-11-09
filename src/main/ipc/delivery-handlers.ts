@@ -12,6 +12,10 @@ type Dependencies = {
     update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace>;
   };
   delivery: Pick<DeliveryService, 'settingsChanged'>;
+  /** `shell.openExternal`: absent in the suites that do not open anything. */
+  openExternal?: (url: string) => Promise<void>;
+  /** The address of the PR of a delivery, rebuilt by the delivery (`DeliveryService.prUrl`). */
+  prUrl?: (deliveryId: string) => Promise<string | null>;
   /** `workspace:deliveries` to the renderer. */
   onChange?: (
     workspaceId: string,
@@ -19,8 +23,21 @@ type Dependencies = {
   ) => void;
 };
 
-export function createDeliveryServices({ workspaces, delivery, onChange }: Dependencies) {
+export function createDeliveryServices({
+  workspaces,
+  delivery,
+  onChange,
+  openExternal,
+  prUrl,
+}: Dependencies) {
   return {
+    'delivery:openPr': async ({ deliveryId }: IpcInput<'delivery:openPr'>): Promise<void> => {
+      const url = (await prUrl?.(deliveryId)) ?? null;
+      if (url === null) {
+        throw new IpcFailure('NOT_FOUND', 'Aucune PR à ouvrir pour cette livraison.');
+      }
+      await openExternal?.(url);
+    },
     'delivery:settings': async ({
       workspaceId,
       settings,

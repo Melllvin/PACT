@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
+  MAX_REASON,
   deliveryGate,
   isFinalState,
   prBody,
@@ -103,7 +104,16 @@ class Stop extends Error {
   constructor(
     readonly state: DeliveryState,
     readonly reason: string,
-    readonly outcome: 'refused' | 'dropped' | 'conflicted' | 'tests-failed' | 'ci-red' | 'closed',
+    readonly outcome:
+      | 'refused'
+      | 'dropped'
+      | 'conflicted'
+      | 'tests-failed'
+      | 'ci-red'
+      | 'closed'
+      | 'user-refused'
+      /** A PR that is no longer the expected one (FR-030): told as an alert, nothing created. */
+      | 'foreign',
     /** What the orchestrator reads after the issue: the commit, the files. */
     readonly detail = '',
     /** `conflicted`, `tests-failed` and `ci-red` send the dev back for a counted round. */
@@ -236,6 +246,8 @@ export class DeliveryService {
     const loop = unverified ? null : this.loopOf(ws, agent.id);
     const head = await this.deps.git.revParse(agent.worktreePath, 'HEAD');
     const now = new Date().toISOString();
+    // FR-014 — after a refusal the next request is shown to the user once more, Auto or not.
+    const previous = ws.deliveries.filter((x) => x.branch === agent.branch).at(-1);
     const delivery: Delivery = {
       id: randomUUID(),
       agentId: agent.id,
@@ -256,7 +268,7 @@ export class DeliveryService {
       reason: null,
       pr: null,
       ci: null,
-      review: { required: unverified, refusedOnce: false },
+      review: { required: unverified || previous?.review.refusedOnce === true, refusedOnce: false },
       cleanup: 'none',
       requestedBy: input.requestedBy,
       at: now,
@@ -504,6 +516,9 @@ export class DeliveryService {
     }
     await this.ensureHead(agent, d);
 
+    // R22 — the PR of a request that fell is read by its number before anything is pushed.
+    const resumed = await this.resumablePr(workspaceId, d, gh);
+
     d = await this.save(workspaceId, id, { state: 'pushing' });
     if (
       !(await git.pushBranch(ws.path, {
@@ -523,37 +538,54 @@ export class DeliveryService {
     const issue = ws.issues.find((i) => i.id === d.issueId);
     const tester = d.testAgentId;
     let pr: { number: number; url: string };
-    try {
-      pr = await gh.prCreate({
-        head: d.branch,
-        base: d.target,
-        title: d.title,
-        body: prBody({
-          issue: issue
-            ? { id: issue.id, remote: issue.remote, text: await this.issueText(agent, issue.path) }
-            : null,
-          message: d.message,
-          verdict:
-            tester === null || d.unverified
-              ? null
-              : { result: 'accepted', commit: rebased, tester },
-        }),
-      });
-    } catch (error) {
-      throw new Stop(
-        'refused',
-        error instanceof GhFailure ? error.reason : 'gh a échoué.',
-        'refused',
-      );
+    if (resumed) {
+      // R22 — after the push, the head of the PR must be the commit PACT pushed.
+      const view = await gh.prView(resumed.number);
+      if (view.state !== 'OPEN' || view.headRefOid !== rebased) {
+        throw new Stop(
+          'refused',
+          `La PR #${String(resumed.number)} n’a pas la tête poussée par PACT (${short(rebased)}) : reprise arrêtée, rien n’est créé ni suivi.`,
+          'foreign',
+        );
+      }
+      pr = { number: resumed.number, url: resumed.url };
+    } else {
+      try {
+        pr = await gh.prCreate({
+          head: d.branch,
+          base: d.target,
+          title: d.title,
+          body: prBody({
+            issue: issue
+              ? {
+                  id: issue.id,
+                  remote: issue.remote,
+                  text: await this.issueText(agent, issue.path),
+                }
+              : null,
+            message: d.message,
+            verdict:
+              tester === null || d.unverified
+                ? null
+                : { result: 'accepted', commit: rebased, tester },
+          }),
+        });
+      } catch (error) {
+        throw new Stop(
+          'refused',
+          error instanceof GhFailure ? error.reason : 'gh a échoué.',
+          'refused',
+        );
+      }
     }
     d = await this.save(workspaceId, id, {
-      pr: { number: pr.number, url: pr.url, expectedAuthor: login },
+      pr: { number: pr.number, url: pr.url, expectedAuthor: resumed?.expectedAuthor ?? login },
     });
     await this.tell(
       workspaceId,
       d,
       'pr-opened',
-      `PR #${String(pr.number)} ouverte · ${this.label(d)} · ${short(rebased)}`,
+      `PR #${String(pr.number)} ${resumed ? 'reprise' : 'ouverte'} · ${this.label(d)} · ${short(rebased)}`,
       {
         pr: { number: pr.number, url: pr.url },
         commit: rebased,
@@ -562,6 +594,51 @@ export class DeliveryService {
     await this.catchUp(workspaceId, agent, d, rebased);
     await this.save(workspaceId, id, { state: 'watching' });
     this.watcher.track(workspaceId, id);
+  }
+
+  /**
+   * R22 — the PR of the last request of this branch that fell, if it is still open, by the same
+   * author and not from a fork: it is resumed. Closed, merged or gone: a new PR. Any other open PR
+   * is neither resumed nor replaced (FR-030). Read by its number: never listed, never searched.
+   */
+  private async resumablePr(
+    workspaceId: string,
+    d: Delivery,
+    gh: Forge,
+  ): Promise<NonNullable<Delivery['pr']> | null> {
+    const all = this.workspace(workspaceId).deliveries;
+    const earlier = all
+      .slice(
+        0,
+        all.findIndex((x) => x.id === d.id),
+      )
+      .filter((x) => x.branch === d.branch && x.pr !== null && isFinalState(x.state))
+      .at(-1)?.pr;
+    if (!earlier) return null;
+    let view;
+    try {
+      view = await gh.prView(earlier.number);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : '';
+      const stderr = (error as { stderr?: unknown }).stderr;
+      if (
+        /Could not resolve to a pull request|no pull requests? found/i.test(
+          `${text}\n${typeof stderr === 'string' ? stderr : ''}`,
+        )
+      ) {
+        return null;
+      }
+      throw new Stop('refused', `La PR #${String(earlier.number)} n’a pas pu être lue.`, 'refused');
+    }
+    if (view.state !== 'OPEN') return null;
+    if (view.author.login !== earlier.expectedAuthor || view.isCrossRepository) {
+      throw new Stop(
+        'refused',
+        `La PR #${String(earlier.number)} n’a plus l’auteur attendu ou vient d’un autre dépôt : ni reprise ni nouvelle PR.`,
+        'foreign',
+      );
+    }
+    return earlier;
   }
 
   /** The head of the dev is still F: a commit PACT did not make drops the request (R6). */
@@ -617,12 +694,14 @@ export class DeliveryService {
     const loop = issue === null ? null : this.deps.loops.get(workspaceId, issue);
     let text: string;
     const outcome: NonNullable<ExchangeMessage['delivery']>['outcome'] =
-      stop.outcome === 'closed' ? 'alert' : stop.outcome;
-    if (stop.outcome === 'refused' || stop.outcome === 'closed') {
+      stop.outcome === 'closed' || stop.outcome === 'foreign' ? 'alert' : stop.outcome;
+    if (stop.outcome === 'refused' || stop.outcome === 'closed' || stop.outcome === 'foreign') {
       text =
         stop.outcome === 'closed'
           ? `Livraison · PR #${String(this.prOf(d).number)} · ${stop.reason}`
-          : `Livraison refusée · ${this.label(d)} · ${stop.reason}`;
+          : stop.outcome === 'foreign'
+            ? `Livraison · ${this.label(d)} · ${stop.reason}`
+            : `Livraison refusée · ${this.label(d)} · ${stop.reason}`;
       // The verdict and the proof still stand: the loop is as it was.
       if (loop?.state === 'delivering') {
         await this.deps.loops.deliveryState(workspaceId, loop.issueId, 'accepted');
@@ -640,7 +719,9 @@ export class DeliveryService {
           ? `Conflit au recalage · ${this.label(d)} · ${stop.detail}`
           : stop.outcome === 'ci-red'
             ? `CI rouge · PR #${String(this.prOf(d).number)} · ${stop.detail}`
-            : `Tests rouges sur ${stop.detail} · ${this.label(d)}`;
+            : stop.outcome === 'user-refused'
+              ? `PR #${String(this.prOf(d).number)} refusée par l’utilisateur · ${this.label(d)} · ${stop.detail}`
+              : `Tests rouges sur ${stop.detail} · ${this.label(d)}`;
       text =
         reopened === null
           ? what
@@ -686,7 +767,8 @@ export class DeliveryService {
     if (!owner) throw new IpcFailure('NOT_FOUND', 'Livraison introuvable.');
     const workspaceId = owner.id;
     const found = this.current(workspaceId, input.deliveryId);
-    if (found.state !== 'reviewing' || found.channel !== 'local') {
+    if (found.channel === 'github') return this.decideOnForge(workspaceId, found, input);
+    if (found.state !== 'reviewing') {
       throw new IpcFailure('INVALID_INPUT', 'Cette livraison n’attend pas de décision.');
     }
     if (this.deciding.has(found.id)) return found;
@@ -734,6 +816,70 @@ export class DeliveryService {
         throw error;
       }
       return this.current(workspaceId, found.id);
+    } finally {
+      this.deciding.delete(found.id);
+    }
+  }
+
+  /**
+   * « Valider » / « Refuser » of a PR (FR-013, FR-014, FR-027): one decision at a time per request,
+   * on the head the user was shown; a second click finds the first one under way and changes nothing.
+   */
+  private async decideOnForge(
+    workspaceId: string,
+    found: Delivery,
+    input: DeliveryDecision,
+  ): Promise<Delivery> {
+    // A merge under way (Auto's, the other click's) is not raced: Valider finds it taken, Refuser is
+    // refused while it runs.
+    const underWay = this.merging.has(found.id) || found.state === 'merging';
+    if (underWay && input.decision === 'refuse') {
+      throw new IpcFailure('INVALID_INPUT', 'Une fusion est en cours : le refus vient trop tard.');
+    }
+    if (underWay || this.deciding.has(found.id)) return found;
+    // The item may be shown while the PR is watched (a review that is owed); the CI decides below.
+    if (found.state !== 'reviewing' && found.state !== 'watching') {
+      throw new IpcFailure('INVALID_INPUT', 'Cette livraison n’attend pas de décision.');
+    }
+    const reason = input.reason?.trim() ?? '';
+    if (input.decision === 'refuse' && (reason === '' || reason.length > MAX_REASON)) {
+      throw new IpcFailure(
+        'INVALID_INPUT',
+        `Un motif de 1 à ${String(MAX_REASON)} caractères est nécessaire pour refuser.`,
+      );
+    }
+    if (input.head !== (found.pushedHead ?? found.frozenCommit)) {
+      throw new IpcFailure('INVALID_INPUT', 'La tête a changé depuis l’affichage : recharge.');
+    }
+    // FR-013 — a CI that is configured and has no green check on this head forbids « Valider ».
+    if (
+      input.decision === 'validate' &&
+      !(found.ci?.verdict === 'green' && found.ci.head === input.head)
+    ) {
+      throw new IpcFailure(
+        'INVALID_INPUT',
+        'La CI n’est pas verte sur cette tête : rien à valider.',
+      );
+    }
+    this.deciding.add(found.id);
+    try {
+      if (input.decision === 'validate') {
+        // FR-031 — the CI, the author, the fork, the head and the login are read again in there.
+        await this.merge(workspaceId, found.id, true);
+        return this.current(workspaceId, found.id);
+      }
+      await this.save(workspaceId, found.id, { review: { ...found.review, refusedOnce: true } });
+      return await this.end(
+        workspaceId,
+        found.id,
+        new Stop(
+          'user-refused',
+          `Refus de la PR #${String(this.prOf(found).number)} : ${reason}`,
+          'user-refused',
+          reason,
+          !found.unverified,
+        ),
+      );
     } finally {
       this.deciding.delete(found.id);
     }
@@ -793,6 +939,29 @@ export class DeliveryService {
   }
 
   // ---- the CI and the merge (phase 4, US2) ----
+
+  /**
+   * « Ouvrir la PR »: the address rebuilt from the GitHub project of the repository and the number
+   * of the PR followed, never the stored text; `null` when there is nothing to open.
+   */
+  async prUrl(deliveryId: string): Promise<string | null> {
+    const ws = this.deps.workspaces
+      .list()
+      .find((w) => w.deliveries.some((d) => d.id === deliveryId));
+    const d = ws?.deliveries.find((x) => x.id === deliveryId);
+    if (!ws || !d?.pr || d.channel !== 'github') return null;
+    let repo: string;
+    try {
+      repo = await this.repoOf(ws.id);
+    } catch {
+      return null;
+    }
+    const [owner, name, ...rest] = repo.split('/');
+    const clean = (part: string | undefined) =>
+      part !== undefined && /^[A-Za-z0-9_.-]+$/.test(part) && part !== '.' && part !== '..';
+    if (rest.length > 0 || !clean(owner) || !clean(name)) return null;
+    return `https://github.com/${repo}/pull/${String(d.pr.number)}`;
+  }
 
   /** The request, if it is still there. */
   private find(workspaceId: string, id: string): Delivery | undefined {
@@ -936,8 +1105,9 @@ export class DeliveryService {
   }
 
   /** One merge at a time per request, whoever asks (FR-027). */
-  private async merge(workspaceId: string, id: string): Promise<void> {
-    if (this.merging.has(id)) return;
+  private async merge(workspaceId: string, id: string, decided = false): Promise<void> {
+    // Auto does not start a merge while the user is deciding on the same request.
+    if (this.merging.has(id) || (!decided && this.deciding.has(id))) return;
     this.merging.add(id);
     try {
       await this.mergeNow(workspaceId, id);
