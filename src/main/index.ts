@@ -163,6 +163,7 @@ void app.whenReady().then(async () => {
       createAgentTools(
         {
           exchanges,
+          delivery: { ciLog: (id, check) => delivery.ciLog(id, check) },
           onReport: async (id, report) => {
             const refused = await loops.report(id, report);
             // « ◆ Décider » reads the last report of an agent, with or without a loop.
@@ -419,6 +420,10 @@ void app.whenReady().then(async () => {
     // The e2e runs read the CI faster than every 30 s.
     ...(process.env.PACT_TEST_MODE === '1' && Number(process.env.PACT_CI_POLL_MS) > 0
       ? { pollMs: Number(process.env.PACT_CI_POLL_MS) }
+      : {}),
+    // Same for the silence of a configured CI (10 min).
+    ...(process.env.PACT_TEST_MODE === '1' && Number(process.env.PACT_SILENT_CI_MS) > 0
+      ? { silentMs: Number(process.env.PACT_SILENT_CI_MS) }
       : {}),
     deliveriesDir: join(app.getPath('userData'), 'deliveries'),
     runTests: (cwd, command) =>

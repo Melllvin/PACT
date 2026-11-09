@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAgentTools, eventsNote } from '../../../src/main/orchestrator/agent-tools';
-import type { AgentToolDependencies } from '../../../src/main/orchestrator/agent-tools';
 import { MAX_CI_LOG } from '../../../src/shared/delivery';
 import { createDeliveryHarness, type DeliveryHarness } from '../delivery/delivery-harness';
 
@@ -29,8 +28,7 @@ afterEach(async () => {
 });
 
 const runViews = () => h.ghLog().filter(([a, b]) => a === 'run' && b === 'view');
-const toolsOf = (agentId: string) =>
-  createAgentTools({ delivery: h.delivery } as unknown as AgentToolDependencies, agentId);
+const toolsOf = (agentId: string) => createAgentTools({ delivery: h.delivery }, agentId);
 const callLog = async (agentId: string, check: string) => {
   const tool = toolsOf(agentId).find((t) => t.name === 'get_ci_log');
   expect(tool, 'the tool get_ci_log is offered').toBeDefined();

@@ -337,8 +337,11 @@ test('US4 sc.5: main moved and the PR is BEHIND: PACT brings it up to date, awai
   await expect
     .poll(async () => (await saved()).deliveries[0]?.rebases, { timeout: 120_000 })
     .toBe(1);
+  // The fake forge moves the head of the PR at the next call that reads it (the push is in the bare repo).
+  await expect
+    .poll(async () => String((await forge()).prs['1']?.headRefOid), { timeout: 30_000 })
+    .not.toBe(head);
   const rebased = String((await forge()).prs['1']?.headRefOid);
-  expect(rebased).not.toBe(head);
   expect((await saved()).deliveries[0]?.pushedHead).toBe(rebased);
   expect((await saved()).loops[0]).toMatchObject({ state: 'delivering', round: 1 });
   expect(await mergeCalls()).toHaveLength(0);

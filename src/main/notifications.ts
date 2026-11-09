@@ -18,6 +18,8 @@ const NOTIFIED: ReadonlySet<TodoKind> = new Set([
   'decide',
   'delivery-local',
   'delivery-review',
+  'delivery-silent-ci',
+  'delivery-alert',
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',

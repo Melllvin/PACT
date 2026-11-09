@@ -45,9 +45,18 @@ export interface CiWatcherDeps {
     ): void | Promise<void>;
     /** The PR is no longer open on the forge: merged or closed, by someone else or by us. */
     closed?(found: Found & { state: string }): boolean | undefined | Promise<boolean | undefined>;
+    /**
+     * `mergeStateStatus` BEHIND or DIRTY (FR-017): the PR is to be brought up to date. `true`: the hook
+     * acted (the head moved or the request ended), the checks of the old head are not read.
+     */
+    behind?(
+      found: Found & { head: string; status: string },
+    ): boolean | undefined | Promise<boolean | undefined>;
   };
   /** The rhythm of the reads; `CI_POLL_MS` unless a test goes faster. */
   pollMs?: number;
+  /** The silence of a configured CI that is signalled; `SILENT_CI_MS` unless a test goes faster. */
+  silentMs?: number | undefined;
 }
 
 /** The states of a request whose PR is read. */
@@ -183,6 +192,12 @@ export class CiWatcher {
       return;
     }
 
+    if (pr.mergeStateStatus === 'BEHIND' || pr.mergeStateStatus === 'DIRTY') {
+      if ((await this.deps.on.behind?.({ ...found, head, status: pr.mergeStateStatus })) === true) {
+        return;
+      }
+    }
+
     let checks: CiCheck[];
     let required: string[] | null;
     let configured: boolean | 'unknown';
@@ -221,8 +236,10 @@ export class CiWatcher {
     }
     if (!this.alive(id, entry)) return;
 
+    // Read again: « Attendre encore » may have pushed the silence back while the forge answered.
+    const latest = this.delivery(workspaceId, id)?.ci ?? previous;
     const emptySince =
-      checks.length > 0 ? null : previous?.head === head ? (previous.emptySince ?? now) : now;
+      checks.length > 0 ? null : latest?.head === head ? (latest.emptySince ?? now) : now;
     const verdict = ciVerdict({
       checks,
       required,
@@ -230,6 +247,7 @@ export class CiWatcher {
       emptySince,
       now,
       readFailed: false,
+      silentMs: this.deps.silentMs,
     });
 
     const rerun = [...(previous?.rerun ?? [])];
@@ -268,7 +286,7 @@ export class CiWatcher {
       readAt: now,
     };
     if (!this.alive(id, entry)) return;
-    await this.save(workspaceId, id, previous, ci);
+    await this.save(workspaceId, id, latest, ci);
 
     if (verdict !== 'green') this.greenFor.delete(id);
     if (verdict !== 'red') this.redFor.delete(id);

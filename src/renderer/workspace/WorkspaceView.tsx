@@ -57,7 +57,7 @@ export type AgentActions = {
   /** 008 — « Fusionner » / « Refuser » of the merge the user is asked for, on the head shown. */
   onDecideDelivery?: (
     deliveryId: string,
-    decision: 'validate' | 'refuse',
+    decision: 'validate' | 'refuse' | 'wait' | 'review',
     head: string,
     reason?: string,
   ) => void;

@@ -238,7 +238,8 @@ export class GhClient {
 
   /** R15 — the end of the log of the failed steps of a job. */
   async jobLog(job: number): Promise<string> {
-    const log = await this.gh(['run', 'view', '--job', String(job), '--log-failed']);
+    // The newline `gh` prints after the last line is not part of the log.
+    const log = (await this.gh(['run', 'view', '--job', String(job), '--log-failed'])).trimEnd();
     return log.length > MAX_CI_LOG ? log.slice(-MAX_CI_LOG) : log;
   }
 

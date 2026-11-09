@@ -38,7 +38,7 @@
 //   (write a temporary file, rename it) to turn a check from running to green, without racing the state.
 // The file also receives what the calls did: `reruns` (job ids), `merges` ([{ number, mode, head }]).
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const {
@@ -123,7 +123,12 @@ if (state.scenario === 'third-party') {
 }
 let dirty = false;
 const save = () => {
-  if (dirty) writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+  if (dirty) {
+    // Atomic: a test reads the file while a call of the fake rewrites it.
+    const next = `${statePath}.${String(process.pid)}.next`;
+    writeFileSync(next, `${JSON.stringify(state, null, 2)}\n`);
+    renameSync(next, statePath);
+  }
 };
 const out = (text) => process.stdout.write(`${text}\n`);
 const fail = (code, text) => {
