@@ -163,17 +163,17 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T046 [P] [US6] Tests dans `tests/integration/delivery/delivery-restart.test.ts` : nouveau `DeliveryService` sur un état enregistré à chaque étape (`pushing`, `opening`, `watching`, `merging`) → aucune PR ni fusion doublée (sc.1, SC-005)
-- [ ] T047 [P] [US6] Tests dans `tests/integration/review/integration-restore.test.ts` : conflit à moitié résolu, nouveau `IntegrationService` → conflits et résolutions restaurés (sc.2) ; la demande locale reste jusqu'à l'issue
-- [ ] T048 [P] [US6] Tests dans `tests/integration/orchestrator/loop-agent-closed.test.ts` : agent fermé → boucle hors `running`, message `loop` à l'orchestrateur, `start_loop` accepté ensuite (sc.3, 4, SC-006) ; en livraison, fermeture par l'utilisateur → `dropped`, boucle `closed`, PR ouverte, réveil (sc.6)
-- [ ] T049 [P] [US6] Tests dans `tests/integration/review/integration-followed.test.ts` : intégration manuelle d'un agent qui a une demande locale → jamais rapportée comme celle de la demande (sc.5)
-- [ ] T050 [P] [US6] Tests dans `tests/unit/renderer/tiles/CloseAgentDialog.test.tsx` : avertissement de livraison en cours ; E2E dans `tests/e2e/us55-restart.spec.ts` : sc.1 et 3
+- [x] T046 [P] [US6] Tests dans `tests/integration/delivery/delivery-restart.test.ts` : nouveau `DeliveryService` sur un état enregistré à chaque étape (`pushing`, `opening`, `watching`, `merging`) → aucune PR ni fusion doublée (sc.1, SC-005)
+- [x] T047 [P] [US6] Tests dans `tests/integration/review/integration-restore.test.ts` : conflit à moitié résolu, nouveau `IntegrationService` → conflits et résolutions restaurés (sc.2) ; la demande locale reste jusqu'à l'issue
+- [x] T048 [P] [US6] Tests dans `tests/integration/orchestrator/loop-agent-closed.test.ts` : agent fermé → boucle hors `running`, message `loop` à l'orchestrateur, `start_loop` accepté ensuite (sc.3, 4, SC-006) ; en livraison, fermeture par l'utilisateur → `dropped`, boucle `closed`, PR ouverte, réveil (sc.6)
+- [x] T049 [P] [US6] Tests dans `tests/integration/review/integration-followed.test.ts` : intégration manuelle d'un agent qui a une demande locale → jamais rapportée comme celle de la demande (sc.5)
+- [x] T050 [P] [US6] Tests dans `tests/unit/renderer/tiles/CloseAgentDialog.test.tsx` : avertissement de livraison en cours ; E2E dans `tests/e2e/us55-restart.spec.ts` : sc.1 et 3
 
 ### Implémentation
 
-- [ ] T051 [US6] Dans `src/main/review/integration-service.ts` : écriture de `Pending` dans `<integrationsDir>/<id>.json`, `restore()` au démarrage, retrait à la fin seulement (research R19)
-- [ ] T052 [US6] Dans `src/main/orchestrator/loop-service.ts` et `src/main/agents/agent-manager.ts` : `agentClosed` (research R12), branché sur `agent:state` `closed` ; dans `src/main/delivery/delivery-service.ts` : chute à la fermeture par l'utilisateur ; reprise de chaque état au démarrage
-- [ ] T053 [US6] Dans `src/renderer/tiles/CloseAgentDialog.tsx` : avertissement de `contracts/ui.md`
+- [x] T051 [US6] Dans `src/main/review/integration-service.ts` : écriture de `Pending` dans `<integrationsDir>/<id>.json`, `restore()` au démarrage, retrait à la fin seulement (research R19)
+- [x] T052 [US6] Dans `src/main/orchestrator/loop-service.ts` et `src/main/agents/agent-manager.ts` : `agentClosed` (research R12), branché sur `agent:state` `closed` ; dans `src/main/delivery/delivery-service.ts` : chute à la fermeture par l'utilisateur ; reprise de chaque état au démarrage
+- [x] T053 [US6] Dans `src/renderer/tiles/CloseAgentDialog.tsx` : avertissement de `contracts/ui.md`
 
 **Checkpoint** : US6 livrée ; PR « 008 Phase 8 US6 ».
 

@@ -300,11 +300,52 @@ export class LoopService {
   async deliveryState(
     workspaceId: string,
     issueId: string,
-    state: 'delivering' | 'accepted' | 'running' | 'merged',
+    state: 'delivering' | 'accepted' | 'running' | 'merged' | 'closed',
   ): Promise<void> {
-    if (!this.get(workspaceId, issueId)) throw new Error(`Aucune boucle pour ${issueId}.`);
+    const loop = this.get(workspaceId, issueId);
+    if (!loop) throw new Error(`Aucune boucle pour ${issueId}.`);
+    // 008 R12 — a request that fell because its agent was closed: the loop closes and the issue is free.
+    if (state === 'closed') {
+      await this.closeLoop(workspaceId, loop, loop.devAgentId);
+      return;
+    }
     await this.save(workspaceId, issueId, (l) => ({ ...l, state }));
     if (state === 'merged') await this.setIssue(workspaceId, issueId, 'done');
+  }
+
+  /**
+   * 008 FR-026, R12 — an agent left (closed by the user): its loops that were not finished close, the
+   * issue is `ready` again for `start_loop`, and the orchestrator is woken once per loop. A loop that
+   * is `delivering` is closed by the delivery, which drops its request first (Q10); the agent may be
+   * gone from the workspace already, the loops are found by its id. A second call changes nothing.
+   */
+  async agentClosed(agentId: string): Promise<void> {
+    for (const ws of this.deps.workspaces.list()) {
+      const open = ws.loops.filter(
+        (l) =>
+          (l.devAgentId === agentId || l.testAgentId === agentId) &&
+          (l.state === 'running' || l.state === 'polishing' || l.state === 'accepted'),
+      );
+      for (const loop of open) await this.closeLoop(ws.id, loop, agentId);
+    }
+  }
+
+  private async closeLoop(workspaceId: string, loop: Loop, agentId: string): Promise<void> {
+    if (loop.state === 'closed') return;
+    // One write: nobody sees a closed loop with an issue that is still in progress. The orchestrator
+    // is woken as the state changes, not after the file is written: it may call `start_loop` at once.
+    await this.update(workspaceId, (ws) => {
+      this.deps.notify(workspaceId, {
+        agentId,
+        kind: 'loop',
+        summary: `Boucle fermée · ${loop.issueId} : un de ses agents a été fermé, l’issue est de nouveau prête pour start_loop.`,
+      });
+      return {
+        ...ws,
+        loops: ws.loops.map((l) => (l.issueId === loop.issueId ? { ...l, state: 'closed' } : l)),
+        issues: ws.issues.map((i) => (i.id === loop.issueId ? { ...i, state: 'ready' } : i)),
+      };
+    });
   }
 
   /** A hand-off report of an agent; the reason it is refused, or `null`. */

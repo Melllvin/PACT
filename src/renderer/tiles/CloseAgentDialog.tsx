@@ -18,6 +18,8 @@ type Props = {
   branch: string;
   /** 006 FR-023 — the agents an orchestrator launched: they close with it, same worktree choice. */
   subAgents?: readonly GroupMember[];
+  /** 008 US6 sc.6 — the delivery of this agent that is not over: `prNumber` is null before the PR. */
+  delivery?: { prNumber: number | null } | undefined;
   onConfirm: (removeWorktree: boolean) => void;
   onCancel: () => void;
 };
@@ -26,7 +28,14 @@ const CHOICE =
   'flex cursor-pointer gap-2.5 rounded-xl border border-white/8 px-3 py-2.5 transition-[background-color,border-color] duration-200 has-data-[state=checked]:border-primary/60 has-data-[state=checked]:bg-primary/6';
 
 /** FR-037: closing an agent asks whether its worktree and branch stay. Keeping is the default. */
-export function CloseAgentDialog({ name, branch, subAgents = [], onConfirm, onCancel }: Props) {
+export function CloseAgentDialog({
+  name,
+  branch,
+  subAgents = [],
+  delivery,
+  onConfirm,
+  onCancel,
+}: Props) {
   const [remove, setRemove] = useState(false);
   const confirm = () => {
     onConfirm(remove);
@@ -57,6 +66,13 @@ export function CloseAgentDialog({ name, branch, subAgents = [], onConfirm, onCa
             members={subAgents}
             title="Se ferment avec lui, avec le même choix pour leur worktree :"
           />
+          {delivery && (
+            <p className="rounded-lg border border-amber-400/30 bg-amber-400/8 px-3 py-2 text-[12.5px] leading-[1.4]">
+              {delivery.prNumber === null
+                ? 'Une livraison est en cours : elle sera abandonnée.'
+                : `Une livraison est en cours (PR #${String(delivery.prNumber)}) : elle sera abandonnée, la PR restera ouverte.`}
+            </p>
+          )}
           <RadioGroup
             aria-label="Son worktree et sa branche"
             value={String(remove)}

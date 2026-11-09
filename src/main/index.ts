@@ -265,6 +265,13 @@ void app.whenReady().then(async () => {
       }
       // US4 — an agent asked to resolve a conflict is checked again once its turn ends.
       integration.agentState(event.agentId, event.state);
+      // 008 FR-026 — an agent closed: its request falls first (Q10), then its loop closes (R12).
+      if (event.state === 'closed') {
+        void delivery
+          .agentClosed(event.agentId)
+          .then(() => loops.agentClosed(event.agentId))
+          .catch(() => undefined);
+      }
     },
     onBranch: (event) => {
       emit('agent:branch', event);
@@ -540,7 +547,11 @@ void app.whenReady().then(async () => {
 
   for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
   // 008 — the PR that were followed are read again, the merges that were under way are checked.
-  void delivery.resume();
+  // R19: the conflicts under resolution come back first, then the requests that were under way.
+  void integration
+    .restore()
+    .catch(() => [])
+    .then(() => delivery.resume());
   wake.restore();
   workspaces.startWatching(AVAILABILITY_CHECK_MS);
   origin.start();

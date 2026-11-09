@@ -104,6 +104,9 @@ export type DeliveryDecision = {
   reason?: string | undefined;
 };
 
+/** The request fell while its steps ran (its agent was closed): they stop, nothing more is done. */
+class Abandoned extends Error {}
+
 /** The run of a request ends here, with the state it ends in and what to tell. */
 class Stop extends Error {
   constructor(
@@ -123,6 +126,8 @@ class Stop extends Error {
     readonly detail = '',
     /** `conflicted`, `tests-failed` and `ci-red` send the dev back for a counted round. */
     readonly reopen = false,
+    /** 008 FR-026 — the user closed an agent: the loop closes, it does not go back to `running`. */
+    readonly agentClosed = false,
   ) {
     super(reason);
   }
@@ -174,12 +179,27 @@ export class DeliveryService {
     });
   }
 
-  /** The follow of the PR that were `watching` when the app stopped, and the merges that were under way. */
+  /**
+   * Every request that was under way when the app stopped goes on (US6 sc.1, SC-005): the follow of the
+   * PR that were `watching`, the merges that were under way, and the steps that came before the PR.
+   * Nothing is made twice: a PR noted is read by its number, a merge is asked of the forge first.
+   */
   async resume(): Promise<void> {
     for (const ws of this.deps.workspaces.list()) {
       for (const d of ws.deliveries) {
-        if (d.state !== 'merging' || d.channel !== 'github' || d.pr === null) continue;
-        // R2 — `merging` was written before the call: the forge says whether it went through.
+        if (d.channel !== 'github' || isFinalState(d.state)) continue;
+        // R2 — the state was written before the effect. Before the PR exists, the steps start again:
+        // each one is safe to repeat (the push is a lease on PACT's own head, `gh pr create` itself
+        // refuses a second PR for the branch), and a PR already noted is never created again.
+        if (d.pr === null) {
+          if (['syncing', 'testing', 'pushing', 'opening'].includes(d.state)) {
+            await this.restart(ws.id, d.id);
+          }
+          continue;
+        }
+        if (d.state !== 'merging' && d.state !== 'opening') continue;
+        // `merging` was written before the call: the forge says whether it went through.
+        // `opening` with its PR noted: the PR exists, it is followed by its number.
         try {
           const pr = await this.forge(ws).prView(d.pr.number);
           if (pr.state === 'MERGED') await this.merged(ws.id, d.id);
@@ -191,6 +211,26 @@ export class DeliveryService {
       }
     }
     this.watcher.resume(READ_STATES);
+  }
+
+  /** The steps of a request that stopped before its PR was noted, taken up again in the queue. */
+  private async restart(workspaceId: string, id: string): Promise<void> {
+    const forge = await this.forge(this.workspace(workspaceId)).availability();
+    if (!forge.ok) {
+      await this.end(
+        workspaceId,
+        id,
+        new Stop('refused', `${forge.reason} ${forge.remedy}`, 'refused'),
+      );
+      return;
+    }
+    this.background(workspaceId, id, forge.login);
+  }
+
+  /** `run` in the queue of the project, behind the caller: it ends its request itself. */
+  private background(workspaceId: string, id: string, login: string): void {
+    // A failure of that very write is all that can reach here.
+    this.enqueue(workspaceId, () => this.run(workspaceId, id, login)).catch(() => undefined);
   }
 
   private async repoOf(workspaceId: string): Promise<string> {
@@ -306,10 +346,7 @@ export class DeliveryService {
     if (loop) await this.deps.loops.deliveryState(workspaceId, loop.issueId, 'delivering');
     if (delivery.channel === 'local')
       return this.save(workspaceId, delivery.id, { state: 'reviewing' });
-    // `run` ends its request itself; a failure of that very write is all that can reach here.
-    this.enqueue(workspaceId, () => this.run(workspaceId, delivery.id, login)).catch(
-      () => undefined,
-    );
+    this.background(workspaceId, delivery.id, login);
     return this.current(workspaceId, delivery.id);
   }
 
@@ -318,11 +355,15 @@ export class DeliveryService {
    * after its push, a PR that failed to open for instance), else an absent branch. Anyone else's
    * head, or a branch PACT pushed and someone deleted, is not taken for PACT's.
    */
-  private async lease(ws: Workspace, d: Delivery): Promise<string | null> {
+  private async lease(ws: Workspace, d: Delivery, rebased: string): Promise<string | null> {
     const remote = await this.deps.git.remoteBranchHead(ws.path, d.branch);
-    const ours = this.workspace(ws.id).deliveries.some(
-      (x) => x.branch === d.branch && x.pushedHead === remote,
-    );
+    // The commit to push is already there (a push that went through before the crash): pushing it
+    // again changes nothing, whoever wrote it.
+    const ours =
+      remote === rebased ||
+      this.workspace(ws.id).deliveries.some(
+        (x) => x.branch === d.branch && x.pushedHead === remote,
+      );
     return remote !== null && ours ? remote : null;
   }
 
@@ -444,6 +485,7 @@ export class DeliveryService {
     try {
       await this.steps(workspaceId, id, login);
     } catch (error) {
+      if (error instanceof Abandoned) return;
       const stop =
         error instanceof Stop
           ? error
@@ -513,7 +555,7 @@ export class DeliveryService {
       !(await git.pushBranch(ws.path, {
         commit: rebased,
         branch: d.branch,
-        expected: d.pushedHead ?? (await this.lease(ws, d)),
+        expected: d.pushedHead ?? (await this.lease(ws, d, rebased)),
       }))
     ) {
       throw new Stop(
@@ -659,6 +701,9 @@ export class DeliveryService {
 
   /** The head of the dev is still F: a commit PACT did not make drops the request (R6). */
   private async ensureHead(agent: Agent, d: Delivery): Promise<void> {
+    // A request that fell meanwhile (agent closed) does not push nor open anything more.
+    const now = this.deps.workspaces.get(agent.workspaceId);
+    if (now?.deliveries.some((x) => x.id === d.id && isFinalState(x.state))) throw new Abandoned();
     const head = await this.deps.git.revParse(agent.worktreePath, 'HEAD');
     if (head !== d.frozenCommit) {
       throw new Stop(
@@ -724,7 +769,15 @@ export class DeliveryService {
       }
     } else if (stop.outcome === 'dropped') {
       text = `Livraison tombée · ${this.label(d)} · ${stop.detail}`;
-      if (loop) await this.deps.loops.deliveryState(workspaceId, loop.issueId, 'running');
+      // A foreign commit: the verdict no longer holds, the same round runs again. An agent closed:
+      // the loop is over and its issue free (FR-026).
+      if (loop) {
+        await this.deps.loops.deliveryState(
+          workspaceId,
+          loop.issueId,
+          stop.agentClosed ? 'closed' : 'running',
+        );
+      }
     } else {
       const reopened =
         loop && stop.reopen
@@ -952,29 +1005,28 @@ export class DeliveryService {
     const ws = this.deps.workspaces.list().find((w) => w.deliveries.some((d) => d.id === id));
     if (!ws) return;
     const d = this.current(ws.id, id);
+    // The word to the orchestrator comes before the state that is read as « all done ».
     if (integration.state === 'integrated') {
-      const saved = await this.save(ws.id, id, { state: 'merged' });
-      if (saved.issueId !== null) {
-        await this.deps.loops.deliveryState(ws.id, saved.issueId, 'merged');
-      }
+      if (d.issueId !== null) await this.deps.loops.deliveryState(ws.id, d.issueId, 'merged');
       await this.tell(
         ws.id,
-        saved,
+        d,
         'merged',
-        `Fusion locale · ${this.label(saved)} · ${short(saved.frozenCommit)}`,
+        `Fusion locale · ${this.label(d)} · ${short(d.frozenCommit)}`,
         {
-          commit: saved.frozenCommit,
+          commit: d.frozenCommit,
         },
       );
+      await this.save(ws.id, id, { state: 'merged' });
     } else if (['failed', 'blocked', 'cancelled'].includes(integration.state)) {
       const reason = integration.error ?? 'L’intégration n’a pas abouti.';
-      const saved = await this.save(ws.id, id, { state: 'reviewing', reason });
       await this.tell(
         ws.id,
-        saved,
+        d,
         'merge-failed',
         `Fusion locale non faite · ${this.label(d)} · ${reason}`,
       );
+      await this.save(ws.id, id, { state: 'reviewing', reason });
     }
   }
 
@@ -1412,6 +1464,38 @@ export class DeliveryService {
       }
     }
     await this.save(workspaceId, id, { state: 'merged', reason: null });
+  }
+
+  /**
+   * 008 FR-026, US6 sc.6, Q10 — the user closed an agent: the requests it is in (dev or tester) that
+   * are not over fall, the PR stays open and untouched, the loop closes and the orchestrator hears
+   * it. Called before `LoopService.agentClosed`; a second call finds nothing left to drop. A request
+   * that is `merging` is left: the merge was asked, and PACT itself closes the agents when it is done.
+   */
+  async agentClosed(agentId: string): Promise<void> {
+    for (const ws of this.deps.workspaces.list()) {
+      const falling = ws.deliveries.filter(
+        (d) =>
+          (d.agentId === agentId || d.testAgentId === agentId) &&
+          !isFinalState(d.state) &&
+          d.state !== 'merging' &&
+          !this.merging.has(d.id),
+      );
+      for (const d of falling) {
+        await this.end(
+          ws.id,
+          d.id,
+          new Stop(
+            'dropped',
+            'Un agent de la livraison a été fermé par l’utilisateur : la livraison est abandonnée, la PR reste ouverte.',
+            'dropped',
+            'agent fermé par l’utilisateur',
+            false,
+            true,
+          ),
+        );
+      }
+    }
   }
 
   /** The timers of the CI watch stop; the queues are just promises. */

@@ -7,6 +7,7 @@ import { Home } from '../home/Home';
 import { PermissionsDialog } from '../launch/PermissionsDialog';
 import { LaunchPanel } from '../launch/LaunchPanel';
 import { agentsLaunchedBy } from '../../shared/agents-view';
+import { fallingDelivery } from '../../shared/delivery';
 import type { Agent } from '../../shared/model';
 import type { AppStore } from '../store/app-store';
 import type { PreviewApi } from '../focus/PreviewTab';
@@ -240,6 +241,10 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               name={nameOfAgent(closing)}
               branch={closing.branch}
               subAgents={groupOf(closing)}
+              delivery={fallingDelivery(
+                workspaces.flatMap((w) => w.deliveries),
+                closing.id,
+              )}
               onConfirm={(removeWorktree) => void state.closeAgent(removeWorktree)}
               onCancel={state.cancelCloseAgent}
             />
