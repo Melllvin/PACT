@@ -165,8 +165,9 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onClose: state.requestCloseAgent,
                 onPromote: (id) => void state.promoteAgent(id),
                 onRename: (id, name) => void state.renameAgent(id, name),
-                onDecideDelivery: (id, decision, head) =>
-                  void state.decideDelivery(id, decision, head),
+                onDecideDelivery: (id, decision, head, reason) =>
+                  void state.decideDelivery(id, decision, head, reason),
+                onOpenPr: (id) => void state.openDeliveryPr(id),
                 onDeliverySettings: (settings) =>
                   void state.setDeliverySettings(workspace.id, settings),
                 onRequestDelivery: (agentId, request) =>

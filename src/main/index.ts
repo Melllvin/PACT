@@ -585,6 +585,7 @@ void app.whenReady().then(async () => {
       ...createDeliveryServices({
         workspaces,
         delivery,
+        openExternal: (url) => shell.openExternal(url),
         onChange: (workspaceId, change) => {
           emit('workspace:deliveries', { workspaceId, ...change });
           syncTodos();

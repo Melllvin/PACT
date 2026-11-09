@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { deliverySchema, deliverySettingsSchema } from './delivery';
+import { MAX_REASON, deliverySchema, deliverySettingsSchema } from './delivery';
 import { exchangesPayloadSchema } from './exchanges';
 import { orchestratorActionSchema } from './orchestrator';
 import { previewFileSchema } from './preview';
@@ -251,10 +251,15 @@ export const ipcRequests = {
       deliveryId: z.uuid(),
       decision: z.enum(['validate', 'refuse']),
       head: gitIdSchema,
-      reason: z.string().max(500).optional(),
+      reason: z.string().max(MAX_REASON).optional(),
     }),
     deliverySchema,
   ),
+  /**
+   * 008 US3 — « Ouvrir la PR »: the main process opens the PR of a delivery in the browser; the
+   * renderer never opens a window itself, and only the https address of the PR on the forge is opened.
+   */
+  'delivery:openPr': request(z.object({ deliveryId: z.uuid() }), none),
   /**
    * 008 FR-019, FR-020 — the settings of the delivery of a project (Auto first): only the keys given
    * change; the bounds are checked by the handler, which says which field is out of them.

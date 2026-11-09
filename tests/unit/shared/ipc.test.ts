@@ -202,6 +202,7 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
       { workspaceId: 'w1', settings: { auto: 'yes' } },
     ],
   },
+  'delivery:openPr': { valid: { deliveryId: integrationId }, invalid: [{}, { deliveryId: 'x' }] },
   'delivery:decide': {
     valid: {
       deliveryId: integrationId,

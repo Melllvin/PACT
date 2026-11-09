@@ -55,7 +55,14 @@ export type AgentActions = {
   /** « Revue → »: opens the Changements tab of the agent (002 FR-002). */
   onReview?: (agentId: string) => void;
   /** 008 — « Fusionner » / « Refuser » of the merge the user is asked for, on the head shown. */
-  onDecideDelivery?: (deliveryId: string, decision: 'validate' | 'refuse', head: string) => void;
+  onDecideDelivery?: (
+    deliveryId: string,
+    decision: 'validate' | 'refuse',
+    head: string,
+    reason?: string,
+  ) => void;
+  /** 008 US3 — « Ouvrir la PR »: opened by the main process. */
+  onOpenPr?: (deliveryId: string) => void;
   /** 008 — « Livrer » / « Intégrer » of an agent. */
   onRequestDelivery?: (
     agentId: string,

@@ -128,7 +128,10 @@ export type AppState = {
     deliveryId: string,
     decision: 'validate' | 'refuse',
     head: string,
+    reason?: string,
   ) => Promise<void>;
+  /** 008 US3 — « Ouvrir la PR »: the main process opens it. */
+  openDeliveryPr: (deliveryId: string) => Promise<void>;
   /** 003 US5 — the journal « ◎ Actions » of an orchestrator, the latest first (FR-021). */
   orchestratorActions: Record<string, OrchestratorAction[]>;
   loadOrchestratorActions: (agentId: string) => Promise<void>;
@@ -659,8 +662,17 @@ export function createAppStore(api: PactApi) {
       setDeliverySettings: (workspaceId, settings) =>
         act(() => api.invoke('delivery:settings', { workspaceId, settings })),
 
-      decideDelivery: (deliveryId, decision, head) =>
-        act(() => api.invoke('delivery:decide', { deliveryId, decision, head })),
+      decideDelivery: (deliveryId, decision, head, reason) =>
+        act(() =>
+          api.invoke('delivery:decide', {
+            deliveryId,
+            decision,
+            head,
+            ...(reason === undefined ? {} : { reason }),
+          }),
+        ),
+
+      openDeliveryPr: (deliveryId) => act(() => api.invoke('delivery:openPr', { deliveryId })),
 
       decideLoop: (workspaceId, issueId, decision) =>
         act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),
