@@ -172,3 +172,52 @@ describe('« Reprendre le travail » at the restart of an orchestrator', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 });
+
+// 008 T050 (US6 sc.6, contracts/ui.md) — closing by oneself an agent in a delivery says what will
+// happen: « Une livraison est en cours (PR #n) : elle sera abandonnée, la PR restera ouverte. »
+//
+// RED until T053. ASSUMED PROP (ui.md fixes the text, not the prop; listed in the report): `delivery`,
+// `{ prNumber: number | null }` — the request of the agent that is not final, `null` for a number
+// when the PR is not opened yet — absent when the agent is in no delivery. App.tsx derives it from
+// `workspace.deliveries`. It is passed through a loose object, as above, so that the tests fail on
+// the missing behavior and not on the typing.
+describe('CloseAgentDialog of an agent in a delivery (008 sc.6)', () => {
+  const WARNING =
+    'Une livraison est en cours (PR #12) : elle sera abandonnée, la PR restera ouverte.';
+
+  it('warns, with the number of the PR, that the delivery will be abandoned and the PR left open', () => {
+    setupGroup({ delivery: { prNumber: 12 } });
+    const dialog = screen.getByRole('dialog', { name: 'Fermer Claude Code 1' });
+    expect(within(dialog).getByText(WARNING)).toBeDefined();
+  });
+
+  it('warns as well before the PR exists, without a number that is not there', () => {
+    setupGroup({ delivery: { prNumber: null } });
+    const dialog = screen.getByRole('dialog', { name: 'Fermer Claude Code 1' });
+    expect(within(dialog).getByText(/Une livraison est en cours/)).toBeDefined();
+    expect(dialog.textContent).not.toMatch(/PR #(null|undefined|NaN)/);
+  });
+
+  it('says nothing of the sort for an agent that is in no delivery', () => {
+    setupGroup({});
+    expect(screen.getByRole('dialog').textContent).not.toContain('livraison');
+  });
+
+  it('does not take the choice away: the user still keeps or removes the worktree, and confirms', async () => {
+    const { onConfirm, onCancel } = setupGroup({ delivery: { prNumber: 12 } });
+    expect(screen.getByRole('radio', { name: /Conserver/ }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    await userEvent.click(screen.getByRole('radio', { name: /Supprimer/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fermer l’agent' }));
+    expect(onConfirm).toHaveBeenCalledWith(true);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('can still be given up with « Annuler »: the delivery goes on', async () => {
+    const { onConfirm, onCancel } = setupGroup({ delivery: { prNumber: 12 } });
+    await userEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});

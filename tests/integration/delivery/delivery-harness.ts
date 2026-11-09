@@ -196,18 +196,20 @@ export async function createDeliveryHarness(
   const integrations: Integration[] = [];
   // Built before the service that follows it; the app wires them the same way.
   const followers: ((integration: Integration) => void)[] = [];
-  const integration = new IntegrationService({
-    git: gitService,
-    workspaces,
-    agents: { close: () => Promise.resolve() },
-    prompts: { sendPrompt: () => Promise.resolve(undefined) },
-    integrationsDir: join(userData, 'integrations'),
-    conflictsDir: join(userData, 'conflicts'),
-    onState: (state) => {
-      integrations.push(state);
-      for (const follow of followers) follow(state);
-    },
-  });
+  const makeIntegration = () =>
+    new IntegrationService({
+      git: gitService,
+      workspaces,
+      agents: { close: () => Promise.resolve() },
+      prompts: { sendPrompt: () => Promise.resolve(undefined) },
+      integrationsDir: join(userData, 'integrations'),
+      conflictsDir: join(userData, 'conflicts'),
+      onState: (state) => {
+        integrations.push(state);
+        for (const follow of followers) follow(state);
+      },
+    });
+  let integration = makeIntegration();
   const changes: unknown[] = [];
 
   // What PACT's tests saw: where they ran, on which commit, and the gate that holds them.
@@ -275,19 +277,21 @@ export async function createDeliveryHarness(
   };
 
   const gh = new GhClient({ run: ghRun, cwd: repo });
-  const delivery = new DeliveryService({
-    workspaces,
-    git: gitService,
-    gh,
-    loops,
-    integration,
-    exchanges,
-    agents: agentsDep,
-    ...(options.pollMs === undefined ? {} : { pollMs: options.pollMs }),
-    deliveriesDir: join(userData, 'deliveries'),
-    runTests,
-    onChange: (_id: string, change: unknown) => changes.push(change),
-  });
+  const makeDelivery = () =>
+    new DeliveryService({
+      workspaces,
+      git: gitService,
+      gh,
+      loops,
+      integration,
+      exchanges,
+      agents: agentsDep,
+      ...(options.pollMs === undefined ? {} : { pollMs: options.pollMs }),
+      deliveriesDir: join(userData, 'deliveries'),
+      runTests,
+      onChange: (_id: string, change: unknown) => changes.push(change),
+    });
+  let delivery = makeDelivery();
   followers.push((state) => {
     (delivery as unknown as { integrationState(i: Integration): void }).integrationState(state);
   });
@@ -623,10 +627,14 @@ export async function createDeliveryHarness(
     workspace,
     workspaces,
     gitService,
-    delivery,
+    get delivery() {
+      return delivery;
+    },
     gh,
     loops,
-    integration,
+    get integration() {
+      return integration;
+    },
     integrations,
     exchanges,
     notices,
@@ -682,8 +690,30 @@ export async function createDeliveryHarness(
         ...(input.unverified === undefined ? {} : { unverified: input.unverified }),
         requestedBy: input.by ?? 'orchestrator',
       }),
+    /**
+     * 008 phase 8 — PACT stops and starts again on the same disk: the workspace file, the integrations
+     * folder and the forge stay; the services are new, with nothing in memory. What was under way in
+     * the old ones stays where it was (a held call is never released). Then, as the app does at its
+     * start: `IntegrationService.restore()` (T051), then `DeliveryService.resume()`.
+     * `restore` is read loosely: the missing method is a failure of the test, not of its typing.
+     */
+    async restart({ restore = true }: { restore?: boolean } = {}) {
+      delivery.dispose();
+      integration.dispose();
+      integration = makeIntegration();
+      delivery = makeDelivery();
+      if (restore) {
+        const restorable = integration as unknown as { restore?: () => Promise<Integration[]> };
+        if (typeof restorable.restore !== 'function') {
+          throw new Error('IntegrationService.restore() absent (T051, R19)');
+        }
+        await restorable.restore();
+      }
+      await delivery.resume();
+    },
     async dispose() {
       (delivery as unknown as { dispose?: () => void }).dispose?.();
+      integration.dispose();
       workspaces.dispose();
       review.dispose();
       // The last writes land first.
