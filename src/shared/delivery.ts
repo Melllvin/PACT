@@ -70,6 +70,23 @@ const FINAL_STATES: readonly string[] = [
   'merged',
 ];
 
+/**
+ * 008 US6 sc.6 — the request that falls when `agentId` is closed (as the dev or the tester): not
+ * over, and not `merging` (a merge that was asked goes on). `prNumber` is null before the PR.
+ */
+export function fallingDelivery(
+  deliveries: readonly Pick<Delivery, 'agentId' | 'testAgentId' | 'state' | 'pr'>[],
+  agentId: string,
+): { prNumber: number | null } | undefined {
+  const found = deliveries.find(
+    (d) =>
+      (d.agentId === agentId || d.testAgentId === agentId) &&
+      !isFinalState(d.state) &&
+      d.state !== 'merging',
+  );
+  return found ? { prNumber: found.pr?.number ?? null } : undefined;
+}
+
 /** The request is over: a new one of the same branch may start, taking its PR over (R22). */
 export function isFinalState(state: string): boolean {
   return FINAL_STATES.includes(state);

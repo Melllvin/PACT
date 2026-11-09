@@ -275,10 +275,12 @@ describe('sc.4 — a fork whose branch has the name of the branch of a delivery'
 });
 
 describe('sc.5 — a PR of another account, from a branch of the repository', () => {
-  it('Given an open PR of another account from the very branch of a delivery, When PACT opens its PR, Then it ignores that PR: it does not follow it, read it or merge it', async () => {
+  it('Given an open PR of another account from the very branch of a delivery, When PACT opens its PR, Then it checks that PR by its number and, it not being PACT’s, neither follows nor merges it', async () => {
     const team = await h.team('a');
     // The forge refuses a second PR of the same branch and names #901 in its message: PACT must
-    // neither follow that number nor look the PR up.
+    // neither follow that number nor act on the PR. 008 US6 (FR-031): the number given by gh is read,
+    // by `pr view` only, to check the author, the fork, the head and the base; this PR fails the
+    // author check.
     seedStrangers({
       '901': stranger(901, {
         author: { login: 'someone-else' },
@@ -296,7 +298,9 @@ describe('sc.5 — a PR of another account, from a branch of the repository', ()
 
     const saved = h.deliveries()[0];
     expect(saved?.pr?.number === 901).toBe(false);
-    expect(touched(901).filter(([a, b]) => a === 'pr' && b !== 'create')).toEqual([]);
+    expect(touched(901).filter(([a, b]) => a === 'pr' && b !== 'create' && b !== 'view')).toEqual(
+      [],
+    );
     expect(h.mergeCalls()).toEqual([]);
     expect(h.prStateOnForge(901)).toBe('OPEN');
     expect(saved?.state).not.toBe('merged');
