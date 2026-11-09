@@ -252,6 +252,8 @@ void app.whenReady().then(async () => {
             .find((a) => a.id === event.agentId)?.lastReport
         : undefined;
       emit('agent:state', kept ? { ...event, lastReport: kept } : event);
+      // 009 — an agent out of its pause by « Relancer » or closed frees its account.
+      if (event.state !== 'paused') usageLimit.agentChanged();
       // Working again, an agent has left its last report behind it.
       if (event.state === 'working' && !late) void keepReport(event.agentId, null);
       syncTodos();

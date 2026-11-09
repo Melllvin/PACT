@@ -204,6 +204,22 @@ describe('a restart of PACT with agents in pause (R9)', () => {
   });
 });
 
+describe('an account whose paused agents left the pause another way', () => {
+  it('Given the only paused agent relaunched by the user, When its state changes, Then the account is no longer in pause', () => {
+    waiting = [paused(21)];
+    service.restorePauses(waiting);
+    expect(service.pausedFor('claude-code')).not.toBeNull();
+    service.agentChanged();
+    expect(service.pausedFor('claude-code')).not.toBeNull();
+    // « Relancer » (or a close) takes it out of the pause without the account's resume.
+    waiting = [];
+    service.agentChanged();
+    expect(service.pausedFor('claude-code')).toBeNull();
+    expect(service.usageHeld('claude-code')).toBe(false);
+    expect(service.pauses()).toEqual([]);
+  });
+});
+
 describe('the notices when several things are true at once', () => {
   it('Given a pause on two windows, When the agent resumes, Then the notice names the most loaded one', async () => {
     waiting = [

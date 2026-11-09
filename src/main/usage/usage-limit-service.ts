@@ -607,6 +607,14 @@ export class UsageLimitService {
     return undefined;
   }
 
+  /**
+   * An agent changed state. An account whose last paused agent left the pause another way than its
+   * resume (« Relancer », closed) is no longer in pause: it would hold its CLI until PACT restarts.
+   */
+  agentChanged(): void {
+    for (const info of [...this.paused.values()]) this.forgetIfEmpty(info.cliId, info.account);
+  }
+
   /** The last paused agent of the account resumed: the account is no longer in pause. */
   private forgetIfEmpty(cliId: string, account: string) {
     if (this.options.agents.pausedAgents(cliId, account).length === 0) {
