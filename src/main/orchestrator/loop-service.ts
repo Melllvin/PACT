@@ -2,7 +2,7 @@ import type { Agent, Loop, Workspace } from '../../shared/model';
 import type { HandoffReport, StoredReport } from '../../shared/report';
 import type { TestRun } from '../../shared/review';
 import type { GitService } from '../git/git-service';
-import { MAX_NOTICE } from '../../shared/exchanges';
+import { MAX_INSTRUCTION, MAX_NOTICE } from '../../shared/exchanges';
 import type { RecordInput } from './exchange-service';
 import type { Notice } from './orchestrator-service';
 import type { ReviewService } from '../review/review-service';
@@ -64,6 +64,9 @@ function reportNotice(agentId: string, report: HandoffReport): LoopEvent {
 /** Who got what when a loop started (007 FR-021): the tool says it in words. */
 export type Sent = { agentId: string; kind: 'instruction' }[];
 
+/** 008 R23, P2 — the fixed sentence of every polish instruction. */
+const POLISH_BAN = 'Aucune nouvelle fonctionnalité : corrige seulement ce qui est demandé';
+
 export class LoopService {
   /** Agents that gave a report since their last turn ended. */
   private readonly reported = new Set<string>();
@@ -98,7 +101,9 @@ export class LoopService {
   private find(agentId: string): { ws: Workspace; loop: Loop; agent: Agent } | null {
     for (const ws of this.deps.workspaces.list()) {
       const loop = ws.loops.find(
-        (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
+        (l) =>
+          (l.state === 'running' || l.state === 'polishing') &&
+          (l.devAgentId === agentId || l.testAgentId === agentId),
       );
       const agent = ws.agents.find((a) => a.id === agentId);
       if (loop && agent) return { ws, loop, agent };
@@ -176,6 +181,59 @@ export class LoopService {
     });
     if (delivered) sent.push({ agentId: test, kind: 'instruction' });
     return { ...loop, sent };
+  }
+
+  /** 008 R23 — a pass is running: the last round is a polish round that has no proof yet. */
+  private passRunning(loop: Loop): boolean {
+    const last = loop.rounds.at(-1);
+    return loop.state === 'polishing' && last?.kind === 'polish' && last.proof === null;
+  }
+
+  /**
+   * 008 R23, FR-022 — the orchestrator starts a polish pass: a round of its own (never counted among
+   * the rounds), and one instruction to the dev with the brief of the project, the notes of the
+   * orchestrator and the fixed ban on any new feature (P2).
+   */
+  async polish(
+    workspaceId: string,
+    issueId: string,
+    notes?: string,
+  ): Promise<{ pass: number; total: number; sent: Sent }> {
+    const ws = this.workspace(workspaceId);
+    const loop = this.get(workspaceId, issueId);
+    if (!loop) throw new Error(`Aucune boucle pour ${issueId}.`);
+    if (loop.state !== 'polishing' || !loop.polish) {
+      throw new Error(`La boucle de ${issueId} ne peaufine pas (${loop.state}).`);
+    }
+    if (this.passRunning(loop)) {
+      throw new Error(`Une passe de peaufinage tourne déjà pour ${issueId}.`);
+    }
+    const { done, total } = loop.polish;
+    const pass = done + 1;
+    await this.save(workspaceId, issueId, (l) => ({
+      ...l,
+      polish: { done, total, restarted: false },
+      rounds: [...l.rounds, this.newRound(l.rounds.length + 1, 'polish')],
+    }));
+    const brief = ws.delivery.polishBrief.trim();
+    const extra = notes?.trim();
+    const text = [
+      `Peaufinage de l’issue ${issueId} (passe ${String(pass)} sur ${String(total)}).`,
+      // The ban comes first: nothing after it can push it out of the text (P2, R23).
+      `${POLISH_BAN}. Commite, puis rends ton rapport avec submit_report.`,
+      brief ? `Consigne du projet :\n${brief}` : '',
+      extra ? `Précisions de l’orchestrateur :\n${extra}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    const sent: Sent = [];
+    const delivered = await this.send(workspaceId, {
+      to: loop.devAgentId,
+      kind: 'instruction',
+      text: text.slice(0, MAX_INSTRUCTION),
+    });
+    if (delivered) sent.push({ agentId: loop.devAgentId, kind: 'instruction' });
+    return { pass, total, sent };
   }
 
   private newRound(n: number, kind: 'round' | 'polish' = 'round'): Loop['rounds'][number] {
@@ -394,9 +452,14 @@ export class LoopService {
         text: `Fais passer les tests d’acceptation de l’issue ${loop.issueId} (lis .pact/issues/${loop.issueId}.md dans ton worktree) sans les modifier, puis rends ton rapport avec submit_report.`,
       });
     }
+    // The pass the loop is in, if any (008 R23).
+    const pass =
+      loop.state === 'polishing' && loop.rounds.at(-1)?.kind === 'polish' ? loop.polish : null;
     if (role === 'test' && report.verdict?.result === 'defects') {
       const defects = report.verdict.defects.map((d) => `- ${d}`).join('\n');
-      const head = `Verdict du test sur ${loop.issueId} (tour ${String(loop.round)}/${String(this.maxRounds(ws))}) : défauts.\n`;
+      const head = pass
+        ? `Verdict du test sur ${loop.issueId} (passe ${String(pass.done + 1)}/${String(pass.total)}) : défauts.\n`
+        : `Verdict du test sur ${loop.issueId} (tour ${String(loop.round)}/${String(this.maxRounds(ws))}) : défauts.\n`;
       await this.send(ws.id, {
         to: loop.devAgentId,
         kind: 'verdict',
@@ -417,6 +480,15 @@ export class LoopService {
       // The dev's worktree as it is now: the proof is on this tree (FR-019).
       const { tree } = await this.deps.git.snapshot(target.cwd);
       await this.deps.tests.run(target, command, tree);
+    } else if (role === 'test' && report.verdict?.result === 'defects' && pass) {
+      // P2 — the same pass resumes once, without a round; a second « defects » on it stops the loop.
+      if (pass.restarted) await this.escalate(ws.id, loop.issueId, agentId);
+      else {
+        await this.save(ws.id, loop.issueId, (l) => ({
+          ...l,
+          polish: { ...pass, restarted: true },
+        }));
+      }
     } else if (
       role === 'test' &&
       report.verdict?.result === 'defects' &&
@@ -449,12 +521,16 @@ export class LoopService {
   }
 
   private async escalate(workspaceId: string, issueId: string, agentId: string) {
+    const loop = this.get(workspaceId, issueId);
     await this.save(workspaceId, issueId, (l) => ({ ...l, state: 'escalated' }));
     await this.setIssue(workspaceId, issueId, 'escalated');
     this.deps.notify(workspaceId, {
       agentId,
       kind: 'loop',
-      summary: `Boucle arrêtée · ${issueId} · ${String(this.maxRounds(this.workspace(workspaceId)))} tours : l’utilisateur décide.`,
+      summary:
+        loop?.state === 'polishing' || loop?.rounds.at(-1)?.kind === 'polish'
+          ? `Boucle arrêtée · ${issueId} · peaufinage : défauts répétés sur la même passe, l’utilisateur décide.`
+          : `Boucle arrêtée · ${issueId} · ${String(this.maxRounds(this.workspace(workspaceId)))} tours : l’utilisateur décide.`,
     });
   }
 
@@ -467,6 +543,32 @@ export class LoopService {
     // 008 R3 — the proof is on a commit: the worktree must be clean, what PACT will push.
     const { commit, dirty } = await this.headOf(agent);
     const { tree } = await this.deps.git.snapshot(agent.worktreePath);
+    if (loop.state === 'polishing') {
+      // 008 R23 — the end of a pass: accepted by the tester, then PACT's proof on the end commit.
+      const pass = loop.rounds.at(-1);
+      const accepted = pass?.reports.some(
+        (r) => r.role === 'test' && r.verdict?.result === 'accepted',
+      );
+      if (!this.passRunning(loop) || !accepted || !loop.polish) return;
+      const { done, total } = loop.polish;
+      if (run.status === 'passed' && run.tree === tree && !dirty) {
+        await this.saveRound(ws.id, loop.issueId, (r) => ({
+          ...r,
+          proof: { tree, commit, exitCode: 0, at: this.now() },
+        }));
+        await this.save(ws.id, loop.issueId, (l) => ({
+          ...l,
+          state: done + 1 >= total ? 'accepted' : 'polishing',
+          polish: { done: done + 1, total, restarted: false },
+        }));
+        this.deps.notify(ws.id, {
+          agentId: run.agentId,
+          kind: 'loop',
+          summary: `${loop.issueId} : passe de peaufinage ${String(done + 1)}/${String(total)} finie, tests passés par PACT.`,
+        });
+      }
+      return;
+    }
     if (run.status === 'passed' && run.tree === tree && !dirty) {
       const passes = ws.delivery.polishPasses;
       await this.saveRound(ws.id, loop.issueId, (r) => ({

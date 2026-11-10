@@ -19,7 +19,14 @@ dans le dossier de ce skill : il vaut pour tous les rôles.
 6. `request_delivery({ issue, title, message })` : seulement pour une issue dont la boucle est
    acceptée, après avoir lu les changements et l'état des tests. PACT rebase, teste, pousse et ouvre
    la PR (ou, sans dépôt distant, demande la fusion à l'utilisateur) ; l'issue arrive dans tes
-   événements (`get_events`) : tu ne bloques pas dessus.
+   événements (`get_events`) : tu ne bloques pas dessus. PACT la refuse tant que des passes de
+   peaufinage restent à finir (« passe k sur N à finir »). Il n'y a plus de `request_integration` :
+   toute livraison passe par `request_delivery`.
+7. `polish_pass({ issue, notes? })` : quand la boucle peaufine (le projet a réglé des passes),
+   lance une passe à la fois. PACT envoie au dev la consigne du projet, tes `notes` (2 000
+   caractères au plus) et l'interdiction de toute nouvelle fonctionnalité ; le test vérifie, PACT
+   refait la preuve, puis tu lances la passe suivante. Deux `defects` sur la même passe : l'utilisateur
+   décide, rien n'est fusionné.
 
 ## Chaîne : cadrage → design → boucle → recap
 
@@ -30,8 +37,9 @@ dans le dossier de ce skill : il vaut pour tous les rôles.
    design system et dessine les maquettes ; l'utilisateur les valide dans l'Aperçu, tu l'apprends par
    `get_events` (événement `mockup`).
 3. **Boucle** : pour chaque issue prête, un agent `test` (skill `pact-test`) et un agent `dev`
-   (skill `pact-dev`) ; `start_loop`, puis `next_round` sur un verdict `defects`. Jamais de 4ᵉ tour :
-   après le 3ᵉ verdict `defects`, l'utilisateur décide.
+   (skill `pact-dev`) ; `start_loop`, puis `next_round` sur un verdict `defects`. Le nombre de tours
+   est le plafond du projet (réglé par l'utilisateur) : une fois atteint avec un verdict `defects`,
+   l'utilisateur décide, tu ne relances pas.
 4. **Recap** : un agent `recap` (skill `pact-recap`), ou toi-même, tient `.pact/recap.md`.
 
 `launch_agent` par rôle : `launch_agent({ role: "dev" })` prend le CLI, le modèle et l'effort du

@@ -745,3 +745,120 @@ describe('delivery chain (008)', () => {
     });
   });
 });
+
+// 008 T055 / US5 sc.7, FR-020, FR-021 — the ceiling of rounds is the project's (`workspace.delivery.maxRounds`),
+// read live: the loop stops at it, the dev is escalated to the stronger model at it, and a ceiling lowered
+// under the current round stops the loop at the next « defects ».
+//
+// GREEN already (the ceiling is read from the project since phase 8): these tests pin it for the removal of
+// `MAX_ROUNDS` (T058). The tools' texts that must stop saying « 3 tours » are in
+// tests/integration/orchestrator/tools-loop.test.ts (red).
+describe('the ceiling of the project (008 US5 sc.7)', () => {
+  const ceiling = (maxRounds: number, over: Record<string, unknown> = {}) => {
+    current = {
+      ...current,
+      delivery: {
+        auto: false,
+        mergeMode: 'squash',
+        maxRounds,
+        polishPasses: 0,
+        polishBrief: '',
+        ...over,
+      },
+    };
+  };
+  const lastNotice = () => notify.mock.calls.at(-1)?.[1] as { kind: string; summary: string };
+  /** `defects` at the current round, then the next round. */
+  const bounce = async () => {
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+  };
+
+  it('Given a ceiling of 5, When the defects come, Then the loop runs rounds 3 and 4 and stops at round 5 with the user deciding', async () => {
+    ceiling(5);
+    await start();
+    for (let round = 1; round < 5; round++) {
+      await bounce();
+      expect(loop()?.state).toBe('running');
+    }
+    expect(loop()?.round).toBe(5);
+
+    await loops.report(tester.id, defects);
+
+    expect(loop()?.state).toBe('escalated');
+    expect(state()).toBe('escalated');
+    expect(lastNotice()).toMatchObject({ kind: 'loop' });
+    expect(lastNotice().summary).toContain('5 tours');
+    await expect(loops.next('w1', '0012-connexion')).rejects.toThrow(
+      'Plafond de 5 tours atteint : l’utilisateur décide',
+    );
+  });
+
+  it('Given a ceiling of 5 and a stronger model for the dev, When the rounds go on, Then the escalation comes with round 5, not round 3', async () => {
+    ceiling(5);
+    current = {
+      ...current,
+      roleProfiles: {
+        dev: {
+          cliId: 'claude-code',
+          model: 'sonnet',
+          effort: null,
+          maxModel: 'opus',
+          escalate: true,
+        },
+      },
+    };
+    await start();
+    for (let round = 1; round < 4; round++) await bounce();
+    expect(loop()?.round).toBe(4);
+    expect(d.agents.escalate).not.toHaveBeenCalled();
+
+    await bounce();
+
+    expect(loop()?.round).toBe(5);
+    expect(d.agents.escalate).toHaveBeenCalledTimes(1);
+    expect(d.agents.escalate).toHaveBeenCalledWith(dev.id, 'opus');
+    expect(loop()?.escalatedModel).toBe('opus');
+  });
+
+  it('Given a ceiling lowered under the current round, When the next defects come, Then the loop escalates to the user at once, naming the new ceiling', async () => {
+    ceiling(5);
+    await start();
+    for (let round = 1; round < 4; round++) await bounce();
+    expect(loop()?.round).toBe(4);
+    ceiling(2);
+
+    await loops.report(tester.id, defects);
+
+    expect(loop()?.state).toBe('escalated');
+    expect(state()).toBe('escalated');
+    expect(lastNotice().summary).toContain('2 tours');
+    await expect(loops.next('w1', '0012-connexion')).rejects.toThrow('Plafond de 2 tours');
+  });
+
+  it('Given a ceiling raised while the loop runs, When the defects of the old ceiling come, Then the loop goes on', async () => {
+    await start();
+    await bounce();
+    await bounce();
+    expect(loop()?.round).toBe(3);
+    ceiling(4);
+
+    await loops.report(tester.id, defects);
+
+    expect(loop()?.state).toBe('running');
+    await expect(loops.next('w1', '0012-connexion')).resolves.toMatchObject({ round: 4 });
+  });
+
+  it('Given a ceiling of 5, When the tester finds defects at round 2, Then the dev is told « tour 2/5 »', async () => {
+    ceiling(5);
+    await start();
+    await bounce();
+    d.message.mockClear();
+
+    await loops.report(tester.id, defects);
+
+    const calls = d.message.mock.calls as unknown as [string, { kind: string; text: string }][];
+    const sent = calls.map(([, draft]) => draft);
+    expect(sent.find((m) => m.kind === 'verdict')?.text).toContain('tour 2/5');
+  });
+});

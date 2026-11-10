@@ -64,7 +64,7 @@ export type ToolDependencies = {
   /** 008 — `request_delivery`: the barriers and the run of a delivery. */
   delivery: Pick<DeliveryService, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
-  loops: Pick<LoopService, 'start' | 'next' | 'get'>;
+  loops: Pick<LoopService, 'start' | 'next' | 'get' | 'polish'>;
   /** 004 US3 — the issues of the workspace, published once the user confirms. */
   issues: Pick<IssueService, 'register' | 'list' | 'requestPublish'>;
   /** 005 FR-012 — « Limite 5 h à 85 % : … » when a CLI is near its limit; never a refusal. */
@@ -86,6 +86,8 @@ const MAX_WAIT_S = 60;
 const MAX_PROMPT = 8000;
 const MAX_MESSAGE = 4000;
 const MAX_TITLE = 200;
+/** 008 contracts/mcp-tools.md — the notes of `polish_pass`. */
+const MAX_POLISH_NOTES = 2000;
 
 /** Refused with its reason: the orchestrator reads it and adapts. */
 class Refusal extends Error {}
@@ -159,6 +161,15 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     if (!found) throw new Refusal('L’orchestrateur n’est plus dans un workspace ouvert.');
     if (found.status !== 'available') throw new Refusal('Le dossier du workspace est introuvable.');
     return found;
+  };
+
+  /** 008 FR-021 — the ceiling of rounds is the project's, never a number of the code. */
+  const ceiling = (): number => {
+    try {
+      return workspace().delivery.maxRounds;
+    } catch {
+      return 3;
+    }
   };
 
   /** By id or by displayed name, case ignored; never the orchestrator itself (FR-008). */
@@ -657,7 +668,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'start_loop',
-      'Démarre la boucle dev ↔ test d’une issue prête (3 tours au plus) : PACT compte les tours, valide le verdict du test et fait la preuve par ses propres tests.',
+      `Démarre la boucle dev ↔ test d’une issue prête (au plus le plafond du projet (${String(ceiling())} tours)) : PACT compte les tours, valide le verdict du test et fait la preuve par ses propres tests.`,
       { issue: { type: 'string', minLength: 1 }, dev: agentArgument, test: agentArgument },
       ['issue', 'dev', 'test'],
       async (args) => {
@@ -676,21 +687,50 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             ? `Consigne envoyée à ${who.join(' et ')}.`
             : 'Aucune consigne n’a pu partir : envoie-les avec send_prompt.';
         return reply(
-          `Boucle de ${issue} démarrée : tour 1/3. ${said} ${nameOf(test)} (test) écrit les tests ; ${nameOf(dev)} (dev) reçoit sa consigne à son premier rapport.`,
+          `Boucle de ${issue} démarrée : tour 1/${String(ceiling())}. ${said} ${nameOf(test)} (test) écrit les tests ; ${nameOf(dev)} (dev) reçoit sa consigne à son premier rapport.`,
           { loop: plain, sent },
         );
       },
     ),
     tool(
       'next_round',
-      'Passe au tour suivant d’une boucle, après un verdict « defects » du test ; refusé au-delà de 3 tours.',
+      'Passe au tour suivant d’une boucle, après un verdict « defects » du test ; refusé au-delà du plafond du projet, où l’utilisateur décide.',
       { issue: { type: 'string', minLength: 1 } },
       ['issue'],
       async (args) => {
         const loops = deps.loops;
         const issue = stringArg(args, 'issue');
         const loop = await loopRefusal(() => loops.next(workspace().id, issue));
-        return reply(`${issue} : tour ${String(loop.round)}/3.`, { loop });
+        return reply(`${issue} : tour ${String(loop.round)}/${String(ceiling())}.`, { loop });
+      },
+    ),
+    tool(
+      'polish_pass',
+      'Lance une passe de peaufinage d’une issue dont la boucle peaufine (après le verdict accepté et la preuve de PACT). PACT envoie au dev la consigne du projet, tes notes et l’interdiction de toute nouvelle fonctionnalité ; une passe à la fois. Le résultat arrive dans tes événements (get_events).',
+      {
+        issue: { type: 'string', minLength: 1 },
+        notes: { type: 'string', maxLength: MAX_POLISH_NOTES },
+      },
+      ['issue'],
+      async (args) => {
+        const issue = stringArg(args, 'issue').trim();
+        if (issue === '') throw new Refusal('Argument « issue » attendu.');
+        const notes = optionalString(args, 'notes');
+        if (notes !== null && notes.length > MAX_POLISH_NOTES) {
+          throw new Refusal(`Notes de ${String(MAX_POLISH_NOTES)} caractères au plus.`);
+        }
+        const started = await loopRefusal(() =>
+          deps.loops.polish(workspace().id, issue, notes ?? undefined),
+        );
+        const who = started.sent.map((s) => nameOf(resolve(s.agentId)));
+        const said =
+          who.length > 0
+            ? `Consigne envoyée à ${who.join(' et ')}.`
+            : 'Aucune consigne n’a pu partir : envoie-la avec send_prompt.';
+        return reply(
+          `Passe ${String(started.pass)} sur ${String(started.total)} de ${issue} lancée. ${said}`,
+          started,
+        );
       },
     ),
     tool(
@@ -703,7 +743,9 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const loop = deps.loops.get(workspace().id, issue);
         if (!loop) throw new Refusal(`Aucune boucle pour ${issue}.`);
         return Promise.resolve(
-          reply(`${issue} : tour ${String(loop.round)}/3, ${loop.state}.`, { loop }),
+          reply(`${issue} : tour ${String(loop.round)}/${String(ceiling())}, ${loop.state}.`, {
+            loop,
+          }),
         );
       },
     ),
@@ -740,7 +782,9 @@ function describe(event: EventSummary, name: string): string {
 /** 004 FR-006 — the running loop an agent works in, as dev or test. */
 const loopOf = (ws: Workspace, agentId: string) => {
   const loop = ws.loops.find(
-    (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
+    (l) =>
+      (l.state === 'running' || l.state === 'polishing') &&
+      (l.devAgentId === agentId || l.testAgentId === agentId),
   );
   return loop ? { issueId: loop.issueId, round: loop.round } : null;
 };

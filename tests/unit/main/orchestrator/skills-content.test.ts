@@ -22,7 +22,7 @@ const MUST_SAY: Record<string, string[]> = {
     '`checks`',
     '`questions`',
     '`verdict`',
-    '3 tours',
+    'plafond du projet',
     'PACT relance lui-même la commande de test',
     'Definition of Ready',
     'Given … When … Then …',
@@ -48,7 +48,8 @@ const MUST_SAY: Record<string, string[]> = {
     'pact-test',
     'pact-recap',
     'launch_agent({ role: "dev" })',
-    'Jamais de 4ᵉ tour',
+    'plafond du projet',
+    'polish_pass',
     '.specify/',
   ],
   'pact-spec/SKILL.md': [
@@ -242,4 +243,40 @@ describe('skills about the exchanges between agents (007)', () => {
       expect(has(text, /question/i, /orchestrateur/i)).toBe(true);
     },
   );
+});
+
+// 008 T057 / US5 sc.7 — the contract no longer fixes the number of rounds: it says the ceiling is the
+// PROJECT’s (`workspace.delivery.maxRounds`, 1 to 10, 3 by default).
+//
+// RED until T061. The existing `MUST_SAY` above still lists « 3 tours » for `pact-contract.md` and
+// « Jamais de 4ᵉ tour » for the orchestrator’s skill: both are replaced by the spec and are for the dev to change
+// (T061); they are left as they are here.
+describe('the contract says the ceiling of the project, not « 3 tours » (008 US5 sc.7)', () => {
+  it('Given pact-contract.md, When it is read, Then it no longer says « 3 tours » or « 3ᵉ verdict »', async () => {
+    const contract = flat(await read('pact-contract.md'));
+
+    expect(contract).not.toContain('3 tours');
+    expect(contract).not.toMatch(/\b3\s*(?:ᵉ|e|è)?\s*(?:verdict|tour)\b/);
+    expect(contract).not.toContain('4ᵉ tour');
+  });
+
+  it('Given pact-contract.md, When it is read, Then it says the ceiling of the project and that after it the user decides', async () => {
+    const contract = flat(await read('pact-contract.md'));
+
+    expect(contract).toContain('plafond du projet');
+    expect(contract).toMatch(/l['’]utilisateur décide/);
+  });
+
+  it('Given the skills of the suite, When they are read, Then none tells an agent that a loop is three rounds', async () => {
+    for (const path of [
+      'pact-contract.md',
+      'pact-orchestrator/SKILL.md',
+      'pact-dev/SKILL.md',
+      'pact-test/SKILL.md',
+    ]) {
+      const text = flat(await read(path));
+      expect(text, path).not.toContain('3 tours');
+      expect(text, path).not.toContain('4ᵉ tour');
+    }
+  });
 });

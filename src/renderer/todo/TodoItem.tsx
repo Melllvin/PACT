@@ -183,7 +183,7 @@ export function TodoActions({
               onDecideLoop?.(loop.issueId, 'restart');
             }}
           >
-            Relancer 3 tours
+            Relancer {String(loop.maxRounds ?? 3)} tours
           </Button>
           <Button
             onClick={() => {

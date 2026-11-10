@@ -221,7 +221,9 @@ export function deriveTodos(
         };
       })
     : [];
-  // « ✕ Boucle arrêtée »: 3 rounds without the tests passing, the user decides (004 FR-018).
+  // « ✕ Boucle arrêtée »: the ceiling of the project without the tests passing, the user decides (004 FR-018).
+  // 008 US5 sc.7 — the ceiling is the project's; a workspace without settings has the default.
+  const maxRounds = (workspace as Partial<Workspace>).delivery?.maxRounds ?? 3;
   const loops = (workspace.loops ?? []).flatMap((loop): TodoItem[] => {
     const dev = byId.get(loop.devAgentId);
     return loop.state === 'escalated' && dev
@@ -230,9 +232,9 @@ export function deriveTodos(
             id: `${loop.issueId}:loop-escalated`,
             agentId: loop.devAgentId,
             kind: 'loop-escalated',
-            title: `✕ Boucle arrêtée · ${loop.issueId} · 3 tours`,
+            title: `✕ Boucle arrêtée · ${loop.issueId} · ${String(maxRounds)} tours`,
             actions: [],
-            loop: { issueId: loop.issueId },
+            loop: { issueId: loop.issueId, maxRounds },
           },
         ]
       : [];
