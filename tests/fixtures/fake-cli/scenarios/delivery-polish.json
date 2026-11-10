@@ -1,0 +1,17 @@
+{
+  "echo": true,
+  "mcp": [
+    {
+      "tool": "{{prompt.0}}",
+      "json": "{{prompt.1}}"
+    }
+  ],
+  "report": {
+    "issue": "0012-connexion",
+    "status": "done",
+    "summary": "Les tests passent",
+    "files": ["tests/connexion.test.ts"],
+    "checks": [{ "command": "npm test", "exitCode": 0 }],
+    "verdict": { "result": "accepted", "defects": [] }
+  }
+}

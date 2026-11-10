@@ -249,6 +249,72 @@ describe('deriveTodos', () => {
     });
   });
 
+  // 008 T056 / US5 sc.7 — the title of a loop stopped and its « Relancer » name the ceiling of the PROJECT.
+  //
+  // RED until T059. Assumed API: `deriveTodos` reads `workspace.delivery.maxRounds` (3 when the workspace has no
+  // `delivery`, as the test above); the title is « ✕ Boucle arrêtée · <issue> · <N> tours » and the item carries
+  // `loop: { issueId, maxRounds: N }`, from which TodoItem.tsx writes « Relancer N tours ».
+  describe('a loop stopped under the ceiling of the project (008 US5 sc.7)', () => {
+    const stopped = {
+      issueId: '0012-connexion',
+      devAgentId: 'a2',
+      testAgentId: 'a3',
+      round: 5,
+      rounds: [],
+      state: 'escalated' as const,
+      escalatedModel: null,
+      polish: null,
+    };
+    const derive = (maxRounds: number | null) =>
+      deriveTodos(
+        {
+          ...workspace([agent(2, { state: 'done' }), agent(3, { state: 'done' })]),
+          loops: [stopped],
+          ...(maxRounds === null
+            ? {}
+            : {
+                delivery: {
+                  auto: false,
+                  mergeMode: 'squash' as const,
+                  maxRounds,
+                  polishPasses: 0,
+                  polishBrief: '',
+                },
+              }),
+        },
+        names,
+        {},
+      ).find((t) => t.kind === 'loop-escalated');
+
+    it('Given a ceiling of 5 in the project, When a loop is stopped, Then the title says 5 tours and the item carries the ceiling for « Relancer 5 tours »', () => {
+      expect(derive(5)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 5 tours',
+        loop: { issueId: '0012-connexion', maxRounds: 5 },
+      });
+    });
+
+    it('Given a ceiling of 10, When a loop is stopped, Then the title says 10 tours', () => {
+      expect(derive(10)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 10 tours',
+        loop: { maxRounds: 10 },
+      });
+    });
+
+    it('Given the default ceiling of 3, When a loop is stopped, Then the title still says 3 tours: the value is the project’s', () => {
+      expect(derive(3)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
+        loop: { maxRounds: 3 },
+      });
+    });
+
+    it('Given a workspace without settings (an old state), When a loop is stopped, Then the ceiling is the default 3', () => {
+      expect(derive(null)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
+        loop: { maxRounds: 3 },
+      });
+    });
+  });
+
   // fix-relance-communs — two agents changing the same files give no « Fichiers communs » entry:
   // the reviews alone are listed (the overlaps are no input of the todos any more).
   it('lists no « Fichiers communs » entry for agents that change the same files', () => {
