@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TodoItem } from '../../../../src/renderer/todo/TodoItem';
@@ -571,6 +571,140 @@ describe('TodoItem « Relire la PR » (delivery-review)', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});
+
+// 008 T063 — « ◆ Worktree gardé » (worktree-kept, US8 sc.2, sc.3, FR-037, contracts/ui.md).
+//
+// RED until T066. Assumed API: the item is `{ kind: 'worktree-kept', agentId, title, delivery: { id, head } }`
+// (the agent whose worktree was kept; the reason is in the title, written by PACT) and TodoItem takes
+// `onCleanup(deliveryId, agentId, decision: 'force' | 'keep', confirmed?: boolean)`, which answers
+// `{ lost: string[] }`. « Supprimer quand même » asks FIRST (`'force'`, not confirmed: nothing is deleted
+// by that call) what would be lost, shows it in a dialog named « Supprimer quand même », and deletes only
+// when the user confirms in it (`'force'`, `confirmed = true`). « Annuler » closes it and deletes nothing.
+// « Garder » is `'keep'`, with no dialog.
+describe('TodoItem « Worktree gardé » (worktree-kept)', () => {
+  const dev = agent(2, { state: 'closed', role: 'dev' });
+  const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
+  const LOST = [
+    'notes.txt (non suivi)',
+    '.env.local (ignoré)',
+    '1 commit absent de la PR : encore',
+  ];
+
+  const setup = (lost: string[] = LOST) => {
+    const onCleanup = vi.fn((_d: string, _a: string, _decision: string, confirmed?: boolean) =>
+      Promise.resolve({ lost: confirmed ? [] : lost }),
+    );
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:worktree-kept',
+              agentId: dev.id,
+              kind: 'worktree-kept',
+              title: '◆ Worktree gardé · Claude Code 2 · notes.txt non suivi',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD },
+            } as never
+          }
+          agent={dev}
+          {...({ ...actions(), onCleanup } as object)}
+        />
+      </ul>,
+    );
+    return { onCleanup, user: userEvent.setup() };
+  };
+
+  it('Given the item, When it is shown, Then the title says which agent and why, and the buttons are « Supprimer quand même » and « Garder »', () => {
+    setup();
+
+    expect(screen.getByRole('listitem').getAttribute('data-kind')).toBe('worktree-kept');
+    expect(screen.getByText('◆ Worktree gardé')).toBeTruthy();
+    expect(screen.getByText(/notes\.txt non suivi/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Supprimer quand même' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Garder' })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('Given the item, When « Supprimer quand même » is clicked, Then what would be lost is asked and listed in a confirmation, and nothing is deleted yet (sc.3)', async () => {
+    const { onCleanup, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+    for (const lost of LOST) expect(dialog.textContent).toContain(lost);
+    expect(onCleanup).toHaveBeenCalledExactlyOnceWith('d1', dev.id, 'force');
+    expect(onCleanup.mock.calls.some((call) => call[3] === true)).toBe(false);
+  });
+
+  it('Given the confirmation, When the user confirms, Then the deletion is asked, confirmed, for that delivery and that agent, once', async () => {
+    const { onCleanup, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+
+    expect(onCleanup).toHaveBeenCalledTimes(2);
+    expect(onCleanup).toHaveBeenLastCalledWith('d1', dev.id, 'force', true);
+  });
+
+  it('Given the confirmation, When the user cancels, Then nothing is deleted and the dialog closes', async () => {
+    const { onCleanup, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Annuler' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onCleanup.mock.calls.some((call) => call[3] === true)).toBe(false);
+    expect(screen.getByRole('button', { name: 'Supprimer quand même' })).toBeTruthy();
+  });
+
+  it('Given the item, When « Garder » is clicked, Then the worktree is kept: no dialog and no deletion', async () => {
+    const { onCleanup, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Garder' }));
+
+    expect(onCleanup).toHaveBeenCalledExactlyOnceWith('d1', dev.id, 'keep');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('Given a worktree with nothing to lose but an error of removal, When « Supprimer quand même » is clicked, Then the dialog says there is nothing to lose rather than listing nothing', async () => {
+    const { user } = setup([]);
+
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+    expect(dialog.textContent).toMatch(/rien/i);
+    expect(within(dialog).queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('Given no handler, When the buttons are clicked, Then nothing breaks', async () => {
+    const user = userEvent.setup();
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:worktree-kept',
+              agentId: dev.id,
+              kind: 'worktree-kept',
+              title: '◆ Worktree gardé · Claude Code 2 · raison',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD },
+            } as never
+          }
+          agent={dev}
+        />
+      </ul>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Garder' }));
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
 
     expect(screen.getByRole('listitem')).toBeTruthy();
   });

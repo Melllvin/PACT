@@ -97,6 +97,14 @@ export async function createDeliveryHarness(
     pollMs?: number;
     /** Phase 4: the checks the target branch requires (a CI is configured when there are some). */
     required?: string[];
+    /**
+     * Phase 10 (US8): `agents.close` does what `AgentManager.close(id, { removeWorktree: false })`
+     * does to the saved workspace (the agent stays, `closed`), as the cleanup reads it (« fermé »);
+     * `afterClose` then runs once the agent is closed: what happens between the merge and the cleanup.
+     * Off by default: the suites of the earlier phases keep their agents as they were.
+     */
+    markClosed?: boolean;
+    afterClose?: (agentId: string) => Promise<void> | void;
   } = {},
 ) {
   const withRemote = options.remote ?? true;
@@ -265,14 +273,21 @@ export async function createDeliveryHarness(
   // to show that nothing is closed before the forge says « merged » (US2 sc.7).
   const closed: { id: string; removeWorktree: boolean; prState: string | null }[] = [];
   const agentsDep = {
-    close: (id: string, options: { removeWorktree: boolean }) => {
+    close: (id: string, closing: { removeWorktree: boolean }) => {
       closed.push({
         id,
-        removeWorktree: options.removeWorktree,
+        removeWorktree: closing.removeWorktree,
         prState:
           (Object.values(ghStateNow().prs)[0] as { state?: string } | undefined)?.state ?? null,
       });
-      return Promise.resolve();
+      if (!options.markClosed || closing.removeWorktree) return Promise.resolve();
+      return (async () => {
+        await workspaces.update(workspaceId, (ws) => ({
+          ...ws,
+          agents: ws.agents.map((a) => (a.id === id ? { ...a, state: 'closed' } : a)),
+        }));
+        await options.afterClose?.(id);
+      })();
     },
   };
 

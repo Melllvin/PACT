@@ -211,9 +211,9 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T062 [P] [US8] Tests dans `tests/integration/delivery/cleanup.test.ts` : sc.1, 2, 4, 5, 6, 7, 8, 9, 10, 11 et 13 (dev propre sur la tête avec `node_modules` → worktree et branche supprimés ; non suivi, modifié ou commit en plus → rien, `worktree-kept` ; squash : décision par la PR, jamais `branch --merged` ; testeur contenu par le contenu de ses tests ; orchestrateur jamais ; PR fermée, agent ou boucle fermés, PR sans verdict, autre auteur, `close_agent` → rien ; `.env` ignoré → rien et dit ; dev amené sur R → supprimé ; agent rouvert ou fichier modifié avant la suppression → rien) ; SC-010 sur chaque cas ; suppression en échec → `worktree-kept` avec l'erreur ; redémarrage avec `cleanup: pending` → rejoué, dossier absent sans erreur
-- [ ] T063 [P] [US8] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/main/ipc/delivery-handlers.test.ts` : `worktree-kept`, confirmation qui liste ce qui serait perdu avant de supprimer (sc.3), `delivery:cleanup`
-- [ ] T064 [P] [US8] E2E dans `tests/e2e/us57-cleanup.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-cleanup.json` : sc.1, 2, 3 et SC-011
+- [x] T062 [P] [US8] Tests dans `tests/integration/delivery/cleanup.test.ts` : sc.1, 2, 4, 5, 6, 7, 8, 9, 10, 11 et 13 (dev propre sur la tête avec `node_modules` → worktree et branche supprimés ; non suivi, modifié ou commit en plus → rien, `worktree-kept` ; squash : décision par la PR, jamais `branch --merged` ; testeur contenu par le contenu de ses tests ; orchestrateur jamais ; PR fermée, agent ou boucle fermés, PR sans verdict, autre auteur, `close_agent` → rien ; `.env` ignoré → rien et dit ; dev amené sur R → supprimé ; agent rouvert ou fichier modifié avant la suppression → rien) ; SC-010 sur chaque cas ; suppression en échec → `worktree-kept` avec l'erreur ; redémarrage avec `cleanup: pending` → rejoué, dossier absent sans erreur
+- [x] T063 [P] [US8] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/main/ipc/delivery-handlers.test.ts` : `worktree-kept`, confirmation qui liste ce qui serait perdu avant de supprimer (sc.3), `delivery:cleanup`
+- [x] T064 [P] [US8] E2E dans `tests/e2e/us57-cleanup.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-cleanup.json` : sc.1, 2, 3 et SC-011
 
 ### Implémentation
 
