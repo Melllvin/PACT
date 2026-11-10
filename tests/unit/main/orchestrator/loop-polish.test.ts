@@ -271,6 +271,8 @@ describe('sc.1 — 0 passes: the delivery can be asked at once', () => {
   it('Given 0 passes, When polish_pass is called, Then it is refused: the loop is not polishing', async () => {
     configure({ polishPasses: 0 });
     await proved();
+    // The instruction to fix the tests is sent at the first report of the tester (007 FR-021): not a polish.
+    message.mockClear();
 
     await expect(polish('w1', ISSUE)).rejects.toThrow();
 

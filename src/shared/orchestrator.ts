@@ -43,6 +43,7 @@ export const ORCHESTRATOR_ACTION_TOOLS = [
   'run_tests',
   'start_loop',
   'next_round',
+  'polish_pass',
   'publish_issues',
 ] as const;
 

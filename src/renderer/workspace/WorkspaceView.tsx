@@ -40,6 +40,7 @@ import { AgentsColumn } from '../agents/AgentsColumn';
 import { GraphView } from '../graph/GraphView';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
 import { DeliveryBar } from '../delivery/DeliveryBar';
+import { DeliverySettingsDialog } from '../delivery/DeliverySettingsDialog';
 import { EmptyWorkspace } from './EmptyWorkspace';
 
 /** The tile actions, each about one agent (FR-024, FR-037). */
@@ -213,6 +214,7 @@ export function WorkspaceView({
   // A closed agent may still be in the last review:pending: only the agents here count.
   const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
   const now = useUsageClock(usage);
+  const [deliverySettingsOpen, setDeliverySettingsOpen] = useState(false);
   const [usageDetail, setUsageDetail] = useState<string | null>(null);
   const todos = deriveTodos(
     workspace,
@@ -643,6 +645,21 @@ export function WorkspaceView({
               hasOrigin={workspace.hasOrigin === true}
               onToggleAuto={(auto) => {
                 actions.onDeliverySettings?.({ auto });
+              }}
+              onOpenSettings={() => {
+                setDeliverySettingsOpen(true);
+              }}
+            />
+          )}
+          {deliverySettingsOpen && (
+            <DeliverySettingsDialog
+              settings={workspace.delivery}
+              onSave={(settings) => {
+                actions.onDeliverySettings?.(settings);
+                setDeliverySettingsOpen(false);
+              }}
+              onCancel={() => {
+                setDeliverySettingsOpen(false);
               }}
             />
           )}

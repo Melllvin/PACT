@@ -22,7 +22,7 @@ const MUST_SAY: Record<string, string[]> = {
     '`checks`',
     '`questions`',
     '`verdict`',
-    '3 tours',
+    'plafond du projet',
     'PACT relance lui-même la commande de test',
     'Definition of Ready',
     'Given … When … Then …',
@@ -48,7 +48,8 @@ const MUST_SAY: Record<string, string[]> = {
     'pact-test',
     'pact-recap',
     'launch_agent({ role: "dev" })',
-    'Jamais de 4ᵉ tour',
+    'plafond du projet',
+    'polish_pass',
     '.specify/',
   ],
   'pact-spec/SKILL.md': [

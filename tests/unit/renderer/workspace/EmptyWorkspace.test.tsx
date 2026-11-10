@@ -33,10 +33,12 @@ describe('empty workspace (1b)', () => {
   it('offers a single action: « + Ajouter des agents »', () => {
     render(<WorkspaceView workspace={workspace()} onAddAgents={vi.fn()} />);
     const main = screen.getByRole('region', { name: 'api-facturation' });
+    // The bar of the delivery (008) is the project's, not an action of the empty state.
     expect(
       within(main)
         .getAllByRole('button')
-        .map((b) => b.textContent),
+        .map((b) => b.textContent)
+        .filter((text) => text !== 'Réglages de livraison'),
     ).toEqual(['+Ajouter des agents']);
   });
 

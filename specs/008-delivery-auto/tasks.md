@@ -187,17 +187,17 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T054 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-polish.test.ts` : sc.1 à 6 (0 passe → livraison possible ; 2 passes → refus avec « passe k sur N » ; fin de passe : testeur, preuve sur le commit de fin, compteur de passes sans toucher aux tours ; consigne avec `polishBrief`, `notes` et l'interdiction de toute nouvelle fonctionnalité ; `defects` → même passe sans aller-retour ; second `defects` sur la même passe → escalade, jamais de fusion, research P2)
-- [ ] T055 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-service.test.ts` et `tests/integration/orchestrator/tools-loop.test.ts` : plafond 5 → arrêt au tour 5, escalade de modèle au tour 5 ; plafond baissé sous le tour courant → escalade au prochain `defects` ; descriptions de `start_loop` et `next_round` sans « 3 tours » ; `polish_pass` selon `contracts/mcp-tools.md`
-- [ ] T056 [P] [US5] Tests dans `tests/unit/renderer/delivery/DeliverySettingsDialog.test.tsx` : champs et bornes de `contracts/ui.md`, valeurs gardées (sc.7) ; dans `tests/unit/shared/todo.test.ts` : titre de `loop-escalated` et « Relancer » avec le plafond du projet
-- [ ] T057 [P] [US5] Test dans `tests/unit/main/orchestrator/skills-content.test.ts` : `pact-contract.md` ne dit plus « 3 tours » mais le plafond du projet ; E2E dans `tests/e2e/us54-polish.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-polish.json` : sc.2, 3 et 7
+- [x] T054 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-polish.test.ts` : sc.1 à 6 (0 passe → livraison possible ; 2 passes → refus avec « passe k sur N » ; fin de passe : testeur, preuve sur le commit de fin, compteur de passes sans toucher aux tours ; consigne avec `polishBrief`, `notes` et l'interdiction de toute nouvelle fonctionnalité ; `defects` → même passe sans aller-retour ; second `defects` sur la même passe → escalade, jamais de fusion, research P2)
+- [x] T055 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-service.test.ts` et `tests/integration/orchestrator/tools-loop.test.ts` : plafond 5 → arrêt au tour 5, escalade de modèle au tour 5 ; plafond baissé sous le tour courant → escalade au prochain `defects` ; descriptions de `start_loop` et `next_round` sans « 3 tours » ; `polish_pass` selon `contracts/mcp-tools.md`
+- [x] T056 [P] [US5] Tests dans `tests/unit/renderer/delivery/DeliverySettingsDialog.test.tsx` : champs et bornes de `contracts/ui.md`, valeurs gardées (sc.7) ; dans `tests/unit/shared/todo.test.ts` : titre de `loop-escalated` et « Relancer » avec le plafond du projet
+- [x] T057 [P] [US5] Test dans `tests/unit/main/orchestrator/skills-content.test.ts` : `pact-contract.md` ne dit plus « 3 tours » mais le plafond du projet ; E2E dans `tests/e2e/us54-polish.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-polish.json` : sc.2, 3 et 7
 
 ### Implémentation
 
-- [ ] T058 [US5] Dans `src/main/orchestrator/loop-service.ts` : plafond lu dans `workspace.delivery.maxRounds`, retrait de `MAX_ROUNDS`, état `polishing`, `polish_pass`, reprise d'une passe (research R23)
-- [ ] T059 [US5] Dans `src/main/orchestrator/tools.ts` : outil `polish_pass`, textes de `start_loop` et `next_round` ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : plafond du projet dans les titres et actions
-- [ ] T060 [US5] Créer `src/renderer/delivery/DeliverySettingsDialog.tsx`, ouvert depuis `DeliveryBar`
-- [ ] T061 [US5] Dans `resources/skills/pact-contract.md` et `resources/skills/pact-orchestrator/SKILL.md` : plafond du projet, passes, `request_delivery`, `polish_pass`, plus de `request_integration` ; dans `resources/skills/pact-dev/SKILL.md` : `get_ci_log` et la récupération des tests du testeur ; dans `resources/skills/pact-test/SKILL.md` : tests committés avant le verdict
+- [x] T058 [US5] Dans `src/main/orchestrator/loop-service.ts` : plafond lu dans `workspace.delivery.maxRounds`, retrait de `MAX_ROUNDS`, état `polishing`, `polish_pass`, reprise d'une passe (research R23)
+- [x] T059 [US5] Dans `src/main/orchestrator/tools.ts` : outil `polish_pass`, textes de `start_loop` et `next_round` ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : plafond du projet dans les titres et actions
+- [x] T060 [US5] Créer `src/renderer/delivery/DeliverySettingsDialog.tsx`, ouvert depuis `DeliveryBar`
+- [x] T061 [US5] Dans `resources/skills/pact-contract.md` et `resources/skills/pact-orchestrator/SKILL.md` : plafond du projet, passes, `request_delivery`, `polish_pass`, plus de `request_integration` ; dans `resources/skills/pact-dev/SKILL.md` : `get_ci_log` et la récupération des tests du testeur ; dans `resources/skills/pact-test/SKILL.md` : tests committés avant le verdict
 
 **Checkpoint** : US5 livrée ; PR « 008 Phase 9 US5 ».
 
