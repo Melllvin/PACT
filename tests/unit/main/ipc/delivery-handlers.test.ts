@@ -204,7 +204,7 @@ describe('delivery:cleanup', () => {
       workspaces,
       delivery: { settingsChanged: vi.fn(() => Promise.resolve()) },
       cleanup,
-    } as never) as unknown as Record<
+    }) as unknown as Record<
       string,
       (input: {
         deliveryId: string;

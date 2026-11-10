@@ -217,8 +217,8 @@
 
 ### Implémentation
 
-- [ ] T065 [US8] Créer `src/main/delivery/cleanup.ts` (research R17) : conditions relues juste avant, `worktree remove` sans `--force`, branche du dev seulement, `lost()` pour « Supprimer quand même » ; branché sur `onMerged` de `DeliveryService`
-- [ ] T066 [US8] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/main/ipc/delivery-handlers.ts` : élément `worktree-kept` et `delivery:cleanup`
+- [x] T065 [US8] Créer `src/main/delivery/cleanup.ts` (research R17) : conditions relues juste avant, `worktree remove` sans `--force`, branche du dev seulement, `lost()` pour « Supprimer quand même » ; branché sur `onMerged` de `DeliveryService`
+- [x] T066 [US8] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/main/ipc/delivery-handlers.ts` : élément `worktree-kept` et `delivery:cleanup`
 
 **Checkpoint** : US8 livrée ; PR « 008 Phase 10 US8 ».
 

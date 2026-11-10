@@ -2,6 +2,13 @@ import { useState, type CSSProperties } from 'react';
 import type { Agent, TodoItem as Todo } from '../../shared/model';
 import { TileActions } from '../tiles/TileActions';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import type { AgentActions } from '../workspace/WorkspaceView';
 import { cn } from '@/lib/utils';
 
@@ -52,7 +59,9 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           todo.kind === 'loop-escalated' ||
           todo.kind === 'exchange-escalated') &&
           'border-destructive/30 bg-destructive/6',
-        (todo.kind === 'delivery-silent-ci' || todo.kind === 'delivery-alert') &&
+        (todo.kind === 'delivery-silent-ci' ||
+          todo.kind === 'delivery-alert' ||
+          todo.kind === 'worktree-kept') &&
           'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
@@ -108,6 +117,7 @@ export function TodoActions({
   onDecide,
   onDecideDelivery,
   onOpenPr,
+  onCleanup,
 }: ActionsProps) {
   const { delivery, loop, publish, usage, decide, exchange } = todo;
   return (
@@ -123,6 +133,16 @@ export function TodoActions({
           onOpen={() => {
             onOpenPr?.(delivery.id);
           }}
+        />
+      )}
+      {delivery && todo.kind === 'worktree-kept' && (
+        <WorktreeKept
+          onForce={(confirmed) =>
+            confirmed === true
+              ? onCleanup?.(delivery.id, todo.agentId, 'force', true)
+              : onCleanup?.(delivery.id, todo.agentId, 'force')
+          }
+          onKeep={() => onCleanup?.(delivery.id, todo.agentId, 'keep')}
         />
       )}
       {delivery && agent && todo.kind === 'delivery-silent-ci' && (
@@ -386,6 +406,100 @@ function DeliveryReview({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * « ◆ Worktree gardé »: « Supprimer quand même » asks what would be lost FIRST and lists it in a
+ * confirmation; only « Supprimer » there deletes (US8 sc.3, FR-037). « Garder » deletes nothing.
+ */
+function WorktreeKept({
+  onForce,
+  onKeep,
+}: {
+  onForce: (confirmed?: boolean) => Promise<{ lost: string[] } | null> | undefined;
+  onKeep: () => Promise<unknown> | undefined;
+}) {
+  const [lost, setLost] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const close = () => {
+    setLost(null);
+  };
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void Promise.resolve(onForce())
+              .then((answer) => {
+                if (answer) setLost(answer.lost);
+              })
+              .finally(() => {
+                setBusy(false);
+              });
+          }}
+        >
+          Supprimer quand même
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            void onKeep();
+          }}
+        >
+          Garder
+        </Button>
+      </div>
+      {lost !== null && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) close();
+          }}
+        >
+          <DialogContent aria-describedby={undefined} className="w-[min(480px,calc(100vw-32px))]">
+            <DialogBody>
+              <DialogTitle>Supprimer quand même</DialogTitle>
+              {lost.length === 0 ? (
+                <p className="text-[13px] text-dim">
+                  Rien à perdre : seul le dossier est supprimé.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[13px] text-dim">Ceci sera perdu :</p>
+                  <ul className="flex flex-col gap-1 font-mono text-[12px] break-words">
+                    {lost.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </DialogBody>
+            <DialogFooter className="justify-end">
+              <Button variant="ghost" onClick={close}>
+                Annuler
+              </Button>
+              <Button
+                variant="accept"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void Promise.resolve(onForce(true)).finally(() => {
+                    setBusy(false);
+                    close();
+                  });
+                }}
+              >
+                Supprimer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 

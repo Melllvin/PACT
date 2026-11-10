@@ -18,6 +18,7 @@ import type { Integration } from '../../shared/review';
 import type { GitService } from '../git/git-service';
 import type { IntegrationService } from '../review/integration-service';
 import { detectTestCommandIn } from '../review/test-runner';
+import { WorktreeCleanup } from './cleanup';
 import { isTestPath, type LoopService } from '../orchestrator/loop-service';
 import type { RecordInput } from '../orchestrator/exchange-service';
 import type { AgentManager } from '../agents/agent-manager';
@@ -66,6 +67,9 @@ export interface DeliveryServiceDeps {
     | 'removeDetached'
     | 'moveWorktree'
     | 'hasWorkflows'
+    | 'commitsNotIn'
+    | 'removeWorktreeDir'
+    | 'deleteBranch'
   >;
   /** One client, or one per repository (`gh` runs in the repository of the project). */
   gh: Forge | ((repoPath: string) => Forge);
@@ -155,8 +159,25 @@ export class DeliveryService {
   /** `<owner>/<repo>` of each project, read once from `gh repo view`. */
   private readonly repos = new Map<string, string>();
   private readonly watcher: CiWatcher;
+  /** 008 US8, R17 — the worktrees of a merged request, removed when nothing is lost. */
+  readonly worktreeCleanup: WorktreeCleanup;
 
   constructor(private readonly deps: DeliveryServiceDeps) {
+    this.worktreeCleanup = new WorktreeCleanup({
+      workspaces: deps.workspaces,
+      git: deps.git,
+      mergedHead: async (ws, d) => {
+        // The forge says which head was merged; PACT's own record is the fallback of an unreachable forge.
+        if (d.pr !== null) {
+          const view = await this.forge(ws)
+            .prView(d.pr.number)
+            .catch(() => null);
+          if (view !== null && view.headRefOid !== '') return view.headRefOid;
+        }
+        return d.pushedHead;
+      },
+      save: (workspaceId, deliveryId, change) => this.save(workspaceId, deliveryId, change),
+    });
     this.watcher = new CiWatcher({
       workspaces: {
         get: (id) => deps.workspaces.get(id),
@@ -195,6 +216,11 @@ export class DeliveryService {
   async resume(): Promise<void> {
     for (const ws of this.deps.workspaces.list()) {
       for (const d of ws.deliveries) {
+        // US8 — PACT stopped between the merge and the cleanup: it is replayed, the conditions read again.
+        if (d.channel === 'github' && d.state === 'merged' && d.cleanup === 'pending') {
+          await this.worktreeCleanup.run(ws.id, d.id);
+          continue;
+        }
         if (d.channel !== 'github' || isFinalState(d.state)) continue;
         // R2 — the state was written before the effect. Before the PR exists, the steps start again:
         // each one is safe to repeat (the push is a lease on PACT's own head, `gh pr create` itself
@@ -1531,8 +1557,32 @@ export class DeliveryService {
     );
     // A PR without a verdict leaves the agent as it is: its worktree is the user's to clean (FR-039).
     if (!d.unverified) {
+      // Closing forgets the tile of an agent: where its worktree is, is noted first (the cleanup needs it).
+      const noted = this.workspace(workspaceId).agents.flatMap((a) =>
+        (a.id === d.agentId || a.id === d.testAgentId) && a.role !== 'orchestrator'
+          ? [
+              {
+                agentId: a.id,
+                role: a.id === d.agentId ? ('dev' as const) : ('test' as const),
+                worktreePath: a.worktreePath,
+                branch: a.branch,
+                baseBranch: a.baseBranch,
+                cliId: a.cliId,
+                position: a.position,
+                name: a.name ?? null,
+                color: a.color,
+              },
+            ]
+          : [],
+      );
+      await this.save(workspaceId, id, { worktrees: noted });
       for (const agentId of [d.agentId, d.testAgentId]) {
         if (agentId === null) continue;
+        // Closing an agent that is closed already forgets its tile, and with it where its worktree is:
+        // the cleanup (US8) needs the agent, so a closed one is left as it is.
+        if (this.workspace(workspaceId).agents.find((a) => a.id === agentId)?.state === 'closed') {
+          continue;
+        }
         try {
           await this.deps.agents.close(agentId, { removeWorktree: false });
         } catch {
@@ -1540,7 +1590,25 @@ export class DeliveryService {
         }
       }
     }
-    await this.save(workspaceId, id, { state: 'merged', reason: null });
+    // US8 — the cleanup is noted before anything is removed, so that a restart replays it. A PR without a
+    // verdict never cleans (FR-039): its worktree is the user's.
+    // Nor the PR of someone else, merged on the branch of the dev, nor one the forge cannot be asked about.
+    const cleans = !d.unverified && (await this.isOwnPr(workspaceId, d));
+    await this.save(workspaceId, id, {
+      state: 'merged',
+      reason: null,
+      cleanup: cleans ? 'pending' : 'none',
+    });
+    if (cleans) await this.worktreeCleanup.run(workspaceId, id);
+  }
+
+  /** The merged PR is the one PACT opened or took over: its author is the expected one (FR-030). */
+  private async isOwnPr(workspaceId: string, d: Delivery): Promise<boolean> {
+    if (d.pr === null) return false;
+    const view = await this.forge(this.workspace(workspaceId))
+      .prView(d.pr.number)
+      .catch(() => null);
+    return view !== null && view.author.login === d.pr.expectedAuthor;
   }
 
   /**

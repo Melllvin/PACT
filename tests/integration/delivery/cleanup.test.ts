@@ -234,11 +234,15 @@ describe('sc.1, SC-011 — a clean dev on the merged head is removed, node_modul
     const { team } = await merge();
     await cleaned('done');
 
-    const history = h.changes.flatMap((c) =>
-      ((c as { deliveries?: { cleanup: string; state: string }[] }).deliveries ?? []).map(
-        (d) => `${d.state}:${d.cleanup}`,
-      ),
-    );
+    // The change is told to the renderer once the write has landed: it can come just after the state.
+    const told = () =>
+      h.changes.flatMap((c) =>
+        ((c as { deliveries?: { cleanup: string; state: string }[] }).deliveries ?? []).map(
+          (d) => `${d.state}:${d.cleanup}`,
+        ),
+      );
+    await h.waitFor(() => told().includes('merged:done'), 'the end of the cleanup was not told');
+    const history = told();
     expect(history).toContain('merged:pending');
     expect(history.indexOf('merged:pending')).toBeLessThan(history.lastIndexOf('merged:done'));
     expect(gone(team.dev.worktreePath)).toBe(true);

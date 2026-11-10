@@ -456,6 +456,35 @@ export class GitService {
     await this.git(repo, ['branch', '-D', branch]);
   }
 
+  /**
+   * 008 R17 — `git worktree remove <path>` and nothing else: the branch stays. Without `force` git
+   * itself refuses a worktree that is locked or holds a modified or untracked file (a second guard).
+   * A folder that is already gone is not an error: its entry is forgotten (`prune`, which leaves a
+   * locked one alone).
+   */
+  async removeWorktreeDir(repo: string, path: string, force = false): Promise<void> {
+    if (!(await exists(path))) {
+      await this.git(repo, ['worktree', 'prune']);
+      return;
+    }
+    await this.git(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), path]);
+  }
+
+  /** `git branch -D`: the caller has checked that nothing is lost (008 R17). */
+  async deleteBranch(repo: string, branch: string): Promise<void> {
+    await this.git(repo, ['branch', '-D', '--', branch]);
+  }
+
+  /** The subjects of the commits of `head` that `base` does not hold (008 R17), newest first. */
+  async commitsNotIn(cwd: string, head: string, base: string): Promise<string[]> {
+    // `%h %s`: a commit with an empty subject still makes a line, so the count is right.
+    const out = await this.git(cwd, ['log', '--format=%h %s', `${base}..${head}`, '--']);
+    return out
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.slice(line.indexOf(' ') + 1));
+  }
+
   /** `git clone --progress`, streaming progress parsed from stderr. */
   clone(url: string, destination: string, onProgress: (p: CloneProgress) => void): Promise<void> {
     return new Promise((resolvePromise, reject) => {

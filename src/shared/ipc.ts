@@ -261,6 +261,19 @@ export const ipcRequests = {
    */
   'delivery:openPr': request(z.object({ deliveryId: z.uuid() }), none),
   /**
+   * 008 US8 — « Supprimer quand même » / « Garder » of a worktree the cleanup kept (FR-037). `force`
+   * without `confirmed` only answers what would be lost; `confirmed: true` deletes.
+   */
+  'delivery:cleanup': request(
+    z.object({
+      deliveryId: z.uuid(),
+      agentId: z.uuid(),
+      decision: z.enum(['force', 'keep']),
+      confirmed: z.boolean().optional(),
+    }),
+    z.object({ lost: z.array(z.string()) }),
+  ),
+  /**
    * 008 FR-019, FR-020 — the settings of the delivery of a project (Auto first): only the keys given
    * change; the bounds are checked by the handler, which says which field is out of them.
    */

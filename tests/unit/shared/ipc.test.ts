@@ -203,6 +203,14 @@ const requestCases: Record<IpcRequestChannel, { valid: unknown; invalid: unknown
     ],
   },
   'delivery:openPr': { valid: { deliveryId: integrationId }, invalid: [{}, { deliveryId: 'x' }] },
+  'delivery:cleanup': {
+    valid: { deliveryId: integrationId, agentId: integrationId, decision: 'force' },
+    invalid: [
+      {},
+      { deliveryId: integrationId, agentId: integrationId, decision: 'delete' },
+      { deliveryId: 'x', agentId: integrationId, decision: 'keep' },
+    ],
+  },
   'delivery:decide': {
     valid: {
       deliveryId: integrationId,

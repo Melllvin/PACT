@@ -132,6 +132,16 @@ export type AppState = {
   ) => Promise<void>;
   /** 008 US3 — « Ouvrir la PR »: the main process opens it. */
   openDeliveryPr: (deliveryId: string) => Promise<void>;
+  /**
+   * 008 US8 — « Supprimer quand même » (`force`, then `confirmed`) / « Garder » (`keep`) of a worktree the
+   * cleanup kept. Answers what would be lost; `null` when the call failed (the error is shown).
+   */
+  cleanupWorktree: (
+    deliveryId: string,
+    agentId: string,
+    decision: 'force' | 'keep',
+    confirmed?: boolean,
+  ) => Promise<{ lost: string[] } | null>;
   /** 003 US5 — the journal « ◎ Actions » of an orchestrator, the latest first (FR-021). */
   orchestratorActions: Record<string, OrchestratorAction[]>;
   loadOrchestratorActions: (agentId: string) => Promise<void>;
@@ -673,6 +683,22 @@ export function createAppStore(api: PactApi) {
         ),
 
       openDeliveryPr: (deliveryId) => act(() => api.invoke('delivery:openPr', { deliveryId })),
+
+      cleanupWorktree: async (deliveryId, agentId, decision, confirmed) => {
+        try {
+          const answer = await api.invoke('delivery:cleanup', {
+            deliveryId,
+            agentId,
+            decision,
+            ...(confirmed === undefined ? {} : { confirmed }),
+          });
+          set({ actionError: null });
+          return answer;
+        } catch (error) {
+          set({ actionError: asIpcError(error).message });
+          return null;
+        }
+      },
 
       decideLoop: (workspaceId, issueId, decision) =>
         act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),
