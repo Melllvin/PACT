@@ -2,7 +2,7 @@ import type { Agent, Loop, Workspace } from '../../shared/model';
 import type { HandoffReport, StoredReport } from '../../shared/report';
 import type { TestRun } from '../../shared/review';
 import type { GitService } from '../git/git-service';
-import { MAX_NOTICE } from '../../shared/exchanges';
+import { MAX_INSTRUCTION, MAX_NOTICE } from '../../shared/exchanges';
 import type { RecordInput } from './exchange-service';
 import type { Notice } from './orchestrator-service';
 import type { ReviewService } from '../review/review-service';
@@ -219,9 +219,10 @@ export class LoopService {
     const extra = notes?.trim();
     const text = [
       `Peaufinage de l’issue ${issueId} (passe ${String(pass)} sur ${String(total)}).`,
+      // The ban comes first: nothing after it can push it out of the text (P2, R23).
+      `${POLISH_BAN}. Commite, puis rends ton rapport avec submit_report.`,
       brief ? `Consigne du projet :\n${brief}` : '',
       extra ? `Précisions de l’orchestrateur :\n${extra}` : '',
-      `${POLISH_BAN}. Commite, puis rends ton rapport avec submit_report.`,
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -229,7 +230,7 @@ export class LoopService {
     const delivered = await this.send(workspaceId, {
       to: loop.devAgentId,
       kind: 'instruction',
-      text: text.slice(0, MAX_NOTICE),
+      text: text.slice(0, MAX_INSTRUCTION),
     });
     if (delivered) sent.push({ agentId: loop.devAgentId, kind: 'instruction' });
     return { pass, total, sent };

@@ -449,6 +449,20 @@ describe('sc.4 — the instruction of a pass: precise, and no new feature', () =
     expect(String(toDev().find((m) => m.kind === 'instruction')?.text)).toContain(FIXED_SENTENCE);
   });
 
+  it('Given a 2000-char project instruction AND 2000-char notes, When a pass starts, Then the fixed ban survives in full and the text stays within the send limit (P2, R23)', async () => {
+    configure({ polishBrief: 'b'.repeat(2000) });
+    await proved();
+    message.mockClear();
+
+    await polish('w1', ISSUE, 'n'.repeat(2000));
+
+    const text = String(toDev().find((m) => m.kind === 'instruction')?.text);
+    expect(text).toContain(FIXED_SENTENCE);
+    expect(text).toContain('b'.repeat(2000));
+    expect(text).toContain('n'.repeat(2000));
+    expect(text.length).toBeLessThanOrEqual(8000);
+  });
+
   it('Given the second pass, When it starts, Then it is numbered 2 on 2', async () => {
     await proved();
     await wholePass();
