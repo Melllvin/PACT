@@ -23,6 +23,26 @@ import { parseNumstat, parseRaw } from './diff-output';
 // research.md R7 — the git CLI through execFile/spawn (never a shell), tested on real repositories.
 
 const execFileAsync = promisify(execFile);
+
+/** A branch name that git accepts and that can never read as an option or a refspec trick. */
+function isSafeBranchName(name: string): boolean {
+  return (
+    name.length > 0 &&
+    name.length <= 255 &&
+    !name.startsWith('-') &&
+    !name.startsWith('/') &&
+    !name.endsWith('/') &&
+    !name.endsWith('.') &&
+    !name.endsWith('.lock') &&
+    !name.includes('..') &&
+    !name.includes('//') &&
+    !name.includes('@{') &&
+    name !== '@' &&
+    // eslint-disable-next-line no-control-regex
+    !/[\x00-\x20\x7f~^:?*[\\]/.test(name) &&
+    name.split('/').every((part) => !part.startsWith('.') && !part.endsWith('.lock'))
+  );
+}
 const EXCLUDE_LINE = '/.worktrees/';
 const MAX_OUTPUT = 16 * 1024 * 1024;
 /** Above these, a file is listed without its line diff (002 R2). */
@@ -361,16 +381,22 @@ export class GitService {
     }
   }
 
-  /** 008 R18 — the remote branch deleted only if it is still at `expected` (the merged head). */
+  /**
+   * 008 R18 — the remote branch deleted only if it is still at `expected` (the merged head): ONE push
+   * that carries its own lease. `false` when the name or the sha is not valid, or the lease/network
+   * refuses; the remote is then as it was.
+   */
   async deleteRemoteBranch(repo: string, branch: string, expected: string): Promise<boolean> {
+    if (!isSafeBranchName(branch) || !/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(expected)) return false;
     try {
       await this.run(
         repo,
         [
           'push',
           '--quiet',
-          'origin',
           `--force-with-lease=refs/heads/${branch}:${expected}`,
+          '--',
+          'origin',
           `:refs/heads/${branch}`,
         ],
         { GIT_TERMINAL_PROMPT: '0' },
@@ -379,6 +405,31 @@ export class GitService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * 008 FR-043 — why `deleteRemoteBranch` did not delete: `deleted` (the branch is not on the remote any
+   * more), `moved` (its head is not `expected`), `refused` (it is at `expected` and the push was
+   * refused all the same: a hook, a protection) or `unreachable` (the remote cannot be read).
+   */
+  async remoteBranchStatus(
+    repo: string,
+    branch: string,
+    expected: string,
+  ): Promise<'deleted' | 'moved' | 'refused' | 'unreachable'> {
+    try {
+      const { stdout } = await this.run(
+        repo,
+        ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      const head = stdout.trim().split(/\s/)[0] as string;
+      if (head === '') return 'deleted';
+      return head === expected ? 'refused' : 'moved';
+    } catch {
+      return 'unreachable';
     }
   }
 

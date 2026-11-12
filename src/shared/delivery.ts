@@ -152,6 +152,8 @@ export const deliverySchema = z.object({
   cleanup: z.enum(['none', 'pending', 'done', 'kept']),
   /** 008 R17 — the worktrees the cleanup kept, with why: one « ◆ Worktree gardé » item each. */
   kept: z.array(z.object({ agentId: z.uuid(), reason: z.string() })).optional(),
+  /** 008 FR-043 — the remote branch was kept because its head moved after the merge (one « ◆ Livraison » item). */
+  remoteBranchKept: z.boolean().optional(),
   /**
    * 008 R17 — where the worktrees of the dev and the tester are, written BEFORE they are closed: closing
    * an agent forgets its tile, and the cleanup (maybe after a restart) still needs the path and the branch.

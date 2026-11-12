@@ -199,6 +199,15 @@ export function deriveTodos(
           ),
         );
       }
+      // 008 FR-043: the merged PR's remote branch was kept, its head moved after the merge.
+      if (delivery.state === 'merged' && delivery.remoteBranchKept === true) {
+        items.push(
+          item(
+            'delivery-alert',
+            `◆ Livraison · ${label} · PR #${String(pr.number)} fusionnée, branche ${delivery.branch} gardée sur le dépôt distant`,
+          ),
+        );
+      }
       // Asked while it is watched (a PR without a verdict), or once the CI turned green and Auto does not merge.
       if ((watching && delivery.review.required) || delivery.state === 'reviewing') {
         items.push(
