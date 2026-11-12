@@ -568,9 +568,15 @@ describe('sc.13, FR-042 — the conditions are read again just before the remova
         armed = true;
       },
     });
+    // The remote branch is handled first (FR-043): wait for the cleanup to reach the dev, not a fixed delay.
+    await vi.waitFor(
+      () => {
+        expect(late, 'the cleanup never read the worktree of the dev after the merge').toBe(true);
+      },
+      { timeout: 10_000, interval: 50 },
+    );
     await quiet();
 
-    expect(late, 'the cleanup never read the worktree of the dev after the merge').toBe(true);
     expect(await readFile(join(team.dev.worktreePath, 'late.txt'), 'utf8')).toBe('trop tard\n');
     expect(isListed(team.dev.worktreePath)).toBe(true);
     expect(branchExists(team.dev.branch)).toBe(true);
@@ -595,9 +601,16 @@ describe('sc.13, FR-042 — the conditions are read again just before the remova
         armed = true;
       },
     });
+    await vi.waitFor(
+      () => {
+        expect(reopened, 'the cleanup never read the worktree of the dev after the merge').toBe(
+          true,
+        );
+      },
+      { timeout: 10_000, interval: 50 },
+    );
     await quiet();
 
-    expect(reopened, 'the cleanup never read the worktree of the dev after the merge').toBe(true);
     expect(existsSync(team.dev.worktreePath)).toBe(true);
     expect(isListed(team.dev.worktreePath)).toBe(true);
     expect(branchExists(team.dev.branch)).toBe(true);
