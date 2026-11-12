@@ -229,7 +229,7 @@
 **But** : supprimer la branche distante d'une PR suivie fusionnée si sa tête est encore le commit fusionné. Phase isolée : research P1.
 
 - [x] T067 [P] Tests dans `tests/integration/delivery/remote-branch.test.ts` : tête égale → supprimée par bail ; tête changée → gardée, `delivery-alert` qui le dit ; PR d'un autre auteur → rien ; PR sans verdict fusionnée → même règle (US3 sc.11)
-- [ ] T068 Dans `src/main/delivery/delivery-service.ts` : appel de `GitService.deleteRemoteBranch` dans `onMerged`, après la lecture de la PR
+- [x] T068 Dans `src/main/delivery/delivery-service.ts` : appel de `GitService.deleteRemoteBranch` dans `onMerged`, après la lecture de la PR
 
 **Checkpoint** : PR « 008 Phase 11 ».
 

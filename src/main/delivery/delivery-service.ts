@@ -63,6 +63,8 @@ export interface DeliveryServiceDeps {
     | 'rebaseOnto'
     | 'pushBranch'
     | 'remoteBranchHead'
+    | 'deleteRemoteBranch'
+    | 'knownDefaultBranch'
     | 'addDetached'
     | 'removeDetached'
     | 'moveWorktree'
@@ -1599,7 +1601,47 @@ export class DeliveryService {
       reason: null,
       cleanup: cleans ? 'pending' : 'none',
     });
+    await this.deleteMergedBranch(workspaceId, d);
     if (cleans) await this.worktreeCleanup.run(workspaceId, id);
+  }
+
+  /**
+   * FR-043 — the remote branch of the merged PR, deleted by ONE push whose lease is the merged head.
+   * Only a PR of the expected author, from this repository, on the branch PACT pushed for this
+   * request (never the default branch, never a colleague's). Head changed → the branch stays and a
+   * `delivery-alert` names the PR and the branch.
+   */
+  private async deleteMergedBranch(workspaceId: string, d: Delivery): Promise<void> {
+    if (d.pr === null) return;
+    const ws = this.workspace(workspaceId);
+    try {
+      const view = await this.forge(ws).prView(d.pr.number);
+      const branch = d.branch;
+      if (
+        view.author.login !== d.pr.expectedAuthor ||
+        view.isCrossRepository ||
+        view.headRefName !== branch ||
+        !d.pactCommits.includes(view.headRefOid)
+      ) {
+        return;
+      }
+      const base = await this.deps.git.knownDefaultBranch(ws.path).catch(() => null);
+      if (branch === d.target || branch === base?.branch) return;
+      if (await this.deps.git.deleteRemoteBranch(ws.path, branch, view.headRefOid)) return;
+      // Already gone (or unreachable): nothing to say. Still there: its head moved, it stays.
+      const remote = await this.deps.git.remoteBranchHead(ws.path, branch);
+      if (remote === null) return;
+      await this.save(workspaceId, d.id, { remoteBranchKept: true });
+      await this.tell(
+        workspaceId,
+        d,
+        'alert',
+        `Livraison · PR #${String(d.pr.number)} · la branche ${branch} reste sur le dépôt distant : sa tête a changé depuis la fusion (${short(view.headRefOid)}).`,
+        { pr: this.prOf(d), commit: view.headRefOid },
+      );
+    } catch {
+      // The merge is done and told: a branch that cannot be cleaned stays, nothing more.
+    }
   }
 
   /** The merged PR is the one PACT opened or took over: its author is the expected one (FR-030). */
