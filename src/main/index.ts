@@ -601,6 +601,7 @@ void app.whenReady().then(async () => {
       ...createDeliveryServices({
         workspaces,
         delivery,
+        cleanup: delivery.worktreeCleanup,
         openExternal: (url) => shell.openExternal(url),
         prUrl: (id) => delivery.prUrl(id),
         onChange: (workspaceId, change) => {

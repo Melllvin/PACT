@@ -395,6 +395,7 @@ export type TodoKind =
   | 'delivery-review'
   | 'delivery-silent-ci'
   | 'delivery-alert'
+  | 'worktree-kept'
   | 'publish-issues'
   | 'loop-escalated'
   | 'exchange-escalated'

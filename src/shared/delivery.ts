@@ -150,6 +150,27 @@ export const deliverySchema = z.object({
   ci: ciStatusSchema.nullable(),
   review: z.object({ required: z.boolean(), refusedOnce: z.boolean() }),
   cleanup: z.enum(['none', 'pending', 'done', 'kept']),
+  /** 008 R17 — the worktrees the cleanup kept, with why: one « ◆ Worktree gardé » item each. */
+  kept: z.array(z.object({ agentId: z.uuid(), reason: z.string() })).optional(),
+  /**
+   * 008 R17 — where the worktrees of the dev and the tester are, written BEFORE they are closed: closing
+   * an agent forgets its tile, and the cleanup (maybe after a restart) still needs the path and the branch.
+   */
+  worktrees: z
+    .array(
+      z.object({
+        agentId: z.uuid(),
+        role: z.enum(['dev', 'test']),
+        worktreePath: z.string().min(1),
+        branch: z.string().min(1),
+        baseBranch: z.string().min(1),
+        cliId: z.string(),
+        position: z.int().min(1),
+        name: z.string().nullable().optional(),
+        color: z.string(),
+      }),
+    )
+    .optional(),
   requestedBy: z.enum(['orchestrator', 'user']),
   at: isoDate,
   updatedAt: isoDate,

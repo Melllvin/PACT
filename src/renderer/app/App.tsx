@@ -169,6 +169,7 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onDecideDelivery: (id, decision, head, reason) =>
                   void state.decideDelivery(id, decision, head, reason),
                 onOpenPr: (id) => void state.openDeliveryPr(id),
+                onCleanup: state.cleanupWorktree,
                 onDeliverySettings: (settings) =>
                   void state.setDeliverySettings(workspace.id, settings),
                 onRequestDelivery: (agentId, request) =>

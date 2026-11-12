@@ -62,6 +62,13 @@ export type AgentActions = {
     head: string,
     reason?: string,
   ) => void;
+  /** 008 US8 — « Supprimer quand même » / « Garder »; answers what would be lost (`null`: it failed). */
+  onCleanup?: (
+    deliveryId: string,
+    agentId: string,
+    decision: 'force' | 'keep',
+    confirmed?: boolean,
+  ) => Promise<{ lost: string[] } | null>;
   /** 008 US3 — « Ouvrir la PR »: opened by the main process. */
   onOpenPr?: (deliveryId: string) => void;
   /** 008 — « Livrer » / « Intégrer » of an agent. */

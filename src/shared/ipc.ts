@@ -261,6 +261,22 @@ export const ipcRequests = {
    */
   'delivery:openPr': request(z.object({ deliveryId: z.uuid() }), none),
   /**
+   * 008 US8 — « Supprimer quand même » / « Garder » of a worktree the cleanup kept (FR-037). `force`
+   * without `confirmed` only answers what would be lost; `confirmed: true` deletes, but only when `seen`
+   * (the list the user was shown) is still what the removal would lose: PACT reads it again, and if it
+   * changed (a file added since) nothing is deleted and the new list is answered (R1).
+   */
+  'delivery:cleanup': request(
+    z.object({
+      deliveryId: z.uuid(),
+      agentId: z.uuid(),
+      decision: z.enum(['force', 'keep']),
+      confirmed: z.boolean().optional(),
+      seen: z.array(z.string()).optional(),
+    }),
+    z.object({ lost: z.array(z.string()) }),
+  ),
+  /**
    * 008 FR-019, FR-020 — the settings of the delivery of a project (Auto first): only the keys given
    * change; the bounds are checked by the handler, which says which field is out of them.
    */

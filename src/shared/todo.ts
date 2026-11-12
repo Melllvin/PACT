@@ -11,6 +11,7 @@ export const ORDER: TodoKind[] = [
   'delivery-review',
   'delivery-silent-ci',
   'delivery-alert',
+  'worktree-kept',
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',
@@ -25,7 +26,7 @@ export const ORDER: TodoKind[] = [
 const plural = (count: number, word: string) => `${String(count)} ${word}${count > 1 ? 's' : ''}`;
 
 /** « <CLI> <number> · <role> »: which agent, and what it does. */
-const who = (agent: Agent, cli: string) =>
+const who = (agent: Pick<Agent, 'name' | 'cliId' | 'position' | 'role'>, cli: string) =>
   [agentName(agent, () => cli), ...(agent.role ? [agent.role] : [])].join(' · ');
 
 /** Who gets no « Changements à relire »: the orchestrator, and the agents of a loop until it ends. */
@@ -135,11 +136,31 @@ export function deriveTodos(
       ) ?? [],
   );
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
+  /** « ◆ Worktree gardé »: the cleanup was not sure, the user decides (008 US8, R17). */
+  const worktreeKept = (delivery: NonNullable<Workspace['deliveries']>[number]): TodoItem[] =>
+    (delivery.kept ?? []).flatMap((kept): TodoItem[] => {
+      // The tile of a closed agent is forgotten: the worktree noted at the merge names it.
+      const noted = delivery.worktrees?.find((w) => w.agentId === kept.agentId);
+      const named = byId.get(kept.agentId) ?? noted;
+      if (!named) return [];
+      return [
+        {
+          id: `${delivery.id}:${kept.agentId}:worktree-kept`,
+          agentId: kept.agentId,
+          kind: 'worktree-kept',
+          title: `◆ Worktree gardé · ${who(named, names(named.cliId))} · ${kept.reason}`,
+          actions: [],
+          delivery: { id: delivery.id, head: delivery.pushedHead ?? delivery.frozenCommit },
+        },
+      ];
+    });
   // « ◎ Fusionner <agent> → <main> ? »: a project without a remote, the user decides (008 FR-008).
   // « ◎ Relire la PR #n »: the PR of a request that asks for the eyes of the user (008 data-model).
   const requests = (workspace.deliveries ?? []).flatMap((delivery): TodoItem[] => {
     const agent = byId.get(delivery.agentId);
-    if (!agent) return [];
+    // The tile of an agent that was closed is forgotten, but its kept worktree is still to decide.
+    const keptItems = delivery.channel === 'github' && delivery.pr ? worktreeKept(delivery) : [];
+    if (!agent) return keptItems;
     if (delivery.channel === 'github') {
       const { pr } = delivery;
       if (!pr) return [];
@@ -188,7 +209,7 @@ export function deriveTodos(
           ),
         );
       }
-      return items;
+      return [...items, ...keptItems];
     }
     if (delivery.state !== 'reviewing') return [];
     const name = agentName(agent, names);

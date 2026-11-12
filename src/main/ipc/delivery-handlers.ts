@@ -1,6 +1,7 @@
 import { deliverySettingsSchema, type DeliverySettings } from '../../shared/delivery';
 import { IpcFailure, type IpcInput } from '../../shared/ipc';
 import type { Workspace } from '../../shared/model';
+import type { WorktreeCleanup } from '../delivery/cleanup';
 import type { DeliveryService } from '../delivery/delivery-service';
 
 // 008 contracts/ui.md — `delivery:settings`: the settings of the delivery of a project (FR-019, FR-020),
@@ -12,6 +13,8 @@ type Dependencies = {
     update(id: string, change: (workspace: Workspace) => Workspace): Promise<Workspace>;
   };
   delivery: Pick<DeliveryService, 'settingsChanged'>;
+  /** 008 US8 — the worktrees the cleanup kept (`DeliveryService.worktreeCleanup`). */
+  cleanup?: Pick<WorktreeCleanup, 'lost' | 'force' | 'keep'>;
   /** `shell.openExternal`: absent in the suites that do not open anything. */
   openExternal?: (url: string) => Promise<void>;
   /** The address of the PR of a delivery, rebuilt by the delivery (`DeliveryService.prUrl`). */
@@ -23,9 +26,13 @@ type Dependencies = {
   ) => void;
 };
 
+const sameLines = (seen: string[] | undefined, lost: string[]) =>
+  seen !== undefined && seen.length === lost.length && seen.every((line, i) => line === lost[i]);
+
 export function createDeliveryServices({
   workspaces,
   delivery,
+  cleanup,
   onChange,
   openExternal,
   prUrl,
@@ -37,6 +44,27 @@ export function createDeliveryServices({
         throw new IpcFailure('NOT_FOUND', 'Aucune PR à ouvrir pour cette livraison.');
       }
       await openExternal?.(url);
+    },
+    'delivery:cleanup': async ({
+      deliveryId,
+      agentId,
+      decision,
+      confirmed,
+      seen,
+    }: IpcInput<'delivery:cleanup'>): Promise<{ lost: string[] }> => {
+      if (!cleanup) throw new IpcFailure('NOT_FOUND', 'Aucun nettoyage de worktree disponible.');
+      if (decision === 'keep') {
+        await cleanup.keep(deliveryId, agentId);
+        return { lost: [] };
+      }
+      // « Supprimer quand même » is two steps: what would be lost first, the deletion once confirmed.
+      const lost = await cleanup.lost(deliveryId, agentId);
+      if (lost === null) {
+        throw new IpcFailure('NOT_FOUND', 'Aucun worktree gardé pour cet agent.');
+      }
+      // R1 — the confirmation is bound to what the user saw: a changed list is shown again, never deleted.
+      if (confirmed === true && sameLines(seen, lost)) await cleanup.force(deliveryId, agentId);
+      return { lost };
     },
     'delivery:settings': async ({
       workspaceId,
