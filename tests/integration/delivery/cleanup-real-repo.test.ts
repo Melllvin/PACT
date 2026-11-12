@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorktreeCleanup } from '../../../src/main/delivery/cleanup';
 import { GitService } from '../../../src/main/git/git-service';
@@ -125,7 +125,12 @@ const setAgent = (id: string, patch: Record<string, unknown>) => {
   Object.assign(fx.agents[id] ?? {}, patch);
 };
 const branches = () => git(fx.repo, 'branch', '--format=%(refname:short)').split('\n').sort();
-const registered = () => git(fx.repo, 'worktree', 'list', '--porcelain');
+// Git prints `C:/…` on Windows: compare native, resolved paths, not the raw text.
+const registered = () =>
+  git(fx.repo, 'worktree', 'list', '--porcelain')
+    .split('\n')
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => resolve(line.slice('worktree '.length)));
 
 describe('lost() reads the disk', () => {
   it('Given a clean worktree on the merged head, When asked, Then nothing would be lost', async () => {
@@ -238,12 +243,12 @@ describe('force() deletes exactly one dev worktree', () => {
     await fx.cleanup.force(DELIVERY, DEV);
 
     expect(await present(fx.path('dev'))).toBe(false);
-    expect(registered()).not.toContain(fx.path('dev'));
+    expect(registered()).not.toContain(resolve(fx.path('dev')));
     expect(branches()).not.toContain('feat/dev');
     // The others are untouched: orchestrator, tester, another agent, main.
     for (const name of ['orch', 'tester', 'other']) {
       expect(await present(fx.path(name))).toBe(true);
-      expect(registered()).toContain(fx.path(name));
+      expect(registered()).toContain(resolve(fx.path(name)));
     }
     expect(branches()).toEqual(
       expect.arrayContaining(['main', 'feat/orch', 'feat/tester', 'feat/other']),
@@ -347,7 +352,7 @@ describe('keep() deletes nothing', () => {
     await fx.cleanup.keep(DELIVERY, DEV);
 
     expect(await present(join(fx.path('dev'), 'notes.txt'))).toBe(true);
-    expect(registered()).toContain(fx.path('dev'));
+    expect(registered()).toContain(resolve(fx.path('dev')));
     expect(branches()).toContain('feat/dev');
     expect(fx.delivery).toMatchObject({ cleanup: 'done', reason: null, kept: [] });
   });

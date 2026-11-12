@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GitService, type CloneProgress } from '../../../src/main/git/git-service';
@@ -254,12 +254,17 @@ describe('removeWorktreeDir (008 R17, R2)', () => {
     git(repo, 'worktree', 'add', '-b', name, path);
     return path;
   };
-  const registered = () => git(repo, 'worktree', 'list', '--porcelain');
+  // Git prints `C:/…` on Windows: compare native, resolved paths, not the raw text.
+  const registered = () =>
+    git(repo, 'worktree', 'list', '--porcelain')
+      .split('\n')
+      .filter((line) => line.startsWith('worktree '))
+      .map((line) => resolve(line.slice('worktree '.length)));
 
   it('removes a clean worktree directory and its registration, keeping the branch', async () => {
     const path = addWorktree('dev-a');
     await service.removeWorktreeDir(repo, path);
-    expect(registered()).not.toContain(path);
+    expect(registered()).not.toContain(resolve(path));
     await expect(stat(path)).rejects.toThrow();
     expect(git(repo, 'branch', '--list', 'dev-a')).toContain('dev-a');
   });
@@ -271,7 +276,7 @@ describe('removeWorktreeDir (008 R17, R2)', () => {
     expect((await stat(join(path, 'new.txt'))).isFile()).toBe(true);
     await service.removeWorktreeDir(repo, path, true);
     await expect(stat(path)).rejects.toThrow();
-    expect(registered()).not.toContain(path);
+    expect(registered()).not.toContain(resolve(path));
   });
 
   it('clears only the entry of a missing directory, not the other missing worktrees', async () => {
@@ -281,15 +286,15 @@ describe('removeWorktreeDir (008 R17, R2)', () => {
     await rm(unmounted, { recursive: true, force: true });
     await service.removeWorktreeDir(repo, gone);
     const list = registered();
-    expect(list).not.toContain(gone);
+    expect(list).not.toContain(resolve(gone));
     // The other one may be on a disk that is only unmounted: git must still know it.
-    expect(list).toContain(unmounted);
+    expect(list).toContain(resolve(unmounted));
   });
 
   it('does nothing when the missing directory was never a registered worktree', async () => {
     const other = addWorktree('dev-other');
     await service.removeWorktreeDir(repo, join(root, 'never-there'));
-    expect(registered()).toContain(other);
+    expect(registered()).toContain(resolve(other));
   });
 
   it('does nothing when the repository has no linked worktree at all', async () => {
@@ -303,14 +308,34 @@ describe('removeWorktreeDir (008 R17, R2)', () => {
 
     await service.removeWorktreeDir(repo, gone);
 
-    expect(registered()).not.toContain(gone);
+    expect(registered()).not.toContain(resolve(gone));
     expect((await stat(join(repo, '.git', 'worktrees', 'broken'))).isDirectory()).toBe(true);
+  });
+
+  it('clears the entry whose gitdir is written with / and another drive-letter case (Windows form)', async () => {
+    const gone = addWorktree('dev-slash');
+    const name = readdirSync(join(repo, '.git', 'worktrees')).find((n) =>
+      n.startsWith('dev-slash'),
+    );
+    const file = join(repo, '.git', 'worktrees', name ?? '', 'gitdir');
+    // `<worktree>/.git`, as git writes it on Windows: `c:/…`, whatever the case of the native path.
+    writeFileSync(
+      file,
+      `${resolve(gone, '.git')
+        .replaceAll('\\', '/')
+        .replace(/^[A-Z]:/, (d) => d.toLowerCase())}\n`,
+    );
+    await rm(gone, { recursive: true, force: true });
+
+    await service.removeWorktreeDir(repo, gone);
+
+    expect(readdirSync(join(repo, '.git', 'worktrees'))).not.toContain(name);
   });
 
   it('does not clear a registered worktree whose directory only has a sibling of the same name', async () => {
     const a = addWorktree('dev-same');
     await service.removeWorktreeDir(repo, `${a}-2`);
-    expect(registered()).toContain(a);
+    expect(registered()).toContain(resolve(a));
   });
 });
 

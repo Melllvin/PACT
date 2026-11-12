@@ -13,7 +13,7 @@ import {
   utimes,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, posix, resolve } from 'node:path';
+import { dirname, join, posix, resolve, win32 } from 'node:path';
 import type { Writable } from 'node:stream';
 import { promisify } from 'node:util';
 import { parseUnifiedDiff } from '../../shared/diff';
@@ -70,6 +70,23 @@ const exitCode = (error: unknown) => (error as { code?: unknown }).code;
 
 /** Git prints `/`-separated and sometimes 8.3 short paths on Windows: compare canonical paths. */
 const canonical = (path: string) => realpathSync.native(resolve(path));
+
+/**
+ * Two paths name the same folder: resolved, `/` and `\\` alike, the drive letter's case ignored on
+ * Windows (git writes `C:/Users/…`, a native path is `C:\\Users\\…`).
+ */
+export function samePath(
+  a: string,
+  b: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  const flavour = platform === 'win32' ? win32 : posix;
+  const norm = (path: string) => {
+    const resolved = flavour.resolve(path).replaceAll('\\', '/');
+    return platform === 'win32' ? resolved.replace(/^[a-z]:/i, (d) => d.toLowerCase()) : resolved;
+  };
+  return norm(a) === norm(b);
+}
 
 export class GitService {
   private readonly env: Env | undefined;
@@ -494,7 +511,6 @@ export class GitService {
     } catch {
       return; // no linked worktree at all
     }
-    const wanted = resolve(path);
     for (const name of names) {
       let gitdir: string;
       try {
@@ -503,7 +519,7 @@ export class GitService {
         continue;
       }
       // `gitdir` holds `<worktree>/.git`.
-      if (resolve(dirname(gitdir)) === wanted) {
+      if (samePath(dirname(gitdir), path)) {
         await rm(join(admin, name), { recursive: true, force: true });
         return;
       }
