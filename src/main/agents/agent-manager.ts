@@ -1,4 +1,5 @@
 import { agentName } from '../../shared/agent-name';
+import type { UsagePause } from '../../shared/usage-limit';
 import { within } from '../timeout';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -37,7 +38,8 @@ import {
   markStuck,
   type Draft,
 } from './agent-state';
-import { AutoResume, type Clock } from './auto-resume';
+import { accountFolder, countsInAccount } from './account';
+import { AutoResume, nextResume, systemClock, type Clock } from './auto-resume';
 import { BranchWatcher } from './branch-watcher';
 import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
@@ -82,6 +84,7 @@ type Options = {
     | 'fetchOrigin'
     | 'remoteBranchExists'
   > &
+    Partial<Pick<GitService, 'hasUncommittedChanges'>> &
     Partial<Pick<GitService, 'exclude'>>;
   pty: PtyManager;
   hooks: Pick<HookServer, 'register' | 'unregister'>;
@@ -99,6 +102,13 @@ type Options = {
   onLaunched?: (workspaceId: string, agents: Agent[]) => void;
   /** Quiet time after which the output is read again for a question (generic adapter). */
   idleMs?: number;
+  /**
+   * 009 R8 — the scheduled resume of a `paused` agent is due. The account is resumed as a whole by
+   * the usage service, which reads the limits again.
+   */
+  onPausedDue?: (agent: Agent) => void;
+  /** 009 R10 — « Reprendre » on the tile of a paused agent: the service resumes it, with an override. */
+  onPausedResume?: (agent: Agent) => Promise<void>;
   /** Whether a rate limit in this workspace is resumed without asking (FR-035); off by default. */
   autoResume?: (workspaceId: string) => Promise<boolean>;
   clock?: Clock;
@@ -139,6 +149,9 @@ type Options = {
     resetAt?(cliId: string, account: string): Date | undefined;
   };
 };
+
+/** What the usage service knows of a pause; the manager adds the rest (009 R6). */
+export type PauseInfo = Omit<UsagePause, 'midTurn' | 'saved' | 'closedQuestion' | 'blocked'>;
 
 /** How long « Faire orchestrateur » waits for the restarted CLI to be up. */
 const PROMOTE_WAIT_MS = 15_000;
@@ -196,6 +209,31 @@ const folderExists = (path: string) =>
     () => true,
     () => false,
   );
+/** #112 — a closed orchestrator directs nothing: it does not hold the role of its workspace. */
+const isLiveOrchestrator = (agent: Agent) =>
+  agent.role === 'orchestrator' && agent.state !== 'closed';
+
+/**
+ * #112 — a new orchestrator has taken the role: the closed one becomes an ordinary closed tile and
+ * its group is detached (`launchedBy` cleared), so its agents stay, closed and independent.
+ */
+const withoutClosedLead = (agents: Agent[]): Agent[] => {
+  const old = closedLeadIds(agents);
+  if (old.size === 0) return agents;
+  return agents.map((a) => {
+    if (old.has(a.id)) return { ...a, role: null, launchedBy: null };
+    return a.launchedBy !== null && old.has(a.launchedBy) ? { ...a, launchedBy: null } : a;
+  });
+};
+
+const closedLeadIds = (agents: Agent[]) =>
+  new Set(agents.filter((a) => a.role === 'orchestrator' && a.state === 'closed').map((a) => a.id));
+
+/** The agents `withoutClosedLead` changes, as they are now: what a failed launch gives back. */
+const closedLeadAndGroup = (agents: Agent[]): Agent[] => {
+  const old = closedLeadIds(agents);
+  return agents.filter((a) => old.has(a.id) || (a.launchedBy !== null && old.has(a.launchedBy)));
+};
 
 const isReady = (state: Agent['state']) => state === 'awaiting-prompt' || state === 'done';
 
@@ -225,15 +263,22 @@ export class AgentManager {
   private readonly onTurnStart: NonNullable<Options['onTurnStart']>;
   private readonly onBranch: NonNullable<Options['onBranch']>;
   private readonly onLaunched: NonNullable<Options['onLaunched']>;
+  private readonly onPausedDue: ((agent: Agent) => void) | undefined;
+  private readonly onPausedResume: ((agent: Agent) => Promise<void>) | undefined;
   private readonly branches: BranchWatcher;
   private readonly idleMs: number;
   private readonly autoResumeOn: (workspaceId: string) => Promise<boolean>;
+  private readonly clock: Clock;
   private readonly resumes: AutoResume;
   private readonly orchestrator: Options['orchestrator'];
   private readonly usage: Options['usage'];
+  /** 009 R7 — the usage source of each agent, kept after its process ends, until it is closed. */
+  private readonly accounts = new Map<string, UsageSource>();
   private readonly running = new Map<string, Running>();
   /** The ruleKey of the request each agent waits on, for « Toujours pour ce worktree ». */
   private readonly pendingRule = new Map<string, string>();
+  /** #103 — the keys of the screen each agent waits on, when it named its own. */
+  private readonly answerKeys = new Map<string, { allow: string; deny: string }>();
   /**
    * Prompts waiting for the agent to be ready (002 R7): review comments and shortcuts. One is typed per ready transition.
    */
@@ -275,6 +320,8 @@ export class AgentManager {
     this.onTurnStart = options.onTurnStart ?? (() => undefined);
     this.onBranch = options.onBranch ?? (() => undefined);
     this.onLaunched = options.onLaunched ?? (() => undefined);
+    this.onPausedDue = options.onPausedDue;
+    this.onPausedResume = options.onPausedResume;
     this.onPromptTyped = options.onPromptTyped ?? (() => undefined);
     this.onClosing = options.onClosing ?? (() => undefined);
     this.onWakeNotice = options.onWakeNotice ?? (() => undefined);
@@ -282,6 +329,7 @@ export class AgentManager {
     this.submitDelayMs = options.submitDelayMs ?? 150;
     this.submitTimeoutMs = options.submitTimeoutMs ?? 5_000;
     this.autoResumeOn = options.autoResume ?? (() => Promise.resolve(false));
+    this.clock = options.clock ?? systemClock;
     this.orchestrator = options.orchestrator;
     this.usage = options.usage;
     this.resumes = new AutoResume({
@@ -321,7 +369,13 @@ export class AgentManager {
   async restore(workspaceId: string): Promise<void> {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) return;
-    for (const agent of await this.markStale(workspace)) this.resumes.sync(agent);
+    for (const agent of await this.markStale(workspace)) {
+      const resume = agent.scheduledResume;
+      // 009 R9 — the reset of a pause passed while PACT was closed: the resume runs at once.
+      if (agent.state === 'paused' && resume && Date.parse(resume.at) <= +this.clock.now()) {
+        void this.resumeDue(resume);
+      } else this.resumes.sync(agent);
+    }
   }
 
   /**
@@ -339,13 +393,107 @@ export class AgentManager {
     if (workspace) await this.markStale(workspace, UNAVAILABLE_MESSAGE);
   }
 
+  /**
+   * 009 R7 — the agents of an account of a CLI, in every workspace: those with a usage source of
+   * that account, closed, crashed and paused ones left out; one in a rate limit error stays.
+   */
+  accountAgents(cliId: string, account: string): Agent[] {
+    const of = (id: string) => this.running.get(id)?.usage?.source ?? this.accounts.get(id);
+    return this.workspaces
+      .list()
+      .flatMap(({ agents }) => agents.filter(countsInAccount))
+      .filter((agent) => of(agent.id)?.cliId === cliId && of(agent.id)?.account === account);
+  }
+
+  /**
+   * 009 R6 — the stop at a limit of consumption: the process ends without a crash, the agent is
+   * `paused` with what the service knows (`info`) and what only the manager can read: whether it
+   * was at work, whether the worktree is clean (nothing is committed here: FR-003) and the question
+   * the stop closes. The resume is scheduled at the reset when the workspace resumes by itself; a
+   * rate limit's own resume is replaced.
+   */
+  async pause(id: string, info: PauseInfo): Promise<void> {
+    const { workspace, agent } = this.find(id);
+    if (agent.state === 'closed' || agent.state === 'paused') return;
+    const midTurn = WORKING_STATES.includes(agent.state);
+    const question = this.questions.get(id)?.slice(0, 200) ?? null;
+    this.questions.delete(id);
+    this.resumes.forget(id);
+    await this.stop(id);
+    // An unreadable worktree is not known to be clean.
+    const dirty = this.git.hasUncommittedChanges
+      ? await this.git.hasUncommittedChanges(agent.worktreePath).catch(() => true)
+      : true;
+    const resume = (await this.autoResumeOn(workspace.id))
+      ? nextResume(id, info.resumeAt ? new Date(info.resumeAt) : undefined, 0, this.clock.now())
+      : null;
+    const pause: UsagePause = {
+      ...info,
+      midTurn,
+      saved: !dirty,
+      closedQuestion: question !== null && question !== '' ? question : null,
+      blocked: null,
+    };
+    await this.change(workspace.id, id, ({ awaiting: _closed, ...a }) => ({
+      ...a,
+      state: 'paused',
+      pause,
+      lastError: null,
+      scheduledResume: resume,
+    }));
+  }
+
+  /** 009 R8 — the agents in `paused` of an account, in every workspace. */
+  pausedAgents(cliId: string, account: string): Agent[] {
+    return this.workspaces
+      .list()
+      .flatMap(({ agents }) => agents)
+      .filter(
+        (agent) =>
+          agent.state === 'paused' &&
+          agent.pause?.cliId === cliId &&
+          agent.pause.account === account,
+      );
+  }
+
+  /**
+   * 009 R8 — a paused agent starts again in its own session (`--resume`) and leaves the pause. With
+   * no session id there is nothing to resume: it stays paused, `blocked`, waiting for « Relancer ».
+   */
+  async resumePaused(id: string): Promise<'resumed' | 'blocked'> {
+    const { workspace, agent } = this.find(id);
+    if (agent.state !== 'paused') {
+      throw new IpcFailure('INVALID_INPUT', 'Cet agent n’est pas en pause.');
+    }
+    this.resumes.forget(id);
+    if (agent.sessionId === null) {
+      await this.change(workspace.id, id, (a) => ({
+        ...a,
+        scheduledResume: null,
+        pause: a.pause && { ...a.pause, blocked: 'session' },
+      }));
+      return 'blocked';
+    }
+    await this.startAgain(workspace, agent, agent.sessionId);
+    return 'resumed';
+  }
+
+  /** 009 R8, R10 — sets, or with null clears, the scheduled resume of a paused agent. */
+  async schedule(id: string, resume: ScheduledResume | null): Promise<void> {
+    const { workspace } = this.find(id);
+    await this.change(workspace.id, id, (a) => ({ ...a, scheduledResume: resume }));
+  }
+
   /** The agents of the workspace, those without a process marked « à reprendre ». */
   private async markStale(
     { id: workspaceId, agents }: Workspace,
     message = RESTORED_MESSAGE,
   ): Promise<Agent[]> {
     const stale = (agent: Agent) =>
-      agent.state !== 'closed' && agent.state !== 'error' && !this.pty.has(agent.id);
+      agent.state !== 'closed' &&
+      agent.state !== 'error' &&
+      agent.state !== 'paused' &&
+      !this.pty.has(agent.id);
     const changed = agents.filter(stale);
     if (changed.length === 0) return agents;
     const updated = await this.workspaces.update(workspaceId, (ws) => ({
@@ -386,10 +534,15 @@ export class AgentManager {
     }
     const rule = always && answer === 'allow' ? this.pendingRule.get(id) : undefined;
     this.pendingRule.delete(id);
-    this.pty.write(id, running.adapter.answerKeys(answer));
+    const keys = this.answerKeys.get(id);
+    this.answerKeys.delete(id);
+    this.pty.write(id, keys ? keys[answer] : running.adapter.answerKeys(answer));
+    // #104 — a CLI that drops its turn on a refusal says nothing more: it waits for a prompt.
+    const ends = answer === 'deny' && running.adapter.denyEndsTurn === true;
+    // #108 — a start screen (its own keys) leads to the CLI's start, not to a turn.
     await this.change(workspace.id, id, ({ awaiting: _answered, ...a }) => ({
       ...a,
-      state: 'working',
+      state: keys ? 'starting' : ends ? 'awaiting-prompt' : 'working',
       alwaysAllowRules:
         rule === undefined || a.alwaysAllowRules.includes(rule)
           ? a.alwaysAllowRules
@@ -402,6 +555,13 @@ export class AgentManager {
    * « continue » typed in its prompt instead (data-model « AgentState »).
    */
   async resume(id: string): Promise<void> {
+    const found = this.find(id);
+    // 009 — a paused agent resumes in its session, and the service covers it until the reset.
+    if (found.agent.state === 'paused') {
+      if (this.onPausedResume) await this.onPausedResume(found.agent);
+      else await this.resumePaused(id);
+      return;
+    }
     const { workspace, agent } = this.inError(id);
     this.resumes.forget(id);
     await this.resumeNow(workspace, agent);
@@ -531,7 +691,7 @@ export class AgentManager {
       await this.restartClosed(workspace, agent, options?.resumeWork === true);
       return;
     }
-    this.inError(id);
+    if (agent.state !== 'paused') this.inError(id);
     this.resumes.forget(id);
     await this.stop(id);
     await this.startAgain(workspace, agent, null);
@@ -637,7 +797,7 @@ export class AgentManager {
   async promoteToOrchestrator(id: string): Promise<void> {
     const { workspace, agent } = this.find(id);
     if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
-    const current = workspace.agents.find((a) => a.role === 'orchestrator');
+    const current = workspace.agents.find(isLiveOrchestrator);
     if (current) {
       throw new IpcFailure(
         'INVALID_INPUT',
@@ -663,7 +823,7 @@ export class AgentManager {
               scope: 'project' as const,
             },
           }),
-      agents: ws.agents.map((a) => (a.id === id ? promoted : a)),
+      agents: withoutClosedLead(ws.agents).map((a) => (a.id === id ? promoted : a)),
     }));
     this.resumes.forget(id);
     await this.stop(id);
@@ -736,6 +896,7 @@ export class AgentManager {
     // Closed with its orchestrator before: it stays as it is.
     if (keepTile && agent.state === 'closed') return;
     this.resumes.forget(id);
+    this.accounts.delete(id);
     this.prompts.delete(id);
     this.undelivered.delete(id);
     this.orchestrator?.release(id);
@@ -818,6 +979,7 @@ export class AgentManager {
     this.afterSent.delete(id);
     this.clearSubmission(id);
     this.pendingRule.delete(id);
+    this.answerKeys.delete(id);
     this.branches.unwatch(id);
     const running = this.running.get(id);
     if (!running) return;
@@ -838,6 +1000,7 @@ export class AgentManager {
       lastError: null,
       scheduledResume: null,
       closedWhileWorking: false,
+      pause: null,
     } as const;
     await this.workspaces.update(workspace.id, (ws) => ({
       ...ws,
@@ -882,14 +1045,13 @@ export class AgentManager {
     if (!found) return;
     const { workspace, agent } = found;
     const scheduled = agent.scheduledResume;
-    if (
-      agent.state !== 'error' ||
-      agent.lastError?.kind !== 'rate-limit' ||
-      scheduled?.at !== resume.at ||
-      scheduled.attempt !== resume.attempt
-    ) {
+    const due = scheduled?.at === resume.at && scheduled.attempt === resume.attempt;
+    // 009 R8 — a paused agent hands over to the usage service, which reads the limits again.
+    if (agent.state === 'paused') {
+      if (due) this.onPausedDue?.(agent);
       return;
     }
+    if (agent.state !== 'error' || agent.lastError?.kind !== 'rate-limit' || !due) return;
     try {
       await this.resumeNow(workspace, agent);
     } catch {
@@ -996,23 +1158,55 @@ export class AgentManager {
         effort: draft.effort ?? fromProfile?.effort ?? null,
         launchedBy: launchedBy ?? null,
         closedWhileWorking: false,
+        pause: null,
       };
       if (warned !== null) this.warnings.set(agent.id, [warned]);
       const cli = clis[index];
       if (!cli) throw new Error('unreachable: one CLI per draft');
       // Saved before the process starts: its first hook must find the agent.
-      await this.workspaces.update(workspaceId, (ws) => ({ ...ws, agents: [...ws.agents, agent] }));
-      this.start(
-        agent,
-        workspace.path,
-        cli,
-        env,
-        await this.prepareRole(agent, workspace.path, cli),
-      );
+      // The schema allows one orchestrator at a time: the old closed one is demoted in the same
+      // save, and given back by `abandon` if this launch fails (#112).
+      let demoted: Agent[] = [];
+      await this.workspaces.update(workspaceId, (ws) => {
+        demoted = role === 'orchestrator' ? closedLeadAndGroup(ws.agents) : [];
+        return { ...ws, agents: [...withoutClosedLead(ws.agents), agent] };
+      });
+      let prepared: Prepared;
+      try {
+        prepared = await this.prepareRole(agent, workspace.path, cli);
+      } catch (error) {
+        // #113 — it failed before the CLI started: nothing ran, so the agent must not stay recorded
+        // (a ghost orchestrator would hold the role). Its worktree and its place go too.
+        await this.abandon(workspace, agent, demoted);
+        throw error;
+      }
+      this.start(agent, workspace.path, cli, env, prepared);
       launched.push(agent);
     }
     await this.workspaces.update(workspaceId, (ws) => ({ ...ws, quickLaunchCounters: counters }));
     return launched;
+  }
+
+  /** #113 — forgets an agent whose launch failed before its CLI started. */
+  private async abandon(workspace: Workspace, agent: Agent, demoted: Agent[]) {
+    this.orchestrator?.release(agent.id);
+    this.warnings.delete(agent.id);
+    // Best effort, each step on its own: the caller rethrows the error that failed the launch.
+    await this.workspaces
+      .update(workspace.id, (ws) => ({
+        ...ws,
+        agents: ws.agents
+          .filter((a) => a.id !== agent.id)
+          .map((a) => demoted.find((d) => d.id === a.id) ?? a),
+      }))
+      .catch(() => undefined);
+    await this.git
+      .removeWorktree(workspace.path, {
+        path: agent.worktreePath,
+        branch: agent.branch,
+        force: true,
+      })
+      .catch(() => undefined);
   }
 
   /** The user's profile of a role, else its default one (004 R2). */
@@ -1065,7 +1259,8 @@ export class AgentManager {
     const asked = drafts.filter((draft) => draftRole(draft) === 'orchestrator').length;
     if (asked === 0) return;
     if (!this.orchestrator) throw new IpcFailure('INVALID_INPUT', 'Orchestrateur indisponible.');
-    if (asked + workspace.agents.filter((agent) => agent.role === 'orchestrator').length > 1) {
+    // A closed orchestrator directs nothing (#112): only a live one holds the role.
+    if (asked + workspace.agents.filter(isLiveOrchestrator).length > 1) {
       throw new IpcFailure('INVALID_INPUT', 'Un seul orchestrateur par workspace.');
     }
     if (
@@ -1172,6 +1367,7 @@ export class AgentManager {
       mcp: adapter.id !== 'generic' && (orchestrator !== null || agentMcp !== null),
       ...(usage ? { usage } : {}),
     });
+    if (usage) this.accounts.set(agent.id, usage.source);
     this.pty.start(agent.id, {
       file: spec.file,
       args: spec.args,
@@ -1185,8 +1381,7 @@ export class AgentManager {
   /** 005 R3 — the account of the agent's CLI: its configuration folder, or `default`. */
   private usageOf(agent: Agent, adapter: CliAdapter, env: Record<string, string>) {
     if (!this.usage || !adapter.usageSource) return undefined;
-    const folder =
-      adapter.usageSource === 'claude-statusline' ? env.CLAUDE_CONFIG_DIR : env.CODEX_HOME;
+    const folder = accountFolder(adapter.usageSource === 'claude-statusline', env);
     const name = this.registry.get(agent.cliId)?.definition.name ?? agent.cliId;
     const source: UsageSource = {
       agentId: agent.id,
@@ -1223,7 +1418,14 @@ export class AgentManager {
     running.idle = setTimeout(() => {
       const idle = running.adapter.mapOutput(running.output.text(), { idleMs: this.idleMs });
       if (!idle) return;
+      // #108, #110 — what a quiet screen says only counts where it can: « ready » ends a start,
+      // never a request; a dropped turn ends a turn or a request, never a wait for a prompt.
+      // Read and set aside either way: an old line must not count later.
+      const state = this.find(id).agent.state;
       running.output.consume();
+      if (idle.type === 'session-started' && state !== 'starting') return;
+      if (idle.type === 'turn-finished' && state !== 'working' && state !== 'awaiting-answer')
+        return;
       void this.apply(id, idle);
     }, this.idleMs);
   }
@@ -1242,6 +1444,7 @@ export class AgentManager {
     this.afterSent.delete(id);
     this.clearSubmission(id);
     this.pendingRule.delete(id);
+    this.answerKeys.delete(id);
     await this.change(running.workspaceId, id, (agent) => applyExit(agent, code));
   }
 
@@ -1252,9 +1455,12 @@ export class AgentManager {
     if (signal.type === 'awaiting-answer') {
       if (signal.ruleKey !== undefined) this.pendingRule.set(id, signal.ruleKey);
       this.questions.set(id, signal.summary);
+      if (signal.keys) this.answerKeys.set(id, signal.keys);
+      else this.answerKeys.delete(id);
     } else {
       this.pendingRule.delete(id);
       this.questions.delete(id);
+      this.answerKeys.delete(id);
     }
     // 005 R2 — Codex names its rollout after the session: followed from its start.
     if (
@@ -1391,12 +1597,13 @@ export class AgentManager {
     this.submissions.delete(id);
   }
 
-  private emit({ id, state, lastError, scheduledResume, awaiting }: Agent, kept = false) {
+  private emit({ id, state, lastError, scheduledResume, awaiting, pause }: Agent, kept = false) {
     this.onState({
       agentId: id,
       state,
       lastError,
       scheduledResume,
+      pause,
       ...(awaiting ? { awaiting } : {}),
       ...(kept ? { kept } : {}),
     });

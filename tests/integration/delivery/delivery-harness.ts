@@ -356,6 +356,7 @@ export async function createDeliveryHarness(
       role,
       launchedBy: null,
       closedWhileWorking: false,
+      pause: null,
       effort: null,
     } as Agent;
     await workspaces.update(workspaceId, (ws) => ({ ...ws, agents: [...ws.agents, agent] }));

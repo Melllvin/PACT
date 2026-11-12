@@ -61,6 +61,8 @@ export const agentSignalSchema = z.discriminatedUnion('type', [
     ruleKey: z.string().optional(),
     /** A question to choose from (AskUserQuestion), not a permission: never answered by PACT. */
     question: z.literal(true).optional(),
+    /** Keys of a screen with its own layout (folder trust, #103), typed instead of `answerKeys`. */
+    keys: z.object({ allow: z.string(), deny: z.string() }).optional(),
   }),
   // `sessionId` lets the manager drop signals from another session (Codex title thread, T049).
   z.object({ type: z.literal('turn-finished'), sessionId: z.string().optional() }),
@@ -104,6 +106,8 @@ export interface CliAdapter {
   mapHookEvent(payload: unknown): AgentSignal | null;
   mapOutput(chunk: string, ctx: OutputContext): AgentSignal | null;
   answerKeys(answer: 'allow' | 'deny'): string;
+  /** #104 — a refusal ends the turn with no end-of-turn hook: the agent then waits for a prompt. */
+  readonly denyEndsTurn?: boolean;
   /**
    * Reply to the hook that announced a permission request, allowing it without a dialog
    * (« Toujours pour ce worktree », FR-034). Without it, PACT types `answerKeys('allow')`.

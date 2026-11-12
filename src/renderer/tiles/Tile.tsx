@@ -13,6 +13,7 @@ import type { TerminalRegistry } from './terminal-registry';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ROLE_LABELS } from '../../shared/roles';
+import { agentStateLabel } from '../../shared/agents-view';
 
 const BADGE =
   'rounded-md border border-(--agent-color)/40 bg-surface/80 px-1.5 py-0.5 text-[11px] text-(--agent-color)';
@@ -25,6 +26,7 @@ const STATE_LABELS: Record<AgentState, string> = {
   'awaiting-answer': 'attend votre réponse',
   done: 'terminé',
   error: 'erreur',
+  paused: 'en pause',
   closed: 'fermé',
 };
 
@@ -96,9 +98,12 @@ export function Tile({
   const acting =
     agent.state === 'awaiting-answer' ||
     agent.state === 'closed' ||
+    agent.state === 'paused' ||
     failed ||
     reviewing ||
     delivering;
+  // 009 — stopped at a limit with something left uncommitted: the user knows before resuming.
+  const unsaved = agent.state === 'paused' && agent.pause?.saved === false;
   return (
     <article
       data-fx-shield
@@ -146,8 +151,9 @@ export function Tile({
           ))}
         </ol>
       )}
-      {(agent.role !== null || fromOrchestrator) && (
+      {(agent.role !== null || fromOrchestrator || unsaved) && (
         <span className="absolute top-2.5 left-3 flex gap-1">
+          {unsaved && <span className={BADGE}>non sauvegardé</span>}
           {agent.role !== null && agent.role !== 'orchestrator' && (
             // 004 FR-006: the role of the agent, at a glance.
             <span aria-label="Rôle" className={BADGE}>
@@ -188,6 +194,12 @@ export function Tile({
         // Hover on the tile, but focus on the buttons only: the terminal keeps the focus of the tile.
         <div className="group/actions absolute right-3 bottom-3 left-4">
           <div className="flex items-center justify-end gap-2 opacity-0 transition-opacity duration-200 group-focus-within/actions:opacity-100 group-hover:opacity-100">
+            {agent.state === 'paused' && (
+              // 009 contracts/ui.md — « en pause · reprise à HH:MM », never worded as an error.
+              <span className="min-w-0 truncate font-mono text-[12px] text-dim">
+                {agentStateLabel(agent, new Date())}
+              </span>
+            )}
             {failed && agent.lastError && (
               <span className="min-w-0 truncate font-mono text-[12px] text-[#f2a0a0]">
                 {agent.lastError.message}

@@ -103,8 +103,13 @@ export class UsageService {
   }
 
   /** 005 FR-012 — the warning of a launch of agents of `cliId`, or null. */
-  warning(cliId: string): string | null {
-    return launchWarning(this.list(), cliId, this.thresholds, this.now());
+  warning(cliId: string, pauses: Parameters<typeof launchWarning>[4] = []): string | null {
+    return launchWarning(this.list(), cliId, this.thresholds, this.now(), pauses);
+  }
+
+  /** 009 — the latest reading of an account, for the service of the stop. */
+  reading(cliId: string, account: string): UsageReading | null {
+    return this.accounts.get(`${cliId}\u0000${account}`)?.reading ?? null;
   }
 
   /** 007 FR-016 — an account of this CLI is at its critical level: the wakes wait (R7). */

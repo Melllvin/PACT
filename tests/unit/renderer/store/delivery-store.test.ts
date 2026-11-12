@@ -41,6 +41,7 @@ const agent = (n: number): Agent => ({
   effort: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
 });
 
 const delivery = (overrides: Record<string, unknown> = {}) => ({

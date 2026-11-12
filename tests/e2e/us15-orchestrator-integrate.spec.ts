@@ -43,7 +43,7 @@ test('merges what the user asks for once they confirm it, and refuses a delivery
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
   await launcher
     .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();

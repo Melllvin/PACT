@@ -58,6 +58,8 @@ const defaultSpawn: PtySpawn = (file, args, options) =>
 export class PtyManager {
   private readonly sessions = new Map<string, Session>();
   private readonly histories = new Map<string, string>();
+  /** #106 — the last size each terminal was given, kept while none runs (« Reprendre »). */
+  private readonly sizes = new Map<string, { cols: number; rows: number }>();
   private readonly dataListeners = new Set<(id: string, data: string) => void>();
   private readonly exitListeners = new Set<(id: string, code: number | null) => void>();
   private readonly spawn: PtySpawn;
@@ -75,8 +77,8 @@ export class PtyManager {
     const pty = this.spawn(spec.file, args, {
       cwd: spec.cwd,
       env: spec.env,
-      cols: spec.cols ?? 80,
-      rows: spec.rows ?? 24,
+      cols: spec.cols ?? this.sizes.get(id)?.cols ?? 80,
+      rows: spec.rows ?? this.sizes.get(id)?.rows ?? 24,
     });
     let markExited: () => void = () => undefined;
     const exited = new Promise<void>((resolve) => {
@@ -111,6 +113,7 @@ export class PtyManager {
   }
 
   resize(id: string, cols: number, rows: number): void {
+    this.sizes.set(id, { cols, rows });
     this.sessions.get(id)?.pty.resize(cols, rows);
   }
 

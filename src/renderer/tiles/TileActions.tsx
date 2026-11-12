@@ -276,6 +276,22 @@ function StateActions({
       </span>
     );
   }
+  // 009 contracts/ui.md — stopped at a limit, not failed: this agent resumes alone, or starts anew.
+  if (state === 'paused') {
+    return (
+      <span className={GROUP}>
+        {scheduledResume && (
+          <Button variant="link" onClick={onCancelAutoResume}>
+            Annuler la reprise
+          </Button>
+        )}
+        <Button onClick={onRestart}>Relancer</Button>
+        <Button variant="primary" onClick={onResume}>
+          Reprendre
+        </Button>
+      </span>
+    );
+  }
   if (state === 'error') {
     return (
       <span className={GROUP}>

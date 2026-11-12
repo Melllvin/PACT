@@ -50,7 +50,10 @@ const openDetailed = async (page: Page) => {
   await page.getByRole('button', { name: 'Choisir un dépôt Git…' }).click();
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
   const quick = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  await quick.getByRole('group', { name: 'Faux CLI' }).getByRole('button', { name: '+' }).click();
+  await quick
+    .getByRole('group', { name: 'Faux CLI' })
+    .getByRole('button', { name: /^Ajouter un / })
+    .click();
   await quick.getByRole('button', { name: 'Mode détaillé…' }).click();
   const detailed = page.getByRole('dialog', { name: 'Lancer des agents' });
   const agents = detailed.getByRole('list', { name: 'Agents' }).getByRole('listitem');
@@ -154,5 +157,5 @@ test('adds a CLI from the home screen, warning when its command is not found', a
   const other = page
     .getByRole('dialog', { name: 'Ajouter au workspace' })
     .getByRole('group', { name: 'Autre CLI…' });
-  await expect(other.getByRole('button', { name: '+' })).toBeEnabled();
+  await expect(other.getByRole('button', { name: /^Ajouter un / })).toBeEnabled();
 });

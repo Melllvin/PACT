@@ -20,6 +20,9 @@ import { guardQuit, quitQuestion } from './app-lifecycle';
 import { chooseNotify, NotificationService } from './notifications';
 import { OriginSync } from './origin-sync';
 import { UsageService } from './usage/usage-service';
+import type { UsageDeclined, UsageStops } from '../shared/usage-limit';
+import { UsageLimitService } from './usage/usage-limit-service';
+import { systemClock } from './agents/auto-resume';
 import { createUsageServices } from './ipc/usage-handlers';
 import { createAppServices, devServerUrl, trustedSenderCheck } from './app-services';
 import { resolveShellEnv } from './env/shell-env';
@@ -175,6 +178,8 @@ void app.whenReady().then(async () => {
       ),
     onTurnFinished: (agentId) => {
       loops.turnFinished(agentId);
+      // 009 — an agent whose stop waited for the end of its turn is stopped now.
+      void usageLimit.turnFinished(agentId);
     },
     // Read when the orchestrator calls: the services below exist by then.
     tools: (orchestratorId): McpTool[] =>
@@ -192,7 +197,8 @@ void app.whenReady().then(async () => {
           loops,
           issues,
           clis: () => registry.list(),
-          usageWarning: (cliId) => usage.warning(cliId),
+          usageWarning: (cliId) => usage.warning(cliId, usageLimit.pauses()),
+          pausedFor: (cliId) => usageLimit.pausedFor(cliId),
           permissions,
           log: (entry) => {
             orchestrator.record(orchestratorId, entry);
@@ -204,9 +210,13 @@ void app.whenReady().then(async () => {
   // 005 — the usage limits of the CLI accounts, as the agents' CLIs report them.
   const usage = new UsageService({
     thresholds: (await stores.state.read()).usageThresholds,
+    // The readings are dated on the clock of the main process, the test clock of the e2e harness included.
+    ...(clock ? { now: () => clock.now() } : {}),
     onState: (state) => {
       emit('usage:state', state);
       syncTodos();
+      // 009 — the save instruction and the stop at the threshold of each window.
+      void usageLimit.onUsage(state);
     },
   });
   const agents: AgentManager = new AgentManager({
@@ -231,8 +241,9 @@ void app.whenReady().then(async () => {
       review.close(agentId);
     },
     // The tiles of the agents an orchestrator launches appear as the launcher's do.
-    onLaunched: (workspaceId) => {
+    onLaunched: (workspaceId, launched) => {
       emit('workspace:agentsLaunched', { workspaceId });
+      void usageLimit.launched(workspaceId, launched);
     },
     // 007 FR-005 — the count of messages of an agent restarts with each turn.
     onTurnStart: (agentId) => {
@@ -249,6 +260,8 @@ void app.whenReady().then(async () => {
             .find((a) => a.id === event.agentId)?.lastReport
         : undefined;
       emit('agent:state', kept ? { ...event, lastReport: kept } : event);
+      // 009 — an agent out of its pause by « Relancer » or closed frees its account.
+      if (event.state !== 'paused') usageLimit.agentChanged();
       // Working again, an agent has left its last report behind it.
       if (event.state === 'working' && !late) void keepReport(event.agentId, null);
       syncTodos();
@@ -279,20 +292,49 @@ void app.whenReady().then(async () => {
     // FR-035: « reprise auto » of screen 1m, off until chosen.
     autoResume: async (workspaceId) =>
       (await permissions.resolve(workspaceId))?.autoResume ?? false,
+    // 009 R8, R10 — a paused agent resumes with its whole account, or alone from its tile.
+    onPausedDue: (agent) => {
+      if (agent.pause) void usageLimit.resumeAccount(agent.pause.cliId, agent.pause.account);
+    },
+    onPausedResume: (agent) => usageLimit.resumeAgent(agent.id, agent),
     ...(clock ? { clock } : {}),
   });
   // 007 — the wake: an action event for an agent becomes one pointer line, typed once it is ready.
-  const wake = new WakeService({
+  const wake: WakeService = new WakeService({
     workspaces,
     type: (agentId, line) => agents.sendPrompt(agentId, line, 'wake'),
     inputBusy: (agentId) => agents.promptState(agentId) === 'busy',
     setNotice: (agentId, notice) => {
       void agents.setWakeNotice(agentId, notice).catch(() => undefined);
     },
-    usageCritical: (cliId) => usage.critical(cliId),
+    usageHeld: (cliId) => usageLimit.usageHeld(cliId),
     file: eventsFile({ exchanges, agents }),
   });
   agents.setWake(wake);
+  // 009 — the stop at a limit of consumption: it reads the states of UsageService and acts on the
+  // agents through the manager, the journal and the wake. 008 will freeze commits (R18).
+  const usageLimit: UsageLimitService = new UsageLimitService({
+    agents,
+    exchanges,
+    wake,
+    stores,
+    git,
+    cliName: (cliId) => registry.list().find((cli) => cli.id === cliId)?.name ?? cliId,
+    clock: clock ?? systemClock,
+    autoResume: async (workspaceId) =>
+      (await permissions.resolve(workspaceId))?.autoResume ?? false,
+    commitFrozen: () => false,
+    // 009 US3 — the renderer judges the age of a reading on the clock of this process.
+    onStale: (_offers, snapshot) => {
+      limitSnapshot = {
+        stops: snapshot.stops,
+        declined: snapshot.declined,
+        offered: snapshot.offered,
+      };
+      emit('usage:limit', snapshot);
+      syncTodos();
+    },
+  });
   exchanges.onRecorded((workspaceId, message) => {
     wake.notify(workspaceId, message);
   });
@@ -506,6 +548,12 @@ void app.whenReady().then(async () => {
     },
   });
   const pendingFiles = new Map<string, Record<string, number>>();
+  /** 009 US3 — the stop thresholds and refusals the offers of a stop by caution depend on. */
+  let limitSnapshot: {
+    stops: UsageStops;
+    declined: UsageDeclined[];
+    offered?: { cliId: string; account: string }[];
+  } = { stops: {}, declined: [] };
   const cliNameOf = (cliId: string) =>
     registry.list().find((cli) => cli.id === cliId)?.name ?? cliId;
   function syncTodos() {
@@ -516,6 +564,7 @@ void app.whenReady().then(async () => {
           states: usage.list(),
           thresholds: usage.getThresholds(),
           now: clock?.now() ?? new Date(),
+          ...limitSnapshot,
         }),
       );
     }
@@ -545,7 +594,10 @@ void app.whenReady().then(async () => {
     });
   };
 
-  for (const workspace of await workspaces.restore()) await prepareWorkspace(workspace.id);
+  const restored = await workspaces.restore();
+  // 009 R9 — the accounts in pause hold again before the first reading.
+  usageLimit.restorePauses(restored.flatMap((workspace) => workspace.agents));
+  for (const workspace of restored) await prepareWorkspace(workspace.id);
   // 008 — the PR that were followed are read again, the merges that were under way are checked.
   // R19: the conflicts under resolution come back first, then the requests that were under way.
   void integration
@@ -610,7 +662,7 @@ void app.whenReady().then(async () => {
         },
       }),
       ...createPreviewServices({ preview }),
-      ...createUsageServices({ usage, stores }),
+      ...createUsageServices({ usage, stores, limit: usageLimit }),
       ...createOrchestratorServices({
         delivery,
         orchestrator,
@@ -635,7 +687,7 @@ void app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow(windowEnv);
   });
-  guardQuit({
+  const quitGuard = guardQuit({
     app,
     activeAgents: () => agents.activeCount(),
     confirm: async (count) => {
@@ -649,6 +701,7 @@ void app.whenReady().then(async () => {
     // Agent states stay saved as they are; the processes end with the app (FR-038).
     shutdown: async () => {
       origin.stop();
+      usageLimit.dispose();
       workspaces.dispose();
       review.dispose();
       preview.dispose();
@@ -664,6 +717,10 @@ void app.whenReady().then(async () => {
     },
     // e2e runs close the app themselves; no one is there to answer.
     skipConfirm: process.env.PACT_TEST_MODE === '1',
+  });
+  // #116 — a system shutdown or a supervisor quits PACT even with « Quitter PACT ? » open.
+  process.once('SIGTERM', () => {
+    void quitGuard.terminate();
   });
 });
 

@@ -53,7 +53,9 @@ const setCount = async (group: Locator, target: number) => {
   for (;;) {
     const value = Number(await count.textContent());
     if (value === target) return;
-    await group.getByRole('button', { name: value < target ? '+' : '−' }).click();
+    await group
+      .getByRole('button', { name: value < target ? /^Ajouter un / : /^Retirer un / })
+      .click();
   }
 };
 

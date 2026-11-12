@@ -177,12 +177,15 @@ async function merge({
   onTester,
   mainMoves = false,
   lead = false,
+  beforeMerge,
 }: {
   suffix?: string;
   onDev?: (team: Team) => Promise<void> | void;
   onTester?: (team: Team) => Promise<void> | void;
   mainMoves?: boolean;
   lead?: boolean;
+  /** Runs once the team exists, before the PR is requested. */
+  beforeMerge?: (team: Team) => Promise<void> | void;
 } = {}) {
   await ignoreRules();
   const team = await h.team(suffix);
@@ -190,6 +193,7 @@ async function merge({
   await writeFile(join(team.dev.worktreePath, 'node_modules', 'pkg', 'index.js'), 'x\n');
   // The orchestrator, closed and clean: the case a naive rule would take for removable.
   if (lead) await h.setAgentState(team.lead, 'closed');
+  await beforeMerge?.(team);
   if (mainMoves) h.pushToOrigin('main', { 'upstream.txt': 'moved\n' }, 'main moves');
   hooks.set(team.dev.id, async () => {
     await onDev?.(team);
@@ -254,6 +258,29 @@ describe('sc.1, SC-011 — a clean dev on the merged head is removed, node_modul
 
     expect(existsSync(join(team.dev.worktreePath, 'node_modules'))).toBe(false);
     expect(deliveryOf().cleanup).toBe('done');
+  });
+});
+
+// 008 × 009 — an agent PACT stopped at a usage limit resumes later: the merge neither closes it nor lets
+// the cleanup touch its worktree, even when everything in it is clean and on the merged head.
+describe('an agent paused by the usage limit is never closed or cleaned', () => {
+  it('Given a dev in pause at the merge, When the forge says merged, Then it is not closed, its worktree and branch stay, and the cleanup ends as none', async () => {
+    const { team } = await merge({
+      beforeMerge: async (t) => {
+        await h.setAgentState(t.dev, 'paused');
+      },
+    });
+    await cleaned('done').catch(() => undefined);
+    await h.waitFor(() => deliveryOf().cleanup !== 'pending', 'the cleanup did not end');
+
+    expect(h.closed.map((c) => c.id)).not.toContain(team.dev.id);
+    expect(h.closed.map((c) => c.id)).toContain(team.tester.id);
+    expect(existsSync(team.dev.worktreePath)).toBe(true);
+    expect(branchExists(team.dev.branch)).toBe(true);
+    expect(deliveryOf().cleanup).not.toBe('kept');
+    expect(
+      worktreeRemovals().some((args) => args.some((a) => a.includes(team.dev.worktreePath))),
+    ).toBe(false);
   });
 });
 

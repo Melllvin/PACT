@@ -96,6 +96,7 @@ const createManager = async ({
   orchestrator = undefined as ConstructorParameters<typeof AgentManager>[0]['orchestrator'],
   gitService = new GitService({ env: gitEnv }),
   fetchTimeoutMs = undefined as number | undefined,
+  usage = undefined as ConstructorParameters<typeof AgentManager>[0]['usage'],
 } = {}) => {
   const registry = new CliRegistry({
     adapters: [adapter],
@@ -116,6 +117,7 @@ const createManager = async ({
     onState: (event) => events.push(event),
     ...(idleMs === undefined ? {} : { idleMs }),
     ...(orchestrator === undefined ? {} : { orchestrator }),
+    ...(usage === undefined ? {} : { usage }),
   });
   managers.push(manager);
   return manager;
@@ -575,6 +577,71 @@ describe('AgentManager launch of an orchestrator without a way to serve one', ()
   });
 });
 
+// #113 — a launch that fails before the CLI starts must not leave a ghost holding the role.
+describe('AgentManager launch of an orchestrator whose access cannot be prepared', () => {
+  const failing = () => ({
+    prepare: vi.fn().mockRejectedValue(new Error('ENOENT: resources/skills/pact-orchestrator')),
+    release: vi.fn(),
+  });
+
+  it('rejects, and leaves no agent, so no ghost orchestrator', async () => {
+    const manager = await createManager({ orchestrator: failing() });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(/ENOENT/);
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+    expect(await agentsOnDisk()).toEqual([]);
+    expect(manager.activeCount()).toBe(0);
+  });
+
+  it('frees the worktree and the position, so a launch can be tried again', async () => {
+    const orchestrator = failing();
+    const manager = await createManager({ orchestrator });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow();
+    expect(git(repo, 'worktree', 'list')).not.toContain('fake-1');
+    expect(git(repo, 'branch', '--list', 'agent/*')).toBe('');
+    orchestrator.prepare.mockRejectedValueOnce(new Error('ENOENT again'));
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(/again/);
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+  });
+});
+
+// #113 — the cleanup of a failed launch never hides the error that failed it.
+describe('AgentManager abandon of a failed launch', () => {
+  const failing = () => ({
+    prepare: vi.fn().mockRejectedValue(new Error('ENOENT original')),
+    release: vi.fn(),
+  });
+
+  it('throws the original error when saving the workspace fails too, and still frees the branch', async () => {
+    const manager = await createManager({ orchestrator: failing() });
+    const update = workspaces.update.bind(workspaces);
+    let calls = 0;
+    vi.spyOn(workspaces, 'update').mockImplementation((id, fn) => {
+      calls += 1;
+      // 1st: the agent is saved; 2nd: the cleanup fails.
+      return calls === 2 ? Promise.reject(new Error('disk full')) : update(id, fn);
+    });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(
+      /ENOENT original/,
+    );
+    expect(git(repo, 'branch', '--list', 'agent/*')).toBe('');
+    expect(git(repo, 'worktree', 'list')).not.toContain('fake-1');
+  });
+
+  it('throws the original error when the worktree cannot be removed', async () => {
+    class Stuck extends GitService {
+      override removeWorktree = () => Promise.reject(new Error('locked'));
+    }
+    const manager = await createManager({
+      orchestrator: failing(),
+      gitService: new Stuck({ env: gitEnv }),
+    });
+    await expect(launch(manager, [draft({ role: 'orchestrator' })])).rejects.toThrow(
+      /ENOENT original/,
+    );
+    expect(workspaces.get(workspace.id)?.agents).toEqual([]);
+  });
+});
+
 // fix-todo-diff-notifications — a new worktree starts from origin/<main>, after a try to fetch it.
 describe('AgentManager.launch from origin', { timeout: 30_000 }, () => {
   let origin: string;
@@ -737,5 +804,136 @@ describe('AgentManager.launchWarnings', { timeout: 30_000 }, () => {
     const manager = await createManager();
     const [agent] = await launch(manager, [draft({ baseBranch: 'develop' })]);
     expect(warnings(manager, agent?.id ?? '')).toEqual([]);
+  });
+});
+
+// 009 T008 — a paused agent survives a restart of PACT, and the agents of an account are found in every
+// workspace (research R7, R9; FR-006, FR-011, US2 sc.4).
+
+describe(
+  'AgentManager restart of the app with a paused agent (FR-006)',
+  { timeout: 30_000 },
+  () => {
+    const pause = {
+      cliId: 'fake',
+      account: 'default',
+      cause: 'threshold',
+      windows: [
+        { id: 'five-hour', label: '5 h', percent: 91, resetsAt: '2030-01-01T09:30:00.000Z' },
+      ],
+      resumeAt: '2030-01-01T09:30:00.000Z',
+      pausedAt: '2029-12-31T23:00:00.000Z',
+      midTurn: true,
+      saved: false,
+      closedQuestion: null,
+      blocked: null,
+    };
+
+    it('leaves a paused agent paused, not « à reprendre », with its pause and its resume', async () => {
+      const manager = await createManager();
+      const [agent] = await launch(manager, [draft()]);
+      const id = agent?.id ?? '';
+      await waitForState(id, 'awaiting-prompt');
+      await manager.dispose();
+      const scheduledResume = { agentId: id, at: '2030-01-01T09:30:00.000Z', attempt: 0 };
+      await workspaces.update(workspace.id, (ws) => ({
+        ...ws,
+        agents: ws.agents.map((a) => ({ ...a, state: 'paused', pause, scheduledResume }) as never),
+      }));
+
+      workspaces.dispose();
+      workspaces = new WorkspaceService({ git: new GitService({ env: gitEnv }), stores });
+      await workspaces.restore();
+      const restarted = await createManager({ ptyManager: new PtyManager() });
+      await restarted.restore(workspace.id);
+
+      expect(current(id)).toMatchObject({
+        state: 'paused',
+        lastError: null,
+        pause,
+        scheduledResume,
+      });
+      expect((await agentsOnDisk())[0]).toMatchObject({ state: 'paused', lastError: null });
+      expect(events.filter((e) => e.agentId === id).map((e) => e.state)).not.toContain('error');
+    });
+  },
+);
+
+describe('AgentManager.accountAgents', { timeout: 40_000 }, () => {
+  const spyUsage = () => ({ statusLine: vi.fn(() => 'PACT'), follow: vi.fn(), release: vi.fn() });
+  type Accounted = { accountAgents(cliId: string, account: string): { id: string }[] };
+  const ids = (manager: AgentManager, account = 'default') =>
+    (manager as unknown as Accounted).accountAgents('fake', account).map((a) => a.id);
+
+  const secondWorkspace = async () => {
+    const other = join(root, 'Autre dépôt');
+    await mkdir(other, { recursive: true });
+    git(other, 'init', '-b', 'main');
+    await writeFile(join(other, 'README.md'), '# autre\n');
+    git(other, 'add', '.');
+    git(other, 'commit', '-m', 'initial');
+    return workspaces.open(other);
+  };
+  const launchIn = async (manager: AgentManager, workspaceId: string) => {
+    const [agent] = await manager.launch({
+      workspaceId,
+      agents: [draft()],
+      counters: { freeTerminal: 0 },
+    });
+    return agent?.id ?? '';
+  };
+  const waitUntil = async (check: () => boolean, what: string) => {
+    const start = Date.now();
+    while (!check()) {
+      if (Date.now() - start > 10_000) throw new Error(what);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+  };
+
+  it('gives the agents of the account in every open workspace, and none of another account', async () => {
+    const manager = await createManager({ usage: spyUsage() });
+    const first = await launchIn(manager, workspace.id);
+    const other = await secondWorkspace();
+    const second = await launchIn(manager, other.id);
+    shellEnv = { ...baseEnv, CLAUDE_CONFIG_DIR: '/comptes/travail' };
+    const elsewhere = await launchIn(manager, workspace.id);
+
+    expect(ids(manager).sort()).toEqual([first, second].sort());
+    expect(ids(manager, '/comptes/travail')).toEqual([elsewhere]);
+    expect(ids(manager, '/comptes/inconnu')).toEqual([]);
+  });
+
+  it('leaves out an agent that is closed', async () => {
+    const manager = await createManager({ usage: spyUsage() });
+    const kept = await launchIn(manager, workspace.id);
+    const closed = await launchIn(manager, workspace.id);
+    await manager.close(closed, { removeWorktree: false });
+    expect(ids(manager)).toEqual([kept]);
+  });
+
+  it('keeps an agent in a rate limit error, whose process has ended (R7)', async () => {
+    scenario = 'rate-limit';
+    const manager = await createManager({ usage: spyUsage() });
+    const id = await launchIn(manager, workspace.id);
+    await waitForState(id, 'awaiting-prompt');
+    pty.write(id, 'Travaille\r');
+    await waitForState(id, 'error');
+    await waitUntil(() => !pty.has(id), 'the process never ended');
+    expect(current(id)?.lastError?.kind).toBe('rate-limit');
+    expect(ids(manager)).toEqual([id]);
+  });
+
+  it('gives no agent of a CLI that reports no usage (FR-011)', async () => {
+    const adapter = new FakeAdapter({ cliPath: FAKE_CLI, platform: process.platform });
+    Object.defineProperty(adapter, 'usageSource', { value: undefined });
+    const manager = await createManager({ adapter, usage: spyUsage() });
+    await launchIn(manager, workspace.id);
+    expect(ids(manager)).toEqual([]);
+  });
+
+  it('gives no agent when no usage service is there (FR-011)', async () => {
+    const manager = await createManager();
+    await launchIn(manager, workspace.id);
+    expect(ids(manager)).toEqual([]);
   });
 });

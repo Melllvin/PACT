@@ -142,7 +142,9 @@ async function launchTeam(page: Page, testers = 1) {
   const count = 2 + testers;
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
   const quick = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  const plus = quick.getByRole('group', { name: 'Faux CLI' }).getByRole('button', { name: '+' });
+  const plus = quick
+    .getByRole('group', { name: 'Faux CLI' })
+    .getByRole('button', { name: /^Ajouter un / });
   for (let i = 1; i < count; i++) await plus.click();
   await quick.getByRole('button', { name: 'Mode détaillé…' }).click();
   const detailed = page.getByRole('dialog', { name: 'Lancer des agents' });

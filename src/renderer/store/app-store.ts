@@ -8,6 +8,8 @@ import {
   type PactApi,
 } from '../../shared/ipc';
 import { agentsLaunchedBy } from '../../shared/agents-view';
+import type { MainClock } from '../workspace/UsageGauge';
+import type { UsageDeclined, UsageStops } from '../../shared/usage-limit';
 import { countsOf, toAgentDrafts, type LaunchDraft } from '../../shared/launch-draft';
 import type {
   Agent,
@@ -80,7 +82,19 @@ export type AppState = {
   usage: Record<string, UsageState>;
   /** 005 FR-010 — the alert thresholds of the gauges. */
   usageThresholds: UsageThresholds;
+  /** 009 US3 — what the offers of a stop by caution depend on, as the main process told it. */
+  usageLimit: {
+    clock: MainClock | null;
+    stops: UsageStops;
+    declined: UsageDeclined[];
+    offered?: { cliId: string; account: string }[];
+  };
   setUsageThresholds: (thresholds: UsageThresholds) => Promise<void>;
+  /** 009 US4 — the stop thresholds, per CLI and window. */
+  /** Null until the settings asked for them (`loadUsageStops`). */
+  usageStops: UsageStops | null;
+  loadUsageStops: () => Promise<void>;
+  setUsageStops: (stops: UsageStops) => Promise<void>;
   load: () => Promise<void>;
   /** Subscribes to main-process events; returns the function that unsubscribes. */
   connect: () => () => void;
@@ -142,6 +156,11 @@ export type AppState = {
     decision: 'force' | 'keep',
     confirmed?: boolean,
   ) => Promise<{ lost: string[] } | null>;
+  /** 009 R10 — « Reprendre » / « Annuler la reprise » of a « ◆ En pause »: the whole account. */
+  resumeUsage: (cliId: string, account: string) => Promise<void>;
+  cancelUsageResume: (cliId: string, account: string) => Promise<void>;
+  /** 009 US3 — « Arrêter par prudence » ('stop') or « Pas maintenant » ('later'). */
+  decideUsageStale: (cliId: string, account: string, decision: 'stop' | 'later') => Promise<void>;
   /** 003 US5 — the journal « ◎ Actions » of an orchestrator, the latest first (FR-021). */
   orchestratorActions: Record<string, OrchestratorAction[]>;
   loadOrchestratorActions: (agentId: string) => Promise<void>;
@@ -245,6 +264,7 @@ const applyState =
     ...(event.lastReport ? { lastReport: event.lastReport } : {}),
     ...(event.lastError === undefined ? {} : { lastError: event.lastError }),
     ...(event.scheduledResume === undefined ? {} : { scheduledResume: event.scheduledResume }),
+    ...(event.pause === undefined ? {} : { pause: event.pause }),
     // Each event tells whether the agent asks a question: absent, it does not (FR-024a).
     ...(event.awaiting === undefined ? {} : { awaiting: event.awaiting }),
   });
@@ -347,6 +367,8 @@ export function createAppStore(api: PactApi) {
       restartingAgentId: null,
       usage: {},
       usageThresholds: DEFAULT_USAGE_THRESHOLDS,
+      usageLimit: { clock: null, stops: {}, declined: [] },
+      usageStops: null,
       correcting: {},
       orchestratorPrompted: {},
       orchestratorActions: {},
@@ -378,6 +400,16 @@ export function createAppStore(api: PactApi) {
         const unsubscribers = [
           api.on('usage:state', (state) => {
             set({ usage: { ...get().usage, ...byAccount([state]) } });
+          }),
+          api.on('usage:limit', ({ now, stops, declined, offered }) => {
+            set({
+              usageLimit: {
+                clock: { mainAt: Date.parse(now), localAt: Date.now() },
+                stops,
+                declined,
+                offered,
+              },
+            });
           }),
           api.on('agent:state', (event) => {
             const { workspaces } = get();
@@ -667,6 +699,11 @@ export function createAppStore(api: PactApi) {
         await get().restartAgent(agentId, { resumeWork });
       },
       cancelAutoResume: (agentId) => act(() => api.invoke('agent:cancelAutoResume', { agentId })),
+      resumeUsage: (cliId, account) => act(() => api.invoke('usage:resume', { cliId, account })),
+      cancelUsageResume: (cliId, account) =>
+        act(() => api.invoke('usage:cancelResume', { cliId, account })),
+      decideUsageStale: (cliId, account, decision) =>
+        act(() => api.invoke('usage:stale', { cliId, account, decision })),
 
       requestDelivery: (workspaceId, agentId, request) =>
         act(() => api.invoke('delivery:request', { workspaceId, agentId, ...request })),
@@ -727,6 +764,16 @@ export function createAppStore(api: PactApi) {
       setUsageThresholds: (thresholds) =>
         act(async () => {
           set({ usageThresholds: await api.invoke('settings:usageThresholds', thresholds) });
+        }),
+
+      loadUsageStops: () =>
+        act(async () => {
+          set({ usageStops: await api.invoke('usage:stops') });
+        }),
+
+      setUsageStops: (stops) =>
+        act(async () => {
+          set({ usageStops: await api.invoke('settings:usageStops', stops) });
         }),
 
       setRoleProfiles: (workspaceId, profiles) =>

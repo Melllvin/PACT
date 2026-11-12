@@ -63,7 +63,7 @@ test('runs an agent and a free terminal in « Mes Projets/Développement »', as
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
   await launcher
     .getByRole('group', { name: 'Terminal libre' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('button', { name: 'Lancer 1 agent' }).click();
   await expect(page.getByRole('dialog', { name: 'Autorisations des agents' })).toBeVisible();
@@ -101,7 +101,7 @@ test('lets the orchestrator read, and the user merge, a file with spaces and acc
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
   await launcher
     .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();
@@ -154,7 +154,7 @@ test('hands its skills to the orchestrator and shows its recap and a mockup with
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
   await launcher
     .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();

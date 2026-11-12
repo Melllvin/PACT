@@ -145,13 +145,22 @@ export class CodexAdapter implements CliAdapter {
     }
   }
 
-  mapOutput(chunk: string, _ctx: OutputContext): AgentSignal | null {
-    // Both screens come before any hook; PACT leaves the answer to the user (T049).
+  mapOutput(chunk: string, ctx: OutputContext): AgentSignal | null {
+    // Both screens come before any hook; PACT leaves the answer to the user (T049). They are
+    // numbered lists, where a digit only moves the selection: Enter confirms it (#108).
     if (/Trust this folder\?/.test(chunk)) {
-      return { type: 'awaiting-answer', summary: 'Faire confiance au dossier ?' };
+      return {
+        type: 'awaiting-answer',
+        summary: 'Faire confiance au dossier ?',
+        keys: { allow: '1\r', deny: '\u001b' },
+      };
     }
     if (/Hooks need review/.test(chunk)) {
-      return { type: 'awaiting-answer', summary: 'Approuver les hooks PACT ?' };
+      return {
+        type: 'awaiting-answer',
+        summary: 'Approuver les hooks PACT ?',
+        keys: { allow: '2\r', deny: '\u001b' },
+      };
     }
     // The banner only: an agent may well write « rate limit » while working on retries.
     if (/You've hit your usage limit/i.test(chunk)) {
@@ -162,6 +171,13 @@ export class CodexAdapter implements CliAdapter {
         message: chunk.trim(),
         ...(resetAt ? { resetAt } : {}),
       };
+    }
+    // #108 — a refused request ends the turn with no Stop hook: the agent waits for a prompt.
+    if (/■ \{"type":"error"/.test(chunk)) return { type: 'turn-finished' };
+    // #108 — Codex runs SessionStart at its first turn only: its quiet, empty prompt says it is
+    // ready. The manager takes it from a starting agent only.
+    if (ctx.idleMs !== undefined && /\? for shortcuts/.test(chunk)) {
+      return { type: 'session-started' };
     }
     return null;
   }

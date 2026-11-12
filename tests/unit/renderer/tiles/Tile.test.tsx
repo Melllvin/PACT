@@ -333,3 +333,64 @@ describe('Tile terminal and action buttons (006 T022a, FR-021, FR-022)', () => {
     expect(tile().className).toMatch(/(?:ring|outline|border|shadow)/);
   });
 });
+
+// 009 T019 — a paused tile (contracts/ui.md « Tuile et ligne d'agent »): not an error (SC-003), the badge
+// « non sauvegardé » when `pause.saved` is false, and the actions « Reprendre », « Annuler la reprise », « Relancer ».
+describe('Tile of a paused agent (009)', () => {
+  const pause = (over: Record<string, unknown> = {}) => ({
+    cliId: 'claude-code',
+    account: 'default',
+    cause: 'threshold' as const,
+    windows: [{ id: 'five-hour', label: '5 h', percent: 91, resetsAt: '2030-01-01T09:30:00.000Z' }],
+    resumeAt: '2030-01-01T09:30:00.000Z',
+    pausedAt: '2030-01-01T09:00:00.000Z',
+    midTurn: true,
+    saved: true,
+    closedQuestion: null,
+    blocked: null,
+    ...over,
+  });
+
+  it('is not drawn as an error: no halo, not the color of the error, its state says « en pause »', () => {
+    const { tile } = setup({ state: 'paused', pause: pause() });
+    expect(tile().getAttribute('data-state')).toBe('paused');
+    expect(tile().getAttribute('aria-label')).toContain('en pause');
+    expect(tile().className).not.toMatch(/halo/);
+    expect(tile().style.getPropertyValue('--pulse-color')).not.toBe('var(--danger)');
+  });
+
+  it('has the color of the state « attend une consigne »', () => {
+    const waiting = setup({ state: 'awaiting-prompt' });
+    const color = waiting.tile().style.getPropertyValue('--pulse-color');
+    document.body.innerHTML = '';
+    const { tile } = setup({ state: 'paused', pause: pause() });
+    expect(tile().style.getPropertyValue('--pulse-color')).toBe(color);
+  });
+
+  it('shows « non sauvegardé » when something was left uncommitted, and nothing when all was saved', () => {
+    const { tile } = setup({ state: 'paused', pause: pause({ saved: false }) });
+    expect(within(tile()).getByText('non sauvegardé')).toBeTruthy();
+    document.body.innerHTML = '';
+    const saved = setup({ state: 'paused', pause: pause({ saved: true }) });
+    expect(within(saved.tile()).queryByText('non sauvegardé')).toBeNull();
+  });
+
+  it('resumes this agent alone with « Reprendre », and starts a new session with « Relancer »', async () => {
+    const user = userEvent.setup();
+    const { actions } = setup({ state: 'paused', pause: pause() });
+    await user.click(screen.getByRole('button', { name: 'Reprendre' }));
+    expect(actions.onResume).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Relancer' }));
+    expect(actions.onRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers « Annuler la reprise » only while a resume is scheduled', async () => {
+    const user = userEvent.setup();
+    const scheduled = setup({ state: 'paused', pause: pause(), scheduledResume });
+    await user.click(screen.getByRole('button', { name: /^Annuler/ }));
+    expect(scheduled.actions.onCancelAutoResume).toHaveBeenCalledTimes(1);
+    document.body.innerHTML = '';
+    setup({ state: 'paused', pause: pause(), scheduledResume: null });
+    expect(screen.queryByRole('button', { name: /^Annuler/ })).toBeNull();
+  });
+});

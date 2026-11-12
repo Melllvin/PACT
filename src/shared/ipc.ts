@@ -1,3 +1,4 @@
+import { usageDeclinedSchema, usagePauseSchema, usageStopsSchema } from './usage-limit';
 import { z } from 'zod';
 import { MAX_REASON, deliverySchema, deliverySettingsSchema } from './delivery';
 import { exchangesPayloadSchema } from './exchanges';
@@ -94,6 +95,8 @@ const nonEmpty = z.string().trim().min(1);
 const absolutePath = z.string().regex(/^(\/|[A-Za-z]:[\\/]|\\\\)/, 'chemin absolu attendu');
 const agentRef = z.object({ agentId: z.uuid() });
 const fileRef = agentRef.extend({ path: repoPathSchema });
+/** 009 — a CLI account: the key of its pause and of its overrides. */
+const usageAccount = z.strictObject({ cliId: nonEmpty, account: nonEmpty });
 const integrationRef = z.object({ integrationId: z.uuid() });
 const commentText = reviewCommentSchema.shape.text;
 const port = z.int().min(1).max(65535);
@@ -125,6 +128,8 @@ const request = <I extends z.ZodType, O extends z.ZodType>(input: I, output: O) 
   output,
 });
 const none = z.undefined();
+/** The stops sent by the renderer are always whole: no default to fall back on. */
+const usageStopsInput = usageStopsSchema.unwrap();
 
 export const ipcRequests = {
   'app:getState': request(
@@ -296,8 +301,18 @@ export const ipcRequests = {
   /** 003 US5 — the journal « ◎ Actions », the latest first (FR-021). */
   /** 005 — the usage of every CLI account read so far, when the renderer loads. */
   'usage:get': request(none, z.array(usageStateSchema)),
+  /** 009 R10 — « Reprendre » of a « ◆ En pause »: the account resumes, with an override. */
+  'usage:resume': request(usageAccount, none),
+  /** 009 — « Annuler la reprise » of a « ◆ En pause ». */
+  'usage:cancelResume': request(usageAccount, none),
+  /** 009 US3 — the answer to « ◆ Limite <CLI> inconnue depuis <M> min »: stop by caution, or later. */
+  'usage:stale': request(usageAccount.extend({ decision: z.enum(['stop', 'later']) }), none),
   /** 005 FR-010 — the alert thresholds, set by the user. */
   'settings:usageThresholds': request(usageThresholdsSchema, usageThresholdsSchema),
+  /** 009 US4 — the stop thresholds per CLI and window, set by the user (10 to 100). */
+  'settings:usageStops': request(usageStopsInput, usageStopsSchema),
+  /** 009 US4 — the stop thresholds saved, when the settings open. */
+  'usage:stops': request(none, usageStopsSchema),
   'orchestrator:actions': request(
     z.object({ agentId: z.uuid() }),
     z.array(orchestratorActionSchema),
@@ -363,6 +378,8 @@ export const ipcEvents = {
     state: agentStateSchema,
     lastError: agentErrorSchema.nullable().optional(),
     scheduledResume: scheduledResumeSchema.nullable().optional(),
+    /** 009 — the pause of a `paused` agent; null once it is over. */
+    pause: usagePauseSchema.nullable().optional(),
     /** Sent with an `awaiting-answer` state when the agent asks a question (FR-024a). */
     awaiting: z.enum(['question']).optional(),
     /** `closed` with `kept`: the tile stays, closed, to be restarted (006 FR-025). */
@@ -420,6 +437,13 @@ export const ipcEvents = {
   }),
   /** 005 — a new reading of a CLI account, or a change of its level. */
   'usage:state': usageStateSchema,
+  /** 009 US3 — the clock of the main process and what the offers of a stop by caution depend on. */
+  'usage:limit': z.object({
+    now: z.string(),
+    stops: usageStopsSchema,
+    declined: z.array(usageDeclinedSchema),
+    offered: z.array(usageAccount),
+  }),
   /** Agents were launched in a workspace, by the launcher or by its orchestrator (003 FR-015). */
   'workspace:agentsLaunched': z.object({
     workspaceId: z.string(),

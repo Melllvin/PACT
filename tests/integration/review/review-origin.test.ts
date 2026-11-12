@@ -64,6 +64,7 @@ const agent = (role: Role | null = null): Agent => ({
   effort: null,
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
 });
 
 const useAgent = (role: Role | null = null) =>

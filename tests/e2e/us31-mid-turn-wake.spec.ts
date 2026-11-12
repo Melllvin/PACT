@@ -52,7 +52,9 @@ const tiles = (page: Page) => ({
 async function launchTeam(page: Page) {
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
   const quick = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  const plus = quick.getByRole('group', { name: 'Faux CLI' }).getByRole('button', { name: '+' });
+  const plus = quick
+    .getByRole('group', { name: 'Faux CLI' })
+    .getByRole('button', { name: /^Ajouter un / });
   await plus.click();
   await quick.getByRole('button', { name: 'Mode détaillé…' }).click();
   const detailed = page.getByRole('dialog', { name: 'Lancer des agents' });

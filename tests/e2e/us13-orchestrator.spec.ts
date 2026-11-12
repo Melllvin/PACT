@@ -33,7 +33,9 @@ const launchTeam = async (page: Page) => {
   await page.getByRole('button', { name: 'Choisir un dépôt Git…' }).click();
   await page.getByRole('button', { name: /Ajouter des agents/ }).click();
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
-  const plus = launcher.getByRole('group', { name: 'Faux CLI' }).getByRole('button', { name: '+' });
+  const plus = launcher
+    .getByRole('group', { name: 'Faux CLI' })
+    .getByRole('button', { name: /^Ajouter un / });
   // The first launch already counts one agent of the first CLI.
   await plus.click();
   await plus.click();

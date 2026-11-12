@@ -61,7 +61,9 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           'border-destructive/30 bg-destructive/6',
         (todo.kind === 'delivery-silent-ci' ||
           todo.kind === 'delivery-alert' ||
-          todo.kind === 'worktree-kept') &&
+          todo.kind === 'worktree-kept' ||
+          todo.kind === 'usage-paused' ||
+          todo.kind === 'usage-stale') &&
           'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
@@ -118,8 +120,11 @@ export function TodoActions({
   onDecideDelivery,
   onOpenPr,
   onCleanup,
+  onUsageResume,
+  onUsageCancelResume,
+  onUsageStale,
 }: ActionsProps) {
-  const { delivery, loop, publish, usage, decide, exchange } = todo;
+  const { delivery, loop, publish, usage, decide, exchange, usageLimit } = todo;
   return (
     <>
       {delivery && agent && todo.kind === 'delivery-review' && (
@@ -274,6 +279,44 @@ export function TodoActions({
             }}
           >
             Détail
+          </Button>
+        </div>
+      )}
+      {usageLimit?.kind === 'paused' && (onUsageResume || onUsageCancelResume) && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onUsageResume?.(usageLimit.cliId, usageLimit.account);
+            }}
+          >
+            Reprendre
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onUsageCancelResume?.(usageLimit.cliId, usageLimit.account);
+            }}
+          >
+            Annuler la reprise
+          </Button>
+        </div>
+      )}
+      {usageLimit?.kind === 'stale' && onUsageStale && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onUsageStale(usageLimit.cliId, usageLimit.account, 'stop');
+            }}
+          >
+            Arrêter par prudence
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onUsageStale(usageLimit.cliId, usageLimit.account, 'later');
+            }}
+          >
+            Pas maintenant
           </Button>
         </div>
       )}

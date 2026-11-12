@@ -1,5 +1,6 @@
 import type { UsageState, UsageThresholds } from '../../shared/usage';
-import { UsageGauges, useUsageClock } from './UsageGauge';
+import type { UsageDeclined, UsageStops } from '../../shared/usage-limit';
+import { UsageGauges, useUsageClock, type MainClock } from './UsageGauge';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -95,6 +96,11 @@ export type AgentActions = {
   onDecide?: (agentId: string, text: string) => void;
   /** 005 — « Détail » of a usage alert: opens the detail of its gauge (`usage:<cli>:<account>`). */
   onUsageDetail?: (key: string) => void;
+  /** 009 — « Reprendre » and « Annuler la reprise » of a « ◆ En pause »: they act on the account. */
+  onUsageResume?: (cliId: string, account: string) => void;
+  onUsageCancelResume?: (cliId: string, account: string) => void;
+  /** 009 US3 — « Arrêter par prudence » and « Pas maintenant » of a « ◆ Limite … inconnue ». */
+  onUsageStale?: (cliId: string, account: string, decision: 'stop' | 'later') => void;
 };
 
 /** The review of the app (review-store and « vu » of app-store), for this workspace. */
@@ -171,6 +177,17 @@ type Props = {
   /** 005 FR-010 — the alert thresholds of the gauges, and their change. */
   usageThresholds?: UsageThresholds;
   onUsageThresholds?: (thresholds: UsageThresholds) => void;
+  /** 009 US3 — the clock of the main process, the stop thresholds and the refusals of the offers. */
+  usageLimit?: {
+    clock: MainClock | null;
+    stops: UsageStops;
+    declined: UsageDeclined[];
+    offered?: { cliId: string; account: string }[];
+  };
+  /** 009 US4 — the stop thresholds, and their change. */
+  usageStops?: UsageStops | null;
+  onOpenUsageStops?: () => void;
+  onUsageStops?: (stops: UsageStops) => void;
   /** Without it, the Changements tab stays empty and no « Revue → » is offered. */
   review?: ReviewBinding | undefined;
   /** 003 FR-010 — the agents working on a prompt of the orchestrator. */
@@ -203,6 +220,10 @@ export function WorkspaceView({
   usage = [],
   usageThresholds,
   onUsageThresholds,
+  usageLimit,
+  usageStops,
+  onOpenUsageStops,
+  onUsageStops,
   review,
   fromOrchestrator = {},
   loopReports = [],
@@ -220,14 +241,23 @@ export function WorkspaceView({
   const [todoOpen, setTodoOpen] = useState(true);
   // A closed agent may still be in the last review:pending: only the agents here count.
   const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
-  const now = useUsageClock(usage);
+  const now = useUsageClock(usage, usageLimit?.clock ?? undefined);
   const [deliverySettingsOpen, setDeliverySettingsOpen] = useState(false);
   const [usageDetail, setUsageDetail] = useState<string | null>(null);
   const todos = deriveTodos(
     workspace,
     cliName,
     Object.fromEntries(pending.map((id) => [id, review?.files?.[id] ?? 0])),
-    usageThresholds && { states: usage, thresholds: usageThresholds, now },
+    usageThresholds && {
+      states: usage,
+      thresholds: usageThresholds,
+      now,
+      ...(usageLimit && {
+        stops: usageLimit.stops,
+        declined: usageLimit.declined,
+        offered: usageLimit.offered,
+      }),
+    },
   );
   const agentsView = agentRows(workspace, todos, cliName, now);
   // Focus (1p) on one agent; back to the grid when that agent is closed (US5).
@@ -403,7 +433,7 @@ export function WorkspaceView({
     const { onPromote, onRename } = actions;
     const canBe = clis.find((cli) => cli.id === agent.cliId)?.orchestrator;
     const reason =
-      lead && lead.id !== agent.id
+      lead && lead.state !== 'closed' && lead.id !== agent.id
         ? `${agentName(lead, cliName)} est déjà l’orchestrateur`
         : canBe === false
           ? 'Ce CLI ne sait pas être orchestrateur'
@@ -500,6 +530,8 @@ export function WorkspaceView({
           onDetail={setUsageDetail}
           {...(usageThresholds && { thresholds: usageThresholds })}
           {...(onUsageThresholds && { onThresholds: onUsageThresholds })}
+          {...(onOpenUsageStops && { onOpenStops: onOpenUsageStops })}
+          {...(usageStops && onUsageStops && { stops: usageStops, onStops: onUsageStops })}
         />
       }
     />
@@ -640,10 +672,12 @@ export function WorkspaceView({
           )}
           {available && hasTiles && !focused && !graphShown && (
             <TileGrid onAdd={canAdd ? launch : undefined} lead={lead ? tileOf(lead) : undefined}>
-              {agents.filter((agent) => agent !== lead).map(tileOf)}
+              {agents.filter((agent) => agent !== lead && agent.state !== 'closed').map(tileOf)}
               {workspace.freeTerminals.map((terminal) => (
                 <FreeTerminalTile key={terminal.id} terminal={terminal} terminals={terminals} />
               ))}
+              {/* #115 — the closed tiles kept (006 FR-023) come last: a new tile is never behind them. */}
+              {agents.filter((agent) => agent !== lead && agent.state === 'closed').map(tileOf)}
             </TileGrid>
           )}
           {available && (

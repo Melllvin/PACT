@@ -35,7 +35,7 @@ type WakeOptions = {
   type(agentId: string, line: string): unknown;
   inputBusy(agentId: string): boolean;
   setNotice(agentId: string, notice: Notice): void;
-  usageCritical(cliId: string): boolean;
+  usageHeld(cliId: string): boolean;
 };
 type WakeModule = { WakeService: new (options: WakeOptions) => WakeLike };
 
@@ -56,7 +56,7 @@ let current: Workspace;
 let typed: { agentId: string; line: string }[];
 let notices: { agentId: string; notice: Notice }[];
 let busy: boolean;
-let critical: boolean;
+let usageIsHeld: boolean;
 let wake: WakeLike;
 let counter: number;
 
@@ -74,7 +74,7 @@ const create = async () => {
     setNotice: (agentId, notice) => {
       notices.push({ agentId, notice });
     },
-    usageCritical: () => critical,
+    usageHeld: () => usageIsHeld,
   });
 };
 
@@ -137,7 +137,7 @@ beforeEach(async () => {
   typed = [];
   notices = [];
   busy = false;
-  critical = false;
+  usageIsHeld = false;
   counter = 0;
   wake = await create();
 });
@@ -331,23 +331,84 @@ describe('the cap of 20 wakes an hour (FR-016, R7)', () => {
 });
 
 describe('the usage cut (FR-016, R7)', () => {
-  it('Given the usage at critical, When a hook fires, Then it answers nothing; once the usage is back, Then the pointer comes, no event lost', async () => {
-    critical = true;
+  it('Given the usage held, When a hook fires, Then it answers nothing; once the usage is back, Then the pointer comes, no event lost', async () => {
+    usageIsHeld = true;
     push();
     expect(take('stop')).toBeNull();
     await advance(5000);
     expect(take('tool')).toBeNull();
     expect(typed).toEqual([]);
 
-    critical = false;
+    usageIsHeld = false;
     expect(take('tool')).toBe('1 événement, lis get_events');
   });
 
-  it('Given the usage at critical, When the cut ends and a Stop comes, Then the Stop carries the pointer', () => {
-    critical = true;
+  it('Given the usage held, When the cut ends and a Stop comes, Then the Stop carries the pointer', () => {
+    usageIsHeld = true;
     push();
     expect(take('stop')).toBeNull();
-    critical = false;
+    usageIsHeld = false;
     expect(take('stop')).toBe('1 événement, lis get_events');
+  });
+});
+
+describe('a save instruction goes through the hook (009 FR-004, 007 FR-017)', () => {
+  const fillCap = async () => {
+    for (let i = 0; i < 20; i++) {
+      push();
+      expect(take('stop')).toBe('1 événement, lis get_events');
+      await advance(1000);
+    }
+  };
+
+  it.each(['tool', 'stop'] as const)(
+    'Given the cap of 20 wakes reached, When a usage-save is pending, Then the %s hook carries the pointer and raises no notice',
+    async (point) => {
+      await fillCap();
+      push('usage-save');
+      await advance(5000);
+      expect(take(point)).toBe('1 événement, lis get_events');
+      expect(notices.filter((n) => n.notice === 'cap')).toEqual([]);
+      expect(typed).toEqual([]);
+    },
+  );
+
+  it.each(['tool', 'stop'] as const)(
+    'Given the usage held, When a usage-save is pending, Then the %s hook carries the pointer',
+    async (point) => {
+      usageIsHeld = true;
+      push('usage-save');
+      await advance(5000);
+      expect(take(point)).toBe('1 événement, lis get_events');
+    },
+  );
+
+  it('Given the usage held, When a usage-save and a report are pending, Then the Stop pointer announces 2', () => {
+    usageIsHeld = true;
+    push('report');
+    push('usage-save');
+    expect(take('stop')).toBe('2 événements, lis get_events');
+  });
+
+  it('Given the usage held, When only a report is pending, Then the Stop answers nothing', () => {
+    usageIsHeld = true;
+    push('report');
+    expect(take('stop')).toBeNull();
+  });
+
+  it('Given a usage-save in the window of 5 s, When a tool ends, Then the hook still answers nothing: the window holds', async () => {
+    usageIsHeld = true;
+    push('usage-save');
+    await advance(4000);
+    expect(take('tool')).toBeNull();
+    await advance(1000);
+    expect(take('tool')).toBe('1 événement, lis get_events');
+  });
+
+  it('Given a usage-save carried by a hook, When the Stop comes with nothing new, Then it answers nothing (no loop)', () => {
+    usageIsHeld = true;
+    push('usage-save');
+    expect(take('stop')).toBe('1 événement, lis get_events');
+    expect(take('stop')).toBeNull();
   });
 });

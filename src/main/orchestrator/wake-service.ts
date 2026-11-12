@@ -39,8 +39,8 @@ export type WakeOptions = {
   inputBusy(agentId: string): boolean;
   /** `Agent.wakeNotice`, saved and announced. */
   setNotice(agentId: string, notice: Notice): void;
-  /** `usageAlert(...).level === 'critical'` for an account of this CLI. */
-  usageCritical(cliId: string): boolean;
+  /** 009 R13 — an account of this CLI is paused, or has a window at its stop threshold. */
+  usageHeld(cliId: string): boolean;
   /**
    * R11 — an agent without MCP reads its events in `.pact/events.md`: `write` puts the unread there
    * in full and counts them as read. Absent: every agent reads by `get_events`.
@@ -88,13 +88,16 @@ export class WakeService {
     }
     if (this.options.file?.applies(agent) === true) return null;
     if (point === 'tool' && this.windows.has(agentId)) return null;
-    if (this.recentWakes(agentId).length >= MAX_WAKES_PER_HOUR) {
-      this.hold(agentId, 'cap');
-      return null;
-    }
-    if (this.options.usageCritical(agent.cliId)) {
-      this.hold(agentId, 'usage');
-      return null;
+    // 009 FR-004 — a save instruction goes through the cap and the usage cut.
+    if (!saving(pending)) {
+      if (this.recentWakes(agentId).length >= MAX_WAKES_PER_HOUR) {
+        this.hold(agentId, 'cap');
+        return null;
+      }
+      if (this.options.usageHeld(agent.cliId)) {
+        this.hold(agentId, 'usage');
+        return null;
+      }
     }
     this.closeWindow(agentId);
     this.mark(agent, workspace, pending);
@@ -186,13 +189,13 @@ export class WakeService {
       this.hold(agentId, 'input');
       return;
     }
-    if (!urgent) {
+    if (!urgent && !saving(pending)) {
       const recent = this.recentWakes(agentId);
       if (recent.length >= MAX_WAKES_PER_HOUR) {
         this.hold(agentId, 'cap');
         return;
       }
-      if (this.options.usageCritical(agent.cliId)) {
+      if (this.options.usageHeld(agent.cliId)) {
         this.hold(agentId, 'usage');
         return;
       }
@@ -283,6 +286,11 @@ export class WakeService {
       this.arm();
     }, CHECK_MS);
   }
+}
+
+/** 009 FR-004 — a pending `usage-save` makes the wake urgent. */
+function saving(pending: readonly ExchangeMessage[]): boolean {
+  return pending.some((m) => m.kind === 'usage-save');
 }
 
 /** R11 — the text of `.pact/events.md`: the unread events in full, as data reported to the agent. */

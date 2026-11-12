@@ -37,6 +37,7 @@ const agent = (n: number, overrides: Partial<Agent> = {}): Agent => ({
   closedWhileWorking: false,
   effort: null,
   name: null,
+  pause: null,
   ...overrides,
 });
 
@@ -172,5 +173,42 @@ describe('WorkspaceView menu', () => {
     await user.clear(field);
     await user.type(field, 'Alice{Enter}');
     expect(onRename).toHaveBeenCalledWith(agent(1).id, 'Alice');
+  });
+
+  // #112 — a closed orchestrator directs nothing: it does not stop another agent from becoming one.
+  it('offers « Faire orchestrateur » while the orchestrator is closed', async () => {
+    render(
+      <WorkspaceView
+        workspace={workspace([agent(1, { role: 'orchestrator', state: 'closed' }), agent(2)])}
+        clis={[cli('claude-code', true)]}
+        actions={handlers({ onPromote: vi.fn() })}
+      />,
+    );
+    await menuOf('Claude Code 2');
+    expect(
+      screen.getByRole('menuitem', { name: 'Faire orchestrateur' }).getAttribute('aria-disabled'),
+    ).not.toBe('true');
+    expect(screen.queryByText(/est déjà l.orchestrateur/)).toBeNull();
+  });
+
+  // #115 — a new agent is never behind the closed tiles kept by 006 FR-023.
+  it('puts the live tiles before the closed ones', () => {
+    render(
+      <WorkspaceView
+        workspace={workspace([
+          agent(1, { state: 'closed' }),
+          agent(2, { state: 'closed' }),
+          agent(3),
+          agent(4),
+        ])}
+        clis={[cli('claude-code', true)]}
+        actions={handlers({})}
+      />,
+    );
+    const grid = screen.getByRole('region', { name: 'Tuiles' });
+    const names = within(grid)
+      .getAllByRole('article')
+      .map((a) => /Claude Code \d/.exec(a.getAttribute('aria-label') ?? '')?.[0]);
+    expect(names).toEqual(['Claude Code 3', 'Claude Code 4', 'Claude Code 1', 'Claude Code 2']);
   });
 });

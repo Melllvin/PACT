@@ -37,6 +37,6 @@ describe('TerminalText', () => {
   it('keeps only a short tail of the previous output', () => {
     const text = new TerminalText();
     text.push('x'.repeat(5000));
-    expect(text.push('y').length).toBeLessThanOrEqual(501);
+    expect(text.push('y').length).toBeLessThanOrEqual(2001);
   });
 });

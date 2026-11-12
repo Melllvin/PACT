@@ -33,6 +33,7 @@ const dev = {
   role: 'dev',
   launchedBy: null,
   closedWhileWorking: false,
+  pause: null,
   effort: null,
 } as Agent;
 

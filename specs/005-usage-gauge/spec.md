@@ -201,6 +201,9 @@ heure de réinitialisation connue par la jauge ; vérifier que la reprise est pr
 - **FR-012**: Le lanceur MUST avertir, sans bloquer, quand l'utilisateur lance des agents d'un CLI dont
   une fenêtre dépasse le premier seuil ; l'orchestrateur MUST recevoir le même avertissement quand il
   lance un agent (003 FR-015).
+  *(amendement de la 009, 2026-11-09)* : l'avertissement reste sans blocage tant que le compte n'est pas
+  en pause, mais `launch_agent` MUST être refusé pendant une pause de l'arrêt à la limite
+  (009 FR-010) ; le lanceur continue d'avertir sans bloquer.
 
 **Impact par agent**
 

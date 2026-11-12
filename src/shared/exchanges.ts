@@ -35,6 +35,9 @@ export const EXCHANGE_KINDS = [
   'closed',
   'awaiting-answer',
   'overlap',
+  'usage-save',
+  'usage-paused',
+  'usage-resumed',
 ] as const;
 export type ExchangeKind = (typeof EXCHANGE_KINDS)[number];
 
@@ -46,11 +49,12 @@ const INFO_KINDS: readonly ExchangeKind[] = [
   'closed',
   'awaiting-answer',
   'overlap',
+  'usage-paused',
 ];
 
 /** R3 — `info` for the states, `action` for the rest; the sender of a message chooses. */
 export function typeOf(kind: ExchangeKind, chosen?: ExchangeType): ExchangeType {
-  if (kind === 'message') return chosen ?? 'action';
+  if (kind === 'message' || kind === 'usage-resumed') return chosen ?? 'action';
   return INFO_KINDS.includes(kind) ? 'info' : 'action';
 }
 

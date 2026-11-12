@@ -38,7 +38,7 @@ test('waits for the end of an agent’s turn, then reads its changes', async () 
   // The first launch already counts one agent of the first CLI.
   await launcher
     .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();

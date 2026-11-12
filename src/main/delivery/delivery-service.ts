@@ -1583,9 +1583,11 @@ export class DeliveryService {
         if (agentId === null) continue;
         // Closing an agent that is closed already forgets its tile, and with it where its worktree is:
         // the cleanup (US8) needs the agent, so a closed one is left as it is.
-        if (this.workspace(workspaceId).agents.find((a) => a.id === agentId)?.state === 'closed') {
-          continue;
-        }
+        const live = this.workspace(workspaceId).agents.find((a) => a.id === agentId);
+        if (live?.state === 'closed') continue;
+        // 009 — an agent PACT stopped at a usage limit, or one that a rate limit will resume, is not
+        // PACT's to close: it resumes by itself, and its worktree is not the cleanup's to remove.
+        if (live && (live.state === 'paused' || live.scheduledResume !== null)) continue;
         try {
           await this.deps.agents.close(agentId, { removeWorktree: false });
         } catch {

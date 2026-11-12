@@ -66,6 +66,12 @@
 //
 // A final hook answered `{ decision: 'block', reason }` (Stop prolonged by a wake) prints
 // `Prolongé : <reason>` and plays one more turn with the reason, which is a pointer.
+//   onPointer: 'commit' | 'ignore'  (009 T002) what the CLI does with the `get_events` it just read on a
+//                                   pointer turn. `commit`: when a `usage-save` is listed, runs
+//                                   `git add -A && git commit -m "pact: sauvegarde"` in its working
+//                                   directory and prints `Sauvegardé` (`Rien à sauvegarder` when there
+//                                   is nothing to commit); it never pushes. `ignore` (and the absence
+//                                   of the field): reads the pointer and commits nothing, a mute agent
 //   exitCode: number                exits with this code after the turn
 //
 // A bracketed paste (ESC[200~ … ESC[201~) is one prompt, its line breaks included, as in the
@@ -247,11 +253,26 @@ function stepRuns(step, args) {
   return !(step.skipEmpty && hasEmpty(args));
 }
 
+/** The blocks of `.pact/events.md` (`## <at> · <kind> · de <from>`, then the text), like get_events. */
+function parseEventsFile(file) {
+  return file
+    .split(/^## /m)
+    .slice(1)
+    .map((block) => {
+      const [head = '', ...rest] = block.split('\n');
+      const [at, kind, from] = head.split(' · ');
+      const text = rest.join('\n').trim();
+      return { at, kind, from: from?.replace(/^de /, ''), text, summary: text.split('\n')[0] };
+    });
+}
+
 /** What a pointer makes the CLI play: the first instruction it reads, else the pointer itself. */
 async function readPointer(line) {
   if (!process.env.PACT_AGENT_MCP_URL && !process.env.PACT_ORCHESTRATOR_URL) {
     try {
-      return readFileSync(join(process.cwd(), '.pact', 'events.md'), 'utf8').trim() || line;
+      const file = readFileSync(join(process.cwd(), '.pact', 'events.md'), 'utf8').trim();
+      pointerEvents = parseEventsFile(file);
+      return file || line;
     } catch {
       return line;
     }
@@ -526,11 +547,36 @@ async function runTurn(line) {
   }
 }
 
+/** 009 T002 — a `usage-save` read on a pointer: commit locally, never push. */
+function saveWork() {
+  const git = (...args) => execFileSync('git', args, { stdio: 'ignore' });
+  try {
+    git('add', '-A');
+    git(
+      '-c',
+      'user.name=Fake CLI',
+      '-c',
+      'user.email=fake@pact.test',
+      'commit',
+      '-m',
+      'pact: sauvegarde',
+    );
+    console.log('Sauvegardé');
+  } catch {
+    // Nothing to commit: a commit with no change fails, and the work is already saved.
+    console.log('Rien à sauvegarder');
+  }
+}
+
 /** A line typed or a reason given: a pointer is read, anything else is the prompt. */
 async function play(line) {
   pointerTurn = POINTER.test(line);
   pointerEvents = [];
-  await runTurn(POINTER.test(line) ? await readPointer(line) : line);
+  const text = pointerTurn ? await readPointer(line) : line;
+  if (pointerTurn && scenario.onPointer === 'commit') {
+    if (pointerEvents.some((event) => event.kind === 'usage-save')) saveWork();
+  }
+  await runTurn(text);
 }
 
 console.log(resumed ? `Session reprise ${resumed}` : `Session ${sessionId}`);

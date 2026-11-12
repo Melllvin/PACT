@@ -259,4 +259,55 @@ describe('UsageGauges', () => {
     expect(onThresholds).toHaveBeenCalledWith({ warn: 70, critical: 95 });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('offers the stop thresholds of the CLIs with a gauge, in the same dialog (009 US4)', async () => {
+    const onStops = vi.fn();
+    const onOpen = vi.fn();
+    render(
+      <UsageGauges
+        workspace={workspace}
+        usage={[state()]}
+        clis={clis}
+        now={NOW}
+        onThresholds={vi.fn()}
+        stops={{ 'claude-code': { week: 80 } }}
+        onStops={onStops}
+        onOpenStops={onOpen}
+      />,
+    );
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.keyboard('{Enter}');
+    expect(onOpen).toHaveBeenCalledOnce();
+    const section = within(screen.getByRole('dialog', { name: 'Seuils d’alerte' })).getByRole(
+      'group',
+      { name: 'Arrêt' },
+    );
+    expect(within(section).getByRole('group', { name: 'Claude Code' })).toBeTruthy();
+    const week = within(section).getByRole('spinbutton', { name: /^semaine : arrêt à/ });
+    expect(week).toHaveProperty('value', '80');
+    await userEvent.clear(week);
+    await userEvent.type(week, '85');
+    await userEvent.click(within(section).getByRole('button', { name: 'Enregistrer' }));
+    expect(onStops).toHaveBeenCalledWith({ 'claude-code': { 'five-hour': 90, week: 85 } });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('names a CLI absent from the list by its id in the stop section (009 US4)', async () => {
+    render(
+      <UsageGauges
+        workspace={workspace}
+        usage={[state()]}
+        clis={[]}
+        now={NOW}
+        onThresholds={vi.fn()}
+        stops={{}}
+        onStops={vi.fn()}
+      />,
+    );
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getByRole('group', { name: 'claude-code' })).toBeTruthy();
+  });
 });

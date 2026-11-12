@@ -211,15 +211,43 @@ describe('Codex terminal and dialogs', () => {
   });
 
   it('reports the folder trust and hook review screens, which PACT never answers itself', () => {
-    expect(adapter.mapOutput('Trust this folder? Codex can read, edit…', {})).toEqual({
+    expect(adapter.mapOutput('Trust this folder? Codex can read, edit…', {})).toMatchObject({
       type: 'awaiting-answer',
       summary: 'Faire confiance au dossier ?',
     });
-    expect(adapter.mapOutput('Hooks need review\n4 hooks are new or changed.', {})).toEqual({
+    expect(adapter.mapOutput('Hooks need review\n4 hooks are new or changed.', {})).toMatchObject({
       type: 'awaiting-answer',
       summary: 'Approuver les hooks PACT ?',
     });
     expect(adapter.mapOutput('› Ask Codex to do anything', {})).toBeNull();
+  });
+
+  // #108 — captured on Codex 0.163: a digit moves the selection, Enter confirms; y does nothing.
+  it('names the keys of its start screens: Enter on « Trust », 2 then Enter on « Trust all »', () => {
+    const trust = adapter.mapOutput('Trust this folder?\n› 1. Trust and continue\n  2. Quit', {});
+    expect(trust).toMatchObject({ keys: { allow: '1\r', deny: '\u001b' } });
+    const hooks = adapter.mapOutput(
+      'Hooks need review\n› 1. Review hooks\n  2. Trust all and continue\n  3. Continue without trusting',
+      {},
+    );
+    expect(hooks).toMatchObject({ keys: { allow: '2\r', deny: '\u001b' } });
+  });
+
+  // #108 — Codex runs SessionStart at its first turn only.
+  it('takes its quiet, empty prompt as the end of its start, and only once quiet', () => {
+    const screen = '› Ask Codex to do anything\n  gpt-6 high · ~/repo\n  ? for shortcuts';
+    expect(adapter.mapOutput(screen, { idleMs: 1500 })).toEqual({ type: 'session-started' });
+    expect(adapter.mapOutput(screen, {})).toBeNull();
+  });
+
+  // #108 — a request the API refuses prints a banner and runs no Stop hook.
+  it('ends the turn on an API error banner', () => {
+    const banner =
+      '■ {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The model is not supported"}}';
+    expect(adapter.mapOutput(banner, {})).toEqual({ type: 'turn-finished' });
+    expect(
+      adapter.mapOutput('• Handled the {"type":"error"} payload in the client', {}),
+    ).toBeNull();
   });
 
   it('recognises a usage limit and its reset time', () => {

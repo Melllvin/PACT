@@ -46,7 +46,7 @@ test('shows the mockup isolated, follows its changes and takes the decision to t
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
   await launcher
     .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('checkbox', { name: /Orchestrateur/ }).click();
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();

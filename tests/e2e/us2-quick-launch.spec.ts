@@ -75,11 +75,11 @@ test('launches 2 fake agents and a free terminal, then restores them after a res
   const launcher = page.getByRole('dialog', { name: 'Ajouter au workspace' });
   await launcher
     .getByRole('group', { name: 'Faux CLI' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher
     .getByRole('group', { name: 'Terminal libre' })
-    .getByRole('button', { name: '+' })
+    .getByRole('button', { name: /^Ajouter un / })
     .click();
   await launcher.getByRole('button', { name: 'Lancer 2 agents' }).click();
 

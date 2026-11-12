@@ -21,6 +21,7 @@ import type { TestRunner } from '../review/test-runner';
 import type { EventSummary, ExchangeService, WaitResult } from './exchange-service';
 import type { DeliveryService } from '../delivery/delivery-service';
 import type { IssueService } from './issues';
+import { clockTime } from '../../shared/usage';
 import type { LoopService } from './loop-service';
 import type { McpTool, ToolResult } from './mcp';
 import {
@@ -69,6 +70,10 @@ export type ToolDependencies = {
   issues: Pick<IssueService, 'register' | 'list' | 'requestPublish'>;
   /** 005 FR-012 — « Limite 5 h à 85 % : … » when a CLI is near its limit; never a refusal. */
   usageWarning?: (cliId: string) => string | null;
+  /** 009 FR-010 — the pause of an account of this CLI, or null: no agent of it is launched. */
+  pausedFor?: (
+    cliId: string,
+  ) => { windows: readonly { label: string }[]; resumeAt: string | null } | null;
   /** The journal « ◎ Actions »: each action, done or refused (US5, FR-021). */
   log?: (entry: ActionEntry) => void;
 };
@@ -450,6 +455,13 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const ws = workspace();
         const role = roleSchema.nullable().catch(null).parse(optionalString(args, 'role'));
         const { cli, profile } = launchCli(ws, role, optionalString(args, 'cli'));
+        const pause = deps.pausedFor?.(cli.id) ?? null;
+        if (pause) {
+          const until = pause.resumeAt === null ? 'sa réinitialisation' : clockTime(pause.resumeAt);
+          throw new Refusal(
+            `Refusé : PACT est en pause sur la limite ${pause.windows.map((w) => w.label).join(' et ')} de ${cli.name} jusqu'à ${until}. Aucun agent de ce CLI ne peut être lancé avant la reprise.`,
+          );
+        }
         const model = optionalString(args, 'model') ?? profile?.model ?? null;
         if (role !== null && profile && beyondCeiling(model, profile.maxModel, cli.modelTiers)) {
           throw new Refusal(

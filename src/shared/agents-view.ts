@@ -12,13 +12,30 @@ const STATE_LABELS: Record<Agent['state'], string> = {
   'awaiting-answer': 'attend une réponse',
   done: 'fini',
   error: 'erreur',
+  paused: 'en pause',
   closed: 'fermé',
 };
 
 const twoDigits = (n: number) => String(n).padStart(2, '0');
 
+/** 009 contracts/ui.md — « en pause · … »: never an error (SC-003). */
+function pauseLabel(agent: Agent, now: Date): string {
+  const { pause, scheduledResume } = agent;
+  if (pause?.blocked === 'session') return 'en pause · session inconnue';
+  if (pause && pause.resumeAt === null) return 'en pause · reprise après réinitialisation';
+  if (scheduledResume) {
+    const at = new Date(scheduledResume.at);
+    if (at.getTime() > now.getTime()) {
+      return `en pause · reprise à ${twoDigits(at.getHours())}:${twoDigits(at.getMinutes())}`;
+    }
+  }
+  const windows = pause ? pause.windows.map((w) => w.label).join(' · ') : '';
+  return windows ? `en pause · ${windows}` : STATE_LABELS.paused;
+}
+
 /** The state of an agent in words; a scheduled resume says when, in local time (data-model). */
 export function agentStateLabel(agent: Agent, now: Date): string {
+  if (agent.state === 'paused') return pauseLabel(agent, now);
   if (agent.scheduledResume) {
     const at = new Date(agent.scheduledResume.at);
     // A resume already past is about to fire: the state label tells more than a time gone by.
