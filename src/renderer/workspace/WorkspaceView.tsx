@@ -12,7 +12,8 @@ import {
 } from '../../shared/model';
 import { agentName } from '../../shared/agent-name';
 import { agentColor } from '../../shared/agent-color';
-import type { TileMenu } from '../tiles/TileActions';
+import type { DeliveryAction, TileMenu } from '../tiles/TileActions';
+import { isFinalState, type DeliverySettings } from '../../shared/delivery';
 import type { OrchestratorAction } from '../../shared/orchestrator';
 import { agentRows } from '../../shared/agents-view';
 import { deriveTodos } from '../../shared/todo';
@@ -39,6 +40,8 @@ import { TileGrid } from '../tiles/TileGrid';
 import { AgentsColumn } from '../agents/AgentsColumn';
 import { GraphView } from '../graph/GraphView';
 import type { TerminalRegistry } from '../tiles/terminal-registry';
+import { DeliveryBar } from '../delivery/DeliveryBar';
+import { DeliverySettingsDialog } from '../delivery/DeliverySettingsDialog';
 import { EmptyWorkspace } from './EmptyWorkspace';
 
 /** The tile actions, each about one agent (FR-024, FR-037). */
@@ -53,10 +56,29 @@ export type AgentActions = {
   onClose: (agentId: string) => void;
   /** « Revue → »: opens the Changements tab of the agent (002 FR-002). */
   onReview?: (agentId: string) => void;
-  /** 003 US3 — « ✓ Intégrer » of a request of the orchestrator, with the message kept. */
-  onConfirmIntegration?: (requestId: string, message: string) => void;
-  /** 003 US3 — « Refuser » of a request of the orchestrator. */
-  onRefuseIntegration?: (requestId: string) => void;
+  /** 008 — « Fusionner » / « Refuser » of the merge the user is asked for, on the head shown. */
+  onDecideDelivery?: (
+    deliveryId: string,
+    decision: 'validate' | 'refuse' | 'wait' | 'review',
+    head: string,
+    reason?: string,
+  ) => void;
+  /** 008 US8 — « Supprimer quand même » / « Garder »; answers what would be lost (`null`: it failed). */
+  onCleanup?: (
+    deliveryId: string,
+    agentId: string,
+    decision: 'force' | 'keep',
+    confirmed?: boolean,
+  ) => Promise<{ lost: string[] } | null>;
+  /** 008 US3 — « Ouvrir la PR »: opened by the main process. */
+  onOpenPr?: (deliveryId: string) => void;
+  /** 008 — « Livrer » / « Intégrer » of an agent. */
+  onRequestDelivery?: (
+    agentId: string,
+    request: { title: string; message: string; unverified: boolean },
+  ) => void;
+  /** 008 FR-019 — the settings of the delivery of the project that changed (« Auto » first). */
+  onDeliverySettings?: (settings: Partial<DeliverySettings>) => void;
   /** 004 FR-018 — the user's decision on a loop stopped after 3 rounds. */
   onDecideLoop?: (issueId: string, decision: 'restart' | 'take-over' | 'abandon') => void;
   /** 007 FR-006 — the user's decision on two agents that bounce a message. */
@@ -220,6 +242,7 @@ export function WorkspaceView({
   // A closed agent may still be in the last review:pending: only the agents here count.
   const pending = (review?.pending ?? []).filter((id) => agents.some((agent) => agent.id === id));
   const now = useUsageClock(usage, usageLimit?.clock ?? undefined);
+  const [deliverySettingsOpen, setDeliverySettingsOpen] = useState(false);
   const [usageDetail, setUsageDetail] = useState<string | null>(null);
   const todos = deriveTodos(
     workspace,
@@ -385,6 +408,26 @@ export function WorkspaceView({
     workspace.loops.find(
       (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
     )?.round ?? null;
+  // 008 — « Livrer » / « Intégrer » on the dev, or the lone agent, that is not already delivering.
+  const deliveryOf = (agent: Agent): DeliveryAction | undefined => {
+    const { onRequestDelivery } = actions;
+    if (!onRequestDelivery || agent.role === 'orchestrator' || agent.role === 'test') {
+      return undefined;
+    }
+    if (workspace.deliveries.some((d) => d.agentId === agent.id && !isFinalState(d.state))) {
+      return undefined;
+    }
+    const loop = workspace.loops.find((l) => l.devAgentId === agent.id && l.state === 'accepted');
+    const issue = loop && workspace.issues.find((i) => i.id === loop.issueId);
+    return {
+      remote: workspace.hasOrigin === true,
+      accepted: loop !== undefined,
+      title: issue?.title ?? agent.branch,
+      onRequest: (request) => {
+        onRequestDelivery(agent.id, request);
+      },
+    };
+  };
   // 006 — the ⋮ menu of a tile and of the Focus: « Faire orchestrateur » (US5), « Renommer » (#45).
   const menuOf = (agent: Agent): TileMenu => {
     const { onPromote, onRename } = actions;
@@ -422,6 +465,7 @@ export function WorkspaceView({
     <Tile
       key={agent.id}
       menu={menuOf(agent)}
+      delivery={deliveryOf(agent)}
       color={agentColor(agent, agents)}
       fromOrchestrator={fromOrchestrator[agent.id] !== undefined}
       round={roundOf(agent.id)}
@@ -529,6 +573,7 @@ export function WorkspaceView({
               terminals={terminals}
               pills={pills}
               menu={focusedAgent && menuOf(focusedAgent)}
+              delivery={focusedAgent && deliveryOf(focusedAgent)}
               changedFiles={changedFilesOf(focused)}
               onSelect={(agentId) => {
                 if (inReview) openReview(agentId);
@@ -634,6 +679,30 @@ export function WorkspaceView({
               {/* #115 — the closed tiles kept (006 FR-023) come last: a new tile is never behind them. */}
               {agents.filter((agent) => agent !== lead && agent.state === 'closed').map(tileOf)}
             </TileGrid>
+          )}
+          {available && (
+            <DeliveryBar
+              auto={workspace.delivery.auto}
+              hasOrigin={workspace.hasOrigin === true}
+              onToggleAuto={(auto) => {
+                actions.onDeliverySettings?.({ auto });
+              }}
+              onOpenSettings={() => {
+                setDeliverySettingsOpen(true);
+              }}
+            />
+          )}
+          {deliverySettingsOpen && (
+            <DeliverySettingsDialog
+              settings={workspace.delivery}
+              onSave={(settings) => {
+                actions.onDeliverySettings?.(settings);
+                setDeliverySettingsOpen(false);
+              }}
+              onCancel={() => {
+                setDeliverySettingsOpen(false);
+              }}
+            />
           )}
         </section>
         {/* Décision takes the place of À faire while a review is open (FR-004), and Intégration

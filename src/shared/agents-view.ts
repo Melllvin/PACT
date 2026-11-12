@@ -65,8 +65,12 @@ export type AgentPhase = {
   round?: { n: number; max: number };
 };
 
+/** 008 R12 — the loop after the proof: accepted, polished, delivered, merged; or stopped. */
 const LOOP_LABELS = {
-  passed: 'boucle terminée',
+  accepted: 'boucle acceptée',
+  polishing: 'peaufinage',
+  delivering: 'en livraison',
+  merged: 'boucle terminée',
   escalated: 'boucle arrêtée',
 } as const;
 

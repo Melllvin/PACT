@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createAppStore } from '../../../../src/renderer/store/app-store';
 import type { PactApi } from '../../../../src/shared/ipc';
+import { defaultDeliverySettings } from '../../../../src/shared/delivery';
 import { DEFAULT_TEST_PATHS, type Workspace } from '../../../../src/shared/model';
 import { agent } from '../tiles/fixtures';
 
@@ -17,6 +18,8 @@ const workspace: Workspace = {
   permissionOverride: null,
   testCommand: null,
   integrationRequests: [],
+  delivery: defaultDeliverySettings(),
+  deliveries: [],
   roleProfiles: {},
   issues: [],
   loops: [],

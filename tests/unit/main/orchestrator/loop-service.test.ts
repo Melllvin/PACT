@@ -69,6 +69,8 @@ const base = (): Workspace => ({
   permissionOverride: null,
   testCommand: 'npm test',
   integrationRequests: [],
+  delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+  deliveries: [],
   roleProfiles: {},
   issues: [issue()],
   loops: [],
@@ -98,6 +100,9 @@ const deps = () => ({
     ),
     changedFiles: vi.fn(() => Promise.resolve(touched.map((path) => ({ path })))),
     mergeBase: vi.fn((_cwd: string, _a: string, b: string) => Promise.resolve(`base-${b}`)),
+    // 008 R3 — the head of the dev and its tree: a clean worktree is the one whose snapshot equals it.
+    revParse: vi.fn(() => Promise.resolve('c'.repeat(40))),
+    treeOf: vi.fn(() => Promise.resolve(TREE)),
   },
   review: {
     testPlan: vi.fn((agentId: string) =>
@@ -275,7 +280,7 @@ describe('reports', () => {
 });
 
 describe('the proof (FR-019)', () => {
-  it('runs the tests on the dev’s tree, and the issue is done only once they pass there', async () => {
+  it('runs the tests on the dev’s tree, and the loop is accepted only once they pass there (the issue is done at the merge, 008 FR-007)', async () => {
     await start();
     await loops.report(tester.id, accepted);
     expect(d.tests.run).toHaveBeenCalledWith(
@@ -285,8 +290,8 @@ describe('the proof (FR-019)', () => {
     );
     expect(state()).toBe('in-progress');
     await loops.testRun(finished('passed'));
-    expect(state()).toBe('done');
-    expect(loop()?.state).toBe('passed');
+    expect(state()).toBe('in-progress');
+    expect(loop()?.state).toBe('accepted');
     expect(loop()?.rounds[0]?.proof).toMatchObject({ tree: TREE, exitCode: 0 });
   });
 
@@ -555,5 +560,306 @@ describe('the base of the control of the tester (007 FR-023, R12)', () => {
     expect(rejection).toContain('src/auth.ts');
     expect(rejection).toMatch(/retire/i);
     expect(rejection).toMatch(/branche/i);
+  });
+});
+
+// 008 T007 — the loop up to the delivery (research R3, R11, R12; FR-003, FR-007, FR-018). RED until
+// T011. Assumed API (listed in the report of the test agent):
+//   - the verdict of the tester is stored with `commit` (revParse of the dev's HEAD) and `dirty`
+//     (the worktree snapshot differs from the tree of HEAD: `git.revParse`, `git.treeOf`);
+//   - the proof is `{ tree, commit, exitCode, at }`, laid only on a clean worktree;
+//   - `loops.reopen(workspaceId, issueId, reason)` opens a counted round;
+//   - the ceiling is `workspace.delivery.maxRounds`, the passes `workspace.delivery.polishPasses`.
+describe('delivery chain (008)', () => {
+  const HEAD = 'c'.repeat(40);
+  let headTree: string;
+
+  const settings = (over: Record<string, unknown> = {}) => ({
+    auto: false,
+    mergeMode: 'squash',
+    maxRounds: 3,
+    polishPasses: 0,
+    polishBrief: '',
+    ...over,
+  });
+  const configure = (over: Record<string, unknown> = {}) => {
+    current = { ...current, delivery: settings(over) } as Workspace;
+  };
+  const setLoop = (change: Record<string, unknown>) => {
+    current = {
+      ...current,
+      loops: current.loops.map((l) => ({ ...l, ...change })),
+    };
+  };
+
+  beforeEach(() => {
+    headTree = TREE;
+    const wired = deps();
+    d = {
+      ...wired,
+      git: {
+        ...wired.git,
+        revParse: vi.fn(() => Promise.resolve(HEAD)),
+        treeOf: vi.fn(() => Promise.resolve(headTree)),
+      },
+    };
+    loops = new LoopService(d as never);
+    configure();
+  });
+
+  describe('the verdict is tied to a commit (FR-003)', () => {
+    it('Given a clean worktree, When the tester gives a verdict, Then it keeps the head of the dev and « dirty » false', async () => {
+      await start();
+      await loops.report(tester.id, accepted);
+      expect(loop()?.rounds[0]?.reports.at(-1)).toMatchObject({
+        role: 'test',
+        commit: HEAD,
+        dirty: false,
+      });
+    });
+
+    it('Given changes not committed, When the tester gives a verdict, Then it is kept with « dirty » true', async () => {
+      devTree = OTHER_TREE;
+      await start();
+      await loops.report(tester.id, defects);
+      expect(loop()?.rounds[0]?.reports.at(-1)).toMatchObject({ commit: HEAD, dirty: true });
+    });
+  });
+
+  describe('the proof (FR-007, research R3)', () => {
+    it('Given a clean worktree and the tests passing, When PACT lays the proof, Then it names the commit, the loop is accepted and the issue stays in progress', async () => {
+      await start();
+      await loops.report(tester.id, accepted);
+      await loops.testRun(finished('passed'));
+      expect(loop()?.rounds[0]?.proof).toMatchObject({ tree: TREE, commit: HEAD, exitCode: 0 });
+      expect(loop()?.state).toBe('accepted');
+      expect(state()).toBe('in-progress');
+      expect(notify.mock.calls.at(-1)?.[1]).toMatchObject({ kind: 'loop' });
+    });
+
+    it('Given two polish passes set, When PACT lays the proof, Then the loop polishes first, with its own counter (R23)', async () => {
+      configure({ polishPasses: 2 });
+      await start();
+      await loops.report(tester.id, accepted);
+      await loops.testRun(finished('passed'));
+      expect(loop()?.state).toBe('polishing');
+      expect(loop()?.polish).toEqual({ done: 0, total: 2, restarted: false });
+      expect(state()).toBe('in-progress');
+    });
+
+    it('Given changes not committed, When the tests pass on that tree, Then no proof is laid and the summary says why', async () => {
+      devTree = OTHER_TREE;
+      await start();
+      await loops.report(tester.id, accepted);
+      await loops.testRun(finished('passed', OTHER_TREE));
+      expect(loop()?.rounds[0]?.proof).toBeNull();
+      expect(loop()?.state).toBe('running');
+      expect(state()).toBe('in-progress');
+      const last = notify.mock.calls.at(-1)?.[1] as { kind: string; summary: string };
+      expect(last.kind).toBe('loop');
+      expect(last.summary).toContain('changements non commités');
+    });
+  });
+
+  describe('reopen: a counted round for the delivery (FR-017, FR-018)', () => {
+    it('Given a loop being delivered, When the CI is red, Then reopen opens the next round and the loop runs again', async () => {
+      await start();
+      await loops.report(tester.id, accepted);
+      await loops.testRun(finished('passed'));
+      setLoop({ state: 'delivering' });
+      const reopened = await loops.reopen('w1', '0012-connexion', 'CI rouge : build');
+      expect(reopened).toMatchObject({ round: 2, state: 'running' });
+      expect(loop()?.rounds).toHaveLength(2);
+      expect(loop()?.rounds[1]).toMatchObject({ n: 2, kind: 'round', reports: [], proof: null });
+      expect(state()).toBe('in-progress');
+    });
+
+    it('Given the last round of the ceiling, When the delivery asks for another, Then the loop escalates to the user and no round is opened (FR-018)', async () => {
+      configure({ maxRounds: 2 });
+      await start();
+      await loops.report(tester.id, defects);
+      await loops.next('w1', '0012-connexion');
+      await loops.report(tester.id, accepted);
+      await loops.testRun(finished('passed'));
+      setLoop({ state: 'delivering' });
+      await loops.reopen('w1', '0012-connexion', 'CI rouge : build');
+      expect(loop()).toMatchObject({ state: 'escalated', round: 2 });
+      expect(loop()?.rounds).toHaveLength(2);
+      expect(state()).toBe('escalated');
+      expect(kinds()).toContain('loop');
+    });
+
+    it('Given a ceiling of 5, When the third round is reached, Then reopen still opens a round: 3 is no longer the limit (FR-021)', async () => {
+      configure({ maxRounds: 5 });
+      await start();
+      for (let round = 1; round < 3; round++) {
+        await loops.report(tester.id, defects);
+        await loops.next('w1', '0012-connexion');
+      }
+      await loops.report(tester.id, accepted);
+      await loops.testRun(finished('passed'));
+      setLoop({ state: 'delivering' });
+      await expect(loops.reopen('w1', '0012-connexion', 'CI rouge')).resolves.toMatchObject({
+        round: 4,
+        state: 'running',
+      });
+    });
+  });
+  describe('reopen and closeAll edges (008)', () => {
+    it('Given no loop for the issue, When reopen is asked, Then it fails', async () => {
+      await expect(loops.reopen('w1', 'absente', 'CI rouge')).rejects.toThrow(
+        'Aucune boucle pour absente.',
+      );
+    });
+
+    it('Given a merged loop, When reopen is asked, Then it fails: the loop is over', async () => {
+      await start();
+      setLoop({ state: 'merged' });
+      await expect(loops.reopen('w1', '0012-connexion', 'CI rouge')).rejects.toThrow(
+        'est terminée',
+      );
+    });
+
+    it('Given accepted and polishing loops, When the orchestrator role is withdrawn, Then they close', async () => {
+      await start();
+      setLoop({ state: 'accepted' });
+      await loops.closeAll('w1');
+      expect(loop()?.state).toBe('closed');
+      setLoop({ state: 'polishing' });
+      await loops.closeAll('w1');
+      expect(loop()?.state).toBe('closed');
+    });
+
+    it('Given no test command, When the tester accepts, Then PACT tells it cannot lay the proof', async () => {
+      d.review.testPlan.mockImplementationOnce((agentId: string) =>
+        Promise.resolve({
+          target: { agentId, cwd: dev.worktreePath, port: dev.port },
+          command: null as unknown as string,
+          tree: TREE,
+        }),
+      );
+      await start();
+      await loops.report(tester.id, accepted);
+      expect(loop()?.rounds[0]?.proof).toBeNull();
+      const last = notify.mock.calls.at(-1)?.[1] as { summary: string };
+      expect(last.summary).toContain('aucune commande de tests');
+    });
+  });
+});
+
+// 008 T055 / US5 sc.7, FR-020, FR-021 — the ceiling of rounds is the project's (`workspace.delivery.maxRounds`),
+// read live: the loop stops at it, the dev is escalated to the stronger model at it, and a ceiling lowered
+// under the current round stops the loop at the next « defects ».
+//
+// GREEN already (the ceiling is read from the project since phase 8): these tests pin it for the removal of
+// `MAX_ROUNDS` (T058). The tools' texts that must stop saying « 3 tours » are in
+// tests/integration/orchestrator/tools-loop.test.ts (red).
+describe('the ceiling of the project (008 US5 sc.7)', () => {
+  const ceiling = (maxRounds: number, over: Record<string, unknown> = {}) => {
+    current = {
+      ...current,
+      delivery: {
+        auto: false,
+        mergeMode: 'squash',
+        maxRounds,
+        polishPasses: 0,
+        polishBrief: '',
+        ...over,
+      },
+    };
+  };
+  const lastNotice = () => notify.mock.calls.at(-1)?.[1] as { kind: string; summary: string };
+  /** `defects` at the current round, then the next round. */
+  const bounce = async () => {
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+  };
+
+  it('Given a ceiling of 5, When the defects come, Then the loop runs rounds 3 and 4 and stops at round 5 with the user deciding', async () => {
+    ceiling(5);
+    await start();
+    for (let round = 1; round < 5; round++) {
+      await bounce();
+      expect(loop()?.state).toBe('running');
+    }
+    expect(loop()?.round).toBe(5);
+
+    await loops.report(tester.id, defects);
+
+    expect(loop()?.state).toBe('escalated');
+    expect(state()).toBe('escalated');
+    expect(lastNotice()).toMatchObject({ kind: 'loop' });
+    expect(lastNotice().summary).toContain('5 tours');
+    await expect(loops.next('w1', '0012-connexion')).rejects.toThrow(
+      'Plafond de 5 tours atteint : l’utilisateur décide',
+    );
+  });
+
+  it('Given a ceiling of 5 and a stronger model for the dev, When the rounds go on, Then the escalation comes with round 5, not round 3', async () => {
+    ceiling(5);
+    current = {
+      ...current,
+      roleProfiles: {
+        dev: {
+          cliId: 'claude-code',
+          model: 'sonnet',
+          effort: null,
+          maxModel: 'opus',
+          escalate: true,
+        },
+      },
+    };
+    await start();
+    for (let round = 1; round < 4; round++) await bounce();
+    expect(loop()?.round).toBe(4);
+    expect(d.agents.escalate).not.toHaveBeenCalled();
+
+    await bounce();
+
+    expect(loop()?.round).toBe(5);
+    expect(d.agents.escalate).toHaveBeenCalledTimes(1);
+    expect(d.agents.escalate).toHaveBeenCalledWith(dev.id, 'opus');
+    expect(loop()?.escalatedModel).toBe('opus');
+  });
+
+  it('Given a ceiling lowered under the current round, When the next defects come, Then the loop escalates to the user at once, naming the new ceiling', async () => {
+    ceiling(5);
+    await start();
+    for (let round = 1; round < 4; round++) await bounce();
+    expect(loop()?.round).toBe(4);
+    ceiling(2);
+
+    await loops.report(tester.id, defects);
+
+    expect(loop()?.state).toBe('escalated');
+    expect(state()).toBe('escalated');
+    expect(lastNotice().summary).toContain('2 tours');
+    await expect(loops.next('w1', '0012-connexion')).rejects.toThrow('Plafond de 2 tours');
+  });
+
+  it('Given a ceiling raised while the loop runs, When the defects of the old ceiling come, Then the loop goes on', async () => {
+    await start();
+    await bounce();
+    await bounce();
+    expect(loop()?.round).toBe(3);
+    ceiling(4);
+
+    await loops.report(tester.id, defects);
+
+    expect(loop()?.state).toBe('running');
+    await expect(loops.next('w1', '0012-connexion')).resolves.toMatchObject({ round: 4 });
+  });
+
+  it('Given a ceiling of 5, When the tester finds defects at round 2, Then the dev is told « tour 2/5 »', async () => {
+    ceiling(5);
+    await start();
+    await bounce();
+    d.message.mockClear();
+
+    await loops.report(tester.id, defects);
+
+    const calls = d.message.mock.calls as unknown as [string, { kind: string; text: string }][];
+    const sent = calls.map(([, draft]) => draft);
+    expect(sent.find((m) => m.kind === 'verdict')?.text).toContain('tour 2/5');
   });
 });

@@ -66,6 +66,8 @@ const base = (): Workspace => ({
   permissionOverride: null,
   testCommand: 'npm test',
   integrationRequests: [],
+  delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
+  deliveries: [],
   roleProfiles: {},
   issues: [issue()],
   loops: [],
@@ -82,6 +84,9 @@ const git = (mergeBase: (cwd: string, a: string, b: string) => Promise<string>) 
   snapshot: vi.fn(() => Promise.resolve({ commit: 'c', tree: TREE })),
   changedFiles: vi.fn(() => Promise.resolve(touched.map((path) => ({ path })))),
   mergeBase: vi.fn(mergeBase),
+  // 008 R3 — the head of the dev and its tree.
+  revParse: vi.fn(() => Promise.resolve('c'.repeat(40))),
+  treeOf: vi.fn(() => Promise.resolve(TREE)),
 });
 const make = (over: Record<string, unknown> = {}, ag: Agent = tester) => {
   current = base();
@@ -191,5 +196,16 @@ describe('the bases of the control of the tester (007 R12)', () => {
     const { loops } = make({ git: git(() => Promise.reject(new Error('unknown'))) });
     await start(loops);
     await expect(loops.report(tester.id, verdict)).rejects.toThrow(/Aucune base connue/);
+  });
+});
+
+// 008 T018 — where the delivery leaves the loop: a loop that does not exist is an error.
+describe('deliveryState', () => {
+  it('Given an issue without a loop, When the delivery sets its state, Then it fails', async () => {
+    const { loops } = make();
+
+    await expect(loops.deliveryState('w1', '0012-connexion', 'accepted')).rejects.toThrow(
+      'Aucune boucle',
+    );
   });
 });

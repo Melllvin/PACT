@@ -5,8 +5,12 @@
     { "tool": "send_prompt", "arguments": { "agent": "{{prompt.0}}", "text": "{{prompt.1}}" } },
     { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 30 } },
     {
-      "tool": "request_integration",
-      "arguments": { "agent": "{{prompt.0}}", "message": "feat: la fonction" }
+      "tool": "request_delivery",
+      "arguments": {
+        "issue": "0001-fonction",
+        "title": "La fonction",
+        "message": "feat: la fonction"
+      }
     },
     { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 60 } }
   ]

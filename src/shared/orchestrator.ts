@@ -39,10 +39,11 @@ export const ORCHESTRATOR_ACTION_TOOLS = [
   'send_prompt',
   'launch_agent',
   'close_agent',
-  'request_integration',
+  'request_delivery',
   'run_tests',
   'start_loop',
   'next_round',
+  'polish_pass',
   'publish_issues',
 ] as const;
 

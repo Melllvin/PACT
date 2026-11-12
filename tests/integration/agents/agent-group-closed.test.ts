@@ -193,6 +193,60 @@ describe('closing a closed tile, and restarting one agent alone', () => {
   });
 });
 
+// 008 R3 — a closed tile stays after the worktree cleanup deleted its folder (006 FR-025 keeps closed
+// tiles to be restarted): reopening it says so, rather than failing on a folder that is not there.
+describe('a closed tile whose worktree was deleted (008 R3)', () => {
+  const remove = (id: string) => {
+    const tree = h.current(id)?.worktreePath ?? '';
+    git(h.repo, 'worktree', 'remove', '--force', tree);
+    return tree;
+  };
+
+  it('refuses to restart it, says the worktree was deleted, and starts nothing', async () => {
+    const ids = await group();
+    await h.manager.close(ids.lead, KEEP);
+    remove(ids.one);
+
+    const failure = await h.manager.restart(ids.one).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toMatchObject({ code: 'NOT_FOUND' });
+    expect((failure as Error).message).toMatch(/worktree .*supprimé/i);
+    expect(h.pty.has(ids.one)).toBe(false);
+    expect(h.current(ids.one)?.state).toBe('closed');
+    expect(h.current(ids.one)?.lastError).toBeNull();
+  });
+
+  it('restarts the orchestrator and the members that still have their worktree, and skips the one without', async () => {
+    const ids = await group();
+    await h.manager.close(ids.lead, KEEP);
+    remove(ids.one);
+
+    await h.manager.restart(ids.lead);
+
+    await h.waitForState(ids.lead, 'awaiting-prompt');
+    await h.waitForState(ids.two, 'awaiting-prompt');
+    expect(h.pty.has(ids.one)).toBe(false);
+    expect(h.current(ids.one)?.state).toBe('closed');
+  });
+
+  it('closes the tile with « Supprimer » even though the folder is gone, and leaves the others’ worktrees deleted', async () => {
+    const ids = await group();
+    const branchOne = h.current(ids.one)?.branch ?? '';
+    const treeTwo = h.current(ids.two)?.worktreePath ?? '';
+    await h.manager.close(ids.lead, KEEP);
+    remove(ids.one);
+
+    await h.manager.close(ids.lead, { removeWorktree: true });
+
+    for (const id of Object.values(ids)) expect(h.current(id)).toBeUndefined();
+    expect(existsSync(treeTwo)).toBe(false);
+    expect(git(h.repo, 'branch', '--list', branchOne)).toBe('');
+  });
+});
+
 // #112 — a closed orchestrator directs nothing: it no longer holds the role of its workspace.
 describe('a closed orchestrator and a new one', () => {
   it('launches a new orchestrator while the old one is closed, which becomes an ordinary closed tile', async () => {

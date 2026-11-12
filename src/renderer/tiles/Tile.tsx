@@ -3,7 +3,12 @@ import { useState, type CSSProperties } from 'react';
 import type { Agent, AgentState } from '../../shared/model';
 import { BranchTooltip } from './BranchTooltip';
 import { TerminalView } from './TerminalView';
-import { TileActions, type TileActionHandlers, type TileMenu } from './TileActions';
+import {
+  TileActions,
+  type DeliveryAction,
+  type TileActionHandlers,
+  type TileMenu,
+} from './TileActions';
 import type { TerminalRegistry } from './terminal-registry';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -39,6 +44,8 @@ type Props = TileActionHandlers & {
   onClose: () => void;
   /** 006 — the ⋮ menu: « Faire orchestrateur », « Renommer ». */
   menu?: TileMenu | undefined;
+  /** 008 — « Livrer » / « Intégrer » of the agent. */
+  delivery?: DeliveryAction | undefined;
   /** 006 #46 — the color of the agent among its workspace's (a shade of its orchestrator's). */
   color?: string | undefined;
   /** ⤢: opens the Focus on this agent (US5). */
@@ -64,6 +71,7 @@ export function Tile({
   terminals,
   onClose,
   menu,
+  delivery,
   color,
   onExpand,
   fromOrchestrator = false,
@@ -85,12 +93,15 @@ export function Tile({
   // says that one is due.
   const reviewing =
     actions.onReview !== undefined && (agent.state === 'done' || agent.state === 'awaiting-prompt');
+  const delivering =
+    delivery !== undefined && (agent.state === 'done' || agent.state === 'awaiting-prompt');
   const acting =
     agent.state === 'awaiting-answer' ||
     agent.state === 'closed' ||
     agent.state === 'paused' ||
     failed ||
-    reviewing;
+    reviewing ||
+    delivering;
   // 009 — stopped at a limit with something left uncommitted: the user knows before resuming.
   const unsaved = agent.state === 'paused' && agent.pause?.saved === false;
   return (
@@ -199,6 +210,7 @@ export function Tile({
               question={agent.awaiting === 'question'}
               scheduledResume={agent.scheduledResume}
               menu={menu}
+              delivery={delivery}
               {...actions}
             />
           </div>

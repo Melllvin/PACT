@@ -33,9 +33,9 @@
 ### Implémentation
 
 - [ ] T008 Créer `src/shared/delivery.ts` selon data-model et research R25 (constantes, schémas, `ciVerdict`, `deliveryGate`, `prBody`, `checkName`) ; dans `src/shared/model.ts` : `workspace.delivery`, `workspace.deliveries`, états de `loopSchema`, `polish`, `round.kind`, `proof.commit`, bornes à 10 ; dans `src/shared/report.ts` : `commit`, `dirty`, `round` ≤ 10 ; dans `src/shared/exchanges.ts` : kind `delivery` (action) et son champ structuré (research R21)
-- [ ] T009 Créer `src/main/delivery/gh-client.ts` sur `ghCommand` de `src/main/orchestrator/issues.ts` : méthodes de `contracts/gh.md` seulement, sortie parsée et réduite aux champs du contrat
-- [ ] T010 Dans `src/main/git/git-service.ts` : `fetchRefs`, `rebaseOnto` (worktree temporaire détaché, `core.hooksPath` vide), `pushBranch`, `deleteRemoteBranch`, `statusIgnored`, `hasWorkflows(ref)`
-- [ ] T011 Dans `src/main/orchestrator/loop-service.ts` : `commit` et `dirty` au verdict ; preuve sur commit propre ; états `accepted`, `polishing`, `delivering`, `merged`, méthode `reopen` ; plus de passage de l'issue à `done` ; adapter `src/shared/todo.ts` et `src/shared/agents-view.ts` aux nouveaux états
+- [x] T009 Créer `src/main/delivery/gh-client.ts` sur `ghCommand` de `src/main/orchestrator/issues.ts` : méthodes de `contracts/gh.md` seulement, sortie parsée et réduite aux champs du contrat
+- [x] T010 Dans `src/main/git/git-service.ts` : `fetchRefs`, `rebaseOnto` (worktree temporaire détaché, `core.hooksPath` vide), `pushBranch`, `deleteRemoteBranch`, `statusIgnored`, `hasWorkflows(ref)`
+- [x] T011 Dans `src/main/orchestrator/loop-service.ts` : `commit` et `dirty` au verdict ; preuve sur commit propre ; états `accepted`, `polishing`, `delivering`, `merged`, méthode `reopen` ; plus de passage de l'issue à `done` ; adapter `src/shared/todo.ts` et `src/shared/agents-view.ts` aux nouveaux états
 
 **Checkpoint** : `npm run check` et e2e verts ; `request_integration` encore en place ; PR « 008 Phase 1-2 ».
 
@@ -58,12 +58,12 @@
 
 ### Implémentation
 
-- [ ] T018 [US1] Créer `src/main/delivery/delivery-service.ts` : `request` (barrières par `deliveryGate`, gel de F, file par projet), étapes `checking` à `opening` écrites avant chaque effet, chute sur commit étranger, messages `delivery` par `ExchangeService.record`, défauts au dev par message `verdict` et `LoopService.reopen(issue, reason)` (nouveau tour compté, boucle `delivering` → `running`, escalade au plafond)
-- [ ] T019 [US1] Dans `src/main/review/integration-service.ts` : `requestId` repris dans `Integration` (R20) ; voie `local` de `DeliveryService` sur `start`
-- [ ] T020 [US1] Dans `src/main/orchestrator/tools.ts` et `src/shared/orchestrator.ts` : outil `request_delivery`, retrait de `request_integration`, refus de `close_agent` en livraison ; supprimer `src/main/orchestrator/integration-requests.ts` et ses tests, leur couverture passant à `delivery-request.test.ts` (justification dans la PR, constitution II)
-- [ ] T021 [US1] Créer `src/main/ipc/delivery-handlers.ts` (`delivery:request`, `workspace:deliveries`) ; dans `src/shared/ipc.ts`, `src/main/index.ts`, `src/renderer/store/app-store.ts` : canaux de `contracts/ui.md`, retrait de `workspace:integrationRequests`, création de `GhClient` et `DeliveryService`
-- [ ] T022 [US1] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/tiles/TileActions.tsx` : « Livrer », « Créer la PR sans verdict », « Intégrer », « Fusionner sans verdict », élément `delivery-local`, retrait de `integration-request`, nettoyage R24 dans `src/main/workspace/workspace-service.ts`
-- [ ] T023 [US1] Migrer `tests/e2e/us15-orchestrator-integrate.spec.ts` et les tests qui appelaient `request_integration` vers `request_delivery`, sans `skip` ni suppression d'attendu
+- [x] T018 [US1] Créer `src/main/delivery/delivery-service.ts` : `request` (barrières par `deliveryGate`, gel de F, file par projet), étapes `checking` à `opening` écrites avant chaque effet, chute sur commit étranger, messages `delivery` par `ExchangeService.record`, défauts au dev par message `verdict` et `LoopService.reopen(issue, reason)` (nouveau tour compté, boucle `delivering` → `running`, escalade au plafond)
+- [x] T019 [US1] Dans `src/main/review/integration-service.ts` : `requestId` repris dans `Integration` (R20) ; voie `local` de `DeliveryService` sur `start`
+- [x] T020 [US1] Dans `src/main/orchestrator/tools.ts` et `src/shared/orchestrator.ts` : outil `request_delivery`, retrait de `request_integration`, refus de `close_agent` en livraison ; supprimer `src/main/orchestrator/integration-requests.ts` et ses tests, leur couverture passant à `delivery-request.test.ts` (justification dans la PR, constitution II)
+- [x] T021 [US1] Créer `src/main/ipc/delivery-handlers.ts` (`delivery:request`, `workspace:deliveries`) ; dans `src/shared/ipc.ts`, `src/main/index.ts`, `src/renderer/store/app-store.ts` : canaux de `contracts/ui.md`, retrait de `workspace:integrationRequests`, création de `GhClient` et `DeliveryService`
+- [x] T022 [US1] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/tiles/TileActions.tsx` : « Livrer », « Créer la PR sans verdict », « Intégrer », « Fusionner sans verdict », élément `delivery-local`, retrait de `integration-request`, nettoyage R24 dans `src/main/workspace/workspace-service.ts`
+- [x] T023 [US1] Migrer `tests/e2e/us15-orchestrator-integrate.spec.ts` et les tests qui appelaient `request_integration` vers `request_delivery`, sans `skip` ni suppression d'attendu
 
 **Checkpoint** : US1 utilisable seule (PR ouverte, relue à la main sur la forge) ; PR « 008 Phase 3 US1 ».
 
@@ -100,13 +100,13 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T031 [P] [US7] Tests dans `tests/integration/delivery/third-party.test.ts` : US7 sc.1 à 7 et 9 ; recherche de `PACT-INJECTION-WITNESS` dans le journal de 007, `deriveTodos`, l'état JSON écrit, les notices et les arguments passés aux faux agents ; aucun appel de `FAKE_GH_LOG` ne vise les PR tierces ; PR d'un fork au même nom de branche jamais adoptée (sc.4) ; login changé → pas de fusion, alerte (sc.9)
-- [ ] T032 [P] [US7] Tests dans `tests/integration/git/git-remote.test.ts` : le remote nu expose `refs/pull/1/head` ; après une livraison, aucune ref locale ne le reflète (sc.8)
-- [ ] T033 [P] [US7] E2E dans `tests/e2e/us56-third-party.spec.ts` avec `tests/fixtures/fake-cli/scenarios/third-party.json` : sc.1 et 3, SC-009 (chaîne absente des sorties des faux agents et du DOM)
+- [x] T031 [P] [US7] Tests dans `tests/integration/delivery/third-party.test.ts` : US7 sc.1 à 7 et 9 ; recherche de `PACT-INJECTION-WITNESS` dans le journal de 007, `deriveTodos`, l'état JSON écrit, les notices et les arguments passés aux faux agents ; aucun appel de `FAKE_GH_LOG` ne vise les PR tierces ; PR d'un fork au même nom de branche jamais adoptée (sc.4) ; login changé → pas de fusion, alerte (sc.9)
+- [x] T032 [P] [US7] Tests dans `tests/integration/git/git-remote.test.ts` : le remote nu expose `refs/pull/1/head` ; après une livraison, aucune ref locale ne le reflète (sc.8)
+- [x] T033 [P] [US7] E2E dans `tests/e2e/us56-third-party.spec.ts` avec `tests/fixtures/fake-cli/scenarios/third-party.json` : sc.1 et 3, SC-009 (chaîne absente des sorties des faux agents et du DOM)
 
 ### Implémentation
 
-- [ ] T034 [US7] Corriger ce que T031 à T033 révèlent dans `src/main/delivery/gh-client.ts`, `src/main/delivery/ci-watcher.ts` ou `src/shared/delivery.ts` (`checkName`) ; documenter dans la PR chaque fuite trouvée, ou son absence
+- [x] T034 [US7] Corriger ce que T031 à T033 révèlent dans `src/main/delivery/gh-client.ts`, `src/main/delivery/ci-watcher.ts` ou `src/shared/delivery.ts` (`checkName`) ; documenter dans la PR chaque fuite trouvée, ou son absence
 
 **Checkpoint** : US7 éprouvée ; PR « 008 Phase 5 US7 ».
 
@@ -120,15 +120,15 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T035 [P] [US3] Tests dans `tests/integration/delivery/delivery-review.test.ts` : sc.1 à 6 (élément, double Valider → une fusion, Refuser sans motif refusé, motif au dev en `verdict`, tour compté, PR ouverte, retour une fois après la nouvelle CI même Auto activé, nouvelle demande qui reprend la PR) ; sc.12 à 15 (reprise par numéro après les contrôles, PR fermée → nouvelle PR, auteur ou fork différent → ni reprise ni création, alerte ; tête après push vérifiée) ; FR-013 (Valider refusé si la CI est configurée et aucun check lu) ; FR-027 (Valider pendant que le dev travaille : aucun dialogue, une fusion) ; CI repassée au rouge avant la décision → élément retiré
-- [ ] T036 [P] [US3] Tests dans `tests/integration/delivery/delivery-unverified.test.ts` : sc.7 à 11 (Auto ne fusionne jamais une PR sans verdict ; Valider vérifie CI, auteur, fork et tête ; CI rouge, conflit et refus signalés sans compteur ; nouveau commit → chute, même geste qui recrée ; après fusion, aucun worktree supprimé ; la branche distante relève de T067)
-- [ ] T037 [P] [US3] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/renderer/store/delivery-store.test.ts` : `delivery-review` (lien, commit, verdict ou « sans verdict »), bouton Valider inactif après clic, champ de motif obligatoire, `delivery:decide` avec la tête affichée ; notification de `delivery-review` dans `tests/unit/main/notifications.test.ts`
-- [ ] T038 [P] [US3] E2E dans `tests/e2e/us52-review.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-review.json` : sc.2, 4, 5, 7 et SC-007
+- [x] T035 [P] [US3] Tests dans `tests/integration/delivery/delivery-review.test.ts` : sc.1 à 6 (élément, double Valider → une fusion, Refuser sans motif refusé, motif au dev en `verdict`, tour compté, PR ouverte, retour une fois après la nouvelle CI même Auto activé, nouvelle demande qui reprend la PR) ; sc.12 à 15 (reprise par numéro après les contrôles, PR fermée → nouvelle PR, auteur ou fork différent → ni reprise ni création, alerte ; tête après push vérifiée) ; FR-013 (Valider refusé si la CI est configurée et aucun check lu) ; FR-027 (Valider pendant que le dev travaille : aucun dialogue, une fusion) ; CI repassée au rouge avant la décision → élément retiré
+- [x] T036 [P] [US3] Tests dans `tests/integration/delivery/delivery-unverified.test.ts` : sc.7 à 11 (Auto ne fusionne jamais une PR sans verdict ; Valider vérifie CI, auteur, fork et tête ; CI rouge, conflit et refus signalés sans compteur ; nouveau commit → chute, même geste qui recrée ; après fusion, aucun worktree supprimé ; la branche distante relève de T067)
+- [x] T037 [P] [US3] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/renderer/store/delivery-store.test.ts` : `delivery-review` (lien, commit, verdict ou « sans verdict »), bouton Valider inactif après clic, champ de motif obligatoire, `delivery:decide` avec la tête affichée ; notification de `delivery-review` dans `tests/unit/main/notifications.test.ts`
+- [x] T038 [P] [US3] E2E dans `tests/e2e/us52-review.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-review.json` : sc.2, 4, 5, 7 et SC-007
 
 ### Implémentation
 
-- [ ] T039 [US3] Dans `src/main/delivery/delivery-service.ts` : état `reviewing`, `decide` (verrou par demande, tête attendue, `merging` avant l'appel), refus avec motif, `review.refusedOnce`, PR sans verdict, reprise de PR (research R22)
-- [ ] T040 [US3] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/store/app-store.ts`, `src/main/notifications.ts` et `src/main/ipc/delivery-handlers.ts` : élément `delivery-review`, `delivery:decide`, `NOTIFIED`
+- [x] T039 [US3] Dans `src/main/delivery/delivery-service.ts` : état `reviewing`, `decide` (verrou par demande, tête attendue, `merging` avant l'appel), refus avec motif, `review.refusedOnce`, PR sans verdict, reprise de PR (research R22)
+- [x] T040 [US3] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/renderer/store/app-store.ts`, `src/main/notifications.ts` et `src/main/ipc/delivery-handlers.ts` : élément `delivery-review`, `delivery:decide`, `NOTIFIED`
 
 **Checkpoint** : US3 livrée ; PR « 008 Phase 6 US3 ».
 
@@ -142,14 +142,14 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T041 [P] [US4] Tests dans `tests/integration/delivery/delivery-ci-states.test.ts` : sc.1 (sans workflow ni requis : Auto fusionne après le verdict, sinon relecture) ; sc.2 et 7 (CI configurée muette : alerte à 10 min, « Attendre encore » repousse, « Relire » ouvre la PR, Valider refusé, fusion faite sur la forge constatée) ; sc.3 et 4 (rouge → nom du check borné au dev, tour compté ; au plafond, escalade sans nouveau tour) ; sc.5 (`mergeStateStatus` `BEHIND` ou `DIRTY` → recalage, nouvelle CI ; 3 de suite → alerte) ; sc.6 (PR fermée ou fusionnée à la main → demande close, dit) ; protection illisible → CI réputée configurée (research R10)
-- [ ] T042 [P] [US4] Tests dans `tests/integration/orchestrator/agent-tools-ci-log.test.ts` : `get_ci_log` sc.8 (rendu borné avec la note pour une PR suivie ; refus sans lecture pour PR non suivie, fork, demande tombée, autre agent)
-- [ ] T043 [P] [US4] E2E dans `tests/e2e/us53-ci-states.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-ci.json` : sc.1, 2, 3 et 5
+- [x] T041 [P] [US4] Tests dans `tests/integration/delivery/delivery-ci-states.test.ts` : sc.1 (sans workflow ni requis : Auto fusionne après le verdict, sinon relecture) ; sc.2 et 7 (CI configurée muette : alerte à 10 min, « Attendre encore » repousse, « Relire » ouvre la PR, Valider refusé, fusion faite sur la forge constatée) ; sc.3 et 4 (rouge → nom du check borné au dev, tour compté ; au plafond, escalade sans nouveau tour) ; sc.5 (`mergeStateStatus` `BEHIND` ou `DIRTY` → recalage, nouvelle CI ; 3 de suite → alerte) ; sc.6 (PR fermée ou fusionnée à la main → demande close, dit) ; protection illisible → CI réputée configurée (research R10)
+- [x] T042 [P] [US4] Tests dans `tests/integration/orchestrator/agent-tools-ci-log.test.ts` : `get_ci_log` sc.8 (rendu borné avec la note pour une PR suivie ; refus sans lecture pour PR non suivie, fork, demande tombée, autre agent)
+- [x] T043 [P] [US4] E2E dans `tests/e2e/us53-ci-states.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-ci.json` : sc.1, 2, 3 et 5
 
 ### Implémentation
 
-- [ ] T044 [US4] Dans `src/main/delivery/ci-watcher.ts` et `src/main/delivery/delivery-service.ts` : CI configurée (R10), `emptySince`, élément `delivery-silent-ci` et ses décisions `wait` et `review`, CI rouge vers le dev, recalage après la PR et compteur `rebases`, PR close sur la forge
-- [ ] T045 [US4] Dans `src/main/orchestrator/agent-tools.ts` : outil `get_ci_log` (research R15) ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : `delivery-silent-ci`, `delivery-alert`
+- [x] T044 [US4] Dans `src/main/delivery/ci-watcher.ts` et `src/main/delivery/delivery-service.ts` : CI configurée (R10), `emptySince`, élément `delivery-silent-ci` et ses décisions `wait` et `review`, CI rouge vers le dev, recalage après la PR et compteur `rebases`, PR close sur la forge
+- [x] T045 [US4] Dans `src/main/orchestrator/agent-tools.ts` : outil `get_ci_log` (research R15) ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : `delivery-silent-ci`, `delivery-alert`
 
 **Checkpoint** : US4 livrée ; PR « 008 Phase 7 US4 ».
 
@@ -163,17 +163,17 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T046 [P] [US6] Tests dans `tests/integration/delivery/delivery-restart.test.ts` : nouveau `DeliveryService` sur un état enregistré à chaque étape (`pushing`, `opening`, `watching`, `merging`) → aucune PR ni fusion doublée (sc.1, SC-005)
-- [ ] T047 [P] [US6] Tests dans `tests/integration/review/integration-restore.test.ts` : conflit à moitié résolu, nouveau `IntegrationService` → conflits et résolutions restaurés (sc.2) ; la demande locale reste jusqu'à l'issue
-- [ ] T048 [P] [US6] Tests dans `tests/integration/orchestrator/loop-agent-closed.test.ts` : agent fermé → boucle hors `running`, message `loop` à l'orchestrateur, `start_loop` accepté ensuite (sc.3, 4, SC-006) ; en livraison, fermeture par l'utilisateur → `dropped`, boucle `closed`, PR ouverte, réveil (sc.6)
-- [ ] T049 [P] [US6] Tests dans `tests/integration/review/integration-followed.test.ts` : intégration manuelle d'un agent qui a une demande locale → jamais rapportée comme celle de la demande (sc.5)
-- [ ] T050 [P] [US6] Tests dans `tests/unit/renderer/tiles/CloseAgentDialog.test.tsx` : avertissement de livraison en cours ; E2E dans `tests/e2e/us55-restart.spec.ts` : sc.1 et 3
+- [x] T046 [P] [US6] Tests dans `tests/integration/delivery/delivery-restart.test.ts` : nouveau `DeliveryService` sur un état enregistré à chaque étape (`pushing`, `opening`, `watching`, `merging`) → aucune PR ni fusion doublée (sc.1, SC-005)
+- [x] T047 [P] [US6] Tests dans `tests/integration/review/integration-restore.test.ts` : conflit à moitié résolu, nouveau `IntegrationService` → conflits et résolutions restaurés (sc.2) ; la demande locale reste jusqu'à l'issue
+- [x] T048 [P] [US6] Tests dans `tests/integration/orchestrator/loop-agent-closed.test.ts` : agent fermé → boucle hors `running`, message `loop` à l'orchestrateur, `start_loop` accepté ensuite (sc.3, 4, SC-006) ; en livraison, fermeture par l'utilisateur → `dropped`, boucle `closed`, PR ouverte, réveil (sc.6)
+- [x] T049 [P] [US6] Tests dans `tests/integration/review/integration-followed.test.ts` : intégration manuelle d'un agent qui a une demande locale → jamais rapportée comme celle de la demande (sc.5)
+- [x] T050 [P] [US6] Tests dans `tests/unit/renderer/tiles/CloseAgentDialog.test.tsx` : avertissement de livraison en cours ; E2E dans `tests/e2e/us55-restart.spec.ts` : sc.1 et 3
 
 ### Implémentation
 
-- [ ] T051 [US6] Dans `src/main/review/integration-service.ts` : écriture de `Pending` dans `<integrationsDir>/<id>.json`, `restore()` au démarrage, retrait à la fin seulement (research R19)
-- [ ] T052 [US6] Dans `src/main/orchestrator/loop-service.ts` et `src/main/agents/agent-manager.ts` : `agentClosed` (research R12), branché sur `agent:state` `closed` ; dans `src/main/delivery/delivery-service.ts` : chute à la fermeture par l'utilisateur ; reprise de chaque état au démarrage
-- [ ] T053 [US6] Dans `src/renderer/tiles/CloseAgentDialog.tsx` : avertissement de `contracts/ui.md`
+- [x] T051 [US6] Dans `src/main/review/integration-service.ts` : écriture de `Pending` dans `<integrationsDir>/<id>.json`, `restore()` au démarrage, retrait à la fin seulement (research R19)
+- [x] T052 [US6] Dans `src/main/orchestrator/loop-service.ts` et `src/main/agents/agent-manager.ts` : `agentClosed` (research R12), branché sur `agent:state` `closed` ; dans `src/main/delivery/delivery-service.ts` : chute à la fermeture par l'utilisateur ; reprise de chaque état au démarrage
+- [x] T053 [US6] Dans `src/renderer/tiles/CloseAgentDialog.tsx` : avertissement de `contracts/ui.md`
 
 **Checkpoint** : US6 livrée ; PR « 008 Phase 8 US6 ».
 
@@ -187,17 +187,17 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T054 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-polish.test.ts` : sc.1 à 6 (0 passe → livraison possible ; 2 passes → refus avec « passe k sur N » ; fin de passe : testeur, preuve sur le commit de fin, compteur de passes sans toucher aux tours ; consigne avec `polishBrief`, `notes` et l'interdiction de toute nouvelle fonctionnalité ; `defects` → même passe sans aller-retour ; second `defects` sur la même passe → escalade, jamais de fusion, research P2)
-- [ ] T055 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-service.test.ts` et `tests/integration/orchestrator/tools-loop.test.ts` : plafond 5 → arrêt au tour 5, escalade de modèle au tour 5 ; plafond baissé sous le tour courant → escalade au prochain `defects` ; descriptions de `start_loop` et `next_round` sans « 3 tours » ; `polish_pass` selon `contracts/mcp-tools.md`
-- [ ] T056 [P] [US5] Tests dans `tests/unit/renderer/delivery/DeliverySettingsDialog.test.tsx` : champs et bornes de `contracts/ui.md`, valeurs gardées (sc.7) ; dans `tests/unit/shared/todo.test.ts` : titre de `loop-escalated` et « Relancer » avec le plafond du projet
-- [ ] T057 [P] [US5] Test dans `tests/unit/main/orchestrator/skills-content.test.ts` : `pact-contract.md` ne dit plus « 3 tours » mais le plafond du projet ; E2E dans `tests/e2e/us54-polish.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-polish.json` : sc.2, 3 et 7
+- [x] T054 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-polish.test.ts` : sc.1 à 6 (0 passe → livraison possible ; 2 passes → refus avec « passe k sur N » ; fin de passe : testeur, preuve sur le commit de fin, compteur de passes sans toucher aux tours ; consigne avec `polishBrief`, `notes` et l'interdiction de toute nouvelle fonctionnalité ; `defects` → même passe sans aller-retour ; second `defects` sur la même passe → escalade, jamais de fusion, research P2)
+- [x] T055 [P] [US5] Tests dans `tests/unit/main/orchestrator/loop-service.test.ts` et `tests/integration/orchestrator/tools-loop.test.ts` : plafond 5 → arrêt au tour 5, escalade de modèle au tour 5 ; plafond baissé sous le tour courant → escalade au prochain `defects` ; descriptions de `start_loop` et `next_round` sans « 3 tours » ; `polish_pass` selon `contracts/mcp-tools.md`
+- [x] T056 [P] [US5] Tests dans `tests/unit/renderer/delivery/DeliverySettingsDialog.test.tsx` : champs et bornes de `contracts/ui.md`, valeurs gardées (sc.7) ; dans `tests/unit/shared/todo.test.ts` : titre de `loop-escalated` et « Relancer » avec le plafond du projet
+- [x] T057 [P] [US5] Test dans `tests/unit/main/orchestrator/skills-content.test.ts` : `pact-contract.md` ne dit plus « 3 tours » mais le plafond du projet ; E2E dans `tests/e2e/us54-polish.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-polish.json` : sc.2, 3 et 7
 
 ### Implémentation
 
-- [ ] T058 [US5] Dans `src/main/orchestrator/loop-service.ts` : plafond lu dans `workspace.delivery.maxRounds`, retrait de `MAX_ROUNDS`, état `polishing`, `polish_pass`, reprise d'une passe (research R23)
-- [ ] T059 [US5] Dans `src/main/orchestrator/tools.ts` : outil `polish_pass`, textes de `start_loop` et `next_round` ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : plafond du projet dans les titres et actions
-- [ ] T060 [US5] Créer `src/renderer/delivery/DeliverySettingsDialog.tsx`, ouvert depuis `DeliveryBar`
-- [ ] T061 [US5] Dans `resources/skills/pact-contract.md` et `resources/skills/pact-orchestrator/SKILL.md` : plafond du projet, passes, `request_delivery`, `polish_pass`, plus de `request_integration` ; dans `resources/skills/pact-dev/SKILL.md` : `get_ci_log` et la récupération des tests du testeur ; dans `resources/skills/pact-test/SKILL.md` : tests committés avant le verdict
+- [x] T058 [US5] Dans `src/main/orchestrator/loop-service.ts` : plafond lu dans `workspace.delivery.maxRounds`, retrait de `MAX_ROUNDS`, état `polishing`, `polish_pass`, reprise d'une passe (research R23)
+- [x] T059 [US5] Dans `src/main/orchestrator/tools.ts` : outil `polish_pass`, textes de `start_loop` et `next_round` ; dans `src/shared/todo.ts` et `src/renderer/todo/TodoItem.tsx` : plafond du projet dans les titres et actions
+- [x] T060 [US5] Créer `src/renderer/delivery/DeliverySettingsDialog.tsx`, ouvert depuis `DeliveryBar`
+- [x] T061 [US5] Dans `resources/skills/pact-contract.md` et `resources/skills/pact-orchestrator/SKILL.md` : plafond du projet, passes, `request_delivery`, `polish_pass`, plus de `request_integration` ; dans `resources/skills/pact-dev/SKILL.md` : `get_ci_log` et la récupération des tests du testeur ; dans `resources/skills/pact-test/SKILL.md` : tests committés avant le verdict
 
 **Checkpoint** : US5 livrée ; PR « 008 Phase 9 US5 ».
 
@@ -211,14 +211,14 @@
 
 ### Tests (rouges d'abord)
 
-- [ ] T062 [P] [US8] Tests dans `tests/integration/delivery/cleanup.test.ts` : sc.1, 2, 4, 5, 6, 7, 8, 9, 10, 11 et 13 (dev propre sur la tête avec `node_modules` → worktree et branche supprimés ; non suivi, modifié ou commit en plus → rien, `worktree-kept` ; squash : décision par la PR, jamais `branch --merged` ; testeur contenu par le contenu de ses tests ; orchestrateur jamais ; PR fermée, agent ou boucle fermés, PR sans verdict, autre auteur, `close_agent` → rien ; `.env` ignoré → rien et dit ; dev amené sur R → supprimé ; agent rouvert ou fichier modifié avant la suppression → rien) ; SC-010 sur chaque cas ; suppression en échec → `worktree-kept` avec l'erreur ; redémarrage avec `cleanup: pending` → rejoué, dossier absent sans erreur
-- [ ] T063 [P] [US8] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/main/ipc/delivery-handlers.test.ts` : `worktree-kept`, confirmation qui liste ce qui serait perdu avant de supprimer (sc.3), `delivery:cleanup`
-- [ ] T064 [P] [US8] E2E dans `tests/e2e/us57-cleanup.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-cleanup.json` : sc.1, 2, 3 et SC-011
+- [x] T062 [P] [US8] Tests dans `tests/integration/delivery/cleanup.test.ts` : sc.1, 2, 4, 5, 6, 7, 8, 9, 10, 11 et 13 (dev propre sur la tête avec `node_modules` → worktree et branche supprimés ; non suivi, modifié ou commit en plus → rien, `worktree-kept` ; squash : décision par la PR, jamais `branch --merged` ; testeur contenu par le contenu de ses tests ; orchestrateur jamais ; PR fermée, agent ou boucle fermés, PR sans verdict, autre auteur, `close_agent` → rien ; `.env` ignoré → rien et dit ; dev amené sur R → supprimé ; agent rouvert ou fichier modifié avant la suppression → rien) ; SC-010 sur chaque cas ; suppression en échec → `worktree-kept` avec l'erreur ; redémarrage avec `cleanup: pending` → rejoué, dossier absent sans erreur
+- [x] T063 [P] [US8] Tests dans `tests/unit/renderer/todo/TodoItem.test.tsx` et `tests/unit/main/ipc/delivery-handlers.test.ts` : `worktree-kept`, confirmation qui liste ce qui serait perdu avant de supprimer (sc.3), `delivery:cleanup`
+- [x] T064 [P] [US8] E2E dans `tests/e2e/us57-cleanup.spec.ts` avec `tests/fixtures/fake-cli/scenarios/delivery-cleanup.json` : sc.1, 2, 3 et SC-011
 
 ### Implémentation
 
-- [ ] T065 [US8] Créer `src/main/delivery/cleanup.ts` (research R17) : conditions relues juste avant, `worktree remove` sans `--force`, branche du dev seulement, `lost()` pour « Supprimer quand même » ; branché sur `onMerged` de `DeliveryService`
-- [ ] T066 [US8] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/main/ipc/delivery-handlers.ts` : élément `worktree-kept` et `delivery:cleanup`
+- [x] T065 [US8] Créer `src/main/delivery/cleanup.ts` (research R17) : conditions relues juste avant, `worktree remove` sans `--force`, branche du dev seulement, `lost()` pour « Supprimer quand même » ; branché sur `onMerged` de `DeliveryService`
+- [x] T066 [US8] Dans `src/shared/todo.ts`, `src/renderer/todo/TodoItem.tsx`, `src/main/ipc/delivery-handlers.ts` : élément `worktree-kept` et `delivery:cleanup`
 
 **Checkpoint** : US8 livrée ; PR « 008 Phase 10 US8 ».
 
@@ -228,8 +228,8 @@
 
 **But** : supprimer la branche distante d'une PR suivie fusionnée si sa tête est encore le commit fusionné. Phase isolée : research P1.
 
-- [ ] T067 [P] Tests dans `tests/integration/delivery/remote-branch.test.ts` : tête égale → supprimée par bail ; tête changée → gardée, `delivery-alert` qui le dit ; PR d'un autre auteur → rien ; PR sans verdict fusionnée → même règle (US3 sc.11)
-- [ ] T068 Dans `src/main/delivery/delivery-service.ts` : appel de `GitService.deleteRemoteBranch` dans `onMerged`, après la lecture de la PR
+- [x] T067 [P] Tests dans `tests/integration/delivery/remote-branch.test.ts` : tête égale → supprimée par bail ; tête changée → gardée, `delivery-alert` qui le dit ; PR d'un autre auteur → rien ; PR sans verdict fusionnée → même règle (US3 sc.11)
+- [x] T068 Dans `src/main/delivery/delivery-service.ts` : appel de `GitService.deleteRemoteBranch` dans `onMerged`, après la lecture de la PR
 
 **Checkpoint** : PR « 008 Phase 11 ».
 
@@ -237,10 +237,10 @@
 
 ## Phase 12: Polish
 
-- [ ] T069 [P] Test dans `tests/contract/gh-client.contract.test.ts` qui parcourt tout `src/main` à la recherche de `'--auto'` et de `pr list` (SC-002)
-- [ ] T070 [P] Mettre à jour `README.md` : livraison, Auto, réglages, `gh` requis ; retirer `request_integration`
-- [ ] T071 Dérouler `specs/008-delivery-auto/quickstart.md` ; vérifier la couverture des fichiers modifiés (80 % hors UI, 70 % UI)
-- [ ] T072 Ajuster `version` dans `package.json` selon la règle 0.x seulement si l'orchestrateur le demande
+- [x] T069 [P] Test dans `tests/contract/gh-client.contract.test.ts` qui parcourt tout `src/main` à la recherche de `'--auto'` et de `pr list` (SC-002)
+- [x] T070 [P] Mettre à jour `README.md` : livraison, Auto, réglages, `gh` requis ; retirer `request_integration`
+- [x] T071 Dérouler `specs/008-delivery-auto/quickstart.md` ; vérifier la couverture des fichiers modifiés (80 % hors UI, 70 % UI)
+- [ ] T072 Ajuster `version` dans `package.json` selon la règle 0.x seulement si l'orchestrateur le demande — fait par l'orchestrateur dans la PR de release (non coché ici)
 
 ---
 

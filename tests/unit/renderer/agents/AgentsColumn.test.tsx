@@ -32,12 +32,12 @@ const limit: TodoItem = {
   actions: ['log', 'restart', 'resume'],
 };
 const integration: TodoItem = {
-  id: 'req-1:integration-request',
+  id: 'req-1:delivery-local',
   agentId: waiting.id,
-  kind: 'integration-request',
-  title: '◎ Intégrer Claude Code 1 → main ?',
+  kind: 'delivery-local',
+  title: '◎ Fusionner Claude Code 1 → main ?',
   actions: [],
-  request: { id: 'req-1', message: 'feat: x' },
+  delivery: { id: 'req-1', head: 'abcdef0123456789abcdef0123456789abcdef01' },
 };
 const info: TodoItem = {
   id: 't1:info',
@@ -76,8 +76,7 @@ const setup = (view: AgentsView = full) => {
     onRestart: vi.fn(),
     onLog: vi.fn(),
     onCancelAutoResume: vi.fn(),
-    onConfirmIntegration: vi.fn(),
-    onRefuseIntegration: vi.fn(),
+    onDecideDelivery: vi.fn(),
   };
   render(<AgentsColumn view={view} {...actions} />);
   return actions;
@@ -116,7 +115,7 @@ describe('AgentsColumn', () => {
       within(screen.getByRole('list', { name: 'À traiter' }))
         .getAllByRole('listitem')
         .map((li) => li.textContent),
-    ).toEqual([expect.stringContaining('Intégrer'), 'En cours ▸ zsh — main']);
+    ).toEqual([expect.stringContaining('Fusionner'), 'En cours ▸ zsh — main']);
     expect(
       within(screen.getByRole('list', { name: 'Agents du workspace' })).getAllByRole('listitem'),
     ).toHaveLength(3);
@@ -179,13 +178,14 @@ describe('AgentsColumn', () => {
     expect(actions.onCancelAutoResume).toHaveBeenCalledWith(limited.id);
   });
 
-  it('confirms and refuses an integration request from the head (003 FR-017)', async () => {
+  it('merges and refuses a local delivery from the head (003 FR-017, 008 FR-008)', async () => {
     const actions = setup();
-    const request = within(item('◎ Intégrer Claude Code 1 → main ?'));
-    await userEvent.click(request.getByRole('button', { name: /Intégrer/ }));
+    const request = within(item('◎ Fusionner'));
     await userEvent.click(request.getByRole('button', { name: 'Refuser' }));
-    expect(actions.onConfirmIntegration).toHaveBeenCalledWith('req-1', 'feat: x');
-    expect(actions.onRefuseIntegration).toHaveBeenCalledWith('req-1');
+    await userEvent.click(request.getByRole('button', { name: 'Fusionner' }));
+    const head = 'abcdef0123456789abcdef0123456789abcdef01';
+    expect(actions.onDecideDelivery).toHaveBeenCalledWith('req-1', 'refuse', head);
+    expect(actions.onDecideDelivery).toHaveBeenCalledWith('req-1', 'validate', head);
   });
 
   it('shows the kind of request apart from its agent and hint (1f)', () => {

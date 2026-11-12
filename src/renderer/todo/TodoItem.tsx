@@ -2,16 +2,25 @@ import { useState, type CSSProperties } from 'react';
 import type { Agent, TodoItem as Todo } from '../../shared/model';
 import { TileActions } from '../tiles/TileActions';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import type { AgentActions } from '../workspace/WorkspaceView';
 import { cn } from '@/lib/utils';
 
-type Props = Omit<AgentActions, 'onClose'> & {
+type Props = Partial<Omit<AgentActions, 'onClose'>> & {
   todo: Todo;
   /** Absent for a free terminal, which has no color nor actions. */
   agent: Agent | undefined;
 };
 
+const none = () => undefined;
 const SEPARATOR = ' · ';
+const LOCAL_VERB = '◎ Fusionner';
 
 /**
  * One request, in the color of its agent, with the same buttons as its tile (FR-028). Its title
@@ -41,7 +50,8 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
       className={cn(
         'flex origin-top animate-unfold flex-col gap-2.5 overflow-hidden rounded-xl border border-white/6 bg-surface p-3 motion-reduce:animate-none',
         todo.kind === 'answer' && 'border-waiting/30 bg-waiting/6',
-        (todo.kind === 'integration-request' ||
+        (todo.kind === 'delivery-local' ||
+          todo.kind === 'delivery-review' ||
           todo.kind === 'publish-issues' ||
           todo.kind === 'decide') &&
           'border-primary/30 bg-primary/6',
@@ -49,14 +59,25 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           todo.kind === 'loop-escalated' ||
           todo.kind === 'exchange-escalated') &&
           'border-destructive/30 bg-destructive/6',
-        (todo.kind === 'usage-paused' || todo.kind === 'usage-stale') &&
+        (todo.kind === 'delivery-silent-ci' ||
+          todo.kind === 'delivery-alert' ||
+          todo.kind === 'worktree-kept' ||
+          todo.kind === 'usage-paused' ||
+          todo.kind === 'usage-stale') &&
           'border-waiting/30 bg-waiting/6',
         usage?.level === 'warn' && 'border-waiting/30 bg-waiting/6',
         usage?.level === 'critical' && 'border-destructive/30 bg-destructive/6',
       )}
     >
       <span className="font-mono text-[12px] leading-[1.5] break-words text-foreground">
-        {what}
+        {todo.kind === 'delivery-local' && what?.startsWith(LOCAL_VERB) ? (
+          <>
+            <span>{LOCAL_VERB}</span>
+            <span>{what.slice(LOCAL_VERB.length)}</span>
+          </>
+        ) : (
+          what
+        )}
       </span>
       {who !== undefined && (
         <span className="order-first flex items-center gap-2 text-[12px] text-[#a1a1aa]">
@@ -83,14 +104,12 @@ type ActionsProps = Props;
 export function TodoActions({
   todo,
   agent,
-  onAnswer,
-  onResume,
-  onRestart,
-  onLog,
-  onCancelAutoResume,
+  onAnswer = none,
+  onResume = none,
+  onRestart = none,
+  onLog = none,
+  onCancelAutoResume = none,
   onReview,
-  onConfirmIntegration,
-  onRefuseIntegration,
   onDecideLoop,
   onDecideExchange,
   onConfirmPublish,
@@ -98,21 +117,81 @@ export function TodoActions({
   onOpenTerminal,
   onUsageDetail,
   onDecide,
+  onDecideDelivery,
+  onOpenPr,
+  onCleanup,
   onUsageResume,
   onUsageCancelResume,
   onUsageStale,
 }: ActionsProps) {
-  const { request, loop, publish, usage, decide, exchange, usageLimit } = todo;
+  const { delivery, loop, publish, usage, decide, exchange, usageLimit } = todo;
   return (
     <>
-      {request && agent && (
-        <IntegrationRequest
-          request={request}
-          onConfirm={(message) => {
-            onConfirmIntegration?.(request.id, message);
+      {delivery && agent && todo.kind === 'delivery-review' && (
+        <DeliveryReview
+          key={`${delivery.id}:${delivery.head}`}
+          delivery={delivery}
+          onDecide={(decision, reason) => {
+            if (decision === 'validate') onDecideDelivery?.(delivery.id, decision, delivery.head);
+            else onDecideDelivery?.(delivery.id, decision, delivery.head, reason);
           }}
-          onRefuse={() => {
-            onRefuseIntegration?.(request.id);
+          onOpen={() => {
+            onOpenPr?.(delivery.id);
+          }}
+        />
+      )}
+      {delivery && todo.kind === 'worktree-kept' && (
+        <WorktreeKept
+          onForce={(confirmed) =>
+            confirmed === true
+              ? onCleanup?.(delivery.id, todo.agentId, 'force', true)
+              : onCleanup?.(delivery.id, todo.agentId, 'force')
+          }
+          onKeep={() => onCleanup?.(delivery.id, todo.agentId, 'keep')}
+        />
+      )}
+      {delivery && agent && todo.kind === 'delivery-silent-ci' && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onDecideDelivery?.(delivery.id, 'wait', delivery.head);
+            }}
+          >
+            Attendre encore
+          </Button>
+          <Button
+            onClick={() => {
+              onDecideDelivery?.(delivery.id, 'review', delivery.head);
+              onOpenPr?.(delivery.id);
+            }}
+          >
+            Relire
+          </Button>
+        </div>
+      )}
+      {delivery && agent && todo.kind === 'delivery-alert' && (
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            onClick={() => {
+              onOpenPr?.(delivery.id);
+            }}
+          >
+            Ouvrir la PR
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onDecideDelivery?.(delivery.id, 'wait', delivery.head);
+            }}
+          >
+            Compris
+          </Button>
+        </div>
+      )}
+      {delivery && agent && todo.kind === 'delivery-local' && (
+        <DeliveryLocal
+          onDecide={(decision) => {
+            onDecideDelivery?.(delivery.id, decision, delivery.head);
           }}
           onReview={
             onReview &&
@@ -129,7 +208,7 @@ export function TodoActions({
               onDecideLoop?.(loop.issueId, 'restart');
             }}
           >
-            Relancer 3 tours
+            Relancer {String(loop.maxRounds ?? 3)} tours
           </Button>
           <Button
             onClick={() => {
@@ -249,90 +328,262 @@ export function TodoActions({
           }}
         />
       )}
-      {agent && !request && !loop && !publish && !decide && !exchange && (
-        <TileActions
-          state={agent.state}
-          question={todo.actions.includes('open-terminal')}
-          scheduledResume={agent.scheduledResume}
-          onAnswer={(answer) => {
-            onAnswer(agent.id, answer);
+      {agent &&
+        todo.kind !== 'delivery-review' &&
+        !delivery &&
+        !loop &&
+        !publish &&
+        !decide &&
+        !exchange && (
+          <TileActions
+            state={agent.state}
+            question={todo.actions.includes('open-terminal')}
+            scheduledResume={agent.scheduledResume}
+            onAnswer={(answer) => {
+              onAnswer(agent.id, answer);
+            }}
+            onOpenTerminal={
+              onOpenTerminal
+                ? () => {
+                    onOpenTerminal(agent.id);
+                  }
+                : undefined
+            }
+            onResume={() => {
+              onResume(agent.id);
+            }}
+            onRestart={() => {
+              onRestart(agent.id);
+            }}
+            onLog={() => {
+              onLog(agent.id);
+            }}
+            onCancelAutoResume={() => {
+              onCancelAutoResume(agent.id);
+            }}
+            onReview={
+              todo.kind === 'review' && onReview
+                ? () => {
+                    onReview(agent.id);
+                  }
+                : undefined
+            }
+          />
+        )}
+    </>
+  );
+}
+
+/**
+ * « ◎ Relire la PR #n »: the PR, its commit and its verdict, then Valider or Refuser (FR-013). One
+ * click on Valider, then the button waits for the answer (FR-027); Refuser asks for a reason first.
+ * The reason is the user's text, shown as React text only.
+ */
+function DeliveryReview({
+  delivery,
+  onDecide,
+  onOpen,
+}: {
+  delivery: NonNullable<Todo['delivery']>;
+  onDecide: (decision: 'validate' | 'refuse', reason?: string) => void;
+  onOpen: () => void;
+}) {
+  const [sent, setSent] = useState(false);
+  const [refusing, setRefusing] = useState(false);
+  const [reason, setReason] = useState('');
+  const blank = reason.trim() === '';
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[12px] text-dim">
+        {delivery.verdict === 'accepted' ? 'Verdict : accepté' : 'sans verdict'}
+        {' · '}
+        <span className="font-mono">{delivery.head.slice(0, 7)}</span>
+      </span>
+      {refusing && (
+        <textarea
+          aria-label="Motif du refus"
+          rows={3}
+          value={reason}
+          onChange={(event) => {
+            setReason(event.target.value);
           }}
-          onOpenTerminal={
-            onOpenTerminal
-              ? () => {
-                  onOpenTerminal(agent.id);
-                }
-              : undefined
-          }
-          onResume={() => {
-            onResume(agent.id);
-          }}
-          onRestart={() => {
-            onRestart(agent.id);
-          }}
-          onLog={() => {
-            onLog(agent.id);
-          }}
-          onCancelAutoResume={() => {
-            onCancelAutoResume(agent.id);
-          }}
-          onReview={
-            todo.kind === 'review' && onReview
-              ? () => {
-                  onReview(agent.id);
-                }
-              : undefined
-          }
+          className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/50"
         />
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          variant="accept"
+          disabled={sent}
+          onClick={() => {
+            setSent(true);
+            onDecide('validate');
+          }}
+        >
+          Valider
+        </Button>
+        <Button
+          disabled={sent || (refusing && blank)}
+          onClick={() => {
+            if (!refusing) {
+              setRefusing(true);
+              return;
+            }
+            setSent(true);
+            onDecide('refuse', reason.trim());
+          }}
+        >
+          Refuser
+        </Button>
+        {delivery.url !== undefined && (
+          <a
+            href={delivery.url}
+            rel="noreferrer"
+            className="text-[12px] text-primary underline-offset-2 hover:underline"
+            onClick={(event) => {
+              event.preventDefault();
+              onOpen();
+            }}
+          >
+            Ouvrir la PR
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * « ◆ Worktree gardé »: « Supprimer quand même » asks what would be lost FIRST and lists it in a
+ * confirmation; only « Supprimer » there deletes (US8 sc.3, FR-037). « Garder » deletes nothing.
+ */
+const sameLines = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((line, i) => line === b[i]);
+
+function WorktreeKept({
+  onForce,
+  onKeep,
+}: {
+  onForce: (confirmed?: boolean) => Promise<{ lost: string[] } | null> | undefined;
+  onKeep: () => Promise<unknown> | undefined;
+}) {
+  const [lost, setLost] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const close = () => {
+    setLost(null);
+  };
+  return (
+    <>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void Promise.resolve(onForce())
+              .then((answer) => {
+                if (answer) setLost(answer.lost);
+              })
+              .finally(() => {
+                setBusy(false);
+              });
+          }}
+        >
+          Supprimer quand même
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            void onKeep();
+          }}
+        >
+          Garder
+        </Button>
+      </div>
+      {lost !== null && (
+        <Dialog open onOpenChange={close}>
+          <DialogContent aria-describedby={undefined} className="w-[min(480px,calc(100vw-32px))]">
+            <DialogBody>
+              <DialogTitle>Supprimer quand même</DialogTitle>
+              {lost.length === 0 ? (
+                <p className="text-[13px] text-dim">
+                  Rien à perdre : seul le dossier est supprimé.
+                </p>
+              ) : (
+                <>
+                  <p className="text-[13px] text-dim">Ceci sera perdu :</p>
+                  <ul className="flex flex-col gap-1 font-mono text-[12px] break-words">
+                    {lost.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </DialogBody>
+            <DialogFooter className="justify-end">
+              <Button variant="ghost" onClick={close}>
+                Annuler
+              </Button>
+              <Button
+                variant="accept"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void Promise.resolve(onForce(true))
+                    .then((answer) => {
+                      // R1 — the list changed since it was shown: nothing was deleted, show it again.
+                      if (answer && !sameLines(answer.lost, lost)) setLost(answer.lost);
+                      else close();
+                    })
+                    .catch(close)
+                    .finally(() => {
+                      setBusy(false);
+                    });
+                }}
+              >
+                Supprimer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   );
 }
 
-/** « ◎ Intégrer <agent> → <main> ? »: the message stays the user's to change (003 FR-018). */
-function IntegrationRequest({
-  request,
-  onConfirm,
-  onRefuse,
+/** « ◎ Fusionner <agent> → <main> ? »: one click, then the button waits for the answer (FR-027). */
+function DeliveryLocal({
+  onDecide,
   onReview,
 }: {
-  request: { id: string; message: string };
-  onConfirm: (message: string) => void;
-  onRefuse: () => void;
+  onDecide: (decision: 'validate' | 'refuse') => void;
   onReview: (() => void) | undefined;
 }) {
-  const [message, setMessage] = useState(request.message);
+  const [sent, setSent] = useState(false);
   return (
-    <form
-      className="flex flex-col gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onConfirm(message.trim());
-      }}
-    >
-      <textarea
-        aria-label="Message de commit"
-        rows={2}
-        value={message}
-        onChange={(event) => {
-          setMessage(event.target.value);
+    <div className="flex flex-wrap gap-1.5">
+      <Button
+        variant="accept"
+        disabled={sent}
+        onClick={() => {
+          setSent(true);
+          onDecide('validate');
         }}
-        className="resize-none rounded-[10px] border border-white/8 bg-white/2 px-2.5 py-2 font-mono text-[12px] text-foreground outline-none focus-visible:border-primary/50"
-      />
-      <div className="flex flex-wrap gap-1.5">
-        <Button type="submit" variant="accept" disabled={message.trim() === ''}>
-          ✓ Intégrer
+      >
+        Fusionner
+      </Button>
+      <Button
+        onClick={() => {
+          onDecide('refuse');
+        }}
+      >
+        Refuser
+      </Button>
+      {onReview && (
+        <Button variant="ghost" onClick={onReview}>
+          Revue →
         </Button>
-        <Button type="button" onClick={onRefuse}>
-          Refuser
-        </Button>
-        {onReview && (
-          <Button type="button" variant="ghost" onClick={onReview}>
-            Revue →
-          </Button>
-        )}
-      </div>
-    </form>
+      )}
+    </div>
   );
 }
 

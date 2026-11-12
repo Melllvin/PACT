@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handoffReportSchema, missingFields } from '../../../src/shared/report';
+import { handoffReportSchema, missingFields, storedReportSchema } from '../../../src/shared/report';
 
 // 004 T006 — the hand-off report an agent gives with submit_report (contracts/handoff-report.md).
 
@@ -51,5 +51,37 @@ describe('handoff report', () => {
   it('says in French what is missing', () => {
     expect(missingFields({ issue: '0012' }).join(', ')).toBe('status, summary, files, checks');
     expect(missingFields(done)).toEqual([]);
+  });
+});
+
+// 008 T004 — a verdict is tied to the commit it judges (FR-003, research R3).
+// RED until T008: `storedReportSchema` has no `commit` nor `dirty` and stops at round 3.
+describe('stored report (008)', () => {
+  const stored = {
+    ...done,
+    agentId: '00000000-0000-4000-8000-000000000003',
+    role: 'test',
+    round: 1,
+    at: '2026-11-08T10:00:00.000Z',
+  };
+
+  it('Given a report saved before 008, When read, Then the commit is null and the worktree is not said dirty', () => {
+    expect(storedReportSchema.parse(stored)).toMatchObject({ commit: null, dirty: false });
+  });
+
+  it('Given the head of the dev when the verdict came, When read, Then the commit and « dirty » are kept', () => {
+    const sha = 'a'.repeat(40);
+    expect(storedReportSchema.parse({ ...stored, commit: sha, dirty: true })).toMatchObject({
+      commit: sha,
+      dirty: true,
+    });
+    expect(storedReportSchema.safeParse({ ...stored, commit: 'main' }).success).toBe(false);
+    expect(storedReportSchema.safeParse({ ...stored, dirty: 'oui' }).success).toBe(false);
+  });
+
+  it('Given a ceiling of 10 rounds, When read, Then the round goes up to 10 and not beyond (FR-021)', () => {
+    expect(storedReportSchema.safeParse({ ...stored, round: 10 }).success).toBe(true);
+    expect(storedReportSchema.safeParse({ ...stored, round: 11 }).success).toBe(false);
+    expect(storedReportSchema.safeParse({ ...stored, round: 0 }).success).toBe(false);
   });
 });

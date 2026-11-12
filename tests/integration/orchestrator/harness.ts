@@ -10,7 +10,6 @@ import { HookServer } from '../../../src/main/agents/hook-server';
 import { PermissionService } from '../../../src/main/agents/permission-service';
 import { GitService } from '../../../src/main/git/git-service';
 import { createAgentTools } from '../../../src/main/orchestrator/agent-tools';
-import { IntegrationRequests } from '../../../src/main/orchestrator/integration-requests';
 import { IssueService } from '../../../src/main/orchestrator/issues';
 import { LoopService } from '../../../src/main/orchestrator/loop-service';
 import { OrchestratorService } from '../../../src/main/orchestrator/orchestrator-service';
@@ -24,7 +23,7 @@ import { PtyManager } from '../../../src/main/pty/pty-manager';
 import { WorkspaceService } from '../../../src/main/workspace/workspace-service';
 import type { AgentDraft } from '../../../src/shared/ipc';
 import type { AgentState, Workspace } from '../../../src/shared/model';
-import type { IntegrationRequest, OrchestratorAction } from '../../../src/shared/orchestrator';
+import type { OrchestratorAction } from '../../../src/shared/orchestrator';
 import type { Integration } from '../../../src/shared/review';
 import { FAKE_CLI, scenarioPath } from '../../fixtures/fake-cli/paths';
 
@@ -164,7 +163,8 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
           review,
           tests,
           wait: (agentIds, timeoutMs) => orchestrator.wait(orchestratorId, agentIds, timeoutMs),
-          requests,
+          // 008 — the delivery has its own harness (tests/integration/delivery).
+          delivery: { request: () => Promise.reject(new Error('no delivery in this harness')) },
           loops,
           issues,
           clis: () => registry.list(),
@@ -180,9 +180,8 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       ),
   });
 
-  /** What `integration:state` and `workspace:integrationRequests` announced, in order. */
+  /** What `integration:state` announced, in order. */
   const integrations: Integration[] = [];
-  const announced: IntegrationRequest[][] = [];
   // As the app wires them: the agents are read when an integration ends.
   const integration = new IntegrationService({
     git: gitService,
@@ -193,19 +192,8 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     conflictsDir: join(userData, 'conflicts'),
     onState: (state) => {
       integrations.push(state);
-      requests.integrationState(state);
     },
   });
-  const requests: IntegrationRequests = new IntegrationRequests({
-    workspaces,
-    integration,
-    git: gitService,
-    notify: (workspaceId, event) => {
-      orchestrator.push(workspaceId, event);
-    },
-    onChange: (_workspaceId, list) => announced.push(list),
-  });
-
   const loops: LoopService = new LoopService({
     workspaces,
     git: gitService,
@@ -274,7 +262,6 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
       onState: (event) => {
         events.push(event);
         orchestrator.agentState(event);
-        requests.agentState(event);
       },
       onPromptTyped: (agentId, origin) => typed.push({ agentId, origin }),
       orchestrator,
@@ -350,8 +337,6 @@ export async function createHarness(managerOptions: Record<string, unknown> = {}
     tests,
     integration,
     integrations,
-    requests,
-    announced,
     permissions,
     actionsHeard,
     loops,

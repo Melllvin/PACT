@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import {
+  defaultDeliverySettings,
+  deliverySchema,
+  deliverySettingsSchema,
+  MAX_POLISH,
+  MAX_ROUNDS_LIMIT,
+} from './delivery';
 import { exchangesSchema } from './exchanges';
 import {
   agentStateSchema,
@@ -166,27 +173,53 @@ export const issueSchema = z.object({
     .default(() => ({ branch: null, agents: [], pr: null })),
 });
 
-const roundNumber = z.int().min(1).max(3);
+const roundNumber = z.int().min(1).max(MAX_ROUNDS_LIMIT);
 
 /** 004 R6 — one round of a loop: its reports and PACT's own run of the tests. */
 export const roundSchema = z.object({
   n: roundNumber,
   startedAt: isoDate,
   reports: z.array(storedReportSchema).default([]),
-  proof: z.object({ tree: gitIdSchema, exitCode: z.int(), at: isoDate }).nullable().default(null),
+  /** 008 R3 — `commit`: the clean head the tests ran on; `null` in files saved before. */
+  proof: z
+    .object({
+      tree: gitIdSchema,
+      commit: gitIdSchema.nullable().default(null),
+      exitCode: z.int(),
+      at: isoDate,
+    })
+    .nullable()
+    .default(null),
+  /** 008 FR-023 — a polish pass is not a round trip. */
+  kind: z.enum(['round', 'polish']).default('round'),
   /** Files outside the test paths the test agent changed in this round (FR-020). */
   testerTouched: z.array(repoPathSchema).default([]),
 });
 
-/** 004 FR-017 — the dev ↔ test loop of an issue, 3 rounds at most (FR-018). */
+/** 008 R12 — a loop saved as « passed » (007) is read as « closed »: it was never delivered by PACT. */
+const loopState = z.preprocess(
+  (state) => (state === 'passed' ? 'closed' : state),
+  z.enum(['running', 'polishing', 'accepted', 'delivering', 'merged', 'escalated', 'closed']),
+);
+
+/** 004 FR-017 — the dev ↔ test loop of an issue; the ceiling is `workspace.delivery.maxRounds` (008 R11). */
 export const loopSchema = z
   .object({
     issueId: z.string().min(1),
     devAgentId: z.uuid(),
     testAgentId: z.uuid(),
     round: roundNumber,
-    rounds: z.array(roundSchema).max(3),
-    state: z.enum(['running', 'passed', 'escalated', 'closed']),
+    rounds: z.array(roundSchema).max(MAX_ROUNDS_LIMIT),
+    state: loopState,
+    /** 008 R23 — the polish passes; `null` without any. */
+    polish: z
+      .object({
+        done: z.int().min(0).max(MAX_POLISH),
+        total: z.int().min(0).max(MAX_POLISH),
+        restarted: z.boolean(),
+      })
+      .nullable()
+      .default(null),
     escalatedModel: z.string().nullable().default(null),
   })
   .refine((loop) => loop.devAgentId !== loop.testAgentId, {
@@ -253,6 +286,11 @@ export const workspaceSchema = z
     publishRequests: z.array(publishRequestSchema).max(1).default([]),
     /** 007 — the journal of the exchanges between the agents; old files load without it. */
     exchanges: exchangesSchema,
+    /** 008 — the settings of the delivery and the requests, written at every step (R2, R11). */
+    delivery: deliverySettingsSchema.default(defaultDeliverySettings),
+    deliveries: z.array(deliverySchema).default([]),
+    /** 008 — the repository has a remote called `origin`: « Livrer » instead of « Intégrer ». */
+    hasOrigin: z.boolean().optional(),
     lastOpenedAt: isoDate,
     status: z.enum(['available', 'unavailable']),
   })
@@ -335,10 +373,13 @@ export type TodoItem = {
   kind: TodoKind;
   title: string;
   actions: TileAction[];
-  /** 003 US3 — the integration the orchestrator asks for, for `integration-request`. */
-  request?: { id: string; message: string };
-  /** 004 FR-018 — the loop stopped after 3 rounds, for `loop-escalated`. */
-  loop?: { issueId: string };
+  /**
+   * 008 contracts/ui.md — the delivery the user decides on and the head shown. `delivery-review` adds
+   * the link of the PR and its verdict (`null`: a PR without a verdict).
+   */
+  delivery?: { id: string; head: string; url?: string; verdict?: 'accepted' | null };
+  /** 004 FR-018 — the loop stopped at the ceiling of the project, for `loop-escalated`. */
+  loop?: { issueId: string; maxRounds?: number };
   /** 007 FR-006 — the escalation of an exchange in a loop, and its last message as text. */
   exchange?: { escalationId: string; text: string };
   /** 004 FR-023 — the issues the orchestrator asks to publish, for `publish-issues`. */
@@ -355,7 +396,11 @@ export type TodoItem = {
 export type TodoKind =
   | 'answer'
   | 'decide'
-  | 'integration-request'
+  | 'delivery-local'
+  | 'delivery-review'
+  | 'delivery-silent-ci'
+  | 'delivery-alert'
+  | 'worktree-kept'
   | 'publish-issues'
   | 'loop-escalated'
   | 'exchange-escalated'

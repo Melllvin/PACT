@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { unwatchFile, watchFile } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { choicesFor, isFileResolved, parseConflicts, resultOf } from '../../shared/conflicts';
 import { IpcFailure } from '../../shared/ipc';
@@ -80,12 +80,23 @@ type Pending = {
   watched: Map<string, () => void>;
 };
 
+/** What `<integrationsDir>/<id>.json` holds: a `Pending` without its follow-up functions (R19). */
+type StoredPending = Pick<
+  Pending,
+  'integration' | 'request' | 'workspaceId' | 'repo' | 'main' | 'tip' | 'tree'
+>;
+
+/** The files of the integrations: a UUID and `.json`, nothing else is read. */
+const FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
+
 export type IntegrationRequest = {
   agentId: string;
   mode: IntegrationMode;
   message: string;
   after: Integration['after'];
   confirmWorking?: boolean | undefined;
+  /** 008 R20 — the delivery that asks for it: its states carry the id. */
+  requestId?: string | undefined;
 };
 
 /** main is checked again once when it moved during the integration (FR-022). */
@@ -144,6 +155,10 @@ export class IntegrationService {
   /** One queue per workspace (FR-026). */
   private readonly queues = new Map<string, Promise<unknown>>();
   private readonly pending = new Map<string, Pending>();
+  /** 008 R19 — the writes of `<integrationsDir>/<id>.json`, one chain per integration (in order). */
+  private readonly writes = new Map<string, Promise<unknown>>();
+  /** The integrations that have a file: only those are erased at their end. */
+  private readonly saved = new Set<string>();
 
   constructor(private readonly options: Options) {
     this.git = options.git;
@@ -184,6 +199,7 @@ export class IntegrationService {
     let integration: Integration = {
       id,
       agentId: agent.id,
+      ...(request.requestId === undefined ? {} : { requestId: request.requestId }),
       mode: request.mode,
       message: request.message,
       after: request.after,
@@ -228,6 +244,7 @@ export class IntegrationService {
             watched: new Map(),
           };
           this.pending.set(id, mine);
+          await this.persist(mine);
           return conflicted;
         }
         set({ state: 'committing' });
@@ -251,9 +268,11 @@ export class IntegrationService {
       if (error instanceof Cancelled) return integration;
       const { failure, state, detail } = failureOf(error);
       set({ state, error: detail });
+      await this.erase(id);
       throw failure;
     }
     set({ state: 'integrated' });
+    await this.erase(id);
     // main has moved: what follows never turns the integration into a failure.
     await this.afterwards(agent, integration, next).catch(() => undefined);
     return integration;
@@ -262,7 +281,12 @@ export class IntegrationService {
   /** « Garder main », « Garder cette version », « Les deux » or a content (FR-029). */
   resolve(id: string, resolution: ConflictResolution): Promise<ConflictFile> {
     // Refusals come back as rejections, as from the other requests.
-    return Promise.resolve().then(() => this.applyResolution(id, resolution));
+    return Promise.resolve().then(async () => {
+      const file = this.applyResolution(id, resolution);
+      // The resolution is on the disk when it is told (R19).
+      await this.persisted(id);
+      return file;
+    });
   }
 
   private applyResolution(id: string, resolution: ConflictResolution): ConflictFile {
@@ -334,7 +358,9 @@ export class IntegrationService {
       ),
     );
     pending.sawWorking = false;
-    return this.update(pending, { state: 'waiting-agent', error: null });
+    const waiting = this.update(pending, { state: 'waiting-agent', error: null });
+    await this.persisted(id);
+    return waiting;
   }
 
   /** Follows the agents asked to resolve: their turn over, the integration is checked again. */
@@ -370,8 +396,115 @@ export class IntegrationService {
   async cancel(id: string): Promise<void> {
     const pending = this.get(id);
     this.drop(pending);
+    await this.erase(id);
     this.onState({ ...pending.integration, state: 'cancelled' });
     await this.removeCopies(id);
+  }
+
+  /**
+   * 008 R19, FR-025 — at the start of the app: the integrations stopped on conflicts are taken up again
+   * from `<integrationsDir>/<id>.json`, with their resolutions. One whose agent is gone has nothing
+   * left to integrate: its file goes. Never throws for a file it cannot read: that file is left alone.
+   */
+  async restore(): Promise<Integration[]> {
+    const dir = this.options.integrationsDir;
+    const names = await readdir(dir).catch(() => [] as string[]);
+    const restored: Integration[] = [];
+    for (const name of names.filter((n) => FILE.test(n)).sort()) {
+      const id = name.slice(0, -'.json'.length);
+      if (this.pending.has(id)) continue;
+      const pending = await this.read(id);
+      if (!pending) continue;
+      try {
+        this.find(pending.integration.agentId);
+      } catch {
+        await rm(join(dir, name), { force: true });
+        continue;
+      }
+      // What the old process was doing is not kept: the agent's turn and the commit are unknown, the
+      // user (or the agent, asked again) goes on from the conflicts; « Terminer » checks main anew.
+      pending.integration = {
+        ...pending.integration,
+        state: 'conflicted',
+        error: null,
+      };
+      this.pending.set(id, pending);
+      this.saved.add(id);
+      await this.persist(pending);
+      this.onState(pending.integration);
+      restored.push(pending.integration);
+    }
+    return restored;
+  }
+
+  private async read(id: string): Promise<Pending | null> {
+    try {
+      const raw = JSON.parse(
+        await readFile(join(this.options.integrationsDir, `${id}.json`), 'utf8'),
+      ) as Partial<StoredPending> | null;
+      const { integration, request, workspaceId, repo, main, tip, tree } = raw ?? {};
+      if (
+        integration?.id !== id ||
+        !Array.isArray(integration.conflicts) ||
+        typeof integration.agentId !== 'string' ||
+        request === undefined ||
+        typeof workspaceId !== 'string' ||
+        typeof repo !== 'string' ||
+        typeof main !== 'string' ||
+        typeof tip !== 'string' ||
+        typeof tree !== 'string'
+      ) {
+        return null;
+      }
+      return {
+        integration,
+        request,
+        workspaceId,
+        repo,
+        main,
+        tip,
+        tree,
+        sawWorking: false,
+        watched: new Map(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** The state of an integration on the disk, after the writes that came before it. */
+  private persist(pending: Pending): Promise<void> {
+    const { integration, request, workspaceId, repo, main, tip, tree } = pending;
+    const stored: StoredPending = { integration, request, workspaceId, repo, main, tip, tree };
+    const id = integration.id;
+    this.saved.add(id);
+    // Best effort: a disk that refuses the write never stops the integration, it only cannot be restored.
+    return this.chain(id, async () => {
+      const dir = this.options.integrationsDir;
+      const target = join(dir, `${id}.json`);
+      const temporary = `${target}.tmp`;
+      try {
+        await mkdir(dir, { recursive: true });
+        await writeFile(temporary, JSON.stringify(stored));
+        await rename(temporary, target);
+      } catch {
+        await rm(temporary, { force: true }).catch(() => undefined);
+      }
+    });
+  }
+
+  /** The integration is over (integrated, failed, cancelled): its file goes, and only then. */
+  private erase(id: string): Promise<void> {
+    if (!this.saved.delete(id)) return Promise.resolve();
+    return this.chain(id, () =>
+      rm(join(this.options.integrationsDir, `${id}.json`), { force: true }).catch(() => undefined),
+    );
+  }
+
+  private chain(id: string, task: () => Promise<void>): Promise<void> {
+    const next = (this.writes.get(id) ?? Promise.resolve()).then(task, task);
+    this.writes.set(id, next);
+    return next;
   }
 
   dispose(): void {
@@ -411,6 +544,7 @@ export class IntegrationService {
       throw failure;
     }
     this.drop(pending);
+    await this.erase(integration.id);
     await this.removeCopies(integration.id);
     const done = { ...pending.integration, state: 'integrated' as const, error: null };
     this.onState(done);
@@ -451,6 +585,7 @@ export class IntegrationService {
 
   private update(pending: Pending, change: Partial<Integration>): Integration {
     pending.integration = { ...pending.integration, ...change };
+    void this.persist(pending);
     this.onState(pending.integration);
     return pending.integration;
   }
@@ -459,6 +594,11 @@ export class IntegrationService {
     const pending = this.pending.get(id);
     if (!pending) throw new IpcFailure('NOT_FOUND', 'Intégration inconnue ou terminée.');
     return pending;
+  }
+
+  /** The writes asked so far are done. */
+  private async persisted(id: string): Promise<void> {
+    await this.writes.get(id);
   }
 
   /** Not while it is checked again after the agent: its conflicts are being read anew. */

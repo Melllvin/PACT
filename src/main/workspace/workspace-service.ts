@@ -11,6 +11,7 @@ import {
 } from '../../shared/model';
 import type { GitService } from '../git/git-service';
 import type { AppState, Stores } from '../persistence/store';
+import { defaultDeliverySettings } from '../../shared/delivery';
 import { DEFAULT_TEST_PATHS } from '../../shared/model';
 
 // US1 — repositories opened as workspaces, recent projects, availability (FR-003…FR-005).
@@ -122,6 +123,8 @@ export class WorkspaceService {
       permissionOverride: null,
       testCommand: null,
       integrationRequests: [],
+      delivery: defaultDeliverySettings(),
+      deliveries: [],
       roleProfiles: {},
       issues: [],
       loops: [],
@@ -206,13 +209,16 @@ export class WorkspaceService {
       const known = available ? await this.git.knownDefaultBranch(path) : undefined;
       const mainBranch = known?.branch ?? saved?.mainBranch ?? '';
       if (known && !known.settled) resolving.push({ id, path });
+      // 008 R24 — `request_integration` is gone: nothing can answer a request saved by an older app.
+      const legacy = (saved?.integrationRequests.length ?? 0) > 0;
       this.open_.set(id, {
         agents: [],
         freeTerminals: [],
         quickLaunchCounters: { freeTerminal: 0 },
         permissionOverride: null,
         testCommand: null,
-        integrationRequests: [],
+        delivery: defaultDeliverySettings(),
+        deliveries: [],
         roleProfiles: {},
         issues: [],
         loops: [],
@@ -221,12 +227,15 @@ export class WorkspaceService {
         exchanges: { messages: [], escalations: [] },
         lastOpenedAt: this.now().toISOString(),
         ...saved,
+        // 008 R24 — `request_integration` is gone: nothing can answer a request saved by an older app.
+        integrationRequests: [],
         mainBranch,
         id,
         path,
         name: basename(path),
         status: available ? 'available' : 'unavailable',
       });
+      if (legacy) await this.stores.workspace(id).write(this.open_.get(id) as Workspace);
     }
     for (const { id, path } of resolving) this.resolveWithOrigin(id, path);
     return this.list();

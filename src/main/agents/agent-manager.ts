@@ -45,7 +45,7 @@ import type { RegisteredCli } from './cli-registry';
 import type { HookServer } from './hook-server';
 import { TerminalText } from './terminal-text';
 import { accountOf, type UsageSource } from '../usage/usage-service';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import {
   ROLE_FILE,
   ROLE_FILE_PROMPT,
@@ -204,6 +204,11 @@ const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
 /** What the terminal sends for Shift+Enter (see xterm-factory). */
 const LINE_BREAK = '\x1b\r';
+const folderExists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 /** #112 — a closed orchestrator directs nothing: it does not hold the role of its workspace. */
 const isLiveOrchestrator = (agent: Agent) =>
   agent.role === 'orchestrator' && agent.state !== 'closed';
@@ -698,12 +703,23 @@ export class AgentManager {
    * were at work get the resume prompt: queued, it is typed once the agent is ready.
    */
   private async restartClosed(workspace: Workspace, agent: Agent, resumeWork: boolean) {
-    const group = [
-      agent,
-      ...(agent.role === 'orchestrator'
+    // 008 R3 — the cleanup of a merged delivery deletes the worktree and leaves the closed tile: say so.
+    if (!(await folderExists(agent.worktreePath))) {
+      throw new IpcFailure(
+        'NOT_FOUND',
+        `Le worktree de « ${this.nameOf(agent)} » a été supprimé (${agent.worktreePath}) : l’agent ne peut pas être relancé. Fermez sa tuile.`,
+      );
+    }
+    const members =
+      agent.role === 'orchestrator'
         ? agentsLaunchedBy(workspace, agent.id).filter((a) => a.state === 'closed')
-        : []),
-    ];
+        : [];
+    // A member whose worktree is gone is left closed; the others start again.
+    const present: Agent[] = [];
+    for (const member of members) {
+      if (await folderExists(member.worktreePath)) present.push(member);
+    }
+    const group = [agent, ...present];
     for (const closed of group) {
       await this.startAgain(workspace, closed, closed.sessionId);
       if (resumeWork && closed.closedWhileWorking) {

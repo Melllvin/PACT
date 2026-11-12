@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TodoItem } from '../../../../src/renderer/todo/TodoItem';
@@ -61,8 +61,9 @@ describe('TodoItem « Revue → »', () => {
   });
 });
 
-// 003 T031 — « ◎ Intégrer <agent> → <main> ? »: the message stays the user's to change (FR-018).
-describe('TodoItem of an integration the orchestrator asks for', () => {
+// 003 T031, migrated by 008 T023 — « ◎ Fusionner <agent> → <main> ? »: the merge the user is asked for.
+describe('TodoItem of a merge the user is asked for', () => {
+  const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
   /** The actions, without « Revue → » when asked. */
   const without = <T extends { onReview: unknown }>(props: T, noReview: boolean) => {
     const { onReview, ...rest } = props;
@@ -71,20 +72,19 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
   const setup = (overrides: { onReview?: boolean } = {}) => {
     const props = {
       ...actions(),
-      onConfirmIntegration: vi.fn(),
-      onRefuseIntegration: vi.fn(),
+      onDecideDelivery: vi.fn(),
     };
     const done = agent(2, { state: 'done' });
     render(
       <ul>
         <TodoItem
           todo={{
-            id: 'r1:integration-request',
+            id: 'r1:delivery-local',
             agentId: done.id,
-            kind: 'integration-request',
-            title: '◎ Intégrer Claude Code 2 → main ?',
+            kind: 'delivery-local',
+            title: '◎ Fusionner Claude Code 2 → main ?',
             actions: [],
-            request: { id: 'r1', message: 'feat: connexion' },
+            delivery: { id: 'r1', head: HEAD },
           }}
           agent={done}
           {...without(props, overrides.onReview === false)}
@@ -94,19 +94,11 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
     return { props, done };
   };
 
-  it('integrates with the message the user edited', async () => {
+  it('merges on the head it shows', async () => {
     const user = userEvent.setup();
     const { props } = setup();
-    expect(screen.getByText('◎ Intégrer Claude Code 2 → main ?')).toBeTruthy();
-    const message = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message de commit' });
-    expect(message.value).toBe('feat: connexion');
-    await user.clear(message);
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '✓ Intégrer' }).disabled).toBe(
-      true,
-    );
-    await user.type(message, 'feat: connexion relue ');
-    await user.click(screen.getByRole('button', { name: '✓ Intégrer' }));
-    expect(props.onConfirmIntegration).toHaveBeenCalledWith('r1', 'feat: connexion relue');
+    await user.click(screen.getByRole('button', { name: 'Fusionner' }));
+    expect(props.onDecideDelivery).toHaveBeenCalledWith('r1', 'validate', HEAD);
     // Not a tile action: no « Autoriser » nor « Relancer » here.
     expect(screen.queryByRole('button', { name: /Autoriser|Relancer/ })).toBeNull();
   });
@@ -115,7 +107,7 @@ describe('TodoItem of an integration the orchestrator asks for', () => {
     const user = userEvent.setup();
     const { props, done } = setup();
     await user.click(screen.getByRole('button', { name: 'Refuser' }));
-    expect(props.onRefuseIntegration).toHaveBeenCalledWith('r1');
+    expect(props.onDecideDelivery).toHaveBeenCalledWith('r1', 'refuse', HEAD);
     await user.click(screen.getByRole('button', { name: 'Revue →' }));
     expect(props.onReview).toHaveBeenCalledWith(done.id);
   });
@@ -373,6 +365,419 @@ describe('TodoItem of an exchange in a loop', () => {
       </ul>,
     );
     await user.click(screen.getByRole('button', { name: 'Couper' }));
+    expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});
+
+// 008 T022 — a todo needs no handler it does not use.
+describe('TodoItem without handlers', () => {
+  it('shows the buttons of its agent and clicks through without a handler', async () => {
+    const user = userEvent.setup();
+    const failed = agent(5, {
+      state: 'error',
+      lastError: { code: null, kind: 'crash', message: 'Boum' },
+    });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: 'a5:prompt',
+            agentId: failed.id,
+            kind: 'prompt',
+            title: '✕ Erreur · claude-code 5',
+            actions: [],
+          }}
+          agent={failed}
+        />
+      </ul>,
+    );
+    for (const name of ['Journal', 'Relancer', 'Reprendre']) {
+      await user.click(screen.getByRole('button', { name }));
+    }
+    expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});
+
+// 008 data-model — « ◎ Relire la PR #n »: shown with its agent, without the buttons of a tile.
+describe('TodoItem of a PR to review', () => {
+  it('shows the title and the work of its agent, and no button', () => {
+    const dev = agent(6, { state: 'done' });
+    render(
+      <ul>
+        <TodoItem
+          todo={{
+            id: 'd1:delivery-review',
+            agentId: dev.id,
+            kind: 'delivery-review',
+            title: '◎ Relire la PR #3 · 0012-connexion · 1234567 · sans verdict',
+            actions: [],
+          }}
+          agent={dev}
+        />
+      </ul>,
+    );
+    expect(screen.getByRole('listitem').getAttribute('data-kind')).toBe('delivery-review');
+    expect(screen.getByText(/Relire la PR #3/)).toBeTruthy();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+});
+
+// 008 T037 — « ◎ Relire la PR #n » with its decisions (US3 sc.1 to 3, FR-013, FR-027, contracts/ui.md).
+//
+// RED until T040. Assumed API: the item is `{ kind: 'delivery-review', delivery: { id, head, url,
+// verdict } }`, `head` being the head of the PR the user is asked to merge, `url` the link of the PR,
+// `verdict` `'accepted'` or `null` (a PR without a verdict). TodoItem takes `onDecideDelivery(
+// deliveryId, decision, head, reason?)`. « Valider » decides once and stays disabled until the item is
+// gone; « Refuser » opens a field named « motif » and the button « Refuser » stays disabled while the
+// reason is empty or blank; the reason is the fourth argument. « Ouvrir la PR » is a link to `url`.
+describe('TodoItem « Relire la PR » (delivery-review)', () => {
+  const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
+  const PR_URL = 'https://github.com/pact/test/pull/7';
+  const dev = agent(2, { state: 'done', role: 'dev' });
+
+  const setup = (verdict: 'accepted' | null = 'accepted') => {
+    const onDecideDelivery = vi.fn();
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:delivery-review',
+              agentId: dev.id,
+              kind: 'delivery-review',
+              title:
+                verdict === null
+                  ? '◎ Relire la PR #7 · 0012-connexion · abcdef0 · sans verdict'
+                  : '◎ Relire la PR #7 · 0012-connexion · abcdef0',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD, url: PR_URL, verdict },
+            } as never
+          }
+          agent={dev}
+          {...{ ...actions(), onDecideDelivery }}
+        />
+      </ul>,
+    );
+    return { onDecideDelivery, user: userEvent.setup() };
+  };
+
+  it('Given the item, When it is shown, Then it gives the PR, the commit and the verdict, and the buttons Valider, Refuser and the link of the PR', () => {
+    setup();
+
+    expect(screen.getByRole('listitem').getAttribute('data-kind')).toBe('delivery-review');
+    expect(screen.getAllByText(/Relire la PR #7/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/abcdef0/).length).toBeGreaterThan(0);
+    expect(screen.getByRole('listitem').textContent).toMatch(/verdict/i);
+    expect(screen.getByRole('listitem').textContent).not.toMatch(/sans verdict/i);
+    expect(screen.getByRole('button', { name: 'Valider' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Refuser' })).toBeTruthy();
+    const link = screen.getAllByRole('link').find((a) => a.getAttribute('href') === PR_URL);
+    expect(link).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Fusionner' })).toBeNull();
+  });
+
+  it('Given a PR without a verdict, When it is shown, Then it says « sans verdict »', () => {
+    setup(null);
+
+    expect(screen.getByRole('listitem').textContent).toMatch(/sans verdict/);
+  });
+
+  it('Given the item, When Valider is clicked, Then the delivery is validated on the head shown', async () => {
+    const { onDecideDelivery, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(onDecideDelivery).toHaveBeenCalledExactlyOnceWith('d1', 'validate', HEAD);
+  });
+
+  it('Given a click on Valider, When the answer has not come, Then the button is disabled and a second click asks nothing (sc.2, FR-027)', async () => {
+    const { onDecideDelivery, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Valider' }).disabled).toBe(true);
+    expect(onDecideDelivery).toHaveBeenCalledOnce();
+  });
+
+  it('Given the item, When it is shown, Then no field of reason is there until Refuser is clicked', async () => {
+    const { onDecideDelivery, user } = setup();
+    expect(screen.queryByRole('textbox')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    expect(screen.getByRole('textbox', { name: /motif/i })).toBeTruthy();
+    expect(onDecideDelivery).not.toHaveBeenCalled();
+  });
+
+  it('Given the field of reason, When it is empty or blank, Then Refuser is disabled and a click asks nothing (sc.3)', async () => {
+    const { onDecideDelivery, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    const refuse = screen.getByRole<HTMLButtonElement>('button', { name: 'Refuser' });
+    expect(refuse.disabled).toBe(true);
+    await user.click(refuse);
+    await user.type(screen.getByRole('textbox', { name: /motif/i }), '   ');
+
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Refuser' }).disabled).toBe(true);
+    expect(onDecideDelivery).not.toHaveBeenCalled();
+  });
+
+  it('Given a reason, When Refuser is clicked, Then the delivery is refused on the head shown, with the reason', async () => {
+    const { onDecideDelivery, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    await user.type(screen.getByRole('textbox', { name: /motif/i }), 'Le cas vide manque.');
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    expect(onDecideDelivery).toHaveBeenCalledExactlyOnceWith(
+      'd1',
+      'refuse',
+      HEAD,
+      'Le cas vide manque.',
+    );
+  });
+
+  it('Given a reason written by someone with markup, When the item is shown, Then nothing of it is rendered as an element', async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+
+    await user.type(
+      screen.getByRole('textbox', { name: /motif/i }),
+      '<img src=x onerror=alert(1)>',
+    );
+
+    expect(document.querySelector('img')).toBeNull();
+  });
+
+  it('Given no handler, When Valider is clicked, Then nothing breaks', async () => {
+    const user = userEvent.setup();
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:delivery-review',
+              agentId: dev.id,
+              kind: 'delivery-review',
+              title: '◎ Relire la PR #7 · 0012-connexion · abcdef0',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD, url: PR_URL, verdict: 'accepted' },
+            } as never
+          }
+          agent={dev}
+        />
+      </ul>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Valider' }));
+
+    expect(screen.getByRole('listitem')).toBeTruthy();
+  });
+});
+
+// 008 T063 — « ◆ Worktree gardé » (worktree-kept, US8 sc.2, sc.3, FR-037, contracts/ui.md).
+//
+// RED until T066. Assumed API: the item is `{ kind: 'worktree-kept', agentId, title, delivery: { id, head } }`
+// (the agent whose worktree was kept; the reason is in the title, written by PACT) and TodoItem takes
+// `onCleanup(deliveryId, agentId, decision: 'force' | 'keep', confirmed?: boolean)`, which answers
+// `{ lost: string[] }`. « Supprimer quand même » asks FIRST (`'force'`, not confirmed: nothing is deleted
+// by that call) what would be lost, shows it in a dialog named « Supprimer quand même », and deletes only
+// when the user confirms in it (`'force'`, `confirmed = true`). « Annuler » closes it and deletes nothing.
+// « Garder » is `'keep'`, with no dialog.
+describe('TodoItem « Worktree gardé » (worktree-kept)', () => {
+  const dev = agent(2, { state: 'closed', role: 'dev' });
+  const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
+  const LOST = [
+    'notes.txt (non suivi)',
+    '.env.local (ignoré)',
+    '1 commit absent de la PR : encore',
+  ];
+
+  const setup = (lost: string[] = LOST) => {
+    const onCleanup = vi.fn((_d: string, _a: string, _decision: string, confirmed?: boolean) =>
+      Promise.resolve({ lost: confirmed ? [] : lost }),
+    );
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:worktree-kept',
+              agentId: dev.id,
+              kind: 'worktree-kept',
+              title: '◆ Worktree gardé · Claude Code 2 · notes.txt non suivi',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD },
+            } as never
+          }
+          agent={dev}
+          {...({ ...actions(), onCleanup } as object)}
+        />
+      </ul>,
+    );
+    return { onCleanup, user: userEvent.setup() };
+  };
+
+  it('Given the item, When it is shown, Then the title says which agent and why, and the buttons are « Supprimer quand même » and « Garder »', () => {
+    setup();
+
+    expect(screen.getByRole('listitem').getAttribute('data-kind')).toBe('worktree-kept');
+    expect(screen.getByText('◆ Worktree gardé')).toBeTruthy();
+    expect(screen.getByText(/notes\.txt non suivi/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Supprimer quand même' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Garder' })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('Given the item, When « Supprimer quand même » is clicked, Then what would be lost is asked and listed in a confirmation, and nothing is deleted yet (sc.3)', async () => {
+    const { onCleanup, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+    for (const lost of LOST) expect(dialog.textContent).toContain(lost);
+    expect(onCleanup).toHaveBeenCalledExactlyOnceWith('d1', dev.id, 'force');
+    expect(onCleanup.mock.calls.some((call) => call[3] === true)).toBe(false);
+  });
+
+  it('Given the confirmation, When the user confirms, Then the deletion is asked, confirmed, for that delivery and that agent, once', async () => {
+    const { onCleanup, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+
+    expect(onCleanup).toHaveBeenCalledTimes(2);
+    expect(onCleanup).toHaveBeenLastCalledWith('d1', dev.id, 'force', true);
+  });
+
+  const renderKept = (onCleanup: ReturnType<typeof vi.fn>) => {
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:worktree-kept',
+              agentId: dev.id,
+              kind: 'worktree-kept',
+              title: '◆ Worktree gardé · Claude Code 2 · notes.txt non suivi',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD },
+            } as never
+          }
+          agent={dev}
+          {...({ ...actions(), onCleanup } as object)}
+        />
+      </ul>,
+    );
+    return userEvent.setup();
+  };
+
+  it('Given a file added since the list was shown, When the user confirms, Then the dialog shows the new list instead of closing (R1)', async () => {
+    const later = [...LOST, 'added-later.txt (non suivi)'];
+    const onCleanup = vi
+      .fn()
+      .mockResolvedValueOnce({ lost: LOST })
+      .mockResolvedValueOnce({ lost: later })
+      .mockResolvedValueOnce({ lost: later });
+    const user = renderKept(onCleanup);
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+
+    const again = await screen.findByText('added-later.txt (non suivi)');
+    expect(again).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    // Seen and confirmed again: it goes, and the dialog closes.
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Supprimer' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(onCleanup).toHaveBeenCalledTimes(3);
+  });
+
+  it('Given a deletion that fails, When the user confirms, Then the dialog closes (the error is shown elsewhere)', async () => {
+    const onCleanup = vi.fn().mockResolvedValueOnce({ lost: LOST }).mockResolvedValueOnce(null);
+    const user = renderKept(onCleanup);
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
+  it('Given the confirmation, When Escape is pressed, Then the dialog closes and nothing is deleted', async () => {
+    const { onCleanup, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(onCleanup.mock.calls.some((call) => call[3] === true)).toBe(false);
+  });
+
+  it('Given the confirmation, When the user cancels, Then nothing is deleted and the dialog closes', async () => {
+    const { onCleanup, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Annuler' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onCleanup.mock.calls.some((call) => call[3] === true)).toBe(false);
+    expect(screen.getByRole('button', { name: 'Supprimer quand même' })).toBeTruthy();
+  });
+
+  it('Given the item, When « Garder » is clicked, Then the worktree is kept: no dialog and no deletion', async () => {
+    const { onCleanup, user } = setup();
+
+    await user.click(screen.getByRole('button', { name: 'Garder' }));
+
+    expect(onCleanup).toHaveBeenCalledExactlyOnceWith('d1', dev.id, 'keep');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('Given a worktree with nothing to lose but an error of removal, When « Supprimer quand même » is clicked, Then the dialog says there is nothing to lose rather than listing nothing', async () => {
+    const { user } = setup([]);
+
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+    expect(dialog.textContent).toMatch(/rien/i);
+    expect(within(dialog).queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  it('Given no handler, When the buttons are clicked, Then nothing breaks', async () => {
+    const user = userEvent.setup();
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:worktree-kept',
+              agentId: dev.id,
+              kind: 'worktree-kept',
+              title: '◆ Worktree gardé · Claude Code 2 · raison',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD },
+            } as never
+          }
+          agent={dev}
+        />
+      </ul>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Garder' }));
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+
     expect(screen.getByRole('listitem')).toBeTruthy();
   });
 });

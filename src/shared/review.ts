@@ -119,6 +119,8 @@ export const integrationStateSchema = z.enum([
 export const integrationSchema = z.object({
   id: z.uuid(),
   agentId: z.uuid(),
+  /** 008 R20 — the delivery this integration comes from; absent for a manual one. */
+  requestId: z.uuid().optional(),
   mode: integrationModeSchema.default('squash'),
   message: z.string().min(1),
   after: integrationAfterSchema.default(() => ({ closeTile: true, removeWorktree: true })),

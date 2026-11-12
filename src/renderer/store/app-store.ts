@@ -1,3 +1,4 @@
+import type { DeliverySettings } from '../../shared/delivery';
 import { createStore } from 'zustand/vanilla';
 import {
   ipcErrorSchema,
@@ -129,14 +130,37 @@ export type AppState = {
   confirmRestartAgent: (resumeWork: boolean) => Promise<void>;
   /** « Annuler » of « reprise auto à HH:MM » (FR-036). */
   cancelAutoResume: (agentId: string) => Promise<void>;
+  /** 008 US1 — « Livrer » / « Intégrer » of an agent, and « Fusionner » / « Refuser » of the local merge. */
+  requestDelivery: (
+    workspaceId: string,
+    agentId: string,
+    request: { title: string; message: string; unverified: boolean },
+  ) => Promise<void>;
+  /** 008 FR-019 — the settings of the delivery of a project (« Auto » first). */
+  setDeliverySettings: (workspaceId: string, settings: Partial<DeliverySettings>) => Promise<void>;
+  decideDelivery: (
+    deliveryId: string,
+    decision: 'validate' | 'refuse' | 'wait' | 'review',
+    head: string,
+    reason?: string,
+  ) => Promise<void>;
+  /** 008 US3 — « Ouvrir la PR »: the main process opens it. */
+  openDeliveryPr: (deliveryId: string) => Promise<void>;
+  /**
+   * 008 US8 — « Supprimer quand même » (`force`, then `confirmed`) / « Garder » (`keep`) of a worktree the
+   * cleanup kept. Answers what would be lost; `null` when the call failed (the error is shown).
+   */
+  cleanupWorktree: (
+    deliveryId: string,
+    agentId: string,
+    decision: 'force' | 'keep',
+    confirmed?: boolean,
+  ) => Promise<{ lost: string[] } | null>;
   /** 009 R10 — « Reprendre » / « Annuler la reprise » of a « ◆ En pause »: the whole account. */
   resumeUsage: (cliId: string, account: string) => Promise<void>;
   cancelUsageResume: (cliId: string, account: string) => Promise<void>;
   /** 009 US3 — « Arrêter par prudence » ('stop') or « Pas maintenant » ('later'). */
   decideUsageStale: (cliId: string, account: string, decision: 'stop' | 'later') => Promise<void>;
-  /** 003 US3 — the user's answer to an integration the orchestrator asks for (FR-018). */
-  confirmIntegrationRequest: (requestId: string, message: string) => Promise<void>;
-  refuseIntegrationRequest: (requestId: string) => Promise<void>;
   /** 003 US5 — the journal « ◎ Actions » of an orchestrator, the latest first (FR-021). */
   orchestratorActions: Record<string, OrchestratorAction[]>;
   loadOrchestratorActions: (agentId: string) => Promise<void>;
@@ -268,6 +292,8 @@ const withoutAgent = (workspaces: Workspace[], agentId: string): Workspace[] =>
   );
 
 export function createAppStore(api: PactApi) {
+  /** 008 R1 — the losses last shown for a kept worktree, by `delivery:agent`. */
+  const shownLosses = new Map<string, string[]>();
   return createStore<AppState>()((set, get) => {
     /** Adds (or refreshes) a workspace and makes its tab active. */
     /** Runs a tile action; a refusal is shown until an action succeeds. */
@@ -443,10 +469,17 @@ export function createAppStore(api: PactApi) {
               },
             });
           }),
-          api.on('workspace:integrationRequests', ({ workspaceId, requests }) => {
+          api.on('workspace:deliveries', ({ workspaceId, deliveries, delivery, hasOrigin }) => {
             set({
               workspaces: get().workspaces.map((w) =>
-                w.id === workspaceId ? { ...w, integrationRequests: requests } : w,
+                w.id === workspaceId
+                  ? {
+                      ...w,
+                      deliveries,
+                      delivery,
+                      ...(hasOrigin === undefined ? {} : { hasOrigin }),
+                    }
+                  : w,
               ),
             });
           }),
@@ -672,11 +705,45 @@ export function createAppStore(api: PactApi) {
       decideUsageStale: (cliId, account, decision) =>
         act(() => api.invoke('usage:stale', { cliId, account, decision })),
 
-      confirmIntegrationRequest: (requestId, message) =>
-        act(() => api.invoke('integrationRequest:confirm', { requestId, message })),
+      requestDelivery: (workspaceId, agentId, request) =>
+        act(() => api.invoke('delivery:request', { workspaceId, agentId, ...request })),
 
-      refuseIntegrationRequest: (requestId) =>
-        act(() => api.invoke('integrationRequest:refuse', { requestId })),
+      setDeliverySettings: (workspaceId, settings) =>
+        act(() => api.invoke('delivery:settings', { workspaceId, settings })),
+
+      decideDelivery: (deliveryId, decision, head, reason) =>
+        act(() =>
+          api.invoke('delivery:decide', {
+            deliveryId,
+            decision,
+            head,
+            ...(reason === undefined ? {} : { reason }),
+          }),
+        ),
+
+      openDeliveryPr: (deliveryId) => act(() => api.invoke('delivery:openPr', { deliveryId })),
+
+      cleanupWorktree: async (deliveryId, agentId, decision, confirmed) => {
+        const key = `${deliveryId}:${agentId}`;
+        try {
+          const answer = await api.invoke('delivery:cleanup', {
+            deliveryId,
+            agentId,
+            decision,
+            ...(confirmed === undefined ? {} : { confirmed }),
+            // R1 — the deletion is confirmed for the list the user was shown, not for whatever it is by then.
+            ...(confirmed === true ? { seen: shownLosses.get(key) ?? [] } : {}),
+          });
+          // What the user is shown last is what a confirmation is bound to (a changed list is shown again).
+          if (decision === 'keep') shownLosses.delete(key);
+          else shownLosses.set(key, answer.lost);
+          set({ actionError: null });
+          return answer;
+        } catch (error) {
+          set({ actionError: asIpcError(error).message });
+          return null;
+        }
+      },
 
       decideLoop: (workspaceId, issueId, decision) =>
         act(() => api.invoke('loop:decide', { workspaceId, issueId, decision })),

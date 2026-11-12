@@ -17,8 +17,12 @@
     },
     { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 30 } },
     {
-      "tool": "request_integration",
-      "arguments": { "agent": "Faux CLI 4", "message": "feat: la fonction" }
+      "tool": "request_delivery",
+      "arguments": {
+        "issue": "0001-fonction",
+        "title": "La fonction",
+        "message": "feat: la fonction"
+      }
     },
     { "tool": "wait_for_agents", "arguments": { "timeoutSeconds": 60 } }
   ]

@@ -175,13 +175,17 @@ describe('deriveTodos', () => {
     expect(todos.map((t) => t.id)).toEqual(['a1:answer']);
   });
 
-  it('asks to integrate what the orchestrator proposes, after answers and before reviews', () => {
+  it('asks to merge what a local delivery proposes, after answers and before reviews', () => {
+    const HEAD = 'abcdef0123456789abcdef0123456789abcdef01';
     const request = {
       id: 'r1',
       agentId: 'a2',
-      mode: 'squash' as const,
+      channel: 'local',
+      state: 'reviewing',
+      unverified: false,
+      frozenCommit: HEAD,
+      title: 'Connexion',
       message: 'feat: connexion',
-      requestedAt: '2026-11-03T00:00:00.000Z',
     };
     const todos = deriveTodos(
       {
@@ -191,17 +195,17 @@ describe('deriveTodos', () => {
           agent(3, { state: 'awaiting-answer' }),
         ]),
         // A request for an agent already gone gives nothing.
-        integrationRequests: [request, { ...request, id: 'r2', agentId: 'a9' }],
+        deliveries: [request, { ...request, id: 'r2', agentId: 'a9' }] as never,
       },
       names,
       { a1: 1 },
     );
-    expect(todos.map((t) => t.id)).toEqual(['a3:answer', 'r1:integration-request', 'a1:review']);
+    expect(todos.map((t) => t.id)).toEqual(['a3:answer', 'r1:delivery-local', 'a1:review']);
     expect(todos[1]).toMatchObject({
       agentId: 'a2',
-      kind: 'integration-request',
-      title: '◎ Intégrer Claude Code 2 → main ?',
-      request: { id: 'r1', message: 'feat: connexion' },
+      kind: 'delivery-local',
+      title: '◎ Fusionner Claude Code 2 → main ?',
+      delivery: { id: 'r1', head: HEAD },
     });
   });
 
@@ -215,6 +219,7 @@ describe('deriveTodos', () => {
       rounds: [],
       state,
       escalatedModel: null,
+      polish: null,
     });
     const todos = deriveTodos(
       {
@@ -242,6 +247,72 @@ describe('deriveTodos', () => {
       agentId: 'a2',
       title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
       loop: { issueId: '0012-connexion' },
+    });
+  });
+
+  // 008 T056 / US5 sc.7 — the title of a loop stopped and its « Relancer » name the ceiling of the PROJECT.
+  //
+  // RED until T059. Assumed API: `deriveTodos` reads `workspace.delivery.maxRounds` (3 when the workspace has no
+  // `delivery`, as the test above); the title is « ✕ Boucle arrêtée · <issue> · <N> tours » and the item carries
+  // `loop: { issueId, maxRounds: N }`, from which TodoItem.tsx writes « Relancer N tours ».
+  describe('a loop stopped under the ceiling of the project (008 US5 sc.7)', () => {
+    const stopped = {
+      issueId: '0012-connexion',
+      devAgentId: 'a2',
+      testAgentId: 'a3',
+      round: 5,
+      rounds: [],
+      state: 'escalated' as const,
+      escalatedModel: null,
+      polish: null,
+    };
+    const derive = (maxRounds: number | null) =>
+      deriveTodos(
+        {
+          ...workspace([agent(2, { state: 'done' }), agent(3, { state: 'done' })]),
+          loops: [stopped],
+          ...(maxRounds === null
+            ? {}
+            : {
+                delivery: {
+                  auto: false,
+                  mergeMode: 'squash' as const,
+                  maxRounds,
+                  polishPasses: 0,
+                  polishBrief: '',
+                },
+              }),
+        },
+        names,
+        {},
+      ).find((t) => t.kind === 'loop-escalated');
+
+    it('Given a ceiling of 5 in the project, When a loop is stopped, Then the title says 5 tours and the item carries the ceiling for « Relancer 5 tours »', () => {
+      expect(derive(5)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 5 tours',
+        loop: { issueId: '0012-connexion', maxRounds: 5 },
+      });
+    });
+
+    it('Given a ceiling of 10, When a loop is stopped, Then the title says 10 tours', () => {
+      expect(derive(10)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 10 tours',
+        loop: { maxRounds: 10 },
+      });
+    });
+
+    it('Given the default ceiling of 3, When a loop is stopped, Then the title still says 3 tours: the value is the project’s', () => {
+      expect(derive(3)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
+        loop: { maxRounds: 3 },
+      });
+    });
+
+    it('Given a workspace without settings (an old state), When a loop is stopped, Then the ceiling is the default 3', () => {
+      expect(derive(null)).toMatchObject({
+        title: '✕ Boucle arrêtée · 0012-connexion · 3 tours',
+        loop: { maxRounds: 3 },
+      });
     });
   });
 
@@ -389,7 +460,7 @@ type WithReport = Partial<Agent> & {
 const reported = (n: number, overrides: WithReport = {}): Agent => agent(n, overrides);
 
 const loopOf = (
-  state: 'running' | 'escalated' | 'passed' | 'closed',
+  state: 'running' | 'escalated' | 'polishing' | 'accepted' | 'delivering' | 'merged' | 'closed',
   devAgentId: string,
   testAgentId: string,
 ) => ({
@@ -400,6 +471,7 @@ const loopOf = (
   rounds: [],
   state,
   escalatedModel: null,
+  polish: null,
 });
 
 describe('deriveTodos — « Changements à relire » names the agent, its role and its size', () => {
@@ -432,50 +504,61 @@ describe('deriveTodos — who has no review', () => {
     expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
   });
 
-  it.each(['running', 'escalated'] as const)('gives the dev of a %s loop no review', (state) => {
-    const todos = deriveTodos(
-      {
-        ...workspace([
-          agent(1, { state: 'done', role: 'dev' }),
-          agent(2, { state: 'done', role: 'test' }),
-        ]),
-        loops: [loopOf(state, 'a1', 'a2')],
-      },
-      names,
-      { a1: 2, a2: 1 },
-    );
-    expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
-  });
-
-  it.each(['passed', 'closed'] as const)('gives the dev of a %s loop its review', (state) => {
-    const todos = deriveTodos(
-      {
-        ...workspace([agent(1, { state: 'done', role: 'dev' })]),
-        loops: [loopOf(state, 'a1', 'a2')],
-      },
-      names,
-      { a1: 2 },
-    );
-    expect(todos.map((t) => t.id)).toEqual(['a1:review']);
-  });
-
-  it.each(['running', 'escalated', 'passed', 'closed'] as const)(
-    'gives the tester of a %s loop no review',
+  it.each(['running', 'escalated', 'polishing', 'delivering'] as const)(
+    'gives the dev of a %s loop no review',
     (state) => {
       const todos = deriveTodos(
         {
           ...workspace([
-            agent(1, { state: 'working', role: 'dev' }),
+            agent(1, { state: 'done', role: 'dev' }),
             agent(2, { state: 'done', role: 'test' }),
           ]),
           loops: [loopOf(state, 'a1', 'a2')],
         },
         names,
-        { a2: 3 },
+        { a1: 2, a2: 1 },
       );
-      expect(todos.filter((t) => t.id === 'a2:review')).toEqual([]);
+      expect(todos.filter((t) => t.kind === 'review')).toEqual([]);
     },
   );
+
+  it.each(['accepted', 'merged', 'closed'] as const)(
+    'gives the dev of a %s loop its review',
+    (state) => {
+      const todos = deriveTodos(
+        {
+          ...workspace([agent(1, { state: 'done', role: 'dev' })]),
+          loops: [loopOf(state, 'a1', 'a2')],
+        },
+        names,
+        { a1: 2 },
+      );
+      expect(todos.map((t) => t.id)).toEqual(['a1:review']);
+    },
+  );
+
+  it.each([
+    'running',
+    'escalated',
+    'polishing',
+    'accepted',
+    'delivering',
+    'merged',
+    'closed',
+  ] as const)('gives the tester of a %s loop no review', (state) => {
+    const todos = deriveTodos(
+      {
+        ...workspace([
+          agent(1, { state: 'working', role: 'dev' }),
+          agent(2, { state: 'done', role: 'test' }),
+        ]),
+        loops: [loopOf(state, 'a1', 'a2')],
+      },
+      names,
+      { a2: 3 },
+    );
+    expect(todos.filter((t) => t.id === 'a2:review')).toEqual([]);
+  });
 });
 
 describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', () => {
@@ -518,15 +601,18 @@ describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', 
           agent(4, { state: 'error', lastError: rateLimited }),
           blocked(5, 1, { state: 'awaiting-prompt' }),
         ]),
-        integrationRequests: [
+        deliveries: [
           {
             id: 'r1',
             agentId: 'a1',
-            mode: 'squash' as const,
+            channel: 'local',
+            state: 'reviewing',
+            unverified: false,
+            frozenCommit: 'abcdef0123456789abcdef0123456789abcdef01',
+            title: 'Connexion',
             message: 'feat',
-            requestedAt: '2026-11-03T00:00:00.000Z',
           },
-        ],
+        ] as never,
       },
       names,
       { a1: 1, a2: 4, a5: 2 },
@@ -535,7 +621,7 @@ describe('deriveTodos — « ◆ Décider »: an agent stopped with questions', 
       'a3:answer',
       'a2:decide',
       'a5:decide',
-      'r1:integration-request',
+      'r1:delivery-local',
       'a4:rate-limit',
       'a1:review',
     ]);

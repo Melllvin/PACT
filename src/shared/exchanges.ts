@@ -25,6 +25,7 @@ export const EXCHANGE_KINDS = [
   'loop',
   'report-missing',
   'integration',
+  'delivery',
   'publish',
   'mockup',
   'verdict',
@@ -67,6 +68,29 @@ export const integrationOutcomeSchema = z.object({
   files: z.array(z.string()).optional(),
 });
 
+/** 008 R21 — what a delivery tells the orchestrator: the outcome, and the PR and commit it concerns. */
+export const DELIVERY_OUTCOMES = [
+  'refused',
+  'dropped',
+  'conflicted',
+  'tests-failed',
+  'pr-opened',
+  'ci-green',
+  'ci-red',
+  'review-requested',
+  'user-refused',
+  'merged',
+  'merge-failed',
+  'alert',
+] as const;
+export const deliveryOutcomeSchema = z.object({
+  id: z.uuid(),
+  outcome: z.enum(DELIVERY_OUTCOMES),
+  pr: z.object({ number: z.int().positive(), url: z.string() }).optional(),
+  commit: gitIdSchema.optional(),
+  checks: z.array(z.string()).optional(),
+});
+
 export const exchangeMessageSchema = z
   .object({
     id: z.uuid(),
@@ -80,6 +104,7 @@ export const exchangeMessageSchema = z
     kind: z.enum(EXCHANGE_KINDS),
     text: z.string(),
     integration: integrationOutcomeSchema.optional(),
+    delivery: deliveryOutcomeSchema.optional(),
     unreadBy: z.array(z.uuid()),
   })
   .superRefine((message, ctx) => {

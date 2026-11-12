@@ -1,4 +1,5 @@
 import { agentName } from '../../shared/agent-name';
+import { isFinalState } from '../../shared/delivery';
 import { unifiedText } from '../../shared/diff';
 import { IpcFailure } from '../../shared/ipc';
 import {
@@ -18,7 +19,7 @@ import type { PermissionService } from '../agents/permission-service';
 import type { ReviewService } from '../review/review-service';
 import type { TestRunner } from '../review/test-runner';
 import type { EventSummary, ExchangeService, WaitResult } from './exchange-service';
-import type { IntegrationRequests } from './integration-requests';
+import type { DeliveryService } from '../delivery/delivery-service';
 import type { IssueService } from './issues';
 import { clockTime } from '../../shared/usage';
 import type { LoopService } from './loop-service';
@@ -61,9 +62,10 @@ export type ToolDependencies = {
   /** 007 — the shared reading of the journal, for `get_events`. */
   exchanges?: ExchangeReads & Pick<ExchangeService, 'record'> & Partial<ExchangeWrites>;
   /** The integrations waiting for the user (US3). */
-  requests: Pick<IntegrationRequests, 'request'>;
+  /** 008 — `request_delivery`: the barriers and the run of a delivery. */
+  delivery: Pick<DeliveryService, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
-  loops: Pick<LoopService, 'start' | 'next' | 'get'>;
+  loops: Pick<LoopService, 'start' | 'next' | 'get' | 'polish'>;
   /** 004 US3 — the issues of the workspace, published once the user confirms. */
   issues: Pick<IssueService, 'register' | 'list' | 'requestPublish'>;
   /** 005 FR-012 — « Limite 5 h à 85 % : … » when a CLI is near its limit; never a refusal. */
@@ -88,7 +90,9 @@ const MAX_WAIT_S = 60;
 
 const MAX_PROMPT = 8000;
 const MAX_MESSAGE = 4000;
-const MODES = ['squash', 'keep-commits'] as const;
+const MAX_TITLE = 200;
+/** 008 contracts/mcp-tools.md — the notes of `polish_pass`. */
+const MAX_POLISH_NOTES = 2000;
 
 /** Refused with its reason: the orchestrator reads it and adapts. */
 class Refusal extends Error {}
@@ -162,6 +166,15 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     if (!found) throw new Refusal('L’orchestrateur n’est plus dans un workspace ouvert.');
     if (found.status !== 'available') throw new Refusal('Le dossier du workspace est introuvable.');
     return found;
+  };
+
+  /** 008 FR-021 — the ceiling of rounds is the project's, never a number of the code. */
+  const ceiling = (): number => {
+    try {
+      return workspace().delivery.maxRounds;
+    } catch {
+      return 3;
+    }
   };
 
   /** By id or by displayed name, case ignored; never the orchestrator itself (FR-008). */
@@ -517,6 +530,14 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       ['agent'],
       async (args) => {
         const agent = resolve(stringArg(args, 'agent'));
+        const running = workspace().deliveries.find(
+          (d) => !isFinalState(d.state) && (d.agentId === agent.id || d.testAgentId === agent.id),
+        );
+        if (running) {
+          throw new Refusal(
+            `${nameOf(agent)} est dans une livraison en cours (${running.state}) : attends son issue.`,
+          );
+        }
         await asRefusal(() => deps.agents.close(agent.id, { removeWorktree: false }));
         return reply(`${nameOf(agent)} fermé ; worktree et branche ${agent.branch} gardés.`, {
           closed: true,
@@ -525,32 +546,40 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       },
     ),
     tool(
-      'request_integration',
-      'Demande à l’utilisateur d’intégrer le travail d’un agent dans la branche principale, avec un message de commit. Rien n’est intégré sans sa confirmation ; l’issue arrive dans tes événements (get_events). Lis get_changes et les tests avant.',
+      'request_delivery',
+      'Demande la livraison d’une issue acceptée : PACT rebase, teste, pousse et ouvre la PR (ou propose la fusion à l’utilisateur sans dépôt distant). Rend la main tout de suite ; l’issue arrive dans tes événements (get_events). Lis get_changes et les tests avant.',
       {
-        agent: agentArgument,
+        issue: { type: 'string', minLength: 1 },
+        title: { type: 'string', minLength: 1, maxLength: MAX_TITLE },
         message: { type: 'string', minLength: 1, maxLength: MAX_MESSAGE },
-        mode: { type: 'string', enum: [...MODES] },
       },
-      ['agent', 'message'],
+      ['issue', 'message', 'title'],
       async (args) => {
-        const agent = resolve(stringArg(args, 'agent'));
-        const message = stringArg(args, 'message');
-        if (message.trim() === '' || message.length > MAX_MESSAGE) {
+        const issue = stringArg(args, 'issue').trim();
+        const title = stringArg(args, 'title').trim();
+        const message = stringArg(args, 'message').trim();
+        if (title === '' || title.length > MAX_TITLE) {
+          throw new Refusal(`Titre de 1 à ${String(MAX_TITLE)} caractères attendu.`);
+        }
+        if (message === '' || message.length > MAX_MESSAGE) {
           throw new Refusal(`Message de 1 à ${String(MAX_MESSAGE)} caractères attendu.`);
         }
-        const mode = argument(args, 'mode') ?? 'squash';
-        if (mode !== 'squash' && mode !== 'keep-commits') {
-          throw new Refusal('Mode « squash » ou « keep-commits » attendu.');
-        }
-        const request = await deps.requests.request(workspace().id, {
-          agentId: agent.id,
+        const ws = workspace();
+        const loop = ws.loops.filter((l) => l.issueId === issue).at(-1);
+        if (!loop) throw new Refusal(`Aucune boucle pour l’issue « ${issue} ».`);
+        const request = await deps.delivery.request(ws.id, {
+          agentId: loop.devAgentId,
+          title,
           message,
-          mode,
+          requestedBy: 'orchestrator',
         });
-        return reply(`Demande d’intégration de ${nameOf(agent)} proposée à l’utilisateur.`, {
-          requestId: request.id,
-          status: 'waiting-user',
+        if (request.state === 'refused') {
+          throw new Refusal(request.reason ?? 'La livraison est refusée.');
+        }
+        return reply(`Livraison de l’issue ${issue} lancée (${request.state}).`, {
+          deliveryId: request.id,
+          state: request.state,
+          commit: request.frozenCommit.slice(0, 7),
         });
       },
     ),
@@ -651,7 +680,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
     ),
     tool(
       'start_loop',
-      'Démarre la boucle dev ↔ test d’une issue prête (3 tours au plus) : PACT compte les tours, valide le verdict du test et fait la preuve par ses propres tests.',
+      `Démarre la boucle dev ↔ test d’une issue prête (au plus le plafond du projet (${String(ceiling())} tours)) : PACT compte les tours, valide le verdict du test et fait la preuve par ses propres tests.`,
       { issue: { type: 'string', minLength: 1 }, dev: agentArgument, test: agentArgument },
       ['issue', 'dev', 'test'],
       async (args) => {
@@ -670,21 +699,50 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             ? `Consigne envoyée à ${who.join(' et ')}.`
             : 'Aucune consigne n’a pu partir : envoie-les avec send_prompt.';
         return reply(
-          `Boucle de ${issue} démarrée : tour 1/3. ${said} ${nameOf(test)} (test) écrit les tests ; ${nameOf(dev)} (dev) reçoit sa consigne à son premier rapport.`,
+          `Boucle de ${issue} démarrée : tour 1/${String(ceiling())}. ${said} ${nameOf(test)} (test) écrit les tests ; ${nameOf(dev)} (dev) reçoit sa consigne à son premier rapport.`,
           { loop: plain, sent },
         );
       },
     ),
     tool(
       'next_round',
-      'Passe au tour suivant d’une boucle, après un verdict « defects » du test ; refusé au-delà de 3 tours.',
+      'Passe au tour suivant d’une boucle, après un verdict « defects » du test ; refusé au-delà du plafond du projet, où l’utilisateur décide.',
       { issue: { type: 'string', minLength: 1 } },
       ['issue'],
       async (args) => {
         const loops = deps.loops;
         const issue = stringArg(args, 'issue');
         const loop = await loopRefusal(() => loops.next(workspace().id, issue));
-        return reply(`${issue} : tour ${String(loop.round)}/3.`, { loop });
+        return reply(`${issue} : tour ${String(loop.round)}/${String(ceiling())}.`, { loop });
+      },
+    ),
+    tool(
+      'polish_pass',
+      'Lance une passe de peaufinage d’une issue dont la boucle peaufine (après le verdict accepté et la preuve de PACT). PACT envoie au dev la consigne du projet, tes notes et l’interdiction de toute nouvelle fonctionnalité ; une passe à la fois. Le résultat arrive dans tes événements (get_events).',
+      {
+        issue: { type: 'string', minLength: 1 },
+        notes: { type: 'string', maxLength: MAX_POLISH_NOTES },
+      },
+      ['issue'],
+      async (args) => {
+        const issue = stringArg(args, 'issue').trim();
+        if (issue === '') throw new Refusal('Argument « issue » attendu.');
+        const notes = optionalString(args, 'notes');
+        if (notes !== null && notes.length > MAX_POLISH_NOTES) {
+          throw new Refusal(`Notes de ${String(MAX_POLISH_NOTES)} caractères au plus.`);
+        }
+        const started = await loopRefusal(() =>
+          deps.loops.polish(workspace().id, issue, notes ?? undefined),
+        );
+        const who = started.sent.map((s) => nameOf(resolve(s.agentId)));
+        const said =
+          who.length > 0
+            ? `Consigne envoyée à ${who.join(' et ')}.`
+            : 'Aucune consigne n’a pu partir : envoie-la avec send_prompt.';
+        return reply(
+          `Passe ${String(started.pass)} sur ${String(started.total)} de ${issue} lancée. ${said}`,
+          started,
+        );
       },
     ),
     tool(
@@ -697,7 +755,9 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const loop = deps.loops.get(workspace().id, issue);
         if (!loop) throw new Refusal(`Aucune boucle pour ${issue}.`);
         return Promise.resolve(
-          reply(`${issue} : tour ${String(loop.round)}/3, ${loop.state}.`, { loop }),
+          reply(`${issue} : tour ${String(loop.round)}/${String(ceiling())}, ${loop.state}.`, {
+            loop,
+          }),
         );
       },
     ),
@@ -724,6 +784,7 @@ function describe(event: EventSummary, name: string): string {
     case 'report-missing':
       return `${name} a fini son tour sans rapport.`;
     case 'publish':
+    case 'delivery':
       return event.summary;
     default:
       return `${name} : ${event.summary}`;
@@ -733,7 +794,9 @@ function describe(event: EventSummary, name: string): string {
 /** 004 FR-006 — the running loop an agent works in, as dev or test. */
 const loopOf = (ws: Workspace, agentId: string) => {
   const loop = ws.loops.find(
-    (l) => l.state === 'running' && (l.devAgentId === agentId || l.testAgentId === agentId),
+    (l) =>
+      (l.state === 'running' || l.state === 'polishing') &&
+      (l.devAgentId === agentId || l.testAgentId === agentId),
   );
   return loop ? { issueId: loop.issueId, round: loop.round } : null;
 };

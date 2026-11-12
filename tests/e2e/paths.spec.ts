@@ -85,8 +85,8 @@ test('runs an agent and a free terminal in « Mes Projets/Développement »', as
   await expect(terminal).toContainText(/Mes Projets[\\/]Développement/, { timeout: 15_000 });
 });
 
-// 003 T045 — the orchestrator reads and asks for an integration under the same paths (FR-023).
-test('lets the orchestrator read and integrate a file with spaces and accents', async () => {
+// 003 T045, migrated by 008 T023 — the orchestrator reads, then the user merges under the same paths (FR-023).
+test('lets the orchestrator read, and the user merge, a file with spaces and accents', async () => {
   test.setTimeout(120_000);
   const userDataDir = join(root, 'Données PACT');
   await mkdir(userDataDir);
@@ -116,15 +116,23 @@ test('lets the orchestrator read and integrate a file with spaces and accents', 
   await page.keyboard.press('Enter');
   await expect(lead).toContainText('MCP get_file_diff :', { timeout: 20_000 });
   await expect(lead).toContainText('+export const f = 1;');
-  await expect(lead).toContainText('MCP request_integration :');
+  await expect(lead).toContainText('MCP request_delivery :');
+  await expect(lead).toContainText('Aucune boucle');
+  await expect(worker).not.toHaveAttribute('data-state', 'working');
 
+  // The agent commits; the user asks to merge without a verdict (no remote, no loop).
+  const tree = agentWorktree(repo, 2);
+  git(tree, 'add', '-A');
+  git(tree, 'commit', '-m', 'feat: données à jour');
+  await worker.getByRole('button', { name: 'Fusionner sans verdict' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirmer' }).click();
   const request = page
     .getByRole('complementary', { name: 'Agents' })
     .getByRole('listitem')
-    .filter({ hasText: '◎ Intégrer Faux CLI 2 → main ?' });
-  await request.getByRole('button', { name: '✓ Intégrer' }).click();
-  await expect(lead).toContainText('intégration integrated');
-  expect(git(repo, 'log', '-1', '--format=%s', 'main')).toBe('feat: données à jour');
+    .filter({ hasText: '◎ Fusionner Faux CLI 2 → main ?' });
+  await request.getByRole('button', { name: 'Fusionner' }).click();
+  await expect(request).toHaveCount(0);
+  await expect(worker).toHaveCount(0);
   expect(git(repo, '-c', 'core.quotePath=false', 'show', '--name-only', '--format=', 'main')).toBe(
     'src/données à jour.ts',
   );

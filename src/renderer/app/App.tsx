@@ -7,6 +7,7 @@ import { Home } from '../home/Home';
 import { PermissionsDialog } from '../launch/PermissionsDialog';
 import { LaunchPanel } from '../launch/LaunchPanel';
 import { agentsLaunchedBy } from '../../shared/agents-view';
+import { fallingDelivery } from '../../shared/delivery';
 import type { Agent } from '../../shared/model';
 import type { AppStore } from '../store/app-store';
 import type { PreviewApi } from '../focus/PreviewTab';
@@ -170,9 +171,14 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
                 onClose: state.requestCloseAgent,
                 onPromote: (id) => void state.promoteAgent(id),
                 onRename: (id, name) => void state.renameAgent(id, name),
-                onConfirmIntegration: (id, message) =>
-                  void state.confirmIntegrationRequest(id, message),
-                onRefuseIntegration: (id) => void state.refuseIntegrationRequest(id),
+                onDecideDelivery: (id, decision, head, reason) =>
+                  void state.decideDelivery(id, decision, head, reason),
+                onOpenPr: (id) => void state.openDeliveryPr(id),
+                onCleanup: state.cleanupWorktree,
+                onDeliverySettings: (settings) =>
+                  void state.setDeliverySettings(workspace.id, settings),
+                onRequestDelivery: (agentId, request) =>
+                  void state.requestDelivery(workspace.id, agentId, request),
                 onUsageResume: (cliId, account) => void state.resumeUsage(cliId, account),
                 onUsageCancelResume: (cliId, account) =>
                   void state.cancelUsageResume(cliId, account),
@@ -246,6 +252,10 @@ export function App({ store, getPathForFile, terminals, review, preview }: Props
               name={nameOfAgent(closing)}
               branch={closing.branch}
               subAgents={groupOf(closing)}
+              delivery={fallingDelivery(
+                workspaces.flatMap((w) => w.deliveries),
+                closing.id,
+              )}
               onConfirm={(removeWorktree) => void state.closeAgent(removeWorktree)}
               onCancel={state.cancelCloseAgent}
             />

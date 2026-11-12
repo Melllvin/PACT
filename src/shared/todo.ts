@@ -1,4 +1,5 @@
 import { agentName } from './agent-name';
+import { MAX_REBASES_IN_A_ROW } from './delivery';
 import type { Agent, Loop, TileAction, TodoItem, TodoKind, Workspace } from './model';
 import {
   heaviest,
@@ -9,11 +10,15 @@ import {
 } from './usage-limit';
 import { clockTime, readingAge, usageAlert, type UsageState, type UsageThresholds } from './usage';
 
-// 003 data-model: the integrations asked for come after the answers, before the reviews.
+// 008 data-model: the local merges awaiting the user come after the answers, before the reviews.
 export const ORDER: TodoKind[] = [
   'answer',
   'decide',
-  'integration-request',
+  'delivery-local',
+  'delivery-review',
+  'delivery-silent-ci',
+  'delivery-alert',
+  'worktree-kept',
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',
@@ -30,7 +35,7 @@ export const ORDER: TodoKind[] = [
 const plural = (count: number, word: string) => `${String(count)} ${word}${count > 1 ? 's' : ''}`;
 
 /** « <CLI> <number> · <role> »: which agent, and what it does. */
-export const who = (agent: Agent, cli: string) =>
+export const who = (agent: Pick<Agent, 'name' | 'cliId' | 'position' | 'role'>, cli: string) =>
   [agentName(agent, () => cli), ...(agent.role ? [agent.role] : [])].join(' · ');
 
 /** Who gets no « Changements à relire »: the orchestrator, and the agents of a loop until it ends. */
@@ -39,7 +44,11 @@ function reviewedLater(agent: Agent, loops: readonly Loop[]): boolean {
   return loops.some(
     (loop) =>
       loop.testAgentId === agent.id ||
-      (loop.devAgentId === agent.id && (loop.state === 'running' || loop.state === 'escalated')),
+      (loop.devAgentId === agent.id &&
+        (loop.state === 'running' ||
+          loop.state === 'escalated' ||
+          loop.state === 'polishing' ||
+          loop.state === 'delivering')),
   );
 }
 
@@ -115,9 +124,7 @@ const shellName = (path: string) => path.replace(/^.*[\\/]/, '').replace(/\.exe$
 /** The À faire items of a workspace, derived and never stored (data-model TodoItem, FR-027). */
 export function deriveTodos(
   workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'mainBranch'> &
-    Partial<
-      Pick<Workspace, 'integrationRequests' | 'loops' | 'issues' | 'publishRequests' | 'exchanges'>
-    >,
+    Partial<Pick<Workspace, 'deliveries' | 'loops' | 'issues' | 'publishRequests' | 'exchanges'>>,
   names: (cliId: string) => string,
   /** The agents with changes to review, with their number of changed files (`review:pending`). */
   toReview: Readonly<Record<string, number>> | readonly never[] = {},
@@ -147,19 +154,100 @@ export function deriveTodos(
       ) ?? [],
   );
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
-  // « ◎ Intégrer <agent> → <main> ? »: the orchestrator asks, the user decides (003 FR-017).
-  const requests = (workspace.integrationRequests ?? []).flatMap((request): TodoItem[] => {
-    const agent = byId.get(request.agentId);
-    if (!agent) return [];
+  /** « ◆ Worktree gardé »: the cleanup was not sure, the user decides (008 US8, R17). */
+  const worktreeKept = (delivery: NonNullable<Workspace['deliveries']>[number]): TodoItem[] =>
+    (delivery.kept ?? []).flatMap((kept): TodoItem[] => {
+      // The tile of a closed agent is forgotten: the worktree noted at the merge names it.
+      const noted = delivery.worktrees?.find((w) => w.agentId === kept.agentId);
+      const named = byId.get(kept.agentId) ?? noted;
+      if (!named) return [];
+      return [
+        {
+          id: `${delivery.id}:${kept.agentId}:worktree-kept`,
+          agentId: kept.agentId,
+          kind: 'worktree-kept',
+          title: `◆ Worktree gardé · ${who(named, names(named.cliId))} · ${kept.reason}`,
+          actions: [],
+          delivery: { id: delivery.id, head: delivery.pushedHead ?? delivery.frozenCommit },
+        },
+      ];
+    });
+  // « ◎ Fusionner <agent> → <main> ? »: a project without a remote, the user decides (008 FR-008).
+  // « ◎ Relire la PR #n »: the PR of a request that asks for the eyes of the user (008 data-model).
+  const requests = (workspace.deliveries ?? []).flatMap((delivery): TodoItem[] => {
+    const agent = byId.get(delivery.agentId);
+    // The tile of an agent that was closed is forgotten, but its kept worktree is still to decide.
+    const keptItems = delivery.channel === 'github' && delivery.pr ? worktreeKept(delivery) : [];
+    if (!agent) return keptItems;
+    if (delivery.channel === 'github') {
+      const { pr } = delivery;
+      if (!pr) return [];
+      const sha = delivery.pushedHead ?? delivery.frozenCommit;
+      const label = delivery.issueId ?? delivery.branch;
+      const watching = delivery.state === 'watching';
+      const item = (kind: TodoKind, title: string, verdict?: 'accepted' | null): TodoItem => ({
+        id: `${delivery.id}:${kind}`,
+        agentId: agent.id,
+        kind,
+        title,
+        actions: [],
+        delivery: {
+          id: delivery.id,
+          head: sha,
+          url: pr.url,
+          ...(verdict === undefined ? {} : { verdict }),
+        },
+      });
+      const items: TodoItem[] = [];
+      // 008 US4 — « ◆ CI muette »: a configured CI that shows no check for 10 min (FR-016), on this head.
+      if (watching && delivery.ci?.verdict === 'silent' && delivery.ci.head === sha) {
+        items.push(
+          item('delivery-silent-ci', `◆ CI muette · PR #${String(pr.number)} · 10 min sans check`),
+        );
+      }
+      // « ◆ Livraison »: the PR was brought up to date again and again (FR-017), the user is told.
+      if (
+        (watching || delivery.state === 'reviewing') &&
+        delivery.rebases >= MAX_REBASES_IN_A_ROW
+      ) {
+        items.push(
+          item(
+            'delivery-alert',
+            `◆ Livraison · ${label} · ${String(delivery.rebases)} recalages de suite`,
+          ),
+        );
+      }
+      // 008 FR-043: the merged PR's remote branch was kept, its head moved after the merge.
+      if (delivery.state === 'merged' && delivery.remoteBranchKept === true) {
+        items.push(
+          item(
+            'delivery-alert',
+            `◆ Livraison · ${label} · PR #${String(pr.number)} fusionnée, branche ${delivery.branch} gardée sur le dépôt distant`,
+          ),
+        );
+      }
+      // Asked while it is watched (a PR without a verdict), or once the CI turned green and Auto does not merge.
+      if ((watching && delivery.review.required) || delivery.state === 'reviewing') {
+        items.push(
+          item(
+            'delivery-review',
+            `◎ Relire la PR #${String(pr.number)} · ${label} · ${sha.slice(0, 7)}${delivery.unverified ? ' · sans verdict' : ''}`,
+            delivery.unverified ? null : 'accepted',
+          ),
+        );
+      }
+      return [...items, ...keptItems];
+    }
+    if (delivery.state !== 'reviewing') return [];
     const name = agentName(agent, names);
     return [
       {
-        id: `${request.id}:integration-request`,
+        id: `${delivery.id}:delivery-local`,
         agentId: agent.id,
-        kind: 'integration-request',
-        title: `◎ Intégrer ${name} → ${workspace.mainBranch} ?`,
+        kind: 'delivery-local',
+        title: `◎ Fusionner ${name} → ${workspace.mainBranch} ?${delivery.unverified ? ' · sans verdict' : ''}`,
         actions: [],
-        request: { id: request.id, message: request.message },
+        delivery: { id: delivery.id, head: delivery.frozenCommit },
       },
     ];
   });
@@ -181,7 +269,9 @@ export function deriveTodos(
         };
       })
     : [];
-  // « ✕ Boucle arrêtée »: 3 rounds without the tests passing, the user decides (004 FR-018).
+  // « ✕ Boucle arrêtée »: the ceiling of the project without the tests passing, the user decides (004 FR-018).
+  // 008 US5 sc.7 — the ceiling is the project's; a workspace without settings has the default.
+  const maxRounds = (workspace as Partial<Workspace>).delivery?.maxRounds ?? 3;
   const loops = (workspace.loops ?? []).flatMap((loop): TodoItem[] => {
     const dev = byId.get(loop.devAgentId);
     return loop.state === 'escalated' && dev
@@ -190,9 +280,9 @@ export function deriveTodos(
             id: `${loop.issueId}:loop-escalated`,
             agentId: loop.devAgentId,
             kind: 'loop-escalated',
-            title: `✕ Boucle arrêtée · ${loop.issueId} · 3 tours`,
+            title: `✕ Boucle arrêtée · ${loop.issueId} · ${String(maxRounds)} tours`,
             actions: [],
-            loop: { issueId: loop.issueId },
+            loop: { issueId: loop.issueId, maxRounds },
           },
         ]
       : [];

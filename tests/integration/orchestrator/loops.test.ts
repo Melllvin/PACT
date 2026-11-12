@@ -80,7 +80,7 @@ describe('start_loop', () => {
 });
 
 describe('a loop', () => {
-  it('goes round on defects, then is done once PACT’s run of the tests passes', async () => {
+  it('goes round on defects, then is accepted once PACT’s run of the tests passes (the issue is done at the merge, 008 FR-007)', async () => {
     const started = await tool('start_loop', { issue: '0012-connexion', dev: devId, test: testId });
     expect(started.isError).toBe(false);
     expect(started.text).toContain('Boucle de 0012-connexion démarrée : tour 1/3.');
@@ -104,16 +104,17 @@ describe('a loop', () => {
     const next = await tool('next_round', { issue: '0012-connexion' });
     expect(next.text).toBe('0012-connexion : tour 2/3.');
 
-    // Round 2: accepted; the issue is done only on PACT's own run of the tests.
+    // Round 2: accepted; the loop is accepted only on PACT's own run of the tests.
     await h.waitFor(
       () => ['done', 'awaiting-prompt'].includes(h.current(testId)?.state ?? ''),
       'the test is still working',
       testId,
     );
     await tool('send_prompt', { agent: testId, text: '0012-connexion' });
-    await h.waitFor(() => current()?.issues[0]?.state === 'done', 'issue not done', testId);
+    await h.waitFor(() => current()?.loops[0]?.state === 'accepted', 'loop not accepted', testId);
+    expect(current()?.issues[0]?.state).toBe('in-progress');
     const loop = await tool('get_loop', { issue: '0012-connexion' });
-    expect(loop.text).toBe('0012-connexion : tour 2/3, passed.');
+    expect(loop.text).toBe('0012-connexion : tour 2/3, accepted.');
     expect(current()?.loops[0]?.rounds[1]?.proof).toMatchObject({ exitCode: 0 });
     // Earlier events of the dev (its turn ending) can come first: read until the proof arrives.
     const proof = '0012-connexion : tests passés par PACT au tour 2.';

@@ -16,7 +16,10 @@ export type Notify = (notification: Notification) => void;
 const NOTIFIED: ReadonlySet<TodoKind> = new Set([
   'answer',
   'decide',
-  'integration-request',
+  'delivery-local',
+  'delivery-review',
+  'delivery-silent-ci',
+  'delivery-alert',
   'publish-issues',
   'loop-escalated',
   'exchange-escalated',

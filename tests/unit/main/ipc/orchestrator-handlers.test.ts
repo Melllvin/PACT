@@ -3,15 +3,15 @@ import { createOrchestratorServices } from '../../../../src/main/ipc/orchestrato
 import { createPreviewServices } from '../../../../src/main/ipc/preview-handlers';
 import { IpcFailure } from '../../../../src/shared/ipc';
 
-// 003 T032 — integrationRequest:confirm and integrationRequest:refuse (contracts/ipc.md).
+// 003 T032, migrated by 008 T023 — delivery:request and delivery:decide (contracts/ui.md).
 
 const requestId = '00000000-0000-4000-8000-000000000001';
 
 const setup = () => {
-  const integration = { id: requestId, state: 'integrated' };
+  const delivery = { id: requestId, state: 'reviewing' };
   const requests = {
-    confirm: vi.fn(() => Promise.resolve(integration)),
-    refuse: vi.fn(() => Promise.resolve()),
+    request: vi.fn(() => Promise.resolve(delivery)),
+    decide: vi.fn(() => Promise.resolve(delivery)),
   };
   const orchestrator = { actions: vi.fn(() => []) };
   const agents = { revokeOrchestrator: vi.fn(() => Promise.resolve()) };
@@ -25,12 +25,12 @@ const setup = () => {
   };
   return {
     requests,
-    integration,
+    delivery,
     orchestrator,
     agents,
     loops,
     services: createOrchestratorServices({
-      requests,
+      delivery: requests,
       orchestrator,
       agents,
       workspaces,
@@ -39,25 +39,34 @@ const setup = () => {
   };
 };
 
-describe('integrationRequest channels', () => {
-  it('confirms a request with the message the user kept, and gives the integration', async () => {
-    const { requests, integration, services } = setup();
-    const input = { requestId, message: 'feat: édité', confirmWorking: true };
-    await expect(services['integrationRequest:confirm'](input)).resolves.toBe(integration);
-    expect(requests.confirm).toHaveBeenCalledWith(input);
+describe('delivery channels', () => {
+  const agentId = '00000000-0000-4000-8000-000000000002';
+  const head = 'abcdef0123456789abcdef0123456789abcdef01';
+
+  it('requests a delivery for the user, in the workspace asked', async () => {
+    const { requests, delivery, services } = setup();
+    const input = { workspaceId: 'w1', agentId, title: 'Connexion', message: 'feat: x' };
+    await expect(services['delivery:request'](input)).resolves.toBe(delivery);
+    expect(requests.request).toHaveBeenCalledWith('w1', {
+      agentId,
+      title: 'Connexion',
+      message: 'feat: x',
+      requestedBy: 'user',
+    });
   });
 
-  it('refuses a request and gives nothing back', async () => {
-    const { requests, services } = setup();
-    await expect(services['integrationRequest:refuse']({ requestId })).resolves.toBeUndefined();
-    expect(requests.refuse).toHaveBeenCalledWith({ requestId });
+  it('decides a merge on the head shown', async () => {
+    const { requests, delivery, services } = setup();
+    const input = { deliveryId: requestId, decision: 'validate' as const, head };
+    await expect(services['delivery:decide'](input)).resolves.toBe(delivery);
+    expect(requests.decide).toHaveBeenCalledWith(input);
   });
 
-  it('passes on why a request cannot be confirmed', async () => {
+  it('passes on why a decision cannot be taken', async () => {
     const { requests, services } = setup();
-    requests.confirm.mockRejectedValueOnce(new IpcFailure('NOT_FOUND', 'Demande introuvable.'));
+    requests.decide.mockRejectedValueOnce(new IpcFailure('NOT_FOUND', 'Livraison introuvable.'));
     await expect(
-      services['integrationRequest:confirm']({ requestId, message: 'feat' }),
+      services['delivery:decide']({ deliveryId: requestId, decision: 'refuse', head }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

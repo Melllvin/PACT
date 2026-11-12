@@ -14,7 +14,8 @@ parallel, each in its own Git worktree, while keeping direct access to their ter
   into the agent's prompt; shortcuts send « Corriger les commentaires », « Tests en échec » or
   « Conflit avec main ». Nothing is typed while the agent works or waits for an answer.
 - Integrate into the local `main` in one squashed commit (or keeping the agent's commits), then
-  close the tile and remove the worktree, or keep them. Nothing is ever pushed.
+  close the tile and remove the worktree, or keep them. Integrating never pushes; pushing and
+  opening a PR is the job of the delivery (see « Delivery to a pull request »).
 - On a conflict with `main`, ask the agent to resolve it in its worktree, or resolve each
   conflict in PACT (keep `main`, keep the agent's version, both, or edit the file, in PACT or in
   your editor). `main` only moves once everything is resolved; cancelling leaves it untouched.
@@ -84,6 +85,7 @@ The V1 installers are not signed with an Apple or Microsoft certificate, so the 
   Tools with the "Desktop development with C++" workload (Windows)
 - To drive real agents: Claude Code 2.1+ and/or a recent Codex (with the `hooks` feature; 0.39 is
   too old — `npm i -g @openai/codex@latest`), both signed in
+- To deliver to a pull request: the GitHub CLI `gh`, installed and authenticated (`gh auth login`)
 
 ## Development
 
@@ -121,11 +123,11 @@ configurations are never touched.
   terminal), `get_events` (ends of turns, questions, errors, test results since its last read:
   PACT wakes the orchestrator when something arrives, so it does not sit waiting),
   `wait_for_agents` (only a fallback, no longer the normal way), `launch_agent` and `close_agent`
-  (the worktree and the branch are kept), and `request_integration`.
-- **Integrations are yours.** `request_integration` only puts « ◎ Intégrer <agent> → main ? » in
-  « À traiter », with the commit message the orchestrator proposed; you edit it, integrate or refuse,
-  and the orchestrator hears the outcome (the commit, the conflicting files, or why it failed).
-  Nothing is integrated, pushed or opened as a PR without you.
+  (the worktree and the branch are kept), and `request_delivery` (see « Delivery to a pull
+  request »).
+- **Merges are yours, or Auto's.** The orchestrator cannot merge by itself: `request_delivery` asks
+  PACT to deliver an accepted issue, and the merge happens when you click « Valider » on the PR, or
+  when you turned Auto on and the CI is green. Nothing reaches the forge without that request.
 - **Access.** The server listens on `127.0.0.1` only, with a token per orchestrator session,
   separate from the hooks' token and compared in constant time. Requests with another `Host` or any
   `Origin` are refused, so a web page cannot reach it. Tools take agent names and repository
@@ -160,6 +162,51 @@ then hands it to agents with a role, each started with the skills of its role.
   under PACT's data folder: a session plugin for Claude Code, `developer_instructions` and the
   `pact` MCP server for Codex, and for any other CLI a `.pact/ROLE.md` in its worktree, kept out of
   Git, which PACT asks it to read first.
+
+## Delivery to a pull request
+
+Once the test agent has accepted an issue, the orchestrator calls `request_delivery` (title and
+message) and PACT does the rest, with no gesture from you. It needs `gh` installed and
+authenticated (`gh auth login`) and a GitHub `origin`; without them the request is refused with the
+reason and what to do, and PACT never falls back to a local merge. In a repository without a
+remote, the local merge stays, and you confirm it.
+
+- **PR opened by PACT.** `fetch`, rebase onto the remote target branch, PACT's own test run, push
+  of the branch, then the PR, titled and described from the request with the issue and the
+  tester's verdict. The orchestrator is woken at each result (refused, dropped, conflict, tests,
+  PR opened, CI green or red, review asked, refused, merged, merge failed).
+- **CI watching.** PACT reads the checks of the exact head commit of its own PR every 30 s (state
+  and conclusion of the checks only, never what a third party wrote). All checks and all required
+  ones finished in `success`, `neutral` or `skipped` is green. A red CI sends the failing check
+  names to the dev, who can read the log of one with `get_ci_log`, and counts a round. A `main`
+  that moved is rebased and the CI starts again. A job cancelled or timed out is rerun once. A CI
+  that is configured but shows no check for 10 minutes asks you « Attendre encore » or « Relire ».
+- **Review and decide.** A green CI puts « ◎ Relire la PR #n » in « À traiter », with the PR, its
+  commit and its verdict: « Valider » merges (one click, safe to repeat), « Refuser » asks for a
+  reason, sends it to the dev as a defect and brings the review back after the new CI. The merge
+  always requires the exact head commit that was reviewed (`--match-head-commit`); PACT never uses
+  `gh pr merge --auto`, and never lists or searches PRs: it follows the PR number it noted. A PR
+  from another author, or whose head is not the reviewed commit, is never merged.
+- **Auto.** The « Auto » switch at the bottom of the project (off on a new project, one per
+  project) lets PACT merge by itself as soon as the CI is green and the verdict `accepted` is valid
+  for that commit. It is read when the CI turns green, so changing it applies to the PRs in
+  progress. It has no effect without a remote, and a PR opened without a verdict is only ever
+  merged by your « Valider ».
+- **PR without verdict.** The tile's action « Créer la PR sans verdict » (« Fusionner sans verdict »
+  without a remote) delivers a branch that no test agent judged, always confirmed by you.
+- **Polish passes.** After `accepted` and before the PR, PACT can run N passes (0 to 5): the dev
+  corrects according to the project brief, the test agent checks, the tests run again. The brief
+  forbids any new feature, and the passes have their own counter, separate from the rounds.
+- **Cleanup after the merge.** The dev and the test agent are closed. Their worktrees and local
+  branches are removed only when they are clean and identical to the merged commit (the tester's
+  by the content of its test files); otherwise nothing is deleted, « À traiter » says why, and
+  « Supprimer quand même » tells you what would be lost. The remote branch of the PR is deleted if
+  its head is still the merged commit, otherwise it stays and you are told. The orchestrator's
+  worktree, an abandoned work and the worktrees of a PR without verdict are never removed on their
+  own.
+- **Delivery settings.** « Réglages de livraison », next to the Auto switch: merge mode (Squash by
+  default, Merge commit, Rebase), maximum rounds between dev and test (3 by default, 1 to 10),
+  number of polish passes (0 by default) and their brief. They are saved with the workspace.
 
 ## Usage limits
 

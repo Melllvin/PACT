@@ -25,6 +25,8 @@ const looping = (): Workspace => {
     permissionOverride: null,
     testCommand: null,
     integrationRequests: [],
+    deliveries: [],
+    delivery: { auto: false, mergeMode: 'squash', maxRounds: 3, polishPasses: 0, polishBrief: '' },
     roleProfiles: {},
     issues: [],
     loops: [],
@@ -71,4 +73,79 @@ describe('App, an exchange in a loop', () => {
       });
     },
   );
+});
+
+describe('App, a PR to review', () => {
+  const reviewing = (): Workspace => {
+    const dev = agent(2, { state: 'done', role: 'dev', workspaceId: 'w1' });
+    const head = 'abcdef0123456789abcdef0123456789abcdef01';
+    return {
+      ...looping(),
+      agents: [dev],
+      exchanges: { messages: [], escalations: [] },
+      deliveries: [
+        {
+          id: uuid(90),
+          agentId: dev.id,
+          testAgentId: null,
+          issueId: null,
+          branch: 'feat/2',
+          target: 'main',
+          channel: 'github',
+          unverified: true,
+          title: 'Connexion',
+          message: 'feat: connexion',
+          frozenCommit: head,
+          verdictCommit: null,
+          pactCommits: [head],
+          pushedHead: head,
+          rebases: 0,
+          state: 'reviewing',
+          reason: null,
+          pr: { number: 7, url: 'https://github.com/pact/test/pull/7', expectedAuthor: 'me' },
+          ci: null,
+          review: { required: true, refusedOnce: false },
+          cleanup: 'none',
+          requestedBy: 'orchestrator',
+          at: '2026-11-09T10:00:00.000Z',
+          updatedAt: '2026-11-09T10:00:00.000Z',
+        },
+      ],
+    } as unknown as Workspace;
+  };
+
+  const open = () => {
+    const invoke = vi.fn((channel: string) =>
+      Promise.resolve(
+        channel === 'app:getState'
+          ? { workspaces: [reviewing()], recents: [], clis: [], permission: null }
+          : undefined,
+      ),
+    );
+    const store = createAppStore({ invoke, on: () => () => undefined } as unknown as PactApi);
+    render(<App store={store} getPathForFile={() => ''} />);
+    return { invoke, user: userEvent.setup() };
+  };
+
+  it('Given the item, When the user opens the PR, Then the main process is asked, by the delivery', async () => {
+    const { invoke, user } = open();
+    await user.click(await screen.findByRole('link', { name: 'Ouvrir la PR' }));
+    expect(invoke).toHaveBeenCalledWith('delivery:openPr', { deliveryId: uuid(90) });
+  });
+
+  it('Given the item, When the user refuses with a reason, Then the reason travels with the decision', async () => {
+    const { invoke, user } = open();
+    await user.click(await screen.findByRole('button', { name: 'Refuser' }));
+    await user.type(
+      screen.getByRole('textbox', { name: 'Motif du refus' }),
+      ' Le cas vide manque. ',
+    );
+    await user.click(screen.getByRole('button', { name: 'Refuser' }));
+    expect(invoke).toHaveBeenCalledWith('delivery:decide', {
+      deliveryId: uuid(90),
+      decision: 'refuse',
+      head: 'abcdef0123456789abcdef0123456789abcdef01',
+      reason: 'Le cas vide manque.',
+    });
+  });
 });

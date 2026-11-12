@@ -22,9 +22,16 @@ Un tour sans rapport est signalé à l'orchestrateur : rends toujours ton rappor
 
 ## Boucle dev ↔ test
 
-- Une issue se règle en 3 tours au plus : le test écrit les tests d'acceptation, le dev les fait
-  passer, le test rend son verdict. Après le 3ᵉ verdict `defects`, l'utilisateur décide : jamais de
-  4ᵉ tour.
+- Une issue se règle en autant de tours au plus que le plafond du projet (réglé par l'utilisateur,
+  3 par défaut) : le test écrit les tests d'acceptation, le dev les fait passer, le test rend son
+  verdict. Quand le plafond est atteint avec un verdict `defects`, l'utilisateur décide : jamais de
+  tour au-delà.
+- Après un verdict `accepted` et la preuve de PACT, le projet peut demander des passes de
+  peaufinage : le dev corrige seulement ce que la consigne demande, sans aucune nouvelle
+  fonctionnalité ; le test vérifie, PACT refait la preuve. Les passes ne comptent pas dans les
+  tours. Deux verdicts `defects` sur la même passe : l'utilisateur décide, rien n'est fusionné.
+- Le test commite ses tests avant son verdict : le dev les récupère sur la branche du test
+  (`git fetch`, puis merge ou cherry-pick).
 - La preuve est celle de PACT : PACT relance lui-même la commande de test ; un « ça passe chez moi »
   ne compte pas.
 
