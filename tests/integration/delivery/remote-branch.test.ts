@@ -79,7 +79,9 @@ async function watching(suffix: string, number: number) {
 }
 
 /** The forge says « merged » on PR `number` (squash on the forge side: the branch is left as it was). */
-const mergedOnForge = (number: number, extra: Record<string, unknown> = {}) => { h.patchPr(number, { state: 'MERGED', ...extra }); };
+const mergedOnForge = (number: number, extra: Record<string, unknown> = {}) => {
+  h.patchPr(number, { state: 'MERGED', ...extra });
+};
 
 const gone = (branch: string) =>
   h.waitFor(() => h.remoteHead(branch) === null, `${branch} stayed`, SHORT);
