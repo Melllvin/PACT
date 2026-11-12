@@ -240,7 +240,7 @@
 - [x] T069 [P] Test dans `tests/contract/gh-client.contract.test.ts` qui parcourt tout `src/main` à la recherche de `'--auto'` et de `pr list` (SC-002)
 - [x] T070 [P] Mettre à jour `README.md` : livraison, Auto, réglages, `gh` requis ; retirer `request_integration`
 - [x] T071 Dérouler `specs/008-delivery-auto/quickstart.md` ; vérifier la couverture des fichiers modifiés (80 % hors UI, 70 % UI)
-- [ ] T072 Ajuster `version` dans `package.json` selon la règle 0.x seulement si l'orchestrateur le demande — fait par l'orchestrateur dans la PR de release (non coché ici)
+- [X] T072 Ajuster `version` dans `package.json` selon la règle 0.x seulement si l'orchestrateur le demande — fait par l’orchestrateur dans la PR de release 0.9.0
 
 ---
 
