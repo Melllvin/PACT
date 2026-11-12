@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -25,7 +26,7 @@ let traceFile: string;
 
 beforeEach(async () => {
   const root = join(
-    process.env.TMPDIR ?? '/tmp',
+    tmpdir(),
     `pact-remote-branch-${String(process.pid)}-${String(Date.now())}-${String(Math.random()).slice(2)}`,
   );
   traceFile = `${root}.trace`;
