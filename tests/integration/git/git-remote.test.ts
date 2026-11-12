@@ -348,6 +348,70 @@ describe('deleteRemoteBranch (research R18)', () => {
   });
 });
 
+describe('deleteRemoteBranch — names that are not branches (FR-043)', () => {
+  it.each([
+    '',
+    '-d',
+    '--mirror',
+    '/abs',
+    'a/',
+    'a.',
+    'a.lock',
+    'a..b',
+    'a//b',
+    'a@{b',
+    '@',
+    'a b',
+    'a~b',
+    'a:b',
+    'a\\b',
+    '.hidden/x',
+    'x/y.lock',
+  ])('Given the name %j, When deleted, Then nothing runs and it answers false', async (name) => {
+    const f = git(dev, 'rev-parse', 'HEAD');
+    await service.pushBranch(repo, { commit: f, branch: 'feat/connexion', expected: null });
+    const before = refs(bare);
+    await expect(service.deleteRemoteBranch(repo, name, f)).resolves.toBe(false);
+    expect(refs(bare)).toBe(before);
+  });
+
+  it('Given an expected value that is not a sha, When deleted, Then it answers false and the branch stays', async () => {
+    const f = git(dev, 'rev-parse', 'HEAD');
+    await service.pushBranch(repo, { commit: f, branch: 'feat/connexion', expected: null });
+    await expect(service.deleteRemoteBranch(repo, 'feat/connexion', '')).resolves.toBe(false);
+    await expect(service.deleteRemoteBranch(repo, 'feat/connexion', 'HEAD')).resolves.toBe(false);
+    expect(remoteHead('feat/connexion')).toBe(f);
+  });
+});
+
+describe('remoteBranchStatus (FR-043, why a branch was kept)', () => {
+  it('Given a branch gone from the remote, Then it says deleted', async () => {
+    const f = git(dev, 'rev-parse', 'HEAD');
+    await expect(service.remoteBranchStatus(repo, 'feat/connexion', f)).resolves.toBe('deleted');
+  });
+
+  it('Given a branch that moved, Then it says moved', async () => {
+    const f = git(dev, 'rev-parse', 'HEAD');
+    await service.pushBranch(repo, { commit: f, branch: 'feat/connexion', expected: null });
+    await colleaguePushes('feat/connexion', 'colleague.txt', 'y\n');
+    await expect(service.remoteBranchStatus(repo, 'feat/connexion', f)).resolves.toBe('moved');
+  });
+
+  it('Given a branch still at the expected sha, Then it says refused', async () => {
+    const f = git(dev, 'rev-parse', 'HEAD');
+    await service.pushBranch(repo, { commit: f, branch: 'feat/connexion', expected: null });
+    await expect(service.remoteBranchStatus(repo, 'feat/connexion', f)).resolves.toBe('refused');
+  });
+
+  it('Given a remote that cannot be reached, Then it says unreachable', async () => {
+    const f = git(dev, 'rev-parse', 'HEAD');
+    git(repo, 'remote', 'set-url', 'origin', join(root, 'nowhere.git'));
+    await expect(service.remoteBranchStatus(repo, 'feat/connexion', f)).resolves.toBe(
+      'unreachable',
+    );
+  });
+});
+
 describe('statusIgnored (FR-034, Q25, research R17)', () => {
   let tree: string;
   beforeEach(async () => {

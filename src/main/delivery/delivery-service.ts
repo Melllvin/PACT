@@ -64,6 +64,7 @@ export interface DeliveryServiceDeps {
     | 'pushBranch'
     | 'remoteBranchHead'
     | 'deleteRemoteBranch'
+    | 'remoteBranchStatus'
     | 'knownDefaultBranch'
     | 'addDetached'
     | 'removeDetached'
@@ -1601,7 +1602,7 @@ export class DeliveryService {
       reason: null,
       cleanup: cleans ? 'pending' : 'none',
     });
-    await this.deleteMergedBranch(workspaceId, d);
+    await this.deleteMergedBranch(workspaceId, d, d.pr as NonNullable<Delivery['pr']>);
     if (cleans) await this.worktreeCleanup.run(workspaceId, id);
   }
 
@@ -1611,32 +1612,41 @@ export class DeliveryService {
    * request (never the default branch, never a colleague's). Head changed → the branch stays and a
    * `delivery-alert` names the PR and the branch.
    */
-  private async deleteMergedBranch(workspaceId: string, d: Delivery): Promise<void> {
-    if (d.pr === null) return;
+  private async deleteMergedBranch(
+    workspaceId: string,
+    d: Delivery,
+    pr: NonNullable<Delivery['pr']>,
+  ): Promise<void> {
     const ws = this.workspace(workspaceId);
     try {
-      const view = await this.forge(ws).prView(d.pr.number);
+      const view = await this.forge(ws).prView(pr.number);
       const branch = d.branch;
       if (
-        view.author.login !== d.pr.expectedAuthor ||
+        view.author.login !== pr.expectedAuthor ||
         view.isCrossRepository ||
         view.headRefName !== branch ||
         !d.pactCommits.includes(view.headRefOid)
       ) {
         return;
       }
-      const base = await this.deps.git.knownDefaultBranch(ws.path).catch(() => null);
-      if (branch === d.target || branch === base?.branch) return;
+      // A default branch that cannot be read throws: the branch stays (the outer catch).
+      const base = await this.deps.git.knownDefaultBranch(ws.path);
+      if (branch === d.target || branch === base.branch) return;
       if (await this.deps.git.deleteRemoteBranch(ws.path, branch, view.headRefOid)) return;
-      // Already gone (or unreachable): nothing to say. Still there: its head moved, it stays.
-      const remote = await this.deps.git.remoteBranchHead(ws.path, branch);
-      if (remote === null) return;
+      const status = await this.deps.git.remoteBranchStatus(ws.path, branch, view.headRefOid);
+      // Already gone: nothing to say. Otherwise the branch stays, and the user hears why.
+      if (status === 'deleted') return;
+      const why = {
+        moved: `sa tête a changé depuis la fusion (${short(view.headRefOid)})`,
+        refused: 'le dépôt distant a refusé la suppression',
+        unreachable: 'le dépôt distant est injoignable',
+      }[status];
       await this.save(workspaceId, d.id, { remoteBranchKept: true });
       await this.tell(
         workspaceId,
         d,
         'alert',
-        `Livraison · PR #${String(d.pr.number)} · la branche ${branch} reste sur le dépôt distant : sa tête a changé depuis la fusion (${short(view.headRefOid)}).`,
+        `Livraison · PR #${String(pr.number)} · la branche ${branch} reste sur le dépôt distant : ${why}.`,
         { pr: this.prOf(d), commit: view.headRefOid },
       );
     } catch {

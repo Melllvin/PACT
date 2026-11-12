@@ -409,6 +409,31 @@ export class GitService {
   }
 
   /**
+   * 008 FR-043 — why `deleteRemoteBranch` did not delete: `deleted` (the branch is not on the remote any
+   * more), `moved` (its head is not `expected`), `refused` (it is at `expected` and the push was
+   * refused all the same: a hook, a protection) or `unreachable` (the remote cannot be read).
+   */
+  async remoteBranchStatus(
+    repo: string,
+    branch: string,
+    expected: string,
+  ): Promise<'deleted' | 'moved' | 'refused' | 'unreachable'> {
+    try {
+      const { stdout } = await this.run(
+        repo,
+        ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
+        { GIT_TERMINAL_PROMPT: '0' },
+        REMOTE_TIMEOUT_MS,
+      );
+      const head = stdout.trim().split(/\s/)[0] as string;
+      if (head === '') return 'deleted';
+      return head === expected ? 'refused' : 'moved';
+    } catch {
+      return 'unreachable';
+    }
+  }
+
+  /**
    * 008 R17 — what a worktree holds besides its commit: the changed files (staged, unstaged,
    * deleted), the untracked ones, the ignored `.env*` and the other ignored paths (`node_modules/`,
    * collapsed). The ignored ones never make a worktree « dirty », but `.env*` must not be lost.

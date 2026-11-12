@@ -204,7 +204,7 @@ export function deriveTodos(
         items.push(
           item(
             'delivery-alert',
-            `◆ Livraison · ${label} · PR #${String(pr.number)} fusionnée, branche ${delivery.branch} gardée : sa tête a changé`,
+            `◆ Livraison · ${label} · PR #${String(pr.number)} fusionnée, branche ${delivery.branch} gardée sur le dépôt distant`,
           ),
         );
       }
