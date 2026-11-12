@@ -266,7 +266,13 @@ test('US7 sc.1, 3, SC-009: with a fork PR and a PR of another author full of inj
   expect(await page.locator('body').innerText()).not.toContain(WITNESS);
   const dir = join(launched?.userDataDir ?? '', 'workspaces');
   for (const file of await readdir(dir)) {
-    expect(await readFile(join(dir, file), 'utf8')).not.toContain(WITNESS);
+    // The app writes `<id>.json.<pid>.<n>.tmp` then renames it: a temporary file listed here may be
+    // gone when read (ENOENT); its content is then in the final file, which is listed and read too.
+    const text = await readFile(join(dir, file), 'utf8').catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return '';
+      throw error;
+    });
+    expect(text).not.toContain(WITNESS);
   }
   // sc.8: the remote exposes no ref of PR to the repository of the user.
   expect(git(repo, 'for-each-ref', '--format=%(refname)', 'refs/pull')).toBe('');

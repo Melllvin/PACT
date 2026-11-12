@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GhClient } from '../../src/main/delivery/gh-client';
 
@@ -416,5 +418,105 @@ describe('GhClient — the closed list (contracts/gh.md, FR-029 to FR-033)', () 
         expect(json, `${field} asked in ${line}`).not.toContain(field);
       }
     }
+  });
+});
+
+// 008 T069 (SC-002) — nothing in `src/main` can build `gh pr merge --auto` or `gh pr list`. The scan
+// reads the string literals of the code (comments are skipped: they may say « never `--auto` »).
+// Forms caught: a literal holding the flag (`'--auto'`, `"--auto"`, `` `pr merge --auto` ``), a literal
+// holding the words (`'pr list'`), and two consecutive array elements (`'pr', 'list'`).
+// The one allowed mention: a permission rule `Bash(gh pr list …)` that DENIES the agent the command.
+
+/** The string literals of a TypeScript source, comments skipped, with their line numbers. */
+export function stringLiterals(source: string): { text: string; line: number }[] {
+  const found: { text: string; line: number }[] = [];
+  let i = 0;
+  let line = 1;
+  while (i < source.length) {
+    const c = source[i] as string;
+    const next = source[i + 1];
+    if (c === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i++;
+    } else if (c === '/' && next === '*') {
+      i += 2;
+      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) {
+        if (source[i] === '\n') line++;
+        i++;
+      }
+      i += 2;
+    } else if (c === "'" || c === '"' || c === '`') {
+      const start = line;
+      let text = '';
+      i++;
+      while (i < source.length && source[i] !== c) {
+        if (source[i] === '\\') {
+          text += source.charAt(i + 1);
+          i += 2;
+          continue;
+        }
+        if (source[i] === '\n') line++;
+        text += source.charAt(i);
+        i++;
+      }
+      i++;
+      found.push({ text, line: start });
+    } else {
+      if (c === '\n') line++;
+      i++;
+    }
+  }
+  return found;
+}
+
+/** The forbidden forms of a source: `file:line  text` for each. */
+export function forbiddenGhForms(source: string): string[] {
+  const literals = stringLiterals(source);
+  const problems: string[] = [];
+  literals.forEach(({ text, line }, index) => {
+    const denyRule = /^Bash\(gh pr list( \*)?\)$/.test(text);
+    if (/(^|\s)--auto(\s|=|$)/.test(text)) problems.push(`${String(line)}: --auto in ${text}`);
+    if (/\bpr\s+list\b/.test(text) && !denyRule)
+      problems.push(`${String(line)}: pr list in ${text}`);
+    const following = literals[index + 1];
+    if (text === 'pr' && following?.text === 'list') problems.push(`${String(line)}: 'pr', 'list'`);
+  });
+  return problems;
+}
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.(ts|tsx|js|mjs)$/.test(entry.name) ? [path] : [];
+  });
+}
+
+describe('SC-002 — src/main never builds `--auto` nor `pr list`', () => {
+  it('Given the scanner, When fed the forms used to build gh arguments, Then each one is caught', () => {
+    expect(forbiddenGhForms(`const a = ['pr', 'merge', '7', '--auto'];`)).toHaveLength(1);
+    expect(forbiddenGhForms(`run(["pr", "merge", "--auto", "--squash"])`)).toHaveLength(1);
+    expect(forbiddenGhForms('const f = `pr merge ${n} --auto`;')).toHaveLength(1);
+    expect(forbiddenGhForms(`run(['pr', 'list', '--json', 'number'])`)).toHaveLength(1);
+    expect(forbiddenGhForms(`run(["pr",\n  "list"])`)).toHaveLength(1);
+    expect(forbiddenGhForms(`const cmd = 'gh pr list';`)).toHaveLength(1);
+    expect(forbiddenGhForms('const cmd = `pr list --state ${s}`;')).toHaveLength(1);
+    expect(forbiddenGhForms(`'Bash(gh pr list --json number)'`)).toHaveLength(1);
+  });
+
+  it('Given the scanner, When fed comments and the deny rules, Then nothing is reported', () => {
+    expect(forbiddenGhForms(`// never '--auto' nor 'pr list'\nconst a = 1;`)).toEqual([]);
+    expect(forbiddenGhForms(`/* run('pr', 'list') */ const a = 'https://x.y';`)).toEqual([]);
+    expect(forbiddenGhForms(`['Bash(gh pr list)', 'Bash(gh pr list *)']`)).toEqual([]);
+    expect(forbiddenGhForms(`['pr', 'view', '7', '--json', 'number']`)).toEqual([]);
+  });
+
+  it('Given every file of src/main, When scanned, Then none builds `--auto` or `pr list`', () => {
+    const root = join(__dirname, '..', '..', 'src', 'main');
+    const files = sourceFiles(root);
+    expect(files.length).toBeGreaterThan(50);
+    const problems = files.flatMap((file) =>
+      forbiddenGhForms(readFileSync(file, 'utf8')).map((p) => `${relative(root, file)}:${p}`),
+    );
+    expect(problems).toEqual([]);
   });
 });
