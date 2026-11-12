@@ -413,6 +413,9 @@ function DeliveryReview({
  * « ◆ Worktree gardé »: « Supprimer quand même » asks what would be lost FIRST and lists it in a
  * confirmation; only « Supprimer » there deletes (US8 sc.3, FR-037). « Garder » deletes nothing.
  */
+const sameLines = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((line, i) => line === b[i]);
+
 function WorktreeKept({
   onForce,
   onKeep,
@@ -454,12 +457,7 @@ function WorktreeKept({
         </Button>
       </div>
       {lost !== null && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            if (!open) close();
-          }}
-        >
+        <Dialog open onOpenChange={close}>
           <DialogContent aria-describedby={undefined} className="w-[min(480px,calc(100vw-32px))]">
             <DialogBody>
               <DialogTitle>Supprimer quand même</DialogTitle>
@@ -487,10 +485,16 @@ function WorktreeKept({
                 disabled={busy}
                 onClick={() => {
                   setBusy(true);
-                  void Promise.resolve(onForce(true)).finally(() => {
-                    setBusy(false);
-                    close();
-                  });
+                  void Promise.resolve(onForce(true))
+                    .then((answer) => {
+                      // R1 — the list changed since it was shown: nothing was deleted, show it again.
+                      if (answer && !sameLines(answer.lost, lost)) setLost(answer.lost);
+                      else close();
+                    })
+                    .catch(close)
+                    .finally(() => {
+                      setBusy(false);
+                    });
                 }}
               >
                 Supprimer

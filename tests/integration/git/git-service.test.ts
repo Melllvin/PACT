@@ -247,3 +247,111 @@ describe('clone', () => {
     ).rejects.toThrow(/nothing-here/); // git's own (possibly localized) message names the source
   });
 });
+
+describe('removeWorktreeDir (008 R17, R2)', () => {
+  const addWorktree = (name: string) => {
+    const path = join(root, name);
+    git(repo, 'worktree', 'add', '-b', name, path);
+    return path;
+  };
+  const registered = () => git(repo, 'worktree', 'list', '--porcelain');
+
+  it('removes a clean worktree directory and its registration, keeping the branch', async () => {
+    const path = addWorktree('dev-a');
+    await service.removeWorktreeDir(repo, path);
+    expect(registered()).not.toContain(path);
+    await expect(stat(path)).rejects.toThrow();
+    expect(git(repo, 'branch', '--list', 'dev-a')).toContain('dev-a');
+  });
+
+  it('refuses a worktree with local changes unless forced, and never touches it then', async () => {
+    const path = addWorktree('dev-b');
+    await writeFile(join(path, 'new.txt'), 'x');
+    await expect(service.removeWorktreeDir(repo, path)).rejects.toThrow();
+    expect((await stat(join(path, 'new.txt'))).isFile()).toBe(true);
+    await service.removeWorktreeDir(repo, path, true);
+    await expect(stat(path)).rejects.toThrow();
+    expect(registered()).not.toContain(path);
+  });
+
+  it('clears only the entry of a missing directory, not the other missing worktrees', async () => {
+    const gone = addWorktree('dev-gone');
+    const unmounted = addWorktree('dev-unmounted');
+    await rm(gone, { recursive: true, force: true });
+    await rm(unmounted, { recursive: true, force: true });
+    await service.removeWorktreeDir(repo, gone);
+    const list = registered();
+    expect(list).not.toContain(gone);
+    // The other one may be on a disk that is only unmounted: git must still know it.
+    expect(list).toContain(unmounted);
+  });
+
+  it('does nothing when the missing directory was never a registered worktree', async () => {
+    const other = addWorktree('dev-other');
+    await service.removeWorktreeDir(repo, join(root, 'never-there'));
+    expect(registered()).toContain(other);
+  });
+
+  it('does nothing when the repository has no linked worktree at all', async () => {
+    await expect(service.removeWorktreeDir(repo, join(root, 'nowhere'))).resolves.toBeUndefined();
+  });
+
+  it('skips an administrative entry that has no readable gitdir and still clears the right one', async () => {
+    const gone = addWorktree('dev-gone2');
+    await mkdir(join(repo, '.git', 'worktrees', 'broken'));
+    await rm(gone, { recursive: true, force: true });
+
+    await service.removeWorktreeDir(repo, gone);
+
+    expect(registered()).not.toContain(gone);
+    expect((await stat(join(repo, '.git', 'worktrees', 'broken'))).isDirectory()).toBe(true);
+  });
+
+  it('does not clear a registered worktree whose directory only has a sibling of the same name', async () => {
+    const a = addWorktree('dev-same');
+    await service.removeWorktreeDir(repo, `${a}-2`);
+    expect(registered()).toContain(a);
+  });
+});
+
+describe('deleteBranch and commitsNotIn (008 R17)', () => {
+  it('deletes the named branch only', async () => {
+    git(repo, 'branch', 'dev-x');
+    git(repo, 'branch', 'dev-y');
+    await service.deleteBranch(repo, 'dev-x');
+    const branches = git(repo, 'branch', '--list');
+    expect(branches).not.toContain('dev-x');
+    expect(branches).toContain('dev-y');
+    expect(branches).toContain('main');
+  });
+
+  it('deletes an unmerged branch (the caller has checked) and fails on an unknown one', async () => {
+    git(repo, 'switch', '-c', 'dev-z');
+    await writeFile(join(repo, 'z.txt'), 'z');
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-m', 'z work');
+    git(repo, 'switch', 'main');
+    await service.deleteBranch(repo, 'dev-z');
+    expect(git(repo, 'branch', '--list', 'dev-z')).toBe('');
+    await expect(service.deleteBranch(repo, 'dev-nope')).rejects.toThrow();
+  });
+
+  it('lists the subjects of the commits that the base does not hold, newest first', async () => {
+    git(repo, 'switch', '-c', 'dev-c');
+    for (const n of ['one', 'two']) {
+      await writeFile(join(repo, `${n}.txt`), n);
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-m', `commit ${n}`);
+    }
+    expect(await service.commitsNotIn(repo, 'dev-c', 'main')).toEqual(['commit two', 'commit one']);
+    expect(await service.commitsNotIn(repo, 'main', 'dev-c')).toEqual([]);
+  });
+
+  it('counts a commit with an empty subject', async () => {
+    git(repo, 'switch', '-c', 'dev-e');
+    await writeFile(join(repo, 'e.txt'), 'e');
+    git(repo, 'add', '.');
+    git(repo, 'commit', '--allow-empty-message', '-m', '');
+    expect(await service.commitsNotIn(repo, 'dev-e', 'main')).toHaveLength(1);
+  });
+});

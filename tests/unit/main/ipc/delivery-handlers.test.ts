@@ -211,9 +211,11 @@ describe('delivery:cleanup', () => {
         agentId: string;
         decision: string;
         confirmed?: boolean;
+        seen?: string[];
       }) => Promise<{ lost: string[] }>
     >;
-    const call = (decision: string, confirmed?: boolean) => {
+    // R1: a confirmation carries the list the user was shown (by default: the current one).
+    const call = (decision: string, confirmed?: boolean, seen: string[] | null = LOST) => {
       const handler = handlers['delivery:cleanup'];
       if (typeof handler !== 'function') throw new Error('delivery:cleanup is not served');
       return handler({
@@ -221,6 +223,7 @@ describe('delivery:cleanup', () => {
         agentId: AGENT,
         decision,
         ...(confirmed === undefined ? {} : { confirmed }),
+        ...(confirmed === true && seen !== null ? { seen } : {}),
       });
     };
     return { cleanup, call };
@@ -257,6 +260,50 @@ describe('delivery:cleanup', () => {
     expect(result).toEqual({ lost: [] });
     expect(cleanup.keep).toHaveBeenCalledExactlyOnceWith(DELIVERY, AGENT);
     expect(cleanup.force).not.toHaveBeenCalled();
+  });
+
+  it('Given a file added since the user saw the list, When the deletion is confirmed for the old list, Then nothing is deleted and the new list is answered (R1)', async () => {
+    const { cleanup, call } = cleanupHandler();
+    const now = [...LOST, 'added-later.txt'];
+    cleanup.lost.mockResolvedValue(now);
+
+    const result = await call('force', true, LOST);
+
+    expect(result).toEqual({ lost: now });
+    expect(cleanup.force).not.toHaveBeenCalled();
+    // Seeing the new list, the user confirms again: now it goes.
+    await call('force', true, now);
+    expect(cleanup.force).toHaveBeenCalledExactlyOnceWith(DELIVERY, AGENT);
+  });
+
+  it('Given a confirmation that carries no list, or a list in another order or shorter, When the handler is called, Then nothing is deleted (R1)', async () => {
+    const { cleanup, call } = cleanupHandler();
+
+    await call('force', true, null);
+    await call('force', true, []);
+    await call('force', true, LOST.slice(0, 2));
+    await call('force', true, [...LOST].reverse());
+
+    expect(cleanup.force).not.toHaveBeenCalled();
+  });
+
+  it('Given no cleanup available, When the handler is called, Then it fails with NOT_FOUND', async () => {
+    const handlers = createDeliveryServices({
+      workspaces: { get: vi.fn(), update: vi.fn() },
+      delivery: { settingsChanged: vi.fn(() => Promise.resolve()) },
+    }) as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+
+    const failure = await handlers['delivery:cleanup']?.({
+      deliveryId: DELIVERY,
+      agentId: AGENT,
+      decision: 'keep',
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(IpcFailure);
+    expect((failure as IpcFailure).code).toBe('NOT_FOUND');
   });
 
   it('Given a confirmed deletion with « keep », When the handler is called, Then keep wins: nothing is deleted', async () => {

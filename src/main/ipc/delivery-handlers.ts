@@ -26,6 +26,9 @@ type Dependencies = {
   ) => void;
 };
 
+const sameLines = (seen: string[] | undefined, lost: string[]) =>
+  seen !== undefined && seen.length === lost.length && seen.every((line, i) => line === lost[i]);
+
 export function createDeliveryServices({
   workspaces,
   delivery,
@@ -47,6 +50,7 @@ export function createDeliveryServices({
       agentId,
       decision,
       confirmed,
+      seen,
     }: IpcInput<'delivery:cleanup'>): Promise<{ lost: string[] }> => {
       if (!cleanup) throw new IpcFailure('NOT_FOUND', 'Aucun nettoyage de worktree disponible.');
       if (decision === 'keep') {
@@ -58,7 +62,8 @@ export function createDeliveryServices({
       if (lost === null) {
         throw new IpcFailure('NOT_FOUND', 'Aucun worktree gardé pour cet agent.');
       }
-      if (confirmed === true) await cleanup.force(deliveryId, agentId);
+      // R1 — the confirmation is bound to what the user saw: a changed list is shown again, never deleted.
+      if (confirmed === true && sameLines(seen, lost)) await cleanup.force(deliveryId, agentId);
       return { lost };
     },
     'delivery:settings': async ({

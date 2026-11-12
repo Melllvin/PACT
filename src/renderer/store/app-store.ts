@@ -272,6 +272,8 @@ const withoutAgent = (workspaces: Workspace[], agentId: string): Workspace[] =>
   );
 
 export function createAppStore(api: PactApi) {
+  /** 008 R1 — the losses last shown for a kept worktree, by `delivery:agent`. */
+  const shownLosses = new Map<string, string[]>();
   return createStore<AppState>()((set, get) => {
     /** Adds (or refreshes) a workspace and makes its tab active. */
     /** Runs a tile action; a refusal is shown until an action succeeds. */
@@ -685,13 +687,19 @@ export function createAppStore(api: PactApi) {
       openDeliveryPr: (deliveryId) => act(() => api.invoke('delivery:openPr', { deliveryId })),
 
       cleanupWorktree: async (deliveryId, agentId, decision, confirmed) => {
+        const key = `${deliveryId}:${agentId}`;
         try {
           const answer = await api.invoke('delivery:cleanup', {
             deliveryId,
             agentId,
             decision,
             ...(confirmed === undefined ? {} : { confirmed }),
+            // R1 — the deletion is confirmed for the list the user was shown, not for whatever it is by then.
+            ...(confirmed === true ? { seen: shownLosses.get(key) ?? [] } : {}),
           });
+          // What the user is shown last is what a confirmation is bound to (a changed list is shown again).
+          if (decision === 'keep') shownLosses.delete(key);
+          else shownLosses.set(key, answer.lost);
           set({ actionError: null });
           return answer;
         } catch (error) {

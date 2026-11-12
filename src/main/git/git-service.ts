@@ -1,7 +1,17 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { realpathSync } from 'node:fs';
-import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, stat, utimes } from 'node:fs/promises';
+import {
+  appendFile,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  utimes,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix, resolve } from 'node:path';
 import type { Writable } from 'node:stream';
@@ -464,10 +474,40 @@ export class GitService {
    */
   async removeWorktreeDir(repo: string, path: string, force = false): Promise<void> {
     if (!(await exists(path))) {
-      await this.git(repo, ['worktree', 'prune']);
+      // Not a global `git worktree prune`: another worktree may be missing only for now (a disk
+      // that is not mounted) and must stay registered. Clear this path's own entry (008 R2).
+      await this.clearWorktreeEntry(repo, path);
       return;
     }
     await this.git(repo, ['worktree', 'remove', ...(force ? ['--force'] : []), path]);
+  }
+
+  /** Drops the administrative entry (`<git-dir>/worktrees/<name>`) of the worktree at `path`, and only it. */
+  private async clearWorktreeEntry(repo: string, path: string): Promise<void> {
+    const common = (
+      await this.git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
+    ).trim();
+    const admin = join(common, 'worktrees');
+    let names: string[];
+    try {
+      names = await readdir(admin);
+    } catch {
+      return; // no linked worktree at all
+    }
+    const wanted = resolve(path);
+    for (const name of names) {
+      let gitdir: string;
+      try {
+        gitdir = (await readFile(join(admin, name, 'gitdir'), 'utf8')).trim();
+      } catch {
+        continue;
+      }
+      // `gitdir` holds `<worktree>/.git`.
+      if (resolve(dirname(gitdir)) === wanted) {
+        await rm(join(admin, name), { recursive: true, force: true });
+        return;
+      }
+    }
   }
 
   /** `git branch -D`: the caller has checked that nothing is lost (008 R17). */

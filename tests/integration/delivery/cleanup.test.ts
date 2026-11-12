@@ -743,3 +743,58 @@ describe.skipIf(!SHIM)('how it deletes (FR-036, R17): what git was asked', () =>
     expect(branchDeletions().flat()).not.toContain(team.dev.branch);
   });
 });
+
+describe('R17 — when the forge cannot say which head was merged', () => {
+  const keptWithNotes = async () => {
+    const merged = await merge({
+      onDev: ({ dev }) => writeFile(join(dev.worktreePath, 'notes.txt'), 'à garder\n'),
+    });
+    await cleaned('kept');
+    return merged;
+  };
+
+  it('Given a forge that is down, When what would be lost is asked, Then PACT’s own record of the pushed head is used and the file is listed', async () => {
+    const { team, id } = await keptWithNotes();
+    h.setGhState({ forgeDown: true });
+
+    const lost = await h.delivery.worktreeCleanup.lost(id, team.dev.id);
+
+    expect(lost).toEqual(['notes.txt (non suivi)']);
+  });
+
+  it('Given a forge that answers an empty head, When what would be lost is asked, Then the pushed head is used too', async () => {
+    const { team, id } = await keptWithNotes();
+    h.patchPr(1, { headRefOid: '' });
+
+    const lost = await h.delivery.worktreeCleanup.lost(id, team.dev.id);
+
+    expect(lost).toEqual(['notes.txt (non suivi)']);
+  });
+
+  it('Given a request with no PR recorded, When what would be lost is asked, Then the pushed head is used without asking the forge', async () => {
+    const { team, id } = await keptWithNotes();
+    const workspaceId = h.workspace().id;
+    await h.workspaces.update(workspaceId, (ws) => ({
+      ...ws,
+      deliveries: ws.deliveries.map((d) => (d.id === id ? { ...d, pr: null } : d)),
+    }));
+    h.setGhState({ forgeDown: true });
+
+    const lost = await h.delivery.worktreeCleanup.lost(id, team.dev.id);
+
+    expect(lost).toEqual(['notes.txt (non suivi)']);
+  });
+
+  it('Given a PR that cannot be read or does not exist, When its author is checked, Then it is not PACT’s own: nothing may be cleaned', async () => {
+    const { id } = await keptWithNotes();
+    const service = h.delivery as unknown as {
+      isOwnPr(workspaceId: string, d: unknown): Promise<boolean>;
+    };
+    const d = h.deliveryOf(id);
+
+    expect(await service.isOwnPr(h.workspace().id, { ...d, pr: null })).toBe(false);
+    expect(await service.isOwnPr(h.workspace().id, d)).toBe(true);
+    h.setGhState({ forgeDown: true });
+    expect(await service.isOwnPr(h.workspace().id, d)).toBe(false);
+  });
+});

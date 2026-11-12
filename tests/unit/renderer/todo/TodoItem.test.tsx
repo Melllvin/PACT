@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TodoItem } from '../../../../src/renderer/todo/TodoItem';
@@ -650,6 +650,78 @@ describe('TodoItem « Worktree gardé » (worktree-kept)', () => {
 
     expect(onCleanup).toHaveBeenCalledTimes(2);
     expect(onCleanup).toHaveBeenLastCalledWith('d1', dev.id, 'force', true);
+  });
+
+  const renderKept = (onCleanup: ReturnType<typeof vi.fn>) => {
+    render(
+      <ul>
+        <TodoItem
+          todo={
+            {
+              id: 'd1:worktree-kept',
+              agentId: dev.id,
+              kind: 'worktree-kept',
+              title: '◆ Worktree gardé · Claude Code 2 · notes.txt non suivi',
+              actions: [],
+              delivery: { id: 'd1', head: HEAD },
+            } as never
+          }
+          agent={dev}
+          {...({ ...actions(), onCleanup } as object)}
+        />
+      </ul>,
+    );
+    return userEvent.setup();
+  };
+
+  it('Given a file added since the list was shown, When the user confirms, Then the dialog shows the new list instead of closing (R1)', async () => {
+    const later = [...LOST, 'added-later.txt (non suivi)'];
+    const onCleanup = vi
+      .fn()
+      .mockResolvedValueOnce({ lost: LOST })
+      .mockResolvedValueOnce({ lost: later })
+      .mockResolvedValueOnce({ lost: later });
+    const user = renderKept(onCleanup);
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+
+    const again = await screen.findByText('added-later.txt (non suivi)');
+    expect(again).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    // Seen and confirmed again: it goes, and the dialog closes.
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Supprimer' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(onCleanup).toHaveBeenCalledTimes(3);
+  });
+
+  it('Given a deletion that fails, When the user confirms, Then the dialog closes (the error is shown elsewhere)', async () => {
+    const onCleanup = vi.fn().mockResolvedValueOnce({ lost: LOST }).mockResolvedValueOnce(null);
+    const user = renderKept(onCleanup);
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    const dialog = await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Supprimer' }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
+  it('Given the confirmation, When Escape is pressed, Then the dialog closes and nothing is deleted', async () => {
+    const { onCleanup, user } = setup();
+    await user.click(screen.getByRole('button', { name: 'Supprimer quand même' }));
+    await screen.findByRole('dialog', { name: /Supprimer quand même/ });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    expect(onCleanup.mock.calls.some((call) => call[3] === true)).toBe(false);
   });
 
   it('Given the confirmation, When the user cancels, Then nothing is deleted and the dialog closes', async () => {
