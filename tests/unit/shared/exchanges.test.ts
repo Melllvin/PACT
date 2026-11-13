@@ -7,6 +7,7 @@ import {
   exchangeMessageSchema,
   exchangesSchema,
   isPointer,
+  maxText,
   pointerText,
   typeOf,
 } from '../../../src/shared/exchanges';
@@ -269,5 +270,31 @@ describe('the usage kinds', () => {
       expect(accepts(kind, MAX_NOTICE, { from: 'pact' }), kind).toBe(true);
       expect(accepts(kind, MAX_NOTICE + 1, { from: 'pact' }), kind).toBe(false);
     }
+  });
+});
+
+// 010 T009 — the kind `stage`: PACT wakes the orchestrator when an issue changes stage.
+describe('kind stage (010 data-model)', () => {
+  it('is an action, as long as a notice', () => {
+    expect(typeOf('stage')).toBe('action');
+    expect(maxText('stage')).toBe(MAX_NOTICE);
+  });
+
+  it('carries its structured field: issue, from, to, outcome', () => {
+    const stage = { issue: '0001-a', from: 'test', to: 'dev', outcome: 'defects' };
+    const parsed = exchangeMessageSchema.safeParse(
+      message('stage', 'Issue 0001-a : test → dev', { from: 'pact', stage }),
+    );
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.stage).toEqual(stage);
+  });
+
+  it('refuses a malformed stage field, and a text over the notice length', () => {
+    expect(
+      exchangeMessageSchema.safeParse(message('stage', 'x', { stage: { issue: '1' } })).success,
+    ).toBe(false);
+    expect(
+      exchangeMessageSchema.safeParse(message('stage', 'x'.repeat(MAX_NOTICE + 1))).success,
+    ).toBe(false);
   });
 });

@@ -70,6 +70,8 @@ const workspace = (agents: Agent[]): Workspace => ({
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
   exchanges: { messages: [], escalations: [] },
+  workflow: { lastValid: null, error: null, readAt: null },
+  runs: [],
   lastOpenedAt: now,
   status: 'available',
 });
@@ -628,5 +630,53 @@ describe('delivery in the workspace (008)', () => {
     expect(
       loopSchema.safeParse(loop({ rounds: [{ n: 1, startedAt: now, kind: 'pass' }] })).success,
     ).toBe(false);
+  });
+});
+
+// 010 T009 — the workflow and its runs in the workspace file: old files load without them.
+describe('Workspace: workflow and runs (010 data-model)', () => {
+  it('gives the defaults to a file saved before 010', () => {
+    const old: Record<string, unknown> = { ...workspace([]) };
+    delete old.workflow;
+    delete old.runs;
+    const parsed = workspaceSchema.parse(old);
+    expect(parsed.workflow).toEqual({ lastValid: null, error: null, readAt: null });
+    expect(parsed.runs).toEqual([]);
+  });
+
+  it('keeps a run and the last valid workflow', async () => {
+    const { defaultWorkflow } = await import('../../../src/shared/workflow');
+    const { defaultDeliverySettings } = await import('../../../src/shared/delivery');
+    const wf = defaultWorkflow(defaultDeliverySettings());
+    const run = {
+      issueId: '0001-a',
+      oid: 'default',
+      workflow: wf,
+      stage: 'spec',
+      status: 'active',
+      startedAt: now,
+      updatedAt: now,
+    };
+    const parsed = workspaceSchema.parse({
+      ...workspace([]),
+      workflow: { lastValid: { oid: 'a'.repeat(40), workflow: wf }, error: null, readAt: now },
+      runs: [run],
+    });
+    expect(parsed.runs[0]?.stage).toBe('spec');
+    expect(parsed.workflow.lastValid?.oid).toBe('a'.repeat(40));
+  });
+
+  it('refuses a run with more than 50 history entries', () => {
+    const entry = { at: now, from: 'a', to: 'b', outcome: 'done' };
+    const bad = {
+      issueId: 'x',
+      oid: 'default',
+      stage: 'spec',
+      status: 'active',
+      startedAt: now,
+      updatedAt: now,
+      history: Array(51).fill(entry),
+    };
+    expect(workspaceSchema.safeParse({ ...workspace([]), runs: [bad] }).success).toBe(false);
   });
 });

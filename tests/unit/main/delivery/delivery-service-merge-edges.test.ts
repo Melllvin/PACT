@@ -20,6 +20,7 @@ const ID = uuid(9);
 const delivery = (extra: Partial<Delivery> = {}): Delivery => ({
   id: ID,
   agentId: DEV,
+  source: 'agent',
   testAgentId: TEST,
   issueId: '0012-a',
   branch: 'feat/dev',

@@ -24,6 +24,8 @@ const workspace = (id: string): Workspace => ({
   loops: [],
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
+  workflow: { lastValid: null, error: null, readAt: null },
+  runs: [],
   lastOpenedAt: '2026-11-06T10:00:00.000Z',
   status: 'available',
   exchanges: { messages: [], escalations: [] },

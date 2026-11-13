@@ -18,6 +18,8 @@ export const ORDER: TodoKind[] = [
   'delivery-review',
   'delivery-silent-ci',
   'delivery-alert',
+  'workflow-invalid',
+  'workflow-refused',
   'worktree-kept',
   'publish-issues',
   'loop-escalated',
@@ -175,7 +177,7 @@ export function deriveTodos(
   // « ◎ Fusionner <agent> → <main> ? »: a project without a remote, the user decides (008 FR-008).
   // « ◎ Relire la PR #n »: the PR of a request that asks for the eyes of the user (008 data-model).
   const requests = (workspace.deliveries ?? []).flatMap((delivery): TodoItem[] => {
-    const agent = byId.get(delivery.agentId);
+    const agent = delivery.agentId === null ? undefined : byId.get(delivery.agentId);
     // The tile of an agent that was closed is forgotten, but its kept worktree is still to decide.
     const keptItems = delivery.channel === 'github' && delivery.pr ? worktreeKept(delivery) : [];
     if (!agent) return keptItems;

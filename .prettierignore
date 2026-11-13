@@ -11,3 +11,4 @@ docs
 .claude
 .specify
 specs
+tests/fixtures/workflows

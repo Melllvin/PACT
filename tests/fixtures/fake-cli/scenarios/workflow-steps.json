@@ -1,0 +1,28 @@
+{
+  "echo": true,
+  "workflowIssue": "{{prompt}}",
+  "workflowSteps": {
+    "test": {
+      "tool": "start_loop",
+      "arguments": {
+        "issue": "{{prompt}}",
+        "dev": "Claude Code 1",
+        "test": "Claude Code 2"
+      }
+    },
+    "polish": [
+      {
+        "tool": "polish_pass",
+        "arguments": {
+          "issue": "{{prompt}}"
+        }
+      }
+    ],
+    "pr": {
+      "tool": "request_delivery",
+      "arguments": {
+        "agent": "Claude Code 1"
+      }
+    }
+  }
+}

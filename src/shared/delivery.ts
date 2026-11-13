@@ -124,7 +124,10 @@ export type CiStatus = z.infer<typeof ciStatusSchema>;
 /** `workspace.deliveries[]`: one request, written at every step (R2). */
 export const deliverySchema = z.object({
   id: z.uuid(),
-  agentId: z.uuid(),
+  /** 010 R12 — `null` for a request of the workflow, which has no agent. */
+  agentId: z.uuid().nullable(),
+  /** 010 — who asked: an agent's branch, or the saving of the workflow. */
+  source: z.enum(['agent', 'workflow']).default('agent'),
   testAgentId: z.uuid().nullable(),
   issueId: z.string().min(1).nullable(),
   branch: z.string().min(1),

@@ -15,6 +15,7 @@ const START = '2026-11-09T10:00:00.000Z';
 const delivery = (extra: Partial<Delivery> = {}): Delivery => ({
   id: ID,
   agentId: '00000000-0000-4000-8000-000000000003',
+  source: 'agent',
   testAgentId: null,
   issueId: null,
   branch: 'feat/x',

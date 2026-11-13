@@ -50,6 +50,7 @@ const check = (conclusion: string | null, status = 'completed', id = 11, name = 
 const delivery = (extra: Partial<Delivery> = {}): Delivery => ({
   id: ID,
   agentId: AGENT,
+  source: 'agent',
   testAgentId: null,
   issueId: '0012-connexion',
   branch: 'feat/connexion',

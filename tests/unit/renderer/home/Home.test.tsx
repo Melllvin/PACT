@@ -54,6 +54,8 @@ const atelier: Workspace = {
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
   exchanges: { messages: [], escalations: [] },
+  workflow: { lastValid: null, error: null, readAt: null },
+  runs: [],
   lastOpenedAt: now.toISOString(),
   status: 'available',
 };

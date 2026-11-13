@@ -28,6 +28,7 @@ export const EXCHANGE_KINDS = [
   'delivery',
   'publish',
   'mockup',
+  'stage',
   'verdict',
   'exchange-escalated',
   'exchange-decided',
@@ -91,6 +92,14 @@ export const deliveryOutcomeSchema = z.object({
   checks: z.array(z.string()).optional(),
 });
 
+/** 010 data-model — a change of stage: what PACT tells the orchestrator when an issue moves on. */
+export const stageChangeSchema = z.object({
+  issue: z.string().min(1),
+  from: z.string().min(1),
+  to: z.string().min(1),
+  outcome: z.string().min(1),
+});
+
 export const exchangeMessageSchema = z
   .object({
     id: z.uuid(),
@@ -105,6 +114,7 @@ export const exchangeMessageSchema = z
     text: z.string(),
     integration: integrationOutcomeSchema.optional(),
     delivery: deliveryOutcomeSchema.optional(),
+    stage: stageChangeSchema.optional(),
     unreadBy: z.array(z.uuid()),
   })
   .superRefine((message, ctx) => {

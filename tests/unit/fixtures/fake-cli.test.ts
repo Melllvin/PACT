@@ -330,6 +330,59 @@ describe('fake CLI', () => {
     }
   });
 
+  it('reads the workflow at the wake and plays the step of its stage (010 T004)', async () => {
+    const calls: { name: string; arguments: Record<string, unknown> }[] = [];
+    let stage = 'test';
+    const mcp = createServer((req, res) => {
+      let raw = '';
+      req.on('data', (chunk: Buffer) => (raw += chunk.toString()));
+      req.on('end', () => {
+        const body = JSON.parse(raw) as { id: number; params: (typeof calls)[number] };
+        calls.push(body.params);
+        const content =
+          body.params.name === 'get_workflow'
+            ? [
+                { type: 'text', text: 'workflow' },
+                { type: 'text', text: JSON.stringify({ start: 'spec', run: { stage } }) },
+              ]
+            : [{ type: 'text', text: 'ok' }];
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result: { content } }));
+      });
+    });
+    await new Promise<void>((resolve) => mcp.listen(0, '127.0.0.1', resolve));
+    const address = mcp.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    try {
+      const fake = await runFake('workflow-steps', {
+        env: {
+          PACT_ORCHESTRATOR_URL: `http://127.0.0.1:${String(port)}/mcp`,
+          PACT_ORCHESTRATOR_TOKEN: 'orchestrator-token',
+        },
+      });
+      await fake.waitForPrompt(1);
+      fake.send('0012-connexion');
+      await fake.waitFor('MCP start_loop : ok');
+      expect(fake.output()).toContain('MCP get_workflow : test');
+      expect(calls.map((c) => c.name)).toEqual(['get_workflow', 'start_loop']);
+      expect(calls[0]?.arguments).toEqual({ issue: '0012-connexion' });
+      expect(calls[1]?.arguments).toMatchObject({ issue: '0012-connexion', dev: 'Claude Code 1' });
+
+      stage = 'pr';
+      fake.send('0012-connexion');
+      await fake.waitFor('MCP request_delivery : ok');
+      expect(calls.at(-1)?.name).toBe('request_delivery');
+
+      stage = 'dev';
+      fake.send('0012-connexion');
+      await fake.waitForPrompt(4);
+      expect(fake.output()).toContain('MCP get_workflow : dev');
+      expect(calls.at(-1)?.name).toBe('get_workflow');
+    } finally {
+      await new Promise((resolve) => mcp.close(resolve));
+    }
+  });
+
   it('reports to PACT with its agent MCP token, never its hook token, one report per turn, the last one repeated (004 R5)', async () => {
     const mcp = await startMcp('Rapport reçu');
     try {
