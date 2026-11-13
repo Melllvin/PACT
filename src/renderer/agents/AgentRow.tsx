@@ -23,6 +23,7 @@ export function AgentRow({ row, color, onOpen, ...actions }: Props) {
     ...(row.role ? [ROLE_LABELS[row.role]] : []),
     row.stateLabel,
     ...(row.issueId ? [`issue ${row.issueId}`] : []),
+    ...(row.stage ? [`Étape ${row.stage}`] : []),
   ].join(', ');
   const [what, , ...hints] = todo?.title.split(SEPARATOR) ?? [];
   return (
@@ -56,6 +57,9 @@ export function AgentRow({ row, color, onOpen, ...actions }: Props) {
           <>
             {' '}
             <span className="ml-2 font-mono text-[11px] text-[#a1a1aa]">issue {row.issueId}</span>
+            {row.stage && (
+              <span className="ml-2 font-mono text-[11px] text-[#a1a1aa]">Étape {row.stage}</span>
+            )}
           </>
         )}
       </button>

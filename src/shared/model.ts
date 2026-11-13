@@ -383,7 +383,7 @@ export type TodoItem = {
    */
   delivery?: { id: string; head: string; url?: string; verdict?: 'accepted' | null };
   /** 004 FR-018 — the loop stopped at the ceiling of the project, for `loop-escalated`. */
-  loop?: { issueId: string; maxRounds?: number };
+  loop?: { issueId: string; maxRounds?: number; stage?: string };
   /** 007 FR-006 — the escalation of an exchange in a loop, and its last message as text. */
   exchange?: { escalationId: string; text: string };
   /** 004 FR-023 — the issues the orchestrator asks to publish, for `publish-issues`. */

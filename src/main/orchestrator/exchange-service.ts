@@ -64,6 +64,8 @@ export type RecordInput = {
   text: string;
   integration?: IntegrationRequest | ExchangeMessage['integration'];
   delivery?: ExchangeMessage['delivery'];
+  /** 010 — a change of stage of a run, for a `stage` message. */
+  stage?: ExchangeMessage['stage'];
   unreadBy?: string[];
 };
 
@@ -79,6 +81,7 @@ export type EventSummary = {
   summary: string;
   integration?: ExchangeMessage['integration'];
   delivery?: ExchangeMessage['delivery'];
+  stage?: ExchangeMessage['stage'];
 };
 
 export type ReadResult = { events: EventSummary[]; remaining: number };
@@ -104,6 +107,7 @@ const summaryOf = (m: ExchangeMessage): EventSummary => ({
   summary: m.text.slice(0, MAX_EVENT_SUMMARY),
   ...(m.integration === undefined ? {} : { integration: m.integration }),
   ...(m.delivery === undefined ? {} : { delivery: m.delivery }),
+  ...(m.stage === undefined ? {} : { stage: m.stage }),
 });
 
 const notFound = (what: string) => new IpcFailure('NOT_FOUND', what);
@@ -152,6 +156,7 @@ export class ExchangeService {
       text: cuttable ? input.text.slice(0, MAX_NOTICE) : input.text,
       ...(input.integration === undefined ? {} : { integration: input.integration }),
       ...(input.delivery === undefined ? {} : { delivery: input.delivery }),
+      ...(input.stage === undefined ? {} : { stage: input.stage }),
       unreadBy: input.unreadBy ?? [input.to],
     });
     const updated = await this.options.workspaces.update(workspaceId, (ws) => ({

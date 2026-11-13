@@ -8,7 +8,9 @@ import {
   type TodoItem,
   type Workspace,
 } from '../../../src/shared/model';
+import { defaultDeliverySettings } from '../../../src/shared/delivery';
 import { deriveTodos } from '../../../src/shared/todo';
+import { defaultWorkflow, type Run } from '../../../src/shared/workflow';
 
 // 006 T004 and T005 — the state label and the phase of an agent, as the Agents column and the graph
 // read them (data-model « AgentRow » and « Phase »).
@@ -434,5 +436,46 @@ describe('agentStateLabel of a paused agent', () => {
   it('never says « erreur » for a pause, whatever the case (SC-003)', () => {
     const cases = [paused(), paused({}, false), paused({ blocked: 'session' }, false)];
     for (const one of cases) expect(agentStateLabel(one, now)).not.toMatch(/erreur/);
+  });
+});
+
+// 010 T017 — the row of an agent in a loop shows the stage of the run of its issue (contracts/ui.md).
+describe('the stage of the issue on the row (010 US1)', () => {
+  const run = (issueId: string, stage: string): Run => ({
+    issueId,
+    oid: 'default',
+    workflow: defaultWorkflow(defaultDeliverySettings()),
+    stage,
+    status: 'active',
+    bindings: {},
+    entries: {},
+    lastMessageId: null,
+    history: [],
+    reason: null,
+    startedAt: iso,
+    updatedAt: iso,
+  });
+  const agents = [agent(2, { role: 'dev' }), agent(3, { role: 'test' }), agent(4)];
+
+  it('Given a running loop and a run at stage dev, Then both agents show « dev »', () => {
+    const ws = {
+      agents,
+      freeTerminals: [],
+      loops: [loop()],
+      runs: [run('006-p12-base', 'dev'), run('other', 'test')],
+    };
+    const rows = agentRows(ws, [], names, now).rows;
+
+    expect(rows.find((r) => r.agent.position === 2)?.stage).toBe('dev');
+    expect(rows.find((r) => r.agent.position === 3)?.stage).toBe('dev');
+    expect(rows.find((r) => r.agent.position === 4)?.stage).toBeNull();
+  });
+
+  it('Given no run (no workflow in the workspace), Then stage is null and the rest is as before', () => {
+    const ws = { agents, freeTerminals: [], loops: [loop()] };
+    const rows = agentRows(ws, [], names, now).rows;
+
+    expect(rows.every((r) => r.stage === null)).toBe(true);
+    expect(rows.find((r) => r.agent.position === 2)?.issueId).toBe('006-p12-base');
   });
 });

@@ -66,6 +66,13 @@ export type ToolDependencies = {
   delivery: Pick<DeliveryService, 'request'>;
   /** 004 US2 — the dev ↔ test loops. */
   loops: Pick<LoopService, 'start' | 'next' | 'get' | 'polish'>;
+  /** 010 — the runs of the workflow; without it the tools say what they said before. */
+  workflow?: {
+    register(workspaceId: string, issueId: string): Promise<{ stage: string; status: string }>;
+    bind(workspaceId: string, issueId: string, ids: { test?: string; dev?: string }): Promise<void>;
+    maxRounds(workspaceId: string, issueId: string): number;
+    specInstruction(workspaceId: string): Promise<string | null>;
+  };
   /** 004 US3 — the issues of the workspace, published once the user confirms. */
   issues: Pick<IssueService, 'register' | 'list' | 'requestPublish'>;
   /** 005 FR-012 — « Limite 5 h à 85 % : … » when a CLI is near its limit; never a refusal. */
@@ -174,6 +181,15 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
       return workspace().delivery.maxRounds;
     } catch {
       return 3;
+    }
+  };
+
+  /** 010 R7 — the ceiling of the run of the issue; the project’s without a workflow. */
+  const capOf = (issue: string): number => {
+    try {
+      return deps.workflow?.maxRounds(workspace().id, issue) ?? ceiling();
+    } catch {
+      return ceiling();
     }
   };
 
@@ -503,7 +519,10 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
           }),
         );
         if (!agent) throw new Refusal('Aucun agent lancé.');
-        if (prompt !== null) await instruct(agent, prompt);
+        // 010 O2 — the instruction of the `spec` stage goes once to the agent launched with that role.
+        const wanted = role === 'spec' ? await deps.workflow?.specInstruction(ws.id) : null;
+        const full = wanted ? [prompt, wanted].filter(Boolean).join('\n\n') : prompt;
+        if (full !== null && full !== '') await instruct(agent, full);
         const name = nameOf(agent);
         const warning = deps.usageWarning?.(cli.id) ?? null;
         const launched = `${name} lancé sur ${agent.branch}, port ${String(agent.port)}.`;
@@ -634,11 +653,14 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
           deps.issues.register(orchestratorId, stringArg(args, 'path')),
         );
         const view = { id: issue.id, title: issue.title, state: issue.state };
+        // 010 R8 — the issue has a run: the stage is said, nothing else changes.
+        const run = await deps.workflow?.register(workspace().id, issue.id);
+        const stage = run ? ` Étape ${run.stage}.` : '';
         return reply(
           missing.length === 0
-            ? `${issue.id} : ${issue.state}.`
-            : `${issue.id} : ${issue.state}. Manque : ${missing.join(' ')}`,
-          { issue: view, missing },
+            ? `${issue.id} : ${issue.state}.${stage}`
+            : `${issue.id} : ${issue.state}.${stage} Manque : ${missing.join(' ')}`,
+          { issue: view, missing, ...(run ? { stage: run.stage } : {}) },
         );
       },
     ),
@@ -691,6 +713,8 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const loop = await loopRefusal(() =>
           loops.start(workspace().id, { issue, dev: dev.id, test: test.id }),
         );
+        await deps.workflow?.bind(workspace().id, issue, { test: test.id, dev: dev.id });
+        const cap = capOf(issue);
         const { sent, ...plain } = loop;
         const to = (id: string) => (id === test.id ? test : dev);
         const who = sent.map((s) => nameOf(to(s.agentId)));
@@ -699,7 +723,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
             ? `Consigne envoyée à ${who.join(' et ')}.`
             : 'Aucune consigne n’a pu partir : envoie-les avec send_prompt.';
         return reply(
-          `Boucle de ${issue} démarrée : tour 1/${String(ceiling())}. ${said} ${nameOf(test)} (test) écrit les tests ; ${nameOf(dev)} (dev) reçoit sa consigne à son premier rapport.`,
+          `Boucle de ${issue} démarrée : tour 1/${String(cap)}. ${said} ${nameOf(test)} (test) écrit les tests ; ${nameOf(dev)} (dev) reçoit sa consigne à son premier rapport.`,
           { loop: plain, sent },
         );
       },
@@ -713,7 +737,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const loops = deps.loops;
         const issue = stringArg(args, 'issue');
         const loop = await loopRefusal(() => loops.next(workspace().id, issue));
-        return reply(`${issue} : tour ${String(loop.round)}/${String(ceiling())}.`, { loop });
+        return reply(`${issue} : tour ${String(loop.round)}/${String(capOf(issue))}.`, { loop });
       },
     ),
     tool(
@@ -755,7 +779,7 @@ export function createOrchestratorTools(deps: ToolDependencies, orchestratorId: 
         const loop = deps.loops.get(workspace().id, issue);
         if (!loop) throw new Refusal(`Aucune boucle pour ${issue}.`);
         return Promise.resolve(
-          reply(`${issue} : tour ${String(loop.round)}/${String(ceiling())}, ${loop.state}.`, {
+          reply(`${issue} : tour ${String(loop.round)}/${String(capOf(issue))}, ${loop.state}.`, {
             loop,
           }),
         );

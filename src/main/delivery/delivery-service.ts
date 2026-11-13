@@ -10,6 +10,7 @@ import {
   prBody,
   type Delivery,
   type DeliveryState,
+  type MergeMode,
 } from '../../shared/delivery';
 import { IpcFailure } from '../../shared/ipc';
 import type { ExchangeMessage } from '../../shared/exchanges';
@@ -85,6 +86,8 @@ export interface DeliveryServiceDeps {
   /** The silence of a configured CI that is signalled; 10 min by default (a test goes faster). */
   silentMs?: number | undefined;
   exchanges: { record(workspaceId: string, draft: RecordInput): Promise<ExchangeMessage> };
+  /** 010 R9 — the merge mode of the PR stage of the run of the issue; without it, the settings of 008. */
+  mergeModeOf?: (workspaceId: string, issueId: string | null) => MergeMode;
   /** `<userData>/deliveries`: the place of the tests on the rebased commit, removed after. */
   deliveriesDir: string;
   /** The tests of PACT, run in `cwd`. */
@@ -282,6 +285,14 @@ export class DeliveryService {
   private forge(ws: Workspace): Forge {
     const { gh } = this.deps;
     return typeof gh === 'function' ? gh(ws.path) : gh;
+  }
+
+  /** 010 R9 — the mode of the PR stage of the run; the settings of the project when there is no engine. */
+  private mergeMode(workspaceId: string, issueId: string | null): MergeMode {
+    return (
+      this.deps.mergeModeOf?.(workspaceId, issueId) ??
+      this.workspace(workspaceId).delivery.mergeMode
+    );
   }
 
   private workspace(id: string): Workspace {
@@ -985,7 +996,7 @@ export class DeliveryService {
       try {
         await this.deps.integration.start({
           agentId: agent.id,
-          mode: ws.delivery.mergeMode === 'squash' ? 'squash' : 'keep-commits',
+          mode: this.mergeMode(workspaceId, found.issueId) === 'squash' ? 'squash' : 'keep-commits',
           message: found.message,
           after: { closeTile: true, removeWorktree: false },
           requestId: found.id,
@@ -1518,7 +1529,7 @@ export class DeliveryService {
     // R2 — written before the call: after a restart, `pr view` says whether it went through.
     await this.save(workspaceId, id, { state: 'merging', reason: null });
     // The mode is the one of the project now; Auto turned off since does not cancel a merge that left.
-    const mode = this.workspace(workspaceId).delivery.mergeMode;
+    const mode = this.mergeMode(workspaceId, d.issueId);
     try {
       await gh.prMerge(d.pr.number, mode, checked.head);
     } catch (error) {

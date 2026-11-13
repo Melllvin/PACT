@@ -865,3 +865,111 @@ describe('the ceiling of the project (008 US5 sc.7)', () => {
     expect(sent.find((m) => m.kind === 'verdict')?.text).toContain('tour 2/5');
   });
 });
+
+// 010 T015 — the ceiling, the passes and the brief come from the workflow of the run (R7, R9), through
+// the dependencies `maxRounds` and `polish`; the counter of the dev stage stays `loop.round`.
+describe('the ceiling of the workflow of the run (010 R7, US4 sc.2)', () => {
+  const withWorkflow = (extra: Record<string, unknown> = {}) => {
+    const escalation = vi.fn();
+    loops = new LoopService({
+      ...d,
+      maxRounds: vi.fn((_workspaceId: string, issueId: string) =>
+        issueId === '0012-connexion' ? 2 : 9,
+      ),
+      polish: vi.fn(() => ({ passes: 0, brief: '' })),
+      escalation,
+      ...extra,
+    } as never);
+    return escalation;
+  };
+
+  it('Given a workflow ceiling of 2 and a project ceiling of 3, When the defects come twice, Then the loop escalates at 2', async () => {
+    withWorkflow();
+    await start();
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+    expect(loop()?.state).toBe('running');
+
+    await loops.report(tester.id, defects);
+
+    expect(loop()?.state).toBe('escalated');
+    expect(state()).toBe('escalated');
+    expect(notify.mock.calls.at(-1)?.[1]).toMatchObject({
+      summary: expect.stringContaining('2 tours') as unknown,
+    });
+    await expect(loops.next('w1', '0012-connexion')).rejects.toThrow('Plafond de 2 tours');
+  });
+
+  it('Given a delivery that sends the dev back at the ceiling of the run, When it reopens, Then the loop escalates, no round opens', async () => {
+    withWorkflow();
+    await start();
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+
+    const reopened = await loops.reopen('w1', '0012-connexion', 'CI rouge');
+
+    expect(reopened.state).toBe('escalated');
+    expect(loop()?.rounds).toHaveLength(2);
+  });
+
+  it('Given the escalation, When it happens, Then the run is told it waits for the user; at « restart » it is active again', async () => {
+    const escalation = withWorkflow();
+    await start();
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+    await loops.report(tester.id, defects);
+
+    expect(escalation).toHaveBeenLastCalledWith('w1', '0012-connexion', true);
+
+    await loops.decide('w1', '0012-connexion', 'restart');
+
+    expect(escalation).toHaveBeenLastCalledWith('w1', '0012-connexion', false);
+    expect(loop()).toMatchObject({ state: 'running', round: 1 });
+  });
+
+  it('Given the counter of the dev stage, When rounds pass, Then it is loop.round and the loop holds no second counter (R7)', async () => {
+    withWorkflow({ maxRounds: () => 5 });
+    await start();
+    const keys = Object.keys(loop() ?? {}).sort();
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+
+    expect(loop()?.round).toBe(3);
+    expect(Object.keys(loop() ?? {}).sort()).toEqual(keys);
+    expect(current.runs).toEqual([]);
+  });
+
+  it('Given no dependency, When the ceiling is read, Then it is the settings of the project as before (SC-001)', async () => {
+    loops = new LoopService(d as never);
+    await start();
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+    await loops.report(tester.id, defects);
+    await loops.next('w1', '0012-connexion');
+    expect(loop()).toMatchObject({ state: 'running', round: 3 });
+  });
+
+  it('Given passes and a brief of the workflow, When the proof is laid and a pass starts, Then the loop polishes as many times and the dev gets the brief of the stage, not the one of 008', async () => {
+    current = {
+      ...current,
+      delivery: { ...current.delivery, polishPasses: 0, polishBrief: 'Brief du projet' },
+    };
+    withWorkflow({ polish: () => ({ passes: 2, brief: 'Brief du workflow' }) });
+    await start();
+    await loops.report(tester.id, accepted);
+    await loops.testRun(finished('passed'));
+    expect(loop()).toMatchObject({ state: 'polishing', polish: { done: 0, total: 2 } });
+    d.message.mockClear();
+
+    await loops.polish('w1', '0012-connexion', 'Et les noms');
+
+    const sent = (d.message.mock.calls as unknown as [string, { text: string }][]).map(
+      ([, draft]) => draft.text,
+    );
+    expect(sent[0]).toContain('Consigne du projet :\nBrief du workflow');
+    expect(sent[0]).toContain('Et les noms');
+    expect(sent[0]).not.toContain('Brief du projet');
+  });
+});

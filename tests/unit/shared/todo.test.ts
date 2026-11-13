@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { deriveTodos } from '../../../src/shared/todo';
+import { defaultDeliverySettings } from '../../../src/shared/delivery';
 import type { Agent, FreeTerminal, Workspace } from '../../../src/shared/model';
+import { defaultWorkflow, type Run } from '../../../src/shared/workflow';
 import { clockTime, type UsageState } from '../../../src/shared/usage';
 
 // T080 — the À faire items, derived from the agents only (data-model TodoItem, FR-027, FR-028).
@@ -1287,5 +1289,91 @@ describe('workflow kinds in ORDER (010 data-model)', () => {
     expect(ORDER).toContain('workflow-refused');
     expect(ORDER.indexOf('workflow-invalid')).toBeLessThan(ORDER.indexOf('info'));
     expect(ORDER.indexOf('workflow-refused')).toBeLessThan(ORDER.indexOf('info'));
+  });
+});
+
+// 010 T017 — the issue line shows the stage of its run (US1), and a refused run asks for the user
+// (contracts/ui.md « Dans À faire »).
+describe('the workflow in À faire (010 US1)', () => {
+  const run = (overrides: Partial<Run> = {}): Run => ({
+    issueId: '0012-connexion',
+    oid: 'default',
+    workflow: defaultWorkflow(defaultDeliverySettings()),
+    stage: 'dev',
+    status: 'active',
+    bindings: {},
+    entries: {},
+    lastMessageId: null,
+    history: [],
+    reason: null,
+    startedAt: '2026-11-03T10:00:00.000Z',
+    updatedAt: '2026-11-03T10:00:00.000Z',
+    ...overrides,
+  });
+  const loop = {
+    issueId: '0012-connexion',
+    devAgentId: 'a2',
+    testAgentId: 'a3',
+    round: 3,
+    rounds: [],
+    state: 'escalated' as const,
+    escalatedModel: null,
+    polish: null,
+  };
+  const agents = [
+    agent(1, { role: 'orchestrator', state: 'done' }),
+    agent(2, { state: 'done' }),
+    agent(3, { state: 'done' }),
+  ];
+
+  it('Given a stopped loop with a run at stage dev, Then its item carries the stage', () => {
+    const todos = deriveTodos({ ...workspace(agents), loops: [loop], runs: [run()] }, names, {
+      a1: 0,
+    });
+
+    expect(todos.find((t) => t.kind === 'loop-escalated')?.loop).toMatchObject({
+      issueId: '0012-connexion',
+      stage: 'dev',
+    });
+  });
+
+  it('Given no run for the issue, Then the loop item has no stage (a project without a workflow file is unchanged)', () => {
+    const todos = deriveTodos({ ...workspace(agents), loops: [loop] }, names, { a1: 0 });
+
+    expect(todos.find((t) => t.kind === 'loop-escalated')?.loop?.stage).toBeUndefined();
+  });
+
+  it('Given a refused run, Then « workflow-refused » carries the issue, the reason, and goes to the orchestrator', () => {
+    const todos = deriveTodos(
+      {
+        ...workspace(agents),
+        runs: [
+          run({ status: 'refused', reason: 'version 2 non prise en charge' }),
+          run({ issueId: '0013-panier', status: 'active' }),
+        ],
+      },
+      names,
+      { a1: 0 },
+    );
+
+    const refused = todos.filter((t) => t.kind === 'workflow-refused');
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({
+      id: '0012-connexion:workflow-refused',
+      agentId: 'a1',
+      detail: 'version 2 non prise en charge',
+    });
+    expect(refused[0]?.title).toContain('0012-connexion');
+    expect(refused[0]?.title.startsWith('✕ Workflow refusé')).toBe(true);
+  });
+
+  it('Given a refused run and a stopped loop, Then the refusal comes before the loop in the order', () => {
+    const todos = deriveTodos(
+      { ...workspace(agents), loops: [loop], runs: [run({ status: 'refused', reason: 'x' })] },
+      names,
+      { a1: 0 },
+    );
+
+    expect(todos.map((t) => t.kind)).toEqual(['workflow-refused', 'loop-escalated']);
   });
 });

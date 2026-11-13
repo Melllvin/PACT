@@ -396,6 +396,7 @@ describe('IPC event schemas', () => {
       'workspace:issues',
       'workspace:loops',
       'workspace:status',
+      'workspace:workflow',
     ]);
   });
 

@@ -490,6 +490,13 @@ export function createAppStore(api: PactApi) {
               ),
             });
           }),
+          api.on('workspace:workflow', ({ workspaceId, workflow, runs }) => {
+            set({
+              workspaces: get().workspaces.map((w) =>
+                w.id === workspaceId ? { ...w, workflow, runs } : w,
+              ),
+            });
+          }),
           api.on('workspace:exchanges', ({ workspaceId, exchanges }) => {
             set({
               workspaces: get().workspaces.map((w) =>

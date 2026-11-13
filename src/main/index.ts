@@ -45,6 +45,8 @@ import type { McpTool } from './orchestrator/mcp';
 import { createOrchestratorTools } from './orchestrator/tools';
 import { createAgentTools } from './orchestrator/agent-tools';
 import { LoopService } from './orchestrator/loop-service';
+import { WorkflowService } from './workflow/workflow-service';
+import { WorkflowSource } from './workflow/workflow-source';
 import { IssueService, ghCommand } from './orchestrator/issues';
 import { IntegrationService } from './review/integration-service';
 import { createPreviewHandler } from './preview/preview-protocol';
@@ -196,6 +198,7 @@ void app.whenReady().then(async () => {
           delivery,
           loops,
           issues,
+          workflow,
           clis: () => registry.list(),
           usageWarning: (cliId) => usage.warning(cliId, usageLimit.pauses()),
           pausedFor: (cliId) => usageLimit.pausedFor(cliId),
@@ -362,9 +365,27 @@ void app.whenReady().then(async () => {
       void loops.testRun(run);
     },
   });
+  // 010 — the workflow of each issue: what the main branch says, and one run per issue (R8, R10).
+  const workflow = new WorkflowService({
+    workspaces,
+    source: new WorkflowSource({ git, workspaces }),
+    exchanges,
+    onChange: (workspaceId, runs) => {
+      const current = workspaces.get(workspaceId);
+      if (current) emit('workspace:workflow', { workspaceId, workflow: current.workflow, runs });
+      syncTodos();
+    },
+  });
+  exchanges.onRecorded((workspaceId, message) => {
+    void workflow.handle(workspaceId, message).catch(() => undefined);
+  });
   // 004 US2 — the dev ↔ test loops of the issues.
   const loops: LoopService = new LoopService({
     workspaces,
+    maxRounds: (workspaceId, issueId) => workflow.maxRounds(workspaceId, issueId),
+    polish: (workspaceId, issueId) => workflow.polish(workspaceId, issueId),
+    escalation: (workspaceId, issueId, waiting) =>
+      workflow.setWaiting(workspaceId, issueId, waiting),
     git,
     review,
     tests,
@@ -466,6 +487,7 @@ void app.whenReady().then(async () => {
     integration,
     exchanges,
     agents: { close: (id, options) => agents.close(id, options) },
+    mergeModeOf: (workspaceId, issueId) => workflow.mergeModeOf(workspaceId, issueId),
     // The e2e runs read the CI faster than every 30 s.
     ...(process.env.PACT_TEST_MODE === '1' && Number(process.env.PACT_CI_POLL_MS) > 0
       ? { pollMs: Number(process.env.PACT_CI_POLL_MS) }
@@ -604,6 +626,8 @@ void app.whenReady().then(async () => {
     .restore()
     .catch(() => [])
     .then(() => delivery.resume());
+  // 010 SC-006 — the runs find their stage again and replay what the journal said after their last message.
+  void workflow.resume().catch(() => undefined);
   wake.restore();
   workspaces.startWatching(AVAILABILITY_CHECK_MS);
   origin.start();
@@ -652,7 +676,12 @@ void app.whenReady().then(async () => {
       ...createReviewServices({ review, tests, integration, workspaces }),
       ...createDeliveryServices({
         workspaces,
-        delivery,
+        delivery: {
+          settingsChanged: async (workspaceId) => {
+            await workflow.settingsChanged(workspaceId);
+            await delivery.settingsChanged(workspaceId);
+          },
+        },
         cleanup: delivery.worktreeCleanup,
         openExternal: (url) => shell.openExternal(url),
         prUrl: (id) => delivery.prUrl(id),

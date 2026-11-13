@@ -126,7 +126,9 @@ const shellName = (path: string) => path.replace(/^.*[\\/]/, '').replace(/\.exe$
 /** The À faire items of a workspace, derived and never stored (data-model TodoItem, FR-027). */
 export function deriveTodos(
   workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'mainBranch'> &
-    Partial<Pick<Workspace, 'deliveries' | 'loops' | 'issues' | 'publishRequests' | 'exchanges'>>,
+    Partial<
+      Pick<Workspace, 'deliveries' | 'loops' | 'issues' | 'publishRequests' | 'exchanges' | 'runs'>
+    >,
   names: (cliId: string) => string,
   /** The agents with changes to review, with their number of changed files (`review:pending`). */
   toReview: Readonly<Record<string, number>> | readonly never[] = {},
@@ -274,6 +276,11 @@ export function deriveTodos(
   // « ✕ Boucle arrêtée »: the ceiling of the project without the tests passing, the user decides (004 FR-018).
   // 008 US5 sc.7 — the ceiling is the project's; a workspace without settings has the default.
   const maxRounds = (workspace as Partial<Workspace>).delivery?.maxRounds ?? 3;
+  // 010 — « Étape <id> »: the stage of the run of the issue, when it has one.
+  const stageOf = (issueId: string): { stage?: string } => {
+    const run = (workspace.runs ?? []).find((r) => r.issueId === issueId);
+    return run ? { stage: run.stage } : {};
+  };
   const loops = (workspace.loops ?? []).flatMap((loop): TodoItem[] => {
     const dev = byId.get(loop.devAgentId);
     return loop.state === 'escalated' && dev
@@ -284,7 +291,27 @@ export function deriveTodos(
             kind: 'loop-escalated',
             title: `✕ Boucle arrêtée · ${loop.issueId} · ${String(maxRounds)} tours`,
             actions: [],
-            loop: { issueId: loop.issueId, maxRounds },
+            loop: {
+              issueId: loop.issueId,
+              maxRounds,
+              ...stageOf(loop.issueId),
+            },
+          },
+        ]
+      : [];
+  });
+  // « ✕ Workflow refusé »: a run that cannot start, the user is told why (010 contracts/ui.md).
+  const refusals = (workspace.runs ?? []).flatMap((run): TodoItem[] => {
+    const owner = lead ?? agents[0];
+    return run.status === 'refused' && owner
+      ? [
+          {
+            id: `${run.issueId}:workflow-refused`,
+            agentId: owner.id,
+            kind: 'workflow-refused',
+            title: `✕ Workflow refusé · ${run.issueId}`,
+            actions: [],
+            ...(run.reason ? { detail: run.reason } : {}),
           },
         ]
       : [];
@@ -333,6 +360,7 @@ export function deriveTodos(
     ...requests,
     ...publish,
     ...loops,
+    ...refusals,
     ...exchanges,
     ...limits,
     ...terminals,

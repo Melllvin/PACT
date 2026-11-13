@@ -33,6 +33,7 @@ import {
   testRunSchema,
 } from './review';
 import { usageStateSchema, usageThresholdsSchema } from './usage';
+import { runSchema, workflowStateSchema } from './workflow';
 
 // contracts/ipc.md — every channel is validated on both sides of the bridge.
 
@@ -426,6 +427,12 @@ export const ipcEvents = {
     workspaceId: z.string(),
     loops: z.array(loopSchema),
     issues: z.array(issueSchema),
+  }),
+  /** 010 — what the main branch says of the workflow, and the run of each issue. */
+  'workspace:workflow': z.object({
+    workspaceId: z.string(),
+    workflow: workflowStateSchema,
+    runs: z.array(runSchema),
   }),
   /** 004 US4 — a file the Aperçu of the agent lists changed (FR-027). */
   'preview:changed': z.object({ agentId: z.uuid(), path: repoPathSchema }),

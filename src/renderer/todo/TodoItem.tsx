@@ -57,6 +57,7 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
           'border-primary/30 bg-primary/6',
         (todo.kind === 'rate-limit' ||
           todo.kind === 'loop-escalated' ||
+          todo.kind === 'workflow-refused' ||
           todo.kind === 'exchange-escalated') &&
           'border-destructive/30 bg-destructive/6',
         (todo.kind === 'delivery-silent-ci' ||
@@ -93,6 +94,9 @@ export function TodoItem({ todo, agent, ...handlers }: Props) {
         </span>
       )}
       {todo.detail !== undefined && <span className="text-[12px] text-dim">{todo.detail}</span>}
+      {todo.loop?.stage !== undefined && (
+        <span className="font-mono text-[11px] text-dim">Étape {todo.loop.stage}</span>
+      )}
       <TodoActions todo={todo} agent={agent} {...handlers} />
     </li>
   );

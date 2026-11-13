@@ -31,6 +31,12 @@ export interface LoopServiceDeps {
   /** The loops and issues of a workspace changed (`workspace:loops`). */
   onChange?: (workspaceId: string, change: Pick<Workspace, 'loops' | 'issues'>) => void;
   now?: () => Date;
+  /** 010 R7 — the ceiling of rounds of the run of the issue; without it, the settings of 008. */
+  maxRounds?: (workspaceId: string, issueId: string) => number;
+  /** 010 R9 — the passes and the brief of the polish stage of the run; without it, the settings of 008. */
+  polish?: (workspaceId: string, issueId: string) => { passes: number; brief: string };
+  /** 010 — the loop stops for the user (`true`) or starts again (`false`): the run waits, or not. */
+  escalation?: (workspaceId: string, issueId: string, waiting: boolean) => void | Promise<void>;
 }
 
 /** `**`, `*` and `?` of a test path, as a regex over the whole repo path. */
@@ -64,6 +70,14 @@ function reportNotice(agentId: string, report: HandoffReport): LoopEvent {
 /** Who got what when a loop started (007 FR-021): the tool says it in words. */
 export type Sent = { agentId: string; kind: 'instruction' }[];
 
+/** The fixed instruction of the tester at the start of a loop (also the one of a workflow stage, 010 R9). */
+export const testerInstruction = (issueId: string): string =>
+  `Écris les tests d’acceptation de l’issue ${issueId} (lis .pact/issues/${issueId}.md dans ton worktree), sans toucher au code de production. Rends ton rapport avec submit_report.`;
+
+/** The fixed instruction of the dev once the tests are written (also the one of a workflow stage). */
+export const devInstruction = (issueId: string): string =>
+  `Fais passer les tests d’acceptation de l’issue ${issueId} (lis .pact/issues/${issueId}.md dans ton worktree) sans les modifier, puis rends ton rapport avec submit_report.`;
+
 /** 008 R23, P2 — the fixed sentence of every polish instruction. */
 const POLISH_BAN = 'Aucune nouvelle fonctionnalité : corrige seulement ce qui est demandé';
 
@@ -84,8 +98,17 @@ export class LoopService {
   }
 
   /** 008 R11 — the ceiling is read live: a lowered one escalates at the next « defects ». */
-  private maxRounds(ws: Workspace): number {
-    return ws.delivery.maxRounds;
+  private maxRounds(ws: Workspace, issueId: string): number {
+    return this.deps.maxRounds?.(ws.id, issueId) ?? ws.delivery.maxRounds;
+  }
+
+  private polishOf(ws: Workspace, issueId: string): { passes: number; brief: string } {
+    return (
+      this.deps.polish?.(ws.id, issueId) ?? {
+        passes: ws.delivery.polishPasses,
+        brief: ws.delivery.polishBrief,
+      }
+    );
   }
 
   private workspace(id: string): Workspace {
@@ -177,7 +200,7 @@ export class LoopService {
     const delivered = await this.send(workspaceId, {
       to: test,
       kind: 'instruction',
-      text: `Écris les tests d’acceptation de l’issue ${issueId} (lis .pact/issues/${issueId}.md dans ton worktree), sans toucher au code de production. Rends ton rapport avec submit_report.`,
+      text: testerInstruction(issueId),
     });
     if (delivered) sent.push({ agentId: test, kind: 'instruction' });
     return { ...loop, sent };
@@ -215,7 +238,7 @@ export class LoopService {
       polish: { done, total, restarted: false },
       rounds: [...l.rounds, this.newRound(l.rounds.length + 1, 'polish')],
     }));
-    const brief = ws.delivery.polishBrief.trim();
+    const brief = this.polishOf(ws, issueId).brief.trim();
     const extra = notes?.trim();
     const text = [
       `Peaufinage de l’issue ${issueId} (passe ${String(pass)} sur ${String(total)}).`,
@@ -284,7 +307,7 @@ export class LoopService {
     if (!loop) throw new Error(`Aucune boucle pour ${issueId}.`);
     if (loop.state === 'escalated') {
       throw new Error(
-        `Plafond de ${String(this.maxRounds(ws))} tours atteint : l’utilisateur décide`,
+        `Plafond de ${String(this.maxRounds(ws, issueId))} tours atteint : l’utilisateur décide`,
       );
     }
     if (loop.state !== 'running') throw new Error(`La boucle de ${issueId} est terminée.`);
@@ -300,7 +323,7 @@ export class LoopService {
   private async openRound(ws: Workspace, loop: Loop): Promise<Loop> {
     const n = loop.round + 1;
     let escalatedModel = loop.escalatedModel;
-    if (n === this.maxRounds(ws)) {
+    if (n === this.maxRounds(ws, loop.issueId)) {
       const devAgent = ws.agents.find((a) => a.id === loop.devAgentId);
       const profile = ws.roleProfiles.dev;
       if (
@@ -334,7 +357,7 @@ export class LoopService {
     if (loop.state === 'closed' || loop.state === 'merged' || loop.state === 'escalated') {
       throw new Error(`La boucle de ${issueId} est terminée.`);
     }
-    if (loop.round >= this.maxRounds(ws)) {
+    if (loop.round >= this.maxRounds(ws, issueId)) {
       await this.escalate(workspaceId, issueId, loop.devAgentId);
       return this.get(workspaceId, issueId) ?? loop;
     }
@@ -342,7 +365,7 @@ export class LoopService {
     await this.send(workspaceId, {
       to: loop.devAgentId,
       kind: 'verdict',
-      text: `Livraison de ${issueId} (tour ${String(reopened.round)}/${String(this.maxRounds(ws))}) : ${reason}`.slice(
+      text: `Livraison de ${issueId} (tour ${String(reopened.round)}/${String(this.maxRounds(ws, issueId))}) : ${reason}`.slice(
         0,
         MAX_NOTICE,
       ),
@@ -449,7 +472,7 @@ export class LoopService {
       await this.send(ws.id, {
         to: loop.devAgentId,
         kind: 'instruction',
-        text: `Fais passer les tests d’acceptation de l’issue ${loop.issueId} (lis .pact/issues/${loop.issueId}.md dans ton worktree) sans les modifier, puis rends ton rapport avec submit_report.`,
+        text: devInstruction(loop.issueId),
       });
     }
     // The pass the loop is in, if any (008 R23).
@@ -459,7 +482,7 @@ export class LoopService {
       const defects = report.verdict.defects.map((d) => `- ${d}`).join('\n');
       const head = pass
         ? `Verdict du test sur ${loop.issueId} (passe ${String(pass.done + 1)}/${String(pass.total)}) : défauts.\n`
-        : `Verdict du test sur ${loop.issueId} (tour ${String(loop.round)}/${String(this.maxRounds(ws))}) : défauts.\n`;
+        : `Verdict du test sur ${loop.issueId} (tour ${String(loop.round)}/${String(this.maxRounds(ws, loop.issueId))}) : défauts.\n`;
       await this.send(ws.id, {
         to: loop.devAgentId,
         kind: 'verdict',
@@ -492,7 +515,7 @@ export class LoopService {
     } else if (
       role === 'test' &&
       report.verdict?.result === 'defects' &&
-      loop.round >= this.maxRounds(ws)
+      loop.round >= this.maxRounds(ws, loop.issueId)
     ) {
       await this.escalate(ws.id, loop.issueId, agentId);
     }
@@ -524,13 +547,14 @@ export class LoopService {
     const loop = this.get(workspaceId, issueId);
     await this.save(workspaceId, issueId, (l) => ({ ...l, state: 'escalated' }));
     await this.setIssue(workspaceId, issueId, 'escalated');
+    await this.deps.escalation?.(workspaceId, issueId, true);
     this.deps.notify(workspaceId, {
       agentId,
       kind: 'loop',
       summary:
         loop?.state === 'polishing' || loop?.rounds.at(-1)?.kind === 'polish'
           ? `Boucle arrêtée · ${issueId} · peaufinage : défauts répétés sur la même passe, l’utilisateur décide.`
-          : `Boucle arrêtée · ${issueId} · ${String(this.maxRounds(this.workspace(workspaceId)))} tours : l’utilisateur décide.`,
+          : `Boucle arrêtée · ${issueId} · ${String(this.maxRounds(this.workspace(workspaceId), issueId))} tours : l’utilisateur décide.`,
     });
   }
 
@@ -570,7 +594,7 @@ export class LoopService {
       return;
     }
     if (run.status === 'passed' && run.tree === tree && !dirty) {
-      const passes = ws.delivery.polishPasses;
+      const passes = this.polishOf(ws, loop.issueId).passes;
       await this.saveRound(ws.id, loop.issueId, (r) => ({
         ...r,
         proof: { tree, commit, exitCode: 0, at: this.now() },
@@ -626,6 +650,7 @@ export class LoopService {
         rounds: [this.newRound(1)],
       }));
       await this.setIssue(workspaceId, issueId, 'in-progress');
+      await this.deps.escalation?.(workspaceId, issueId, false);
       return;
     }
     await this.save(workspaceId, issueId, (l) => ({ ...l, state: 'closed' }));

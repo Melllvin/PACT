@@ -103,6 +103,8 @@ export type AgentRow = {
   role: Role | null;
   stateLabel: string;
   issueId: string | null;
+  /** 010 — the stage of the run of that issue (« Étape <id> »), when it has one. */
+  stage?: string | null;
   todo: TodoItem | null;
   pending: number;
 };
@@ -128,7 +130,8 @@ const rank = (item: TodoItem) => ORDER.indexOf(item.kind);
 
 /** 006 — the Agents column: `deriveTodos` grouped by agent, no action computed again (SC-005). */
 export function agentRows(
-  workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'loops'>,
+  workspace: Pick<Workspace, 'agents' | 'freeTerminals' | 'loops'> &
+    Partial<Pick<Workspace, 'runs'>>,
   todos: readonly TodoItem[],
   names: (cliId: string) => string,
   now: Date,
@@ -139,12 +142,14 @@ export function agentRows(
   const rows = workspace.agents.map((agent): AgentRow => {
     const items = todos.filter((item) => own(item) && item.agentId === agent.id);
     const first = [...items].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+    const issueId = agentPhase(agent, workspace.loops)?.issueId ?? null;
     return {
       agent,
       name: agentName(agent, names),
       role: agent.role,
       stateLabel: agentStateLabel(agent, now),
-      issueId: agentPhase(agent, workspace.loops)?.issueId ?? null,
+      issueId,
+      stage: workspace.runs?.find((run) => run.issueId === issueId)?.stage ?? null,
       todo: first,
       pending: items.length,
     };
