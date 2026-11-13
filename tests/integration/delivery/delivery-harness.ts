@@ -78,6 +78,9 @@ export const tryGit = (cwd: string, ...args: string[]) => {
   }
 };
 
+/** The longest a wait of the harness lasts: a spawn of the fake `gh` costs ten times more on Windows (#132). */
+const WAIT_MS = process.platform === 'win32' ? 90_000 : 20_000;
+
 export const ISSUE = '0012-connexion';
 export const short = (sha: string) => sha.slice(0, 7);
 
@@ -517,7 +520,7 @@ export async function createDeliveryHarness(
     if (!found) throw new Error(`delivery ${id} not saved`);
     return found;
   };
-  async function until(id: string, states: string[], timeoutMs = 20_000): Promise<Delivery> {
+  async function until(id: string, states: string[], timeoutMs = WAIT_MS): Promise<Delivery> {
     const start = Date.now();
     for (;;) {
       const found = deliveries().find((d) => d.id === id);
@@ -530,7 +533,7 @@ export async function createDeliveryHarness(
       await new Promise((r) => setTimeout(r, 20));
     }
   }
-  async function waitFor(check: () => boolean, what: string, timeoutMs = 20_000) {
+  async function waitFor(check: () => boolean, what: string, timeoutMs = WAIT_MS) {
     const start = Date.now();
     while (!check()) {
       if (Date.now() - start > timeoutMs) throw new Error(what);

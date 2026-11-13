@@ -89,6 +89,8 @@ describe('a loop', () => {
 
     // Round 1: the test finds a defect and reports it with submit_report.
     await tool('send_prompt', { agent: testId, text: '0012-connexion' });
+    // The wake groups messages for 5 s (WAKE_GROUP_MS): deliver it now, the test is not about that wait.
+    h.wake?.deliver(testId);
     await h.waitFor(() => h.reports.some((r) => r.kind === 'report'), 'no report heard');
     const heard = Date.now();
     const { text, json } = await tool('wait_for_agents', { agents: [testId], timeoutSeconds: 10 });
@@ -111,6 +113,8 @@ describe('a loop', () => {
       testId,
     );
     await tool('send_prompt', { agent: testId, text: '0012-connexion' });
+    // The wake groups messages for 5 s (WAKE_GROUP_MS): deliver it now, the test is not about that wait.
+    h.wake?.deliver(testId);
     await h.waitFor(() => current()?.loops[0]?.state === 'accepted', 'loop not accepted', testId);
     expect(current()?.issues[0]?.state).toBe('in-progress');
     const loop = await tool('get_loop', { issue: '0012-connexion' });
@@ -123,6 +127,27 @@ describe('a loop', () => {
       proved += (await tool('wait_for_agents', { agents: [devId], timeoutSeconds: 5 })).text;
     }
     expect(proved).toContain(proof);
+  }, 30_000);
+
+  it('lets a run of the tests go when the worktree of the dev is already gone: no rejection, no proof (#132)', async () => {
+    // Given a loop started and a passing run of the tests of the dev, still to be told to the loop
+    await tool('start_loop', { issue: '0012-connexion', dev: devId, test: testId });
+    const worktree = h.current(devId)?.worktreePath ?? '';
+    const { tree } = await new GitService({ env: gitEnv }).snapshot(worktree);
+    const run = {
+      agentId: devId,
+      command: 'git --version',
+      tree,
+      status: 'passed' as const,
+      passedCount: null,
+      outputTail: '',
+    };
+    // When the cleanup removes the worktree while the agent is still listed (closeOne removes the
+    // worktree first), and the run reports after it
+    git(h.repo, 'worktree', 'remove', '--force', worktree);
+    // Then the loop lets the run go: it is fire and forget in the app, a rejection would be unhandled
+    await h.loops.testRun(run);
+    expect(current()?.loops[0]?.rounds[0]?.proof).toBeNull();
   }, 30_000);
 
   it('escalates the dev to its ceiling, in the same session (FR-007)', async () => {

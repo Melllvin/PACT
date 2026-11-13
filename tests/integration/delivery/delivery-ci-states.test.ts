@@ -57,6 +57,12 @@ async function watching(suffix = 'a') {
   return { ...team, id: delivery.id, head: h.prHead(1), branch: `feat/${suffix}` };
 }
 
+// Every call of the fake `gh` is a process of Node, and the watcher makes five per read: a flow of these
+// tests is dozens of spawns (« main that keeps moving » makes ~50), 4 s on a quiet machine and several
+// times 30 s on a Windows runner under load (#132). The tests that follow a long flow get a budget
+// that scales with it; their own waits (harness.ts) are below it, so a real hang still says what it waited for.
+const FLOW = 180_000;
+
 const WORKFLOW = { '.github/workflows/ci.yml': 'name: ci\non: push\njobs: {}\n' };
 
 describe('no workflow and no required check (sc.1, FR-015)', () => {
@@ -85,34 +91,40 @@ describe('no workflow and no required check (sc.1, FR-015)', () => {
   });
 });
 
-describe('a protection PACT cannot read counts as a CI configured (research R10, P5)', () => {
-  it('Given a protection that refuses to be read and no check, Auto on, When PACT reads again and again, Then the CI is « unknown » and nothing is merged', async () => {
-    h = await createDeliveryHarness({ pollMs: 50 });
-    h.setGhState({ protection: 'forbidden' });
-    await h.setSettings({ auto: true });
+describe(
+  'a protection PACT cannot read counts as a CI configured (research R10, P5)',
+  { timeout: FLOW },
+  () => {
+    it('Given a protection that refuses to be read and no check, Auto on, When PACT reads again and again, Then the CI is « unknown » and nothing is merged', async () => {
+      h = await createDeliveryHarness({ pollMs: 50 });
+      h.setGhState({ protection: 'forbidden' });
+      await h.setSettings({ auto: true });
 
-    const { id } = await watching();
-    const reads = checkRunReads();
-    await h.waitFor(() => checkRunReads() >= reads + 3, 'the checks were not read three times');
+      const { id } = await watching();
+      const reads = checkRunReads();
+      await h.waitFor(() => checkRunReads() >= reads + 3, 'the checks were not read three times');
 
-    expect(h.mergeCalls()).toHaveLength(0);
-    expect(h.deliveryOf(id).state).toBe('watching');
-    expect(h.deliveryOf(id).ci?.configured).toBe('unknown');
-    expect(h.deliveryOf(id).ci?.verdict).not.toBe('green');
-  });
+      expect(h.mergeCalls()).toHaveLength(0);
+      expect(h.deliveryOf(id).state).toBe('watching');
+      expect(h.deliveryOf(id).ci?.configured).toBe('unknown');
+      expect(h.deliveryOf(id).ci?.verdict).not.toBe('green');
+    });
 
-  it('Given a protection that refuses to be read, Auto on, When one check is read and green, Then PACT merges (one check read and green is enough)', async () => {
-    h = await createDeliveryHarness({ pollMs: 50 });
-    h.setGhState({ protection: 'forbidden' });
-    await h.setSettings({ auto: true });
+    it('Given a protection that refuses to be read, Auto on, When one check is read and green, Then PACT merges (one check read and green is enough)', async () => {
+      h = await createDeliveryHarness({ pollMs: 50 });
+      h.setGhState({ protection: 'forbidden' });
+      await h.setSettings({ auto: true });
 
-    const { id, head } = await watching();
-    h.setChecks(head, h.GREEN);
-    await h.until(id, ['merged']);
+      const { id, head } = await watching();
+      h.setChecks(head, h.GREEN);
+      await h.until(id, ['merged']);
 
-    expect(h.mergeCalls()).toEqual([['pr', 'merge', '1', '--squash', '--match-head-commit', head]]);
-  });
-});
+      expect(h.mergeCalls()).toEqual([
+        ['pr', 'merge', '1', '--squash', '--match-head-commit', head],
+      ]);
+    });
+  },
+);
 
 describe('a CI configured that shows no check (sc.2, sc.7, FR-016)', () => {
   /** A workflow on the target, Auto on (to show that PACT merges nothing by itself), the silence 11 minutes old. */
@@ -259,100 +271,105 @@ describe('a red check goes back to the dev, and the ceiling stops it (sc.3, sc.4
   });
 });
 
-describe('main moved or a conflict: PACT brings the PR up to date (sc.5, FR-017)', () => {
-  it.each(['BEHIND', 'DIRTY'] as const)(
-    'Given a PR %s because main moved without conflict, When PACT reads it, Then it rebases on main, tests R, pushes, awaits a new CI, and counts no round',
-    async (status) => {
-      h = await createDeliveryHarness({ pollMs: 50, required: ['ci'] });
-      const { id, head, branch, tester } = await watching();
-      h.setChecks(head, h.RUNNING);
-      const main = h.pushToOrigin('main', { 'docs/note.md': 'une note\n' }, 'main moves');
-      h.patchPr(1, { mergeStateStatus: status });
+describe(
+  'main moved or a conflict: PACT brings the PR up to date (sc.5, FR-017)',
+  { timeout: FLOW },
+  () => {
+    it.each(['BEHIND', 'DIRTY'] as const)(
+      'Given a PR %s because main moved without conflict, When PACT reads it, Then it rebases on main, tests R, pushes, awaits a new CI, and counts no round',
+      async (status) => {
+        h = await createDeliveryHarness({ pollMs: 50, required: ['ci'] });
+        const { id, head, branch, tester } = await watching();
+        h.setChecks(head, h.RUNNING);
+        const main = h.pushToOrigin('main', { 'docs/note.md': 'une note\n' }, 'main moves');
+        h.patchPr(1, { mergeStateStatus: status });
 
-      await h.waitFor(() => h.deliveryOf(id).rebases === 1, 'no rebase was counted');
-      const after = h.deliveryOf(id);
-      const rebased = h.remoteHead(branch) ?? '';
+        await h.waitFor(() => h.deliveryOf(id).rebases === 1, 'no rebase was counted');
+        const after = h.deliveryOf(id);
+        const rebased = h.remoteHead(branch) ?? '';
 
-      expect(rebased).not.toBe(head);
-      expect(after.pushedHead).toBe(rebased);
-      expect(tryGit(h.bare, 'merge-base', '--is-ancestor', main, rebased)).not.toBeNull();
-      expect(after.verdictCommit).toBe(rebased);
-      expect(after.pactCommits).toEqual(expect.arrayContaining([head, rebased]));
-      expect(h.testRuns.at(-1)?.head).toBe(rebased);
-      expect(after.state).toBe('watching');
-      expect(h.workspace().loops[0]?.round).toBe(1);
-      expect(h.workspace().loops[0]?.state).toBe('delivering');
-      expect(h.messagesTo(tester.id)).toHaveLength(0);
-      expect(messagesOf('alert')).toHaveLength(0);
-
-      // The old head's green is no longer the CI of the PR: the new one is awaited.
-      h.setChecks(head, h.GREEN);
-      await h.waitFor(() => h.deliveryOf(id).ci?.head === rebased, 'the new head was not read');
-      expect(h.deliveryOf(id).ci?.verdict).toBe('pending');
-      expect(h.deliveryOf(id).state).toBe('watching');
-      expect(h.mergeCalls()).toHaveLength(0);
-
-      h.setChecks(rebased, h.GREEN);
-      await h.until(id, ['reviewing']);
-      expect(
-        deriveTodos(h.workspace(), names).find((t) => t.kind === 'delivery-review'),
-      ).toBeDefined();
-    },
-  );
-
-  it('Given a PR DIRTY by a real conflict with main, When PACT tries to bring it up to date, Then the request is conflicted and a round is counted', async () => {
-    h = await createDeliveryHarness({ pollMs: 50, required: ['ci'] });
-    const { id, head, dev } = await watching();
-    h.setChecks(head, h.RUNNING);
-    h.pushToOrigin('main', { 'src/a.ts': 'export const a = "main";\n' }, 'main moves');
-    h.patchPr(1, { mergeStateStatus: 'DIRTY' });
-
-    await h.until(id, ['conflicted']);
-
-    expect(h.workspace().loops[0]?.round).toBe(2);
-    expect(h.workspace().loops[0]?.state).toBe('running');
-    expect(h.messagesTo(dev.id).some((m) => m.text.includes('src/a.ts'))).toBe(true);
-    expect(messagesOf('conflicted')).toHaveLength(1);
-    expect(h.prStateOnForge(1)).toBe('OPEN');
-    expect(h.remoteHead('feat/a')).toBe(head);
-  });
-
-  it('Given main that keeps moving, When PACT brings the PR up to date a third time in a row, Then the user is told, and not before', async () => {
-    h = await createDeliveryHarness({ pollMs: 50, required: ['ci'] });
-    const { id, head } = await watching();
-    h.setChecks(head, h.RUNNING);
-
-    for (const n of [1, 2, 3]) {
-      h.pushToOrigin(
-        'main',
-        { [`docs/n${String(n)}.md`]: `${String(n)}\n` },
-        `main moves ${String(n)}`,
-      );
-      h.patchPr(1, { mergeStateStatus: 'BEHIND' });
-      await h.waitFor(() => h.deliveryOf(id).rebases === n, `rebase ${String(n)} not counted`);
-      await h.waitFor(
-        () =>
-          h.prHead(1) === h.deliveryOf(id).pushedHead && h.deliveryOf(id).ci?.head === h.prHead(1),
-        `rebase ${String(n)} not read`,
-      );
-      if (n < 3) {
-        await sleep(200);
+        expect(rebased).not.toBe(head);
+        expect(after.pushedHead).toBe(rebased);
+        expect(tryGit(h.bare, 'merge-base', '--is-ancestor', main, rebased)).not.toBeNull();
+        expect(after.verdictCommit).toBe(rebased);
+        expect(after.pactCommits).toEqual(expect.arrayContaining([head, rebased]));
+        expect(h.testRuns.at(-1)?.head).toBe(rebased);
+        expect(after.state).toBe('watching');
+        expect(h.workspace().loops[0]?.round).toBe(1);
+        expect(h.workspace().loops[0]?.state).toBe('delivering');
+        expect(h.messagesTo(tester.id)).toHaveLength(0);
         expect(messagesOf('alert')).toHaveLength(0);
-        expect(itemsOf('delivery-alert')).toHaveLength(0);
-      }
-    }
-    await h.waitFor(() => messagesOf('alert').length === 1, 'the user was not told');
-    await sleep(300);
 
-    expect(messagesOf('alert')).toHaveLength(1);
-    expect(messagesOf('alert')[0]?.text).toMatch(/recal/i);
-    expect(itemsOf('delivery-alert')).toHaveLength(1);
-    expect(h.deliveryOf(id).state).toBe('watching');
-    expect(h.workspace().loops[0]?.round).toBe(1);
-    expect(h.mergeCalls()).toHaveLength(0);
-    expect(git(h.bare, 'rev-parse', `refs/heads/feat/a`)).toBe(h.deliveryOf(id).pushedHead);
-  });
-});
+        // The old head's green is no longer the CI of the PR: the new one is awaited.
+        h.setChecks(head, h.GREEN);
+        await h.waitFor(() => h.deliveryOf(id).ci?.head === rebased, 'the new head was not read');
+        expect(h.deliveryOf(id).ci?.verdict).toBe('pending');
+        expect(h.deliveryOf(id).state).toBe('watching');
+        expect(h.mergeCalls()).toHaveLength(0);
+
+        h.setChecks(rebased, h.GREEN);
+        await h.until(id, ['reviewing']);
+        expect(
+          deriveTodos(h.workspace(), names).find((t) => t.kind === 'delivery-review'),
+        ).toBeDefined();
+      },
+    );
+
+    it('Given a PR DIRTY by a real conflict with main, When PACT tries to bring it up to date, Then the request is conflicted and a round is counted', async () => {
+      h = await createDeliveryHarness({ pollMs: 50, required: ['ci'] });
+      const { id, head, dev } = await watching();
+      h.setChecks(head, h.RUNNING);
+      h.pushToOrigin('main', { 'src/a.ts': 'export const a = "main";\n' }, 'main moves');
+      h.patchPr(1, { mergeStateStatus: 'DIRTY' });
+
+      await h.until(id, ['conflicted']);
+
+      expect(h.workspace().loops[0]?.round).toBe(2);
+      expect(h.workspace().loops[0]?.state).toBe('running');
+      expect(h.messagesTo(dev.id).some((m) => m.text.includes('src/a.ts'))).toBe(true);
+      expect(messagesOf('conflicted')).toHaveLength(1);
+      expect(h.prStateOnForge(1)).toBe('OPEN');
+      expect(h.remoteHead('feat/a')).toBe(head);
+    });
+
+    it('Given main that keeps moving, When PACT brings the PR up to date a third time in a row, Then the user is told, and not before', async () => {
+      h = await createDeliveryHarness({ pollMs: 50, required: ['ci'] });
+      const { id, head } = await watching();
+      h.setChecks(head, h.RUNNING);
+
+      for (const n of [1, 2, 3]) {
+        h.pushToOrigin(
+          'main',
+          { [`docs/n${String(n)}.md`]: `${String(n)}\n` },
+          `main moves ${String(n)}`,
+        );
+        h.patchPr(1, { mergeStateStatus: 'BEHIND' });
+        await h.waitFor(() => h.deliveryOf(id).rebases === n, `rebase ${String(n)} not counted`);
+        await h.waitFor(
+          () =>
+            h.prHead(1) === h.deliveryOf(id).pushedHead &&
+            h.deliveryOf(id).ci?.head === h.prHead(1),
+          `rebase ${String(n)} not read`,
+        );
+        if (n < 3) {
+          await sleep(200);
+          expect(messagesOf('alert')).toHaveLength(0);
+          expect(itemsOf('delivery-alert')).toHaveLength(0);
+        }
+      }
+      await h.waitFor(() => messagesOf('alert').length === 1, 'the user was not told');
+      await sleep(300);
+
+      expect(messagesOf('alert')).toHaveLength(1);
+      expect(messagesOf('alert')[0]?.text).toMatch(/recal/i);
+      expect(itemsOf('delivery-alert')).toHaveLength(1);
+      expect(h.deliveryOf(id).state).toBe('watching');
+      expect(h.workspace().loops[0]?.round).toBe(1);
+      expect(h.mergeCalls()).toHaveLength(0);
+      expect(git(h.bare, 'rev-parse', `refs/heads/feat/a`)).toBe(h.deliveryOf(id).pushedHead);
+    });
+  },
+);
 
 describe('a PR closed or merged by hand on the forge (sc.6, sc.7)', () => {
   it('Given a PR closed by hand, When PACT reads it, Then the request is closed and says so, nothing is merged and the agents stay', async () => {

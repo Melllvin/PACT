@@ -541,8 +541,17 @@ export class LoopService {
     if (!found || found.loop.devAgentId !== run.agentId) return;
     const { ws, loop, agent } = found;
     // 008 R3 — the proof is on a commit: the worktree must be clean, what PACT will push.
-    const { commit, dirty } = await this.headOf(agent);
-    const { tree } = await this.deps.git.snapshot(agent.worktreePath);
+    // #132 — fire and forget in the app: the cleanup of a worktree can come first (closing an agent
+    // removes the worktree before the agent), and a run with no worktree left proves nothing.
+    let head: { commit: string; dirty: boolean };
+    let tree: string;
+    try {
+      head = await this.headOf(agent);
+      ({ tree } = await this.deps.git.snapshot(agent.worktreePath));
+    } catch {
+      return;
+    }
+    const { commit, dirty } = head;
     if (loop.state === 'polishing') {
       // 008 R23 — the end of a pass: accepted by the tester, then PACT's proof on the end commit.
       const pass = loop.rounds.at(-1);
