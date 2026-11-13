@@ -50,7 +50,8 @@ test.beforeEach(async () => {
 test.afterEach(async () => {
   await launched?.close();
   launched = undefined;
-  await rm(root, { recursive: true, force: true });
+  // The app's last writes (git, the store) can land while the folder goes: retry instead of failing on ENOTEMPTY.
+  await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
 const env = () => ({

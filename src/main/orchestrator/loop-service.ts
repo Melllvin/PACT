@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import type { Agent, Loop, Workspace } from '../../shared/model';
 import type { HandoffReport, StoredReport } from '../../shared/report';
 import type { TestRun } from '../../shared/review';
@@ -541,8 +542,25 @@ export class LoopService {
     if (!found || found.loop.devAgentId !== run.agentId) return;
     const { ws, loop, agent } = found;
     // 008 R3 — the proof is on a commit: the worktree must be clean, what PACT will push.
-    const { commit, dirty } = await this.headOf(agent);
-    const { tree } = await this.deps.git.snapshot(agent.worktreePath);
+    // #132 — fire and forget in the app: the cleanup of a worktree can come first (closing an agent
+    // removes the worktree before the agent), and a run with no worktree left proves nothing.
+    let head: { commit: string; dirty: boolean };
+    let tree: string;
+    try {
+      head = await this.headOf(agent);
+      ({ tree } = await this.deps.git.snapshot(agent.worktreePath));
+    } catch (error) {
+      // Only a worktree that is gone is let go; any other failure (corrupt repository, git missing)
+      // is told, since nobody awaits this call and the loop would stall with no trace.
+      if (!existsSync(agent.worktreePath)) return;
+      this.deps.notify(ws.id, {
+        agentId: run.agentId,
+        kind: 'loop',
+        summary: `${loop.issueId} : preuve impossible, lecture du worktree en échec (${String(error).split('\n', 1).join('')}).`,
+      });
+      return;
+    }
+    const { commit, dirty } = head;
     if (loop.state === 'polishing') {
       // 008 R23 — the end of a pass: accepted by the tester, then PACT's proof on the end commit.
       const pass = loop.rounds.at(-1);

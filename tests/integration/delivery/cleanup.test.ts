@@ -270,7 +270,7 @@ describe('an agent paused by the usage limit is never closed or cleaned', () => 
         await h.setAgentState(t.dev, 'paused');
       },
     });
-    await cleaned('done').catch(() => undefined);
+    // The cleanup of a paused dev never ends in « done »: wait for it to end, not for « done ».
     await h.waitFor(() => deliveryOf().cleanup !== 'pending', 'the cleanup did not end');
 
     expect(h.closed.map((c) => c.id)).not.toContain(team.dev.id);
