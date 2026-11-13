@@ -292,7 +292,8 @@ test('US8 sc.2, 3: a dev with a file it never committed: nothing is removed, À 
     .getByRole('button', { name: 'Supprimer' })
     .click();
   await expect.poll(() => existsSync(where.dev), { timeout: 60_000 }).toBe(false);
-  expect(branchExists(where.branch)).toBe(false);
+  // The branch goes right after the directory (cleanup.force): wait for it, do not race it.
+  await expect.poll(() => branchExists(where.branch), { timeout: 30_000 }).toBe(false);
   await expect(item).toHaveCount(0);
   // The orchestrator, again, is untouched.
   expect(existsSync(where.lead)).toBe(true);
