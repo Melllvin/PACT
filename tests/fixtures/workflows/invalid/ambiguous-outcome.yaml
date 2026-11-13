@@ -1,0 +1,19 @@
+version: 1
+name: base
+agents:
+  spec: { role: spec }
+  tester: { role: test }
+  dev: { role: dev }
+stages:
+  - { id: spec, type: spec, agents: [spec] }
+  - { id: test, type: test, agents: [tester] }
+  - { id: dev, type: dev, agents: [dev] }
+  - { id: pr, type: pr }
+transitions:
+  - { from: spec, to: test, on: [ready] }
+  - { from: test, to: dev, on: [tests-written, defects], maxRounds: 3 }
+  - { from: dev, to: test, on: [done] }
+  - { from: test, to: pr, on: [accepted] }
+  - { from: test, to: dev, on: [tests-written], maxRounds: 3 }
+start: spec
+ends: [pr]

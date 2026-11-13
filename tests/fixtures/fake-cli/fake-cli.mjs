@@ -48,6 +48,14 @@
 //                                   on a pointer turn whose events `get_events` listed have <text> in their
 //                                   summary) and `skipEmpty: true` (skipped when an argument, once filled,
 //                                   is an empty string); arguments are filled at any depth
+//   workflowSteps: { <stage>: step | step[] }
+//                                   (010 T004) the orchestrator, woken or prompted, calls `get_workflow`
+//                                   (with `{ issue: workflowIssue }` when that is given, `{{prompt}}`
+//                                   filled) and prints `MCP get_workflow : <stage>` (the stage of its
+//                                   run, else the start of the workflow). It then plays the steps of
+//                                   that stage: `{ tool, arguments }` with `tool` one of `launch_agent`,
+//                                   `start_loop`, `polish_pass`, `request_delivery`, `advance_stage`,
+//                                   printed `MCP <tool> : <text>`; no entry: nothing played
 //   toolHook: boolean               posts `{ type: 'post-tool' }` (a PostToolUse) during the turn and
 //                                   prints `Contexte : <additionalContext>` when PACT answers one
 //   toolHooks: { times, everyMs }   (007 T034) posts `times` PostToolUse, `everyMs` apart, to stay in
@@ -442,6 +450,29 @@ function editFiles(steps) {
   }
 }
 
+/** The tools a workflow stage may make the orchestrator call (010 T004). */
+const WORKFLOW_TOOLS = [
+  'launch_agent',
+  'start_loop',
+  'polish_pass',
+  'request_delivery',
+  'advance_stage',
+];
+
+/** 010 T004 — reads the workflow at the wake, then plays what the stage it is in asks for. */
+async function playWorkflow(line) {
+  const issue =
+    scenario.workflowIssue === undefined ? undefined : fillDeep(scenario.workflowIssue, line);
+  const view = await callToolFull('get_workflow', issue ? { issue } : {});
+  const stage = view.json?.run?.stage ?? view.json?.start ?? view.text;
+  console.log(`MCP get_workflow : ${stage}`);
+  for (const step of [scenario.workflowSteps[stage] ?? []].flat()) {
+    if (!WORKFLOW_TOOLS.includes(step.tool)) continue;
+    const args = fillDeep(step.arguments ?? {}, line);
+    console.log(`MCP ${step.tool} : ${await callTool(step.tool, args)}`);
+  }
+}
+
 async function runTurn(line) {
   await hook({ type: 'prompt-submitted', prompt: line });
   if (scenario.echo) console.log(`Reçu : ${line}`);
@@ -500,6 +531,7 @@ async function runTurn(line) {
         : JSON.parse(fillDeep(step.json, line));
     console.log(`MCP ${tool} : ${await callTool(tool, args)}`);
   }
+  if (scenario.workflowSteps && process.env.PACT_ORCHESTRATOR_URL) await playWorkflow(line);
   if (scenario.toolHook) {
     const reply = await hook({ type: 'post-tool' });
     const context = reply?.hookSpecificOutput?.additionalContext;

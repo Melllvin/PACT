@@ -15,6 +15,7 @@ import {
   deliveryGate,
   deliverySchema,
   deliverySettingsSchema,
+  fallingDelivery,
   isFinalState,
   prBody,
 } from '../../../src/shared/delivery';
@@ -100,6 +101,7 @@ describe('deliverySchema (data-model Delivery)', () => {
   const delivery = () => ({
     id: uuid(1),
     agentId: uuid(2),
+    source: 'agent',
     testAgentId: uuid(3),
     issueId: '0012-connexion',
     branch: 'feat/connexion',
@@ -498,5 +500,54 @@ describe('checkName (R16, edge case: a check name goes to the dev)', () => {
     expect(codes.filter((code) => code < 32 || code === 127)).toEqual([]);
     expect(cleaned).toContain('ok');
     expect(cleaned).toContain('consignes');
+  });
+});
+
+// 010 T009 — a request of the workflow has no agent: `agentId` is nullable, `source` says who asked.
+describe('Delivery: agentId and source (010 data-model)', () => {
+  const request = (change: object = {}) => ({
+    id: uuid(1),
+    agentId: uuid(2),
+    testAgentId: null,
+    issueId: null,
+    branch: 'pact/workflow-20261113',
+    target: 'main',
+    channel: 'github',
+    unverified: true,
+    title: 'Workflow',
+    message: 'Enregistre le workflow',
+    frozenCommit: sha('a'),
+    verdictCommit: null,
+    pactCommits: [],
+    pushedHead: null,
+    rebases: 0,
+    state: 'checking',
+    reason: null,
+    pr: null,
+    ci: null,
+    review: { required: true, refusedOnce: false },
+    cleanup: 'none',
+    requestedBy: 'user',
+    at: NOW,
+    updatedAt: NOW,
+    ...change,
+  });
+
+  it('takes a null agentId', () => {
+    expect(deliverySchema.safeParse(request({ agentId: null })).success).toBe(true);
+  });
+  it('still refuses an agentId that is not a uuid', () => {
+    expect(deliverySchema.safeParse(request({ agentId: 'dev' })).success).toBe(false);
+  });
+  it('has the source « agent » by default, and knows « workflow »', () => {
+    expect(deliverySchema.parse(request()).source).toBe('agent');
+    expect(deliverySchema.parse(request({ source: 'workflow', agentId: null })).source).toBe(
+      'workflow',
+    );
+    expect(deliverySchema.safeParse(request({ source: 'other' })).success).toBe(false);
+  });
+  it('is not a falling delivery for a null agent', () => {
+    const list = [{ agentId: null, testAgentId: null, state: 'checking' as const, pr: null }];
+    expect(fallingDelivery(list, uuid(2))).toBeUndefined();
   });
 });

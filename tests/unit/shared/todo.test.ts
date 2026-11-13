@@ -1278,3 +1278,14 @@ describe('deriveTodos — usage-stale (009)', () => {
     ).toEqual([]);
   });
 });
+
+// 010 T009/T012 — the kinds of the workflow, ranked among the others.
+describe('workflow kinds in ORDER (010 data-model)', () => {
+  it('ranks workflow-invalid and workflow-refused', async () => {
+    const { ORDER } = await import('../../../src/shared/todo');
+    expect(ORDER).toContain('workflow-invalid');
+    expect(ORDER).toContain('workflow-refused');
+    expect(ORDER.indexOf('workflow-invalid')).toBeLessThan(ORDER.indexOf('info'));
+    expect(ORDER.indexOf('workflow-refused')).toBeLessThan(ORDER.indexOf('info'));
+  });
+});

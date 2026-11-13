@@ -6,6 +6,7 @@ import {
   MAX_POLISH,
   MAX_ROUNDS_LIMIT,
 } from './delivery';
+import { defaultWorkflowState, runSchema, workflowStateSchema } from './workflow';
 import { exchangesSchema } from './exchanges';
 import {
   agentStateSchema,
@@ -289,6 +290,9 @@ export const workspaceSchema = z
     /** 008 — the settings of the delivery and the requests, written at every step (R2, R11). */
     delivery: deliverySettingsSchema.default(defaultDeliverySettings),
     deliveries: z.array(deliverySchema).default([]),
+    /** 010 — what the main branch says of the workflow, and one run per issue (R8, R10). */
+    workflow: workflowStateSchema.default(defaultWorkflowState),
+    runs: z.array(runSchema).default([]),
     /** 008 — the repository has a remote called `origin`: « Livrer » instead of « Intégrer ». */
     hasOrigin: z.boolean().optional(),
     lastOpenedAt: isoDate,
@@ -396,6 +400,8 @@ export type TodoItem = {
 export type TodoKind =
   | 'answer'
   | 'decide'
+  | 'workflow-invalid'
+  | 'workflow-refused'
   | 'delivery-local'
   | 'delivery-review'
   | 'delivery-silent-ci'

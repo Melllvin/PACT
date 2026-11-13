@@ -27,6 +27,8 @@ const workspace = (agents = [agent(1), agent(2)]): Workspace => ({
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
   exchanges: { messages: [], escalations: [] },
+  workflow: { lastValid: null, error: null, readAt: null },
+  runs: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 });

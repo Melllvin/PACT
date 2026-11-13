@@ -12,6 +12,7 @@ import {
 import type { GitService } from '../git/git-service';
 import type { AppState, Stores } from '../persistence/store';
 import { defaultDeliverySettings } from '../../shared/delivery';
+import { defaultWorkflowState } from '../../shared/workflow';
 import { DEFAULT_TEST_PATHS } from '../../shared/model';
 
 // US1 — repositories opened as workspaces, recent projects, availability (FR-003…FR-005).
@@ -131,6 +132,8 @@ export class WorkspaceService {
       testPaths: [...DEFAULT_TEST_PATHS],
       publishRequests: [],
       exchanges: { messages: [], escalations: [] },
+      workflow: defaultWorkflowState(),
+      runs: [],
       ...saved,
       id,
       path: root,
@@ -225,6 +228,8 @@ export class WorkspaceService {
         testPaths: [...DEFAULT_TEST_PATHS],
         publishRequests: [],
         exchanges: { messages: [], escalations: [] },
+        workflow: defaultWorkflowState(),
+        runs: [],
         lastOpenedAt: this.now().toISOString(),
         ...saved,
         // 008 R24 — `request_integration` is gone: nothing can answer a request saved by an older app.

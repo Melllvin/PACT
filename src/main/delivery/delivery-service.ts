@@ -335,6 +335,7 @@ export class DeliveryService {
     const delivery: Delivery = {
       id: randomUUID(),
       agentId: agent.id,
+      source: 'agent',
       testAgentId: loop?.testAgentId ?? null,
       issueId: loop?.issueId ?? null,
       branch: agent.branch,
@@ -923,7 +924,7 @@ export class DeliveryService {
     await this.deps.exchanges.record(workspaceId, {
       from: 'pact',
       to: lead.id,
-      about: d.agentId,
+      ...(d.agentId === null ? {} : { about: d.agentId }),
       kind: 'delivery',
       text,
       delivery: { id: d.id, outcome, ...extra },

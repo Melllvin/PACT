@@ -55,6 +55,7 @@ describe('« ◎ Relire la PR #n »', () => {
     ['a request not yet watched', { state: 'opening' }],
     ['a request without a PR', { pr: null }],
     ['a request of a dev that is gone', { agentId: 'a9' }],
+    ['a request of the workflow, which has no agent (010)', { agentId: null, source: 'workflow' }],
     ['a request of the local channel', { channel: 'local', state: 'merged' }],
   ])('Given %s, When the items are derived, Then none asks for a review', (_what, change) => {
     expect(kinds([github(change)])).not.toContain('delivery-review');

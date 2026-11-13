@@ -29,6 +29,8 @@ const workspace = (id: string, name: string): Workspace => ({
   testPaths: [...DEFAULT_TEST_PATHS],
   publishRequests: [],
   exchanges: { messages: [], escalations: [] },
+  workflow: { lastValid: null, error: null, readAt: null },
+  runs: [],
   lastOpenedAt: '2026-09-24T10:00:00.000Z',
   status: 'available',
 });
@@ -192,6 +194,8 @@ describe('App wiring of the home actions', () => {
                 name: 'old',
                 branch: 'main',
                 keptWorktrees: 0,
+                workflow: { lastValid: null, error: null, readAt: null },
+                runs: [],
                 lastOpenedAt: '2026-09-01T10:00:00.000Z',
               },
             ],

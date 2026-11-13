@@ -20,6 +20,7 @@ const ID = uuid(9);
 const delivery = (extra: Partial<Delivery> = {}): Delivery => ({
   id: ID,
   agentId: DEV,
+  source: 'agent',
   testAgentId: TEST,
   issueId: '0012-a',
   branch: 'feat/dev',
@@ -318,6 +319,19 @@ describe('what is read again before a merge (FR-031)', () => {
       { availability: vi.fn(() => Promise.resolve({ ok: false, reason: 'déconnecté' })) },
       'déconnecté',
     );
+  });
+
+  it('a request of the workflow (no agent) tells the lead without an « about »', async () => {
+    const s = setup(delivery({ agentId: null, source: 'workflow', verdictCommit: 'c'.repeat(40) }));
+    await s.service.settingsChanged('w1');
+    await vi.waitFor(() => {
+      expect(s.current().state).toBe('merge-failed');
+    });
+    const said = s.exchanges.record.mock.calls.map((call) => call[1] as object);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toMatchObject({ kind: 'delivery', delivery: { outcome: 'alert' } });
+    expect(said[0]).not.toHaveProperty('about');
+    s.service.dispose();
   });
 
   it('a PR closed on the forge at the recheck ends closed-on-forge', async () => {
