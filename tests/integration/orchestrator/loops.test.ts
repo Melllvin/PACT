@@ -150,6 +150,29 @@ describe('a loop', () => {
     expect(current()?.loops[0]?.rounds[0]?.proof).toBeNull();
   }, 30_000);
 
+  it('tells the orchestrator when the worktree of the dev is there but git fails on it (#132)', async () => {
+    // Given a loop started, a passing run, and a worktree that exists with a broken .git
+    await tool('start_loop', { issue: '0012-connexion', dev: devId, test: testId });
+    const worktree = h.current(devId)?.worktreePath ?? '';
+    const { tree } = await new GitService({ env: gitEnv }).snapshot(worktree);
+    const run = {
+      agentId: devId,
+      command: 'git --version',
+      tree,
+      status: 'passed' as const,
+      passedCount: null,
+      outputTail: '',
+    };
+    await writeFile(join(worktree, '.git'), 'gitdir: /nowhere/at/all\n');
+    // When the run reports
+    await h.loops.testRun(run);
+    // Then the failure is not silent: the orchestrator is told, and no proof is recorded
+    expect(
+      h.reports.some((r) => r.kind === 'loop' && r.summary.includes('preuve impossible')),
+    ).toBe(true);
+    expect(current()?.loops[0]?.rounds[0]?.proof).toBeNull();
+  }, 30_000);
+
   it('escalates the dev to its ceiling, in the same session (FR-007)', async () => {
     await h.manager.escalate(devId, 'fake-large');
     expect(h.current(devId)?.model).toBe('fake-large');

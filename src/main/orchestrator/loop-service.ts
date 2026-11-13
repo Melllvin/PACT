@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import type { Agent, Loop, Workspace } from '../../shared/model';
 import type { HandoffReport, StoredReport } from '../../shared/report';
 import type { TestRun } from '../../shared/review';
@@ -548,7 +549,15 @@ export class LoopService {
     try {
       head = await this.headOf(agent);
       ({ tree } = await this.deps.git.snapshot(agent.worktreePath));
-    } catch {
+    } catch (error) {
+      // Only a worktree that is gone is let go; any other failure (corrupt repository, git missing)
+      // is told, since nobody awaits this call and the loop would stall with no trace.
+      if (!existsSync(agent.worktreePath)) return;
+      this.deps.notify(ws.id, {
+        agentId: run.agentId,
+        kind: 'loop',
+        summary: `${loop.issueId} : preuve impossible, lecture du worktree en échec (${(error instanceof Error ? error.message : String(error)).split('\n')[0] ?? ''}).`,
+      });
       return;
     }
     const { commit, dirty } = head;
