@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitService } from '../../../src/main/git/git-service';
@@ -142,16 +143,22 @@ describe('a loop', () => {
       passedCount: null,
       outputTail: '',
     };
-    // When the cleanup removes the worktree while the agent is still listed (closeOne removes the
-    // worktree first), and the run reports after it
-    git(h.repo, 'worktree', 'remove', '--force', worktree);
+    // When the worktree is gone while the agent is still listed (closeOne removes the worktree
+    // first), and the run reports after it. Not removed for real: on Windows the fake agent holds
+    // its directory (cwd), so git cannot delete it; the agent points at a path that does not exist.
+    const gone = join(h.repo, '.worktrees', 'already-gone');
+    expect(existsSync(gone)).toBe(false);
+    await h.workspaces.update(h.workspace.id, (ws) => ({
+      ...ws,
+      agents: ws.agents.map((a) => (a.id === devId ? { ...a, worktreePath: gone } : a)),
+    }));
     // Then the loop lets the run go: it is fire and forget in the app, a rejection would be unhandled
     await h.loops.testRun(run);
     expect(current()?.loops[0]?.rounds[0]?.proof).toBeNull();
   }, 30_000);
 
   it('tells the orchestrator when the worktree of the dev is there but git fails on it (#132)', async () => {
-    // Given a loop started, a passing run, and a worktree that exists with a broken .git
+    // Given a loop started, a passing run, and a worktree that exists on which git fails
     await tool('start_loop', { issue: '0012-connexion', dev: devId, test: testId });
     const worktree = h.current(devId)?.worktreePath ?? '';
     const { tree } = await new GitService({ env: gitEnv }).snapshot(worktree);
@@ -163,9 +170,17 @@ describe('a loop', () => {
       passedCount: null,
       outputTail: '',
     };
-    await writeFile(join(worktree, '.git'), 'gitdir: /nowhere/at/all\n');
-    // When the run reports
-    await h.loops.testRun(run);
+    // Git fails on the worktree through the configuration it shares with the repository (the worktree
+    // itself is left alone: on Windows the fake agent holds it open, so its files cannot be written)
+    const config = join(h.repo, '.git', 'config');
+    const saved = await readFile(config, 'utf8');
+    await writeFile(config, '[core\n\tbroken = = =\n');
+    try {
+      // When the run reports
+      await h.loops.testRun(run);
+    } finally {
+      await writeFile(config, saved);
+    }
     // Then the failure is not silent: the orchestrator is told, and no proof is recorded
     expect(
       h.reports.some((r) => r.kind === 'loop' && r.summary.includes('preuve impossible')),
