@@ -189,6 +189,7 @@ describe('validateWorkflow on the files (SC-004)', () => {
       'caps-differ',
       'cap-too-high',
       'free-expression',
+      'too-large',
     ]) {
       expect(shown, code).toContain(code);
     }
@@ -517,35 +518,94 @@ describe('machineCheck (FR-017)', () => {
 });
 
 describe('outcomeOf (research R5)', () => {
-  it.each([
+  const TYPES = ['spec', 'design', 'test', 'dev', 'polish', 'pr', 'recap'] as const;
+  type T = (typeof TYPES)[number];
+  const delivery = (outcome: string) => ({ kind: 'delivery', delivery: { outcome } }) as const;
+  // Every row of R5: [type, source, outcome]. The cross cases below derive from this table.
+  const ROWS = [
     ['spec', { kind: 'issue', issueState: 'ready' }, 'ready'],
     ['design', { kind: 'mockup' }, 'done'],
     ['test', { kind: 'report', role: 'test', status: 'done' }, 'tests-written'],
     ['test', { kind: 'verdict', verdict: 'accepted' }, 'accepted'],
     ['test', { kind: 'verdict', verdict: 'defects' }, 'defects'],
+    ['test', { kind: 'loop', loop: 'polishing' }, 'accepted'],
+    ['test', { kind: 'loop', loop: 'accepted' }, 'accepted'],
     ['dev', { kind: 'report', role: 'dev', status: 'done' }, 'done'],
     ['recap', { kind: 'report', role: 'recap', status: 'done' }, 'done'],
     ['polish', { kind: 'loop', loop: 'accepted' }, 'done'],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'merged' } }, 'merged'],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'ci-red' } }, 'ci-red'],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'tests-failed' } }, 'tests-failed'],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'conflicted' } }, 'conflicted'],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'user-refused' } }, 'user-refused'],
-  ] as const)('%s ← %j is %s', (type, source, outcome) => {
+    ['pr', delivery('merged'), 'merged'],
+    ['pr', delivery('ci-red'), 'ci-red'],
+    ['pr', delivery('tests-failed'), 'tests-failed'],
+    ['pr', delivery('conflicted'), 'conflicted'],
+    ['pr', delivery('user-refused'), 'user-refused'],
+  ] as const;
+
+  it.each(ROWS)('%s ← %j is %s', (type, source, outcome) => {
     expect(outcomeOf(type, source)).toBe(outcome);
   });
 
+  it('gives null to every other stage type for each source of a row', () => {
+    for (const [owner, source] of ROWS) {
+      for (const type of TYPES as readonly T[]) {
+        // `test` shares the loop notice and `accepted` with `polish`, by rows of their own.
+        const given = ROWS.some(
+          ([t, s]) => t === type && JSON.stringify(s) === JSON.stringify(source),
+        );
+        if (type === owner || given) continue;
+        expect(outcomeOf(type, source), `${type} ← ${JSON.stringify(source)}`).toBeNull();
+      }
+    }
+  });
+
   it.each([
-    ['pr', { kind: 'delivery', delivery: { outcome: 'refused' } }],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'dropped' } }],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'pr-opened' } }],
-    ['pr', { kind: 'delivery', delivery: { outcome: 'escalated' } }],
+    ['mockup', 'dev'],
+    ['mockup', 'recap'],
+    ['mockup', 'test'],
+    ['mockup', 'polish'],
+    ['mockup', 'pr'],
+  ] as const)('a %s gives nothing to a %s stage', (_, type) => {
+    expect(outcomeOf(type, { kind: 'mockup' })).toBeNull();
+  });
+
+  it('a done report of another role gives nothing to design, polish, recap, dev', () => {
+    for (const role of ['spec', 'design', 'test', 'dev', 'recap', 'orchestrator'] as const) {
+      for (const type of ['design', 'polish', 'recap', 'dev'] as const) {
+        const own = (type === 'dev' && role === 'dev') || (type === 'recap' && role === 'recap');
+        expect(outcomeOf(type, { kind: 'report', role, status: 'done' }), `${type}/${role}`).toBe(
+          own ? 'done' : null,
+        );
+      }
+    }
+  });
+
+  it('the loop moving to polishing or accepted gives accepted to test, done only to polish', () => {
+    expect(outcomeOf('test', { kind: 'loop', loop: 'polishing' })).toBe('accepted');
+    expect(outcomeOf('test', { kind: 'loop', loop: 'accepted' })).toBe('accepted');
+    expect(outcomeOf('polish', { kind: 'loop', loop: 'polishing' })).toBeNull();
+    for (const loop of ['running', 'delivering', 'merged', 'escalated', 'closed'] as const) {
+      for (const type of TYPES) {
+        expect(outcomeOf(type, { kind: 'loop', loop }), `${type}/${loop}`).toBeNull();
+      }
+    }
+  });
+
+  it.each([
+    ['pr', delivery('refused')],
+    ['pr', delivery('dropped')],
+    ['pr', delivery('pr-opened')],
+    ['pr', delivery('escalated')],
+    ['pr', { kind: 'delivery' }],
     ['dev', { kind: 'usage-save' }],
     ['dev', { kind: 'usage-paused' }],
     ['dev', { kind: 'usage-resumed' }],
     ['test', { kind: 'turn-finished' }],
     ['dev', { kind: 'report', role: 'dev', status: 'blocked' }],
+    ['recap', { kind: 'report', role: 'recap', status: 'blocked' }],
+    ['test', { kind: 'report', role: 'test', status: 'blocked' }],
+    ['test', { kind: 'report', role: 'dev', status: 'done' }],
     ['dev', { kind: 'issue', issueState: 'proposed' }],
+    ['spec', { kind: 'issue', issueState: 'proposed' }],
+    ['test', { kind: 'verdict' }],
   ] as const)('%s ← %j gives no outcome', (type, source) => {
     expect(outcomeOf(type, source)).toBeNull();
   });

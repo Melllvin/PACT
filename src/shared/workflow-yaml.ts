@@ -37,7 +37,11 @@ export function parseWorkflow(text: string): Parsed {
     return { data: null, lines: {}, errors };
   };
   if (new TextEncoder().encode(text).length > MAX_WORKFLOW_BYTES) {
-    return fail({ code: 'too-large', message: 'Fichier trop grand : 64 Kio au plus' });
+    return fail({
+      code: 'too-large',
+      message: 'Fichier trop grand : 64 Kio au plus',
+      line: 1,
+    });
   }
   const conflict = CONFLICT.exec(text);
   if (conflict) {

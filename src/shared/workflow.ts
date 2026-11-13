@@ -93,6 +93,13 @@ export const stageSchema = z
         message: 'passes : étape polish seulement',
       });
     }
+    if (stage.type === 'pr' && stage.agents.length > 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['agents'],
+        message: 'agents : vide ou absent pour une étape pr',
+      });
+    }
     if (stage.mergeMode !== undefined && stage.type !== 'pr') {
       ctx.addIssue({
         code: 'custom',
@@ -260,7 +267,11 @@ export function validateWorkflow(data: unknown, lines: LineMap = {}): Validation
   const fail = (): Validation => ({ workflow: null, errors, phase2 });
 
   if (!isRecord(data)) {
-    errors.push(at('', { code: 'schema', message: 'Le fichier doit être une table YAML' }));
+    errors.push({
+      code: 'schema',
+      message: 'Le fichier doit être une table YAML',
+      line: lineOf(lines, '') ?? 1,
+    });
     return fail();
   }
   // 2. the version, before anything else can be trusted
@@ -778,31 +789,37 @@ const DELIVERY_RESULTS: Record<string, Outcome> = {
 /**
  * R5 — the outcome that a message gives to a stage of this type, or `null`: not an outcome of this
  * stage. `refused` and `dropped` of 008 leave the PR stage as it is, and the states of 009 never count.
+ * Each row of R5 is one source for one type of stage; nothing else gives an outcome.
  */
 export function outcomeOf(type: StageType, source: OutcomeSource): Outcome | null {
-  const outcome = ((): Outcome | null => {
-    switch (source.kind) {
-      case 'issue':
-        return source.issueState === 'ready' ? 'ready' : null;
-      case 'mockup':
-        return 'done';
-      case 'report':
-        if (source.status !== 'done') return null;
-        if (source.role === 'test') return 'tests-written';
-        return source.role === 'dev' || source.role === 'recap' ? 'done' : null;
-      case 'verdict':
-        return source.verdict ?? null;
-      case 'loop':
-        return source.loop === 'accepted' ? 'done' : null;
-      case 'delivery':
-        return (source.delivery && DELIVERY_RESULTS[source.delivery.outcome]) ?? null;
-      default:
-        return null;
-    }
-  })();
-  if (outcome === null) return null;
-  // The loop notice « accepted » ends the polish stage only; the verdict `accepted` ends the test.
-  if (source.kind === 'loop' && type !== 'polish') return null;
-  if (source.kind === 'report' && source.role === 'test' && type !== 'test') return null;
-  return OUTCOMES_OF[type].includes(outcome) ? outcome : null;
+  switch (type) {
+    case 'spec':
+      return source.kind === 'issue' && source.issueState === 'ready' ? 'ready' : null;
+    case 'design':
+      return source.kind === 'mockup' ? 'done' : null;
+    case 'test':
+      if (source.kind === 'report') {
+        return source.role === 'test' && source.status === 'done' ? 'tests-written' : null;
+      }
+      if (source.kind === 'verdict') return source.verdict ?? null;
+      // The loop moving on to `polishing` or `accepted` is the acceptance of the tests.
+      if (source.kind === 'loop') {
+        return source.loop === 'polishing' || source.loop === 'accepted' ? 'accepted' : null;
+      }
+      return null;
+    case 'dev':
+      return source.kind === 'report' && source.role === 'dev' && source.status === 'done'
+        ? 'done'
+        : null;
+    case 'recap':
+      return source.kind === 'report' && source.role === 'recap' && source.status === 'done'
+        ? 'done'
+        : null;
+    case 'polish':
+      return source.kind === 'loop' && source.loop === 'accepted' ? 'done' : null;
+    case 'pr':
+      return source.kind === 'delivery' && source.delivery
+        ? (DELIVERY_RESULTS[source.delivery.outcome] ?? null)
+        : null;
+  }
 }
