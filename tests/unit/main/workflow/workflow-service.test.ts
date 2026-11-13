@@ -487,6 +487,48 @@ describe('the ceiling of rounds and the user (research R7, US4 sc.2)', () => {
     );
   });
 
+  it('defects at round == ceiling: escalation never goes through a transition, the run waits on the same stage (R5)', async () => {
+    const verdict = storedReport(tester, {
+      status: 'defects',
+      verdict: { result: 'defects', defects: ['vide'] },
+    });
+    await runAt('test', { ...loopOf('running', [verdict]), round: 3 });
+    await service.handle('w1', event('report', tester));
+    expect(run()).toMatchObject({ stage: 'test', status: 'waiting-user' });
+    expect(stageMessages()).toHaveLength(1);
+    expect(stageMessages()[0]?.draft.text).toBe(
+      `Étape test · ${ISSUE} : plafond de 3 tours atteint, l’utilisateur décide`,
+    );
+    expect(stageMessages()[0]?.draft.text).not.toContain('lance dev');
+  });
+
+  it('defects below the ceiling still move to dev; tests-written at round == ceiling too (a ceiling of 1)', async () => {
+    const verdict = storedReport(tester, {
+      status: 'defects',
+      verdict: { result: 'defects', defects: ['vide'] },
+    });
+    await runAt('test', { ...loopOf('running', [verdict]), round: 2 });
+    await service.handle('w1', event('report', tester));
+    expect(run()?.stage).toBe('dev');
+
+    workflow = defaultWorkflow({ ...current.delivery, maxRounds: 1 });
+    service = make();
+    current = { ...base() };
+    await runAt('test', loopOf('running', [storedReport(tester)]));
+    current = { ...current, runs: current.runs.map((r) => ({ ...r, workflow })) };
+    await service.handle('w1', event('report', tester));
+    expect(run()).toMatchObject({ stage: 'dev', status: 'active' });
+  });
+
+  it('a return from the delivery that opened the last round is not the ceiling (round == ceiling, loop running)', async () => {
+    await runAt('pr', { ...loopOf('running'), round: 3 });
+    await service.handle(
+      'w1',
+      event('delivery', dev, { delivery: { id: uuid(500), outcome: 'ci-red' } }),
+    );
+    expect(run()).toMatchObject({ stage: 'dev', status: 'active' });
+  });
+
   it('setWaiting: waiting-user at the escalation, active again at « restart »', async () => {
     await runAt('dev', loopOf('escalated'));
     await service.setWaiting('w1', ISSUE, true);
@@ -554,5 +596,132 @@ describe('the instruction of a stage (T014, research R9)', () => {
     workflow = withInstruction('polish', 'Noms et commentaires.');
     await service.register('w1', ISSUE);
     expect(service.polish('w1', ISSUE)).toEqual({ passes: 1, brief: 'Noms et commentaires.' });
+  });
+});
+
+describe('the edges of the engine (review of phase 3)', () => {
+  const extended = (): Workflow => {
+    const flow = defaultWorkflow(current.delivery);
+    return {
+      ...flow,
+      agents: { ...flow.agents, designer: { role: 'design' }, scribe: { role: 'recap' } },
+      stages: [
+        ...flow.stages,
+        { id: 'design', type: 'design', agents: ['designer'], instruction: 'Maquette claire.' },
+        { id: 'recap', type: 'recap', agents: ['scribe'], instruction: 'Résume.' },
+      ],
+      transitions: [
+        { from: 'dev', to: 'design', on: ['done'] },
+        { from: 'design', to: 'recap', on: ['done'] },
+        ...flow.transitions,
+      ],
+    };
+  };
+  const bound = { tester: tester.id, dev: dev.id, designer: uuid(7), scribe: uuid(8) };
+
+  it('links a message to its issue by the delivery it names, when no loop agent is in it', async () => {
+    await runAt('pr', loopOf('delivering'));
+    current = { ...current, deliveries: [{ id: uuid(500), issueId: ISSUE } as never] };
+    await service.handle(
+      'w1',
+      event('delivery', lead, { delivery: { id: uuid(500), outcome: 'merged' } }),
+    );
+    expect(run()?.status).toBe('finished');
+  });
+
+  it.each([
+    ['merged', 'finished', 'pr'],
+    ['escalated', 'waiting-user', 'test'],
+  ] as const)('creates late the run of an issue whose loop is %s', async (state, status, stage) => {
+    current = { ...current, issues: [issue('in-progress')], loops: [loopOf(state)] };
+    const created = await service.ensure('w1', ISSUE);
+    expect(created).toMatchObject({ status, stage });
+  });
+
+  it('a finished or waiting run ignores the messages that come after', async () => {
+    for (const status of ['finished', 'waiting-user'] as const) {
+      await runAt('dev', loopOf('running', [storedReport(dev)]));
+      current = { ...current, runs: current.runs.map((r) => ({ ...r, status })) };
+      await service.handle('w1', event('report', dev));
+      expect(run()).toMatchObject({ stage: 'dev', status });
+      current = { ...base() };
+      service = make();
+    }
+  });
+
+  it('moves on without a word when there is no orchestrator to tell', async () => {
+    current = { ...current, agents: [dev, tester] };
+    const created = await service.register('w1', ISSUE);
+    expect(created.stage).toBe('test');
+    expect(written).toHaveLength(0);
+  });
+
+  it.each([
+    ['design', 'Maquette claire.'],
+    ['recap', 'Résume.'],
+  ])(
+    'enters %s: its instruction goes to the bound agent with the fixed sentence',
+    async (id, text) => {
+      workflow = extended();
+      await runAt('dev', loopOf('running', [storedReport(dev)]));
+      current = {
+        ...current,
+        runs: current.runs.map((r) => ({ ...r, workflow, bindings: bound })),
+      };
+      if (id === 'recap') {
+        current = { ...current, runs: current.runs.map((r) => ({ ...r, stage: 'design' })) };
+        await service.handle('w1', event('mockup', dev));
+      } else {
+        await service.handle('w1', event('report', dev));
+      }
+      const sent = instructions().at(-1);
+      expect(run()?.stage).toBe(id);
+      expect(sent?.draft.to).toBe(id === 'design' ? uuid(7) : uuid(8));
+      expect(sent?.draft.text).toContain(`Étape ${id} de l’issue ${ISSUE}`);
+      expect(sent?.draft.text).toMatch(new RegExp(`Consigne du workflow : ${text}$`));
+    },
+  );
+
+  it('enters a spec stage: its instruction goes to the agent bound to it', async () => {
+    const flow = defaultWorkflow(current.delivery);
+    workflow = {
+      ...flow,
+      stages: flow.stages.map((s) => (s.id === 'spec' ? { ...s, instruction: 'Précise.' } : s)),
+      transitions: [{ from: 'dev', to: 'spec', on: ['done'] }, ...flow.transitions],
+    };
+    await runAt('dev', loopOf('running', [storedReport(dev)]));
+    current = {
+      ...current,
+      runs: current.runs.map((r) => ({
+        ...r,
+        workflow,
+        bindings: { ...r.bindings, spec: speccer.id },
+      })),
+    };
+    await service.handle('w1', event('report', dev));
+    expect(run()?.stage).toBe('spec');
+    expect(instructions().at(-1)?.draft.to).toBe(speccer.id);
+  });
+
+  it('resume leaves a run that is not active alone, and a lastMessageId the journal lost', async () => {
+    await runAt('dev', loopOf('running', [storedReport(dev)]));
+    event('report', dev);
+    current = { ...current, runs: current.runs.map((r) => ({ ...r, status: 'waiting-user' })) };
+    await make().resume();
+    expect(run()).toMatchObject({ stage: 'dev', status: 'waiting-user' });
+
+    current = {
+      ...current,
+      runs: current.runs.map((r) => ({ ...r, status: 'active', lastMessageId: uuid(9999) })),
+    };
+    await make().resume();
+    expect(run()).toMatchObject({ stage: 'dev', status: 'active' });
+  });
+
+  it('a mockup moves the design stage to done', async () => {
+    workflow = extended();
+    await runAt('design', loopOf('running'));
+    await service.handle('w1', event('mockup', dev));
+    expect(run()?.stage).toBe('recap');
   });
 });

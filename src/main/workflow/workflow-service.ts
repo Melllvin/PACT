@@ -14,7 +14,7 @@ import {
   type WorkflowIssue,
 } from '../../shared/workflow';
 import type { CurrentWorkflow } from './workflow-source';
-import { devInstruction, testerInstruction } from '../orchestrator/loop-service';
+import { ceilingReached, devInstruction, testerInstruction } from '../orchestrator/loop-service';
 import type { RecordInput } from '../orchestrator/exchange-service';
 
 // 010 R5 to R9 — the engine of the workflows: one run per issue, on the version of the workflow it
@@ -359,7 +359,8 @@ export class WorkflowService {
       if (
         transition.maxRounds !== undefined &&
         loop &&
-        (loop.state === 'escalated' || loop.round > transition.maxRounds)
+        (loop.state === 'escalated' ||
+          (outcome === 'defects' && ceilingReached(loop.round, transition.maxRounds)))
       ) {
         capped = transition.maxRounds;
         break;

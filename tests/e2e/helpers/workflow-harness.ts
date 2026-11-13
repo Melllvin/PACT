@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { FAKE_CLI, FAKE_GH, scenarioPath } from '../../fixtures/fake-cli/paths';
@@ -9,6 +9,7 @@ import { agentWorktree, createRepo, git, typeIn } from './workspace';
 // the fake CLI, a ready issue and a team of an orchestrator, a dev and a test (as us54-polish.spec.ts).
 
 export const ISSUE = '0012-connexion';
+export const GREEN = [{ id: 11, name: 'ci', status: 'completed', conclusion: 'success' }];
 const REMOTE = 'https://github.com/pact/e2e';
 const TESTS = 'export const t = 1;\n';
 
@@ -18,7 +19,7 @@ export type SavedRun = {
   stage: string;
   status: string;
   entries: Record<string, number>;
-  history: { stage: string }[];
+  history: { from: string; to: string; outcome: string }[];
 };
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
@@ -137,6 +138,25 @@ export async function createHarness(prefix: string) {
     },
     call: (page: Page, lead: Locator, tool: string, args: Record<string, unknown>) =>
       typeIn(page, lead, `${tool}|${JSON.stringify(args)}`),
+    /** The forge (fake `gh`) as it is now. */
+    async forge() {
+      return JSON.parse(await readFile(ghState, 'utf8')) as {
+        prs: Record<string, Record<string, unknown>>;
+      };
+    },
+    /** The checks of `sha` on the forge, swapped atomically: the app reads this file while we write it. */
+    async setChecks(sha: string, checks: typeof GREEN) {
+      const next = `${ghChecks}.next`;
+      await writeFile(next, JSON.stringify({ [sha]: checks }));
+      await rename(next, ghChecks);
+    },
+    /** The switch « Auto » of the bar of the delivery: put it on, as the user would. */
+    async setAuto(page: Page) {
+      const auto = page.getByRole('switch', { name: /Auto/ });
+      await expect(auto).toBeEnabled();
+      if ((await auto.getAttribute('aria-checked')) !== 'true') await auto.click();
+      await expect(auto).toHaveAttribute('aria-checked', 'true');
+    },
     /** What the agents would have done: tests committed by the tester, then by the dev, with the code. */
     async work() {
       const devTree = agentWorktree(repo, 2);

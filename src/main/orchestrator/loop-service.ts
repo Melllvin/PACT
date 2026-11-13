@@ -78,6 +78,9 @@ export const testerInstruction = (issueId: string): string =>
 export const devInstruction = (issueId: string): string =>
   `Fais passer les tests d’acceptation de l’issue ${issueId} (lis .pact/issues/${issueId}.md dans ton worktree) sans les modifier, puis rends ton rapport avec submit_report.`;
 
+/** The round `round` is the last the ceiling allows: a verdict « defects » on it stops the loop (008 R11). */
+export const ceilingReached = (round: number, ceiling: number): boolean => round >= ceiling;
+
 /** 008 R23, P2 — the fixed sentence of every polish instruction. */
 const POLISH_BAN = 'Aucune nouvelle fonctionnalité : corrige seulement ce qui est demandé';
 
@@ -357,7 +360,7 @@ export class LoopService {
     if (loop.state === 'closed' || loop.state === 'merged' || loop.state === 'escalated') {
       throw new Error(`La boucle de ${issueId} est terminée.`);
     }
-    if (loop.round >= this.maxRounds(ws, issueId)) {
+    if (ceilingReached(loop.round, this.maxRounds(ws, issueId))) {
       await this.escalate(workspaceId, issueId, loop.devAgentId);
       return this.get(workspaceId, issueId) ?? loop;
     }
@@ -515,7 +518,7 @@ export class LoopService {
     } else if (
       role === 'test' &&
       report.verdict?.result === 'defects' &&
-      loop.round >= this.maxRounds(ws, loop.issueId)
+      ceilingReached(loop.round, this.maxRounds(ws, loop.issueId))
     ) {
       await this.escalate(ws.id, loop.issueId, agentId);
     }
