@@ -556,7 +556,7 @@ export class LoopService {
       this.deps.notify(ws.id, {
         agentId: run.agentId,
         kind: 'loop',
-        summary: `${loop.issueId} : preuve impossible, lecture du worktree en échec (${(error instanceof Error ? error.message : String(error)).split('\n')[0] ?? ''}).`,
+        summary: `${loop.issueId} : preuve impossible, lecture du worktree en échec (${String(error).split('\n', 1).join('')}).`,
       });
       return;
     }
